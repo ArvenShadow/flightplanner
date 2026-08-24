@@ -1136,6 +1136,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li>Open the <b>Wind Matrix</b> (💨 button, or click any W/V cell) and <b>Tab</b> through Dir → Spd → OAT for every leg without touching the mouse.</li>
             <li><b>🌐 Fetch Forecast Winds</b> pulls live/forecast winds &amp; OAT from Open-Meteo (up to 16 days ahead): per-leg average at your planned altitude, interpolated between pressure levels and forecast hours. Pick a specific model (ECMWF / ICON / GFS) to know exactly what you're flying on, or <b>Compare</b> to fill the three-model mean and see how much the models disagree — big spread = uncertain winds. It only fills the matrix — you review, then Save &amp; Apply. Requires internet.</li>
             <li>Winds apply per-leg; WCA, MH and GS update instantly.</li>
+            <li>The wind modal's <b>Flight date</b> is the same date as the planner's <b>Flight Date</b> field — they stay in sync, so sun times and fetched winds always describe the same day. If your Flight Date is outside the forecast range (today … +15 days) the modal says so instead of silently fetching a different day.</li>
           </ul>
         </div>
 
@@ -1216,7 +1217,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
         <div class="setting-section" style="margin-bottom:6px;">
           <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
             <label style="font-size:11px; font-weight:700;">Flight date:</label>
-            <input type="date" id="wind-fetch-date" style="padding:3px 6px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-input); color:var(--text-main); font-size:11px;">
+            <input type="date" id="wind-fetch-date" onchange="syncFlightDateFromWindPicker()" title="Same date as the planner's Flight Date field — changing it here updates the daylight card too." style="padding:3px 6px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-input); color:var(--text-main); font-size:11px;">
             <select id="wind-model" title="Which forecast model supplies the winds aloft. 'Compare' fetches three models, fills the mean and reports their disagreement." style="padding:3px 6px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-input); color:var(--text-main); font-size:11px;">
               <option value="best_match">Auto (best available)</option>
               <option value="ecmwf_ifs025">ECMWF IFS 0.25°</option>
@@ -2997,14 +2998,24 @@ svg.leaflet-image-layer.leaflet-interactive path {
         container.appendChild(fieldset);
       });
 
-      // Date picker: default today, forecasts available up to 16 days out.
+      // ONE flight date: this picker mirrors the global Flight Date field,
+      // clamped into the Open-Meteo forecast range (today .. +15 days).
+      // Changing it here writes back to the Flight Date, so the daylight
+      // card and the fetched winds can never quietly use different dates.
       const dEl = document.getElementById('wind-fetch-date');
-      const today = new Date();
-      const iso = d => d.toISOString().slice(0, 10);
-      if (!dEl.value) dEl.value = iso(today);
-      dEl.min = iso(today);
-      dEl.max = iso(new Date(today.getTime() + 15 * 86400000));
-      windFetchStatus('', false);
+      const todayStr = localDateStrOf(Date.now());
+      const maxStr = localDateStrOf(Date.now() + 15 * 86400000);
+      dEl.min = todayStr;
+      dEl.max = maxStr;
+      const fEl = document.getElementById('def-date');
+      if (fEl && !fEl.value) fEl.value = todayStr;
+      const flightDate = fEl ? fEl.value : todayStr;
+      dEl.value = flightDate < todayStr ? todayStr : (flightDate > maxStr ? maxStr : flightDate);
+      if (dEl.value === flightDate) {
+        windFetchStatus('', false);
+      } else {
+        windFetchStatus(`⚠ Flight Date ${flightDate} is outside the forecast range (${todayStr} … ${maxStr}) - winds can only be fetched for ${dEl.value}. The daylight card still uses ${flightDate}.`, true);
+      }
 
       document.getElementById('wind-modal').style.display = 'flex';
       
@@ -3173,10 +3184,22 @@ svg.leaflet-image-layer.leaflet-interactive path {
         const [h, m] = etd.split(':').map(Number);
         baseMin = h * 60 + m;
       } else {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = localDateStrOf(Date.now());   // local date, not UTC — matters near midnight
         baseMin = (dateStr === todayStr) ? (new Date().getHours() * 60 + new Date().getMinutes()) : 12 * 60;
       }
       return Math.min(23, Math.max(0, (baseMin + offsetMin) / 60));
+    }
+
+    // The wind modal's date IS the flight date — one concept, two inputs.
+    // Editing the modal's picker pushes the value back to def-date and
+    // recalcs, so sun times and winds always describe the same day.
+    function syncFlightDateFromWindPicker() {
+      const v = document.getElementById('wind-fetch-date').value;
+      const fEl = document.getElementById('def-date');
+      if (!v || !fEl) return;
+      fEl.value = v;
+      renderAllFlightTables();
+      windFetchStatus('', false);
     }
 
     function windFetchStatus(msg, isError) {
@@ -3253,7 +3276,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     async function fetchForecastWinds() {
       const dateStr = document.getElementById('wind-fetch-date').value
-        || new Date().toISOString().slice(0, 10);
+        || localDateStrOf(Date.now());
       const modelSel = document.getElementById('wind-model') ? document.getElementById('wind-model').value : 'best_match';
       const pts = buildWindSamplePoints();
       if (pts.length === 0) {
