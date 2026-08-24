@@ -1606,6 +1606,54 @@ T('pattern rows do not hijack the name', () => {
   ev(SEED);
 });
 
+console.log('\n=== 51. Ctrl+Z / Ctrl+Shift+Z keyboard undo & redo ===');
+const keyZ = (opts) => doc.dispatchEvent(new w.KeyboardEvent('keydown', Object.assign({ key: 'z', ctrlKey: true, bubbles: true, cancelable: true }, opts)));
+T('Ctrl+Z steps back through MULTIPLE edits; Ctrl+Shift+Z replays them', () => {
+  ev(SEED);
+  ev('undoStack = []; redoStack = [];');
+  w.deleteWaypointFromFlight(0, 2);   // 3 -> 2 waypoints
+  w.deleteWaypointFromFlight(0, 1);   // 2 -> 1 waypoint
+  assert(ev('flights[0].waypoints.length') === 1, 'setup failed');
+  keyZ({});
+  assert(ev('flights[0].waypoints.length') === 2, 'first Ctrl+Z did not undo');
+  keyZ({});
+  assert(ev('flights[0].waypoints.length') === 3, 'second Ctrl+Z did not accumulate');
+  keyZ({ shiftKey: true });
+  assert(ev('flights[0].waypoints.length') === 2, 'first Ctrl+Shift+Z did not redo');
+  keyZ({ shiftKey: true });
+  assert(ev('flights[0].waypoints.length') === 1, 'second Ctrl+Shift+Z did not accumulate');
+  keyZ({}); keyZ({});   // back to the full route for later tests
+  assert(ev('flights[0].waypoints.length') === 3, 'undo after redo broken');
+});
+T('Cmd+Z works for Mac users', () => {
+  w.deleteWaypointFromFlight(0, 2);
+  doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }));
+  assert(ev('flights[0].waypoints.length') === 3, 'metaKey undo did not fire');
+});
+T('keystrokes inside a text input are left to the browser', () => {
+  w.deleteWaypointFromFlight(0, 2);
+  const inp = doc.getElementById('fuel-dep');
+  inp.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert(ev('flights[0].waypoints.length') === 2, 'undo fired while typing in an input');
+  keyZ({});   // restore via the document-level path
+  assert(ev('flights[0].waypoints.length') === 3, 'restore failed');
+});
+T('an exhausted stack is silent on the keyboard but still alerts on the buttons', () => {
+  ev('undoStack = []; redoStack = [];');
+  let alerts = 0;
+  const orig = w.alert; w.alert = () => { alerts++; };
+  keyZ({});
+  keyZ({ shiftKey: true });
+  assert(alerts === 0, 'keyboard on empty stacks must be silent, got ' + alerts + ' alert(s)');
+  w.undoLast();
+  assert(alerts === 1, 'Undo button lost its empty-stack alert');
+  w.alert = orig;
+});
+T('guide documents the shortcuts', () => {
+  const guide = doc.querySelector('#help-modal .modal-body').textContent;
+  assert(guide.includes('Ctrl+Z') && guide.includes('Ctrl+Shift+Z'), 'shortcuts missing from guide');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
