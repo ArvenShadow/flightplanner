@@ -93,6 +93,12 @@ claude.ai; this repo is the continuation point for Claude Code.
   epoch via getRegionalMagVar's optional yearDecimal param. Model error
   grows ~0.06°/yr (its secular term is 0.20°/yr vs WMM's 0.26): refit
   the polynomial coefficients around 2029-2030 or when WMM2030 lands.
+- **Via-leg row semantics (v16.4, user decision)**: on a leg with via
+  points the OFP row's TT/MT/WCA/MH show the DIRECT waypoint-to-waypoint
+  line (the chart measurement between the named fixes); the flown
+  per-segment tracks live in the ↳ sub-line and the plotting list, and
+  the guide says to steer by those. Distance/time/fuel/GS always walk
+  the bent path. Do not switch the row back to first-segment track.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).

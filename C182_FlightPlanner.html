@@ -1105,7 +1105,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li><b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> redoes (⌘ on Mac), step by step up to 30 states — same stacks as the Undo/Redo buttons. Inside a text field the keys keep their normal text-editing meaning.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
-            <li><b>Click a leg line</b> to bend it around terrain: a diamond <b>via point</b> appears where you clicked — drag it into position, right-click to remove. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path, and the via tracks are listed in a small sub-line under the row (and per-segment in the plotting list).</li>
+            <li><b>Click a leg line</b> to bend it around terrain: a diamond <b>via point</b> appears where you clicked — drag it into position, right-click to remove. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
             <li>Climb and descent no longer split legs into separate rows: each leg row shows <b>total</b> distance/time/burn for easy copying, with the CLB/DES portion and TOC/TOD marking distance in the sub-line.</li>
             <li>Press <b>👁 View Mode</b> to lock all editing for in-flight use; tapping a map waypoint then highlights its OFP row. The button flips to <b>✏ Edit Mode</b> to switch back.</li>
             <li><b>Undo / Redo</b> cover every change. <b>Esc</b> closes any window like this one.</li>
@@ -1126,6 +1126,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
           <h3>🛠 Aircraft Performance (⚙ Settings)</h3>
           <ul style="margin-left:16px;">
             <li><b>C182T mode</b> uses the genuine POH tables (Fig 5-8 / 5-9, 3100 lb): pick your cruise <b>RPM and MP</b>; TAS &amp; fuel flow interpolate on altitude and ISA deviation, and MP auto-caps at full throttle with altitude.</li>
+            <li>On a <b>CLB+CRZ leg</b> the row's TAS (and the WCA/MH derived from it) is the <b>cruise TAS</b> — the slower climb is fully accounted in the leg's time, fuel and GS and detailed in the ↳ sub-line. A leg that is all climb shows the climb TAS. The integrity check still compares wind against the slowest phase.</li>
             <li><b>Climb technique</b>: POH Fig 5-8 (full throttle, 90 KIAS, +10% per 10°C above ISA) or <b>Cruise climb</b> with your own observed ROC and fuel flow.</li>
             <li><b>Other aircraft</b>: switch to Manual mode and enter your own cruise/climb numbers.</li>
             <li>Units (NM/km/SM, gal/L/kg) and dark mode live here too — all values convert everywhere when you switch.</li>
@@ -2438,7 +2439,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
       let timeMin = 0, burnGal = 0;
       let climbInfo = null, descInfo = null;
-      let startTas, profileTag;
+      let startTas, profileTag, minPhaseTas;
 
       if (deltaAlt > 0) {
         const cp = climbPerf(from.alt, to.alt, to.oat);
@@ -2468,6 +2469,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
         burnGal = climbFuel + (cruiseTime / 60) * crz.gph;
         climbInfo = { timeMin: climbTimeSpent, fuelGal: climbFuel, tocAlongNM: climbDist, completed };
         profileTag = completed && cruiseTime > 0.5 ? 'CLB+CRZ' : 'CLB';
+        // Displayed TAS = the CRUISE TAS when the leg has a cruise portion
+        // (user decision, v16.4): time/fuel/GS already account for the slower
+        // climb (detailed in the sub-line), so the row's TAS/WCA/MH should
+        // describe how the bulk of the leg is flown. An all-climb leg keeps
+        // the climb TAS. The integrity check still guards wind against the
+        // SLOWEST phase via minPhaseTas.
+        if (profileTag === 'CLB+CRZ') startTas = crz.tas;
+        minPhaseTas = cp.tasAvg;
       } else if (deltaAlt < 0) {
         const tDesc = Math.abs(deltaAlt) / Math.max(1, aircraftProfile.rod);
         const crz = cruisePerf(from.alt, to.oat);
@@ -2499,21 +2508,29 @@ svg.leaflet-image-layer.leaflet-interactive path {
         descInfo = { timeMin: descTimeSpent, todBeforeNM: descDist, fitsInLeg: remDesc <= 0.05 };
         profileTag = descDist < totalDist - 0.1 ? 'CRZ+DES' : 'DES';
         if (profileTag === 'DES') startTas = aircraftProfile.descTas;
+        minPhaseTas = Math.min(crz.tas, aircraftProfile.descTas);
       } else {
         const crz = cruisePerf(to.alt, to.oat);
         startTas = crz.tas;
         for (const s of segs) timeMin += (s.distNM / phaseGS(crz.tas, to.wdir, to.wspd, s.tt).gs) * 60;
         burnGal = (timeMin / 60) * crz.gph;
         profileTag = 'CRZ';
+        minPhaseTas = crz.tas;
       }
 
-      const first = segs[0];
-      const { wca } = phaseGS(startTas, to.wdir, to.wspd, first.tt);
+      // The OFP row's TT/MT/WCA/MH describe the DIRECT waypoint-to-waypoint
+      // line — the line you measure on the chart between the two named fixes
+      // (user decision, v16.4). On a leg with via points the flown tracks
+      // differ per segment: those are listed in the ↳ sub-line and in the
+      // plotting list. Distance/time/fuel/GS always walk the real bent path.
+      const rowTT = Math.round(calcTrueTrack(from.lat, from.lng, to.lat, to.lng));
+      const { wca } = phaseGS(startTas, to.wdir, to.wspd, rowTT);
       const effGS = timeMin > 0 ? (totalDist / (timeMin / 60)) : 0;
       return {
         segs, distNM: totalDist, timeMin, burnGal,
-        firstTT: first.tt, firstWCA: Math.round(wca),
-        dispTas: Math.round(startTas), effGS: Math.round(effGS),
+        rowTT, rowWCA: Math.round(wca),
+        dispTas: Math.round(startTas), minPhaseTas: Math.round(minPhaseTas),
+        effGS: Math.round(effGS),
         profileTag, climbInfo, descInfo
       };
     }
@@ -3590,9 +3607,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
           if (!res) continue;
 
           const dist = Number(convertDist(res.distNM, distUnit).toFixed(1));
-          const tt = res.firstTT;
+          const tt = res.rowTT;
           const mt = Math.round((tt + to.var + 360) % 360);
-          const mh = Math.round((mt + res.firstWCA + 360) % 360);
+          const mh = Math.round((mt + res.rowWCA + 360) % 360);
           const varIndicator = "Auto (regional model) - editable";
           const legTime = Math.round(res.timeMin);
 
@@ -3611,7 +3628,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
           runningFuelRemaining = Number((runningFuelRemaining - legBurn).toFixed(1));
           sectorDist += dist; sectorTime += legTime; sectorBurn += legBurn;
 
-          tbody.appendChild(createRowHTML(from.name, to.name, res.profileTag, altLabel, to.oat, res.dispTas, tt, to.var, varIndicator, mt, to.wdir, to.wspd, res.firstWCA, mh, res.effGS, dist, threeMinNM, legTime, runningAccTime, effFF, legBurn, runningAccBurn, runningFuelRemaining, fIdx, i, true));
+          tbody.appendChild(createRowHTML(from.name, to.name, res.profileTag, altLabel, to.oat, res.dispTas, tt, to.var, varIndicator, mt, to.wdir, to.wspd, res.rowWCA, mh, res.effGS, dist, threeMinNM, legTime, runningAccTime, effFF, legBurn, runningAccBurn, runningFuelRemaining, fIdx, i, true));
 
           const subTr = buildSubLegRow(from, to, res, distUnit, fuelUnit);
           if (subTr) tbody.appendChild(subTr);
@@ -3917,8 +3934,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
           if (!res) continue;
           if (!isFinite(res.timeMin) || res.timeMin < 0 || !isFinite(res.burnGal) || res.burnGal < 0)
             add(`Leg ${from.name} → ${to.name}: computed time/fuel is invalid.`);
-          if (to.wspd >= res.dispTas)
-            add(`Leg ${from.name} → ${to.name}: wind (${to.wspd} kt) meets or exceeds TAS (${res.dispTas} kt) - groundspeed and time are NOT reliable.`);
+          if (to.wspd >= res.minPhaseTas)
+            add(`Leg ${from.name} → ${to.name}: wind (${to.wspd} kt) meets or exceeds the slowest phase's TAS (${res.minPhaseTas} kt) - groundspeed and time are NOT reliable.`);
           else if (res.effGS < 30)
             add(`Leg ${from.name} → ${to.name}: effective groundspeed ${res.effGS} kt - check the wind entry.`);
         }
@@ -3969,7 +3986,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
           const smt = Math.round((sg.tt + to.var + 360) % 360);
           return `${String(smt).padStart(3, '0')}° ${convertDist(sg.distNM, distUnit).toFixed(1)}`;
         }).join(' → ');
-        parts.push(`via ${res.segs.length - 1} pt${res.segs.length > 2 ? 's' : ''}: ${segTxt} ${dl}`);
+        parts.push(`via ${res.segs.length - 1} pt${res.segs.length > 2 ? 's' : ''} — flown tracks °M (row TT/MT/MH = direct ${from.name}–${to.name}): ${segTxt} ${dl}`);
       }
       if (parts.length === 0) return null;
       const tr = document.createElement('tr');
