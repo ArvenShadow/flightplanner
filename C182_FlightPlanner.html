@@ -1102,6 +1102,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li><b>Click the map</b> to add a waypoint. Name it in the prompt — the first click is your departure.</li>
             <li>Type <b>PATTERN</b> as the name to log traffic-circuit laps (time &amp; fuel, no distance).</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
+            <li><b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> redoes (⌘ on Mac), step by step up to 30 states — same stacks as the Undo/Redo buttons. Inside a text field the keys keep their normal text-editing meaning.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
             <li><b>Click a leg line</b> to bend it around terrain: a diamond <b>via point</b> appears where you clicked — drag it into position, right-click to remove. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path, and the via tracks are listed in a small sub-line under the row (and per-segment in the plotting list).</li>
@@ -2548,9 +2549,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
       redoStack = [];
     }
 
-    function undoLast() {
+    // quiet=true (keyboard use): an empty stack is ignored silently, so
+    // holding Ctrl+Z past the end doesn't fire an alert per keypress.
+    function undoLast(quiet) {
       if (undoStack.length === 0) {
-        alert("Nothing to undo.");
+        if (!quiet) alert("Nothing to undo.");
         return;
       }
       redoStack.push(JSON.stringify(flights));
@@ -2563,9 +2566,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
       saveActiveState();
     }
 
-    function redoLast() {
+    function redoLast(quiet) {
       if (redoStack.length === 0) {
-        alert("Nothing to redo.");
+        if (!quiet) alert("Nothing to redo.");
         return;
       }
       undoStack.push(JSON.stringify(flights));
@@ -3837,9 +3840,20 @@ svg.leaflet-image-layer.leaflet-interactive path {
     }
 
     // Close any open modal with Escape, or by clicking the dark backdrop.
+    // Ctrl+Z / Ctrl+Shift+Z (Cmd on Mac) drive the same multi-step undo/redo
+    // stacks as the toolbar buttons (up to 30 states). Keystrokes inside
+    // text fields are left alone so native input editing keeps its own undo.
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         ['sera-modal', 'wind-modal', 'settings-modal', 'help-modal'].forEach(closeModal);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key && e.key.toLowerCase() === 'z') {
+        const t = e.target;
+        const tag = t && t.tagName ? t.tagName.toUpperCase() : '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+        e.preventDefault();
+        if (e.shiftKey) redoLast(true); else undoLast(true);
       }
     });
 
