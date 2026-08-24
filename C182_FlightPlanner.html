@@ -850,6 +850,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .tod-label { display: inline-block; background: #c05621; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
     .pattern-label { display: inline-block; background: #553c9a; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
     .ruler-label { display: inline-block; background: #319795; color: #ffffff; font-weight: 700; font-size: 10px; padding: 2px 5px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.7); box-shadow: 0 1px 4px rgba(0,0,0,0.45); white-space: nowrap; }
+    /* Zoom declutter (see applyZoomDeclutter). Mid zoom: compact waypoint
+       labels, the big TOC/TOD and ruler chips disappear (their exact-position
+       dots stay). Far zoom: dots and route lines only. */
+    #map.zoom-mid .wp-label { font-size: 9px; padding: 1px 4px; border-width: 1px; border-left-width: 3px; box-shadow: none; }
+    #map.zoom-mid .pattern-label { font-size: 8px; padding: 1px 4px; }
+    #map.zoom-mid .toc-label, #map.zoom-mid .tod-label,
+    #map.zoom-mid .ruler-seg-label { display: none; }
+    #map.zoom-far .wp-label, #map.zoom-far .pattern-label,
+    #map.zoom-far .toc-label, #map.zoom-far .tod-label,
+    #map.zoom-far .prof-point, #map.zoom-far .via-dot,
+    #map.zoom-far .ruler-seg-label, #map.zoom-far .ruler-label { display: none; }
 
     /* Modals */
     .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
@@ -1161,6 +1172,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail.</li>
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
             <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
+            <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (their exact-position dots remain); zoomed further out only dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only.</li>
           </ul>
         </div>
 
@@ -1804,6 +1816,26 @@ svg.leaflet-image-layer.leaflet-interactive path {
       tileWarningShown = false;
       baseTiles.redraw();
     });
+
+    // ZOOM DECLUTTER. The waypoint labels and TOC/TOD chips are fixed pixel
+    // size, so zooming out shrinks the map under them until they pile into an
+    // unreadable heap. Three detail levels, switched by a single class on the
+    // map container and handled in pure CSS — no marker re-render, everything
+    // stays live and draggable:
+    //   z >= 8   full   everything (normal working zoom)
+    //   z 6-7    mid    compact waypoint labels; TOC/TOD & ruler chips hidden
+    //                   (their exact-position dots remain)
+    //   z <= 5   far    dots and route lines only — all text hidden
+    function applyZoomDeclutter() {
+      const el = document.getElementById('map');
+      if (!el || typeof map.getZoom !== 'function') return;
+      const z = map.getZoom();
+      el.classList.remove('zoom-mid', 'zoom-far');
+      if (z <= 5) el.classList.add('zoom-far');
+      else if (z <= 7) el.classList.add('zoom-mid');
+    }
+    map.on('zoomend', applyZoomDeclutter);
+    applyZoomDeclutter();
 
     let flights = defaultFlights();
     let activeFlightIndex = 0;
