@@ -3851,7 +3851,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key && e.key.toLowerCase() === 'z') {
         const t = e.target;
         const tag = t && t.tagName ? t.tagName.toUpperCase() : '';
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+        // Only fields with real free-text editing keep the browser's native
+        // undo. The app's number/time/date fields and selects commit on
+        // change, and focus often REMAINS in them afterwards (they are not
+        // rebuilt by the re-render) — exempting all inputs made Ctrl+Z
+        // silently dead right after editing fuel, ETD or an altitude, which
+        // is exactly when a pilot reaches for undo (verified in Chromium).
+        const textLike = tag === 'TEXTAREA' || (t && t.isContentEditable) ||
+          (tag === 'INPUT' && /^(text|search|email|password|url|tel)$/i.test(t.type || 'text'));
+        if (textLike) return;
         e.preventDefault();
         if (e.shiftKey) redoLast(true); else undoLast(true);
       }
