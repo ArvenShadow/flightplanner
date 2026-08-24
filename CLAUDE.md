@@ -70,13 +70,9 @@ claude.ai; this repo is the continuation point for Claude Code.
   features. Chart contours + MEF remain the terrain reference.
 - **Map**: locked to a single world copy (maxBounds ±180°, viscosity 1,
   noWrap on tiles). Kartverket tile URL is WMTS webmercator cache.
-- **Mass & Balance / OFP port**: a full port of the school's Excel OFP
-  (M&B, fuel req, POH takeoff/landing interpolation, NavData for 53
-  aerodromes) was built as v17 and then ROLLED BACK — the user prefers
-  keeping M&B in Excel. The port code exists only in the old claude.ai
-  chat; v16.2 contains none of it. If ever revived, note: the user's
-  Excel has one verified typo — takeoff table 2300 lb / 4000 ft / 40 °C
-  must be 1270 ft (POH Fig 5-6 Sheet 3), their sheet had 1165.
+- **Mass & Balance**: out of scope — the user keeps M&B in their Excel
+  OFP. Do not build M&B, fuel-requirement or POH takeoff/landing
+  features into the planner.
 - **Daylight / VFR day (v16.3)**: legal basis verified — SERA Art. 2(97)
   (Reg. (EU) 923/2012) defines night via civil twilight, sun centre 6°
   below the horizon; Norway's BSL F 1-1 (forskrift 2016-12-14-1578) was
@@ -90,12 +86,6 @@ claude.ai; this repo is the continuation point for Claude Code.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).
-
-## Roadmap items the user approved but hasn't ordered yet
-
-- Crosswind calculator per runway.
-- Alternate/diversion fuel planning (ICAO-style trip+alt+reserve).
-- METAR/TAF display via api.met.no — VERIFY endpoint + browser CORS first.
 
 ## Safety posture
 
