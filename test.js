@@ -1630,12 +1630,24 @@ T('Cmd+Z works for Mac users', () => {
   doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }));
   assert(ev('flights[0].waypoints.length') === 3, 'metaKey undo did not fire');
 });
-T('keystrokes inside a text input are left to the browser', () => {
+T('Ctrl+Z works with focus in the app\'s number/time fields (where focus usually is)', () => {
+  // Focus stays in fuel/ETD/altitude fields after editing them (they are not
+  // rebuilt by the re-render), so the shortcut MUST fire from there — this
+  // was the original in-browser bug: undo went dead right after an edit.
   w.deleteWaypointFromFlight(0, 2);
   const inp = doc.getElementById('fuel-dep');
   inp.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
-  assert(ev('flights[0].waypoints.length') === 2, 'undo fired while typing in an input');
-  keyZ({});   // restore via the document-level path
+  assert(ev('flights[0].waypoints.length') === 3, 'undo did not fire from a number input');
+});
+T('free-text fields keep the browser\'s native undo', () => {
+  w.deleteWaypointFromFlight(0, 2);
+  const txt = doc.createElement('input');
+  txt.type = 'text';
+  doc.body.appendChild(txt);
+  txt.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+  assert(ev('flights[0].waypoints.length') === 2, 'app undo hijacked a text input');
+  txt.remove();
+  keyZ({});
   assert(ev('flights[0].waypoints.length') === 3, 'restore failed');
 });
 T('an exhausted stack is silent on the keyboard but still alerts on the buttons', () => {
