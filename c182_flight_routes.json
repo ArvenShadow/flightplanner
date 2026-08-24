@@ -1,8 +1,162 @@
 {
-  "formatVersion": 2,
-  "routes": {},
+  "routes": {
+    "ENDU - ENTC (Via FINNSNES ANSNES)": [
+      {
+        "lat": 69.05505349034048,
+        "lng": 18.54466864537881,
+        "name": "ENDU",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -11
+      },
+      {
+        "lat": 69.23781329784325,
+        "lng": 17.97902780062536,
+        "name": "FINNSNES",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -11
+      },
+      {
+        "lat": 69.466650527204,
+        "lng": 18.15553600514514,
+        "name": "Aglapsvik",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -12
+      },
+      {
+        "lat": 69.50791894607072,
+        "lng": 18.42674713223617,
+        "name": "ANSNES",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -12
+      },
+      {
+        "lat": 69.67895053899815,
+        "lng": 18.911430329302224,
+        "name": "ENTC",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -12
+      }
+    ],
+    "ENDU to ENSK": [
+      {
+        "lat": 69.05717122515573,
+        "lng": 18.538519994922027,
+        "name": "ENDU",
+        "alt": 254,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -11
+      },
+      {
+        "lat": 69.11556116736662,
+        "lng": 17.683500232346766,
+        "name": "ESPENES",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 222,
+        "wspd": 12,
+        "var": -11
+      },
+      {
+        "lat": 68.91481977238743,
+        "lng": 17.431720882810215,
+        "name": "FAKSFJORDEN",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 218,
+        "wspd": 15,
+        "var": -11
+      },
+      {
+        "lat": 68.92544203907292,
+        "lng": 17.118723297563395,
+        "name": "ENGENES",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -11
+      },
+      {
+        "lat": 68.77706654044349,
+        "lng": 17.18313270517787,
+        "name": "HAMNVIK",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -11
+      },
+      {
+        "lat": 68.693391177868,
+        "lng": 16.88028593122797,
+        "name": "TOVIK",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -11
+      },
+      {
+        "lat": 68.60795897309589,
+        "lng": 16.51065802044162,
+        "name": "GAUSVIKA",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -10
+      },
+      {
+        "lat": 68.8063193385454,
+        "lng": 16.101063465013013,
+        "name": "UTSTRAND",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -10
+      },
+      {
+        "lat": 68.70043274161388,
+        "lng": 15.421635401163675,
+        "name": "SORTLAND",
+        "alt": 2500,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -10
+      },
+      {
+        "lat": 68.58026621860824,
+        "lng": 15.018236111214845,
+        "name": "ENSK",
+        "alt": 1000,
+        "oat": 7,
+        "wdir": 230,
+        "wspd": 15,
+        "var": -10
+      }
+    ]
+  },
   "missions": {
-    "ENDU-ENSK-ENLK-ENSH-ENEV-ENDU": [
+    "ENDU-ENSK-ENLK-ENEV-ENDU": [
       {
         "id": 1,
         "title": "ENDU to ENSK",
@@ -463,40 +617,458 @@
   "currentFlights": [
     {
       "id": 1,
-      "title": "Flight Plan 1",
+      "title": "ENDU to ENSK",
       "depElev": 254,
-      "waypoints": []
+      "waypoints": [
+        {
+          "lat": 69.05717122515573,
+          "lng": 18.538519994922027,
+          "name": "ENDU",
+          "alt": 254,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 15,
+          "var": -11
+        },
+        {
+          "lat": 69.11556116736662,
+          "lng": 17.683500232346766,
+          "name": "ESPENES",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 270,
+          "wspd": 4,
+          "var": -11
+        },
+        {
+          "lat": 68.91481977238743,
+          "lng": 17.431720882810215,
+          "name": "FAKSFJORDEN",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 240,
+          "wspd": 5,
+          "var": -11
+        },
+        {
+          "lat": 68.92544203907292,
+          "lng": 17.118723297563395,
+          "name": "ENGENES",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 220,
+          "wspd": 5,
+          "var": -11
+        },
+        {
+          "lat": 68.77706654044349,
+          "lng": 17.18313270517787,
+          "name": "HAMNVIK",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 4,
+          "var": -11
+        },
+        {
+          "lat": 68.693391177868,
+          "lng": 16.88028593122797,
+          "name": "TOVIK",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 3,
+          "var": -11
+        },
+        {
+          "lat": 68.60795897309589,
+          "lng": 16.51065802044162,
+          "name": "GAUSVIKA",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 2,
+          "var": -10
+        },
+        {
+          "lat": 68.8063193385454,
+          "lng": 16.101063465013013,
+          "name": "UTSTRAND",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 270,
+          "wspd": 6,
+          "var": -10
+        },
+        {
+          "lat": 68.70043274161388,
+          "lng": 15.421635401163675,
+          "name": "SORTLAND",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 270,
+          "wspd": 6,
+          "var": -10
+        },
+        {
+          "lat": 68.58026621860824,
+          "lng": 15.018236111214845,
+          "name": "ENSK",
+          "alt": 1000,
+          "oat": 7,
+          "wdir": 250,
+          "wspd": 8,
+          "var": -10
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Flight Plan 2",
+      "depElev": 1000,
+      "waypoints": [
+        {
+          "lat": 68.57969526192524,
+          "lng": 15.018980630577886,
+          "name": "ENSK",
+          "alt": 1000,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 15,
+          "var": -10,
+          "isPattern": false,
+          "laps": 1,
+          "varSource": "offline"
+        },
+        {
+          "lat": 68.44096057894075,
+          "lng": 14.749091350305623,
+          "name": "STRØNSTAD",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 270,
+          "wspd": 6,
+          "var": -10,
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.38640473338202,
+          "lng": 14.416760117709973,
+          "name": "LAUKVIKA",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 260,
+          "wspd": 4,
+          "var": -9,
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.32535415925582,
+          "lng": 14.256140462861493,
+          "name": "GIMSØY",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 220,
+          "wspd": 3,
+          "var": -9,
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.34566232213952,
+          "lng": 13.948987355772514,
+          "name": "DIGERNESET",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 220,
+          "wspd": 3,
+          "var": -9,
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.153196719888,
+          "lng": 13.610298059966063,
+          "name": "LEKNES",
+          "alt": 1000,
+          "oat": 7,
+          "wdir": 200,
+          "wspd": 2,
+          "var": -9,
+          "isPattern": false,
+          "laps": 3
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Flight Plan 3",
+      "depElev": 1000,
+      "waypoints": [
+        {
+          "lat": 68.153196719888,
+          "lng": 13.610298059966063,
+          "name": "LEKNES",
+          "alt": 1000,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 15,
+          "var": -9,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 1
+        },
+        {
+          "lat": 68.12900700348546,
+          "lng": 13.858681852818506,
+          "name": "STAMSUND",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 260,
+          "wspd": 4,
+          "var": -9,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.25173263754897,
+          "lng": 14.19519457098212,
+          "name": "RABBEN",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 4,
+          "var": -9,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.16083196777667,
+          "lng": 14.21081552068643,
+          "name": "HENNINGSVÆR",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 220,
+          "wspd": 4,
+          "var": -9,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.24224870112195,
+          "lng": 14.668480676455891,
+          "name": "ENSH",
+          "alt": 1000,
+          "oat": 7,
+          "wdir": 200,
+          "wspd": 5,
+          "var": -9,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Flight Plan 4",
+      "depElev": 1000,
+      "waypoints": [
+        {
+          "lat": 68.24224870112195,
+          "lng": 14.668480676455891,
+          "name": "ENSH",
+          "alt": 1000,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 15,
+          "var": -9,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 1
+        },
+        {
+          "lat": 68.26676517519229,
+          "lng": 15.008470483641966,
+          "name": "ÅRSTEINEN",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 200,
+          "wspd": 6,
+          "var": -9,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.35301123023994,
+          "lng": 15.31232295070965,
+          "name": "ØKSNES",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 240,
+          "wspd": 6,
+          "var": -10,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.30558394473994,
+          "lng": 15.632302305320268,
+          "name": "OFFERSØY",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 250,
+          "wspd": 7,
+          "var": -10,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.41094274629113,
+          "lng": 15.999644912150023,
+          "name": "LØDINGEN",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 260,
+          "wspd": 9,
+          "var": -10,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.55700720945009,
+          "lng": 16.243374947766412,
+          "name": "KONGSVIKA",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 250,
+          "wspd": 7,
+          "var": -10,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.4898669582443,
+          "lng": 16.683525638145635,
+          "name": "ENEV",
+          "alt": 1100,
+          "oat": 7,
+          "wdir": 250,
+          "wspd": 7,
+          "var": -10,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Flight Plan 5",
+      "depElev": 1100,
+      "waypoints": [
+        {
+          "lat": 68.4898669582443,
+          "lng": 16.683525638145635,
+          "name": "ENEV",
+          "alt": 1100,
+          "oat": 7,
+          "wdir": 230,
+          "wspd": 15,
+          "var": -10,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 1
+        },
+        {
+          "lat": 68.69380561815785,
+          "lng": 16.88088445945375,
+          "name": "TOVIK",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 280,
+          "wspd": 4,
+          "var": -10,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.77744341032248,
+          "lng": 17.182820297107735,
+          "name": "HAMNVIK",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 290,
+          "wspd": 6,
+          "var": -11,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.92611908418328,
+          "lng": 17.116884856563527,
+          "name": "ENGENES",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 280,
+          "wspd": 8,
+          "var": -11,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 68.91475588689909,
+          "lng": 17.430078199148557,
+          "name": "FAKSFJORDEN",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 280,
+          "wspd": 6,
+          "var": -11,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 69.1153900384417,
+          "lng": 17.684049678068085,
+          "name": "ESPENES",
+          "alt": 2500,
+          "oat": 7,
+          "wdir": 270,
+          "wspd": 7,
+          "var": -11,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        },
+        {
+          "lat": 69.05843632372101,
+          "lng": 18.538559894328046,
+          "name": "ENDU",
+          "alt": 1500,
+          "oat": 7,
+          "wdir": 280,
+          "wspd": 7,
+          "var": -11,
+          "varSource": "WMM-2026",
+          "isPattern": false,
+          "laps": 3
+        }
+      ]
     }
-  ],
-  "profile": {
-    "mode": "C182T",
-    "cruiseRpm": 2200,
-    "cruiseMp": 20,
-    "cruiseTas": 130,
-    "cruiseFf": 12.5,
-    "climbMode": "CRUISECLIMB",
-    "ccRoc": 500,
-    "ccKias": 90,
-    "ccFf": 15,
-    "roc": 700,
-    "climbTas": 90,
-    "climbFf": 15,
-    "rod": 500,
-    "descTas": 120,
-    "descFf": 8.5,
-    "patternTime": 5,
-    "patternFf": 12,
-    "taxiFuel": 1.7,
-    "theme": "light",
-    "distUnit": "NM",
-    "fuelUnit": "GAL",
-    "obstacleRadius": 0.32,
-    "msaBuffer": 500,
-    "minuteMark": 3
-  },
-  "planningPrefs": {
-    "fuel": "64.0",
-    "reserve": "12.0",
-    "etd": "12:00"
-  }
+  ]
 }
