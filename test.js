@@ -1469,6 +1469,25 @@ T('a Flight Date outside the forecast range clamps the picker, warns, and leaves
   w.renderAllFlightTables();
 });
 
+console.log('\n=== 46. Local-time labeling (no UTC/local confusion) ===');
+T('ETD input is labeled as local time', () => {
+  const label = doc.getElementById('def-etd').previousElementSibling;
+  assert(label && label.textContent.includes('local'), 'ETD label does not say local');
+});
+T('daylight card states local times and the UTC offset for the flight date', () => {
+  ev(SEED);
+  const txt = doc.getElementById('daylight-body').textContent;
+  // the harness runs pinned to TZ=UTC, so the stated offset must be UTC+0
+  assert(txt.includes('All times local (UTC+0)'), 'timezone note missing/wrong: ' + txt.slice(-220));
+  assert(txt.includes('tables are UTC'), 'AIP-is-UTC caveat missing');
+  assert(ev('utcOffsetLabel("2026-06-21")') === 'UTC+0', 'offset label wrong under TZ=UTC');
+});
+T('guide explains the local-vs-UTC convention', () => {
+  const guide = doc.querySelector('#help-modal .modal-body').textContent;
+  assert(guide.includes('Times are local'), 'local-time note missing from guide');
+  assert(guide.includes('add the local offset'), 'UTC cross-check hint missing from guide');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
