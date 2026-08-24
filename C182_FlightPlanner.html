@@ -974,6 +974,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <label title="Estimated Time of Departure. When set, an ETO clock time is shown for every leg.">ETD (HH:MM)</label>
             <input type="time" id="def-etd" value="" onchange="renderAllFlightTables(); savePlanningPrefs();">
           </div>
+          <div class="input-group">
+            <label title="Flight date, used for the Daylight &amp; VFR-day card. Defaults to today and is NOT saved between sessions, so a stale date can never show the wrong sun times.">Flight Date</label>
+            <input type="date" id="def-date" onchange="renderAllFlightTables();">
+          </div>
         </div>
       </div>
 
@@ -1001,6 +1005,12 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <td>Final Remaining: <span id="grand-final-rem" class="highlight-cell" style="padding:2px 6px;">0.0 gal</span></td>
           </tr>
         </table>
+      </div>
+
+      <!-- DAYLIGHT / VFR-DAY CARD (SERA night definition, see guide) -->
+      <div class="card" style="margin-top:4px;" id="daylight-card">
+        <div class="card-title">🌅 Daylight &amp; VFR Day (SERA)</div>
+        <div id="daylight-body" style="font-size:11px; line-height:1.7;"></div>
       </div>
     </div>
   </div>
@@ -1126,6 +1136,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li>Open the <b>Wind Matrix</b> (💨 button, or click any W/V cell) and <b>Tab</b> through Dir → Spd → OAT for every leg without touching the mouse.</li>
             <li><b>🌐 Fetch Forecast Winds</b> pulls live/forecast winds &amp; OAT from Open-Meteo (up to 16 days ahead): per-leg average at your planned altitude, interpolated between pressure levels and forecast hours. Pick a specific model (ECMWF / ICON / GFS) to know exactly what you're flying on, or <b>Compare</b> to fill the three-model mean and see how much the models disagree — big spread = uncertain winds. It only fills the matrix — you review, then Save &amp; Apply. Requires internet.</li>
             <li>Winds apply per-leg; WCA, MH and GS update instantly.</li>
+          </ul>
+        </div>
+
+        <div class="setting-section">
+          <h3>🌅 Daylight &amp; VFR Day</h3>
+          <ul style="margin-left:16px;">
+            <li>The <b>Daylight &amp; VFR Day card</b> under the mission totals shows sunrise/sunset and the legal <b>day-VFR window</b> at your departure and destination for the <b>Flight Date</b> (defaults to today; deliberately not saved between sessions so a stale date can never show wrong sun times).</li>
+            <li><b>The rule</b>: SERA Art. 2(97) (Reg. (EU) 923/2012) defines night as the hours between the end of evening civil twilight and the beginning of morning civil twilight — the boundary is the sun's centre <b>6° below the horizon</b>. Norway applies SERA through BSL F 1-1 without prescribing any other period, so this is the Norwegian day/night VFR boundary. Note: it is NOT sunset — at our latitudes civil twilight can last from ~30 minutes to many hours past sunset.</li>
+            <li>With an <b>ETD</b> set, takeoff and mission ETA are checked against the window: red = outside day VFR (night per SERA), amber = within a 30-minute <i>planning margin</i> (the margin is a suggestion, not a rule).</li>
+            <li><b>Polar cases are handled</b>: midnight sun / bright summer nights (day VFR all 24 h), polar-night days where the sun never rises but a legal twilight window still exists, and deep polar night (no day-VFR window at all — the card says so instead of showing meaningless times).</li>
+            <li><b>Accuracy</b>: NOAA solar equations, cross-checked against US Naval Observatory almanac data (±2 min at 69°N; degrades above 72° latitude — the card warns). The computed times are for planning; the official times in <b>AIP Norge GEN 2.7</b> / the almanac govern. Checking legality of the actual flight remains PIC responsibility.</li>
           </ul>
         </div>
 
@@ -1468,6 +1489,187 @@ svg.leaflet-image-layer.leaflet-interactive path {
     function etoCellHTML(accMins) {
       const eto = computeETO(accMins);
       return eto ? `<div style="font-size:9px; color:var(--highlight-text); font-weight:700;">ETO ${eto}</div>` : '';
+    }
+
+    // =========================================================================
+    // DAYLIGHT & VFR DAY (SERA)
+    // =========================================================================
+    // Legal basis (verified Aug 2026): SERA Article 2(97), Regulation (EU)
+    // 923/2012 — "'night' means the hours between the end of evening civil
+    // twilight and the beginning of morning civil twilight. Civil twilight
+    // ends in the evening when the centre of the sun's disc is 6 degrees
+    // below the horizon and begins in the morning when the centre of the
+    // sun's disc is 6 degrees below the horizon." Norway applies SERA via
+    // BSL F 1-1 (forskrift 2016-12-14-1578) WITHOUT prescribing any other
+    // night period, so the -6° civil-twilight boundary is the Norwegian
+    // day/night VFR boundary. Day VFR window = morning CT -> evening CT.
+    //
+    // Solar positions: NOAA Global Monitoring Laboratory equations (Meeus).
+    // Cross-checked in test.js against USNO almanac data for 69.7°N incl.
+    // polar night and midnight sun; agreement within ±2 min. NOAA states
+    // accuracy degrades beyond ±72° latitude — the card warns there.
+
+    const SOLAR_DEG = Math.PI / 180;
+
+    // Sun declination (rad) and equation of time (minutes) at a UTC instant.
+    function sunDeclEqTime(ms) {
+      const T = (ms / 86400000 + 2440587.5 - 2451545) / 36525;
+      const L0 = ((280.46646 + T * (36000.76983 + 0.0003032 * T)) % 360 + 360) % 360;
+      const M = (357.52911 + T * (35999.05029 - 0.0001537 * T)) * SOLAR_DEG;
+      const e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
+      const C = Math.sin(M) * (1.914602 - T * (0.004817 + 0.000014 * T))
+              + Math.sin(2 * M) * (0.019993 - 0.000101 * T)
+              + Math.sin(3 * M) * 0.000289;
+      const omega = (125.04 - 1934.136 * T) * SOLAR_DEG;
+      const lambda = (L0 + C - 0.00569 - 0.00478 * Math.sin(omega)) * SOLAR_DEG;
+      const eps = (23.43929111 - T * (0.013004167 + T * (0.000000164 - T * 0.0000005036))
+                   + 0.00256 * Math.cos(omega)) * SOLAR_DEG;
+      const decl = Math.asin(Math.sin(eps) * Math.sin(lambda));
+      const y = Math.pow(Math.tan(eps / 2), 2);
+      const L0r = L0 * SOLAR_DEG;
+      const eqTime = (4 / SOLAR_DEG) * (y * Math.sin(2 * L0r) - 2 * e * Math.sin(M)
+        + 4 * e * y * Math.sin(M) * Math.cos(2 * L0r)
+        - 0.5 * y * y * Math.sin(4 * L0r) - 1.25 * e * e * Math.sin(2 * M));
+      return { decl, eqTime };
+    }
+
+    // One crossing of the given solar zenith angle on a UTC calendar date.
+    // zenith 90.833° = official sunrise/sunset (refraction + semidiameter);
+    // zenith 96° = civil twilight (sun centre 6° below the horizon).
+    // rising=true -> morning crossing. Returns UTC ms, or the string
+    // 'above'/'below' when the sun stays above/below that altitude all day.
+    function solarCrossingUTC(dateStr, lat, lng, zenithDeg, rising) {
+      const p = dateStr.split('-').map(Number);
+      const midnight = Date.UTC(p[0], p[1] - 1, p[2]);
+      let t = midnight + (720 - 4 * lng) * 60000;   // ~ local solar noon
+      for (let i = 0; i < 3; i++) {                 // refine decl/eqTime at the event itself
+        const s = sunDeclEqTime(t);
+        const noonUTC = midnight + (720 - 4 * lng - s.eqTime) * 60000;
+        const cosH = (Math.cos(zenithDeg * SOLAR_DEG) - Math.sin(lat * SOLAR_DEG) * Math.sin(s.decl))
+                   / (Math.cos(lat * SOLAR_DEG) * Math.cos(s.decl));
+        if (cosH > 1) return 'below';
+        if (cosH < -1) return 'above';
+        const haMin = (Math.acos(cosH) / SOLAR_DEG) * 4;
+        t = noonUTC + (rising ? -haMin : haMin) * 60000;
+      }
+      return t;
+    }
+
+    // Full daylight picture for one date and point. kinds:
+    //  'normal'      window + sunrise/sunset exist
+    //  'no-sunrise'  day-VFR window exists but the sun never reaches the
+    //                horizon (polar night edge — legal day VFR in twilight)
+    //  'all-day'     civil twilight never ends: midnight sun, or the sun
+    //                sets but stays above -6° (bright polar summer night)
+    //  'polar-night' the sun never reaches -6°: NO day-VFR window this date
+    function computeDaylight(dateStr, lat, lng) {
+      const num = v => (typeof v === 'number' ? v : null);
+      const mct = solarCrossingUTC(dateStr, lat, lng, 96, true);
+      if (mct === 'below') return { kind: 'polar-night', mct: null, ect: null, sunrise: null, sunset: null };
+      const sr = solarCrossingUTC(dateStr, lat, lng, 90.833, true);
+      const ss = solarCrossingUTC(dateStr, lat, lng, 90.833, false);
+      if (mct === 'above') return { kind: 'all-day', mct: null, ect: null, sunrise: num(sr), sunset: num(ss) };
+      const ect = solarCrossingUTC(dateStr, lat, lng, 96, false);
+      return { kind: num(sr) === null ? 'no-sunrise' : 'normal',
+               mct, ect: num(ect), sunrise: num(sr), sunset: num(ss) };
+    }
+
+    function fmtLocalHM(ms) {
+      if (ms == null || !isFinite(ms)) return '—';
+      const d = new Date(ms);
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    function localDateStrOf(ms) {
+      const d = new Date(ms);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function firstPlottedWaypoint(fl) {
+      return (fl.waypoints || []).find(w => !w.isPattern && isFinite(w.lat) && isFinite(w.lng)) || null;
+    }
+
+    // Rebuilds the daylight card. totalMissionMin = whole-mission minutes
+    // after ETD (same accumulator the mission ETA uses).
+    function updateDaylightCard(totalMissionMin) {
+      const body = document.getElementById('daylight-body');
+      if (!body) return;
+      const dateEl = document.getElementById('def-date');
+      if (dateEl && !dateEl.value) dateEl.value = localDateStrOf(Date.now());
+      const dateStr = (dateEl && dateEl.value) ? dateEl.value : localDateStrOf(Date.now());
+
+      const dep = flights.length ? firstPlottedWaypoint(flights[0]) : null;
+      let dest = null;
+      for (let i = flights.length - 1; i >= 0 && !dest; i--) {
+        const pts = (flights[i].waypoints || []).filter(w => !w.isPattern && isFinite(w.lat) && isFinite(w.lng));
+        if (pts.length) dest = pts[pts.length - 1];
+      }
+      if (!dep || !dest) {
+        body.innerHTML = 'Add waypoints to see sunrise, sunset and the day-VFR window for the route and date.';
+        return;
+      }
+
+      // ETD / mission ETA as absolute instants (ETD is local clock time on the flight date).
+      const etdStr = document.getElementById('def-etd').value;
+      let etdMs = null, etaMs = null;
+      if (/^\d{1,2}:\d{2}$/.test(etdStr)) {
+        const dp = dateStr.split('-').map(Number);
+        const tp = etdStr.split(':').map(Number);
+        etdMs = new Date(dp[0], dp[1] - 1, dp[2], tp[0], tp[1]).getTime();
+        etaMs = etdMs + Math.round(totalMissionMin || 0) * 60000;
+      }
+
+      const depDl = computeDaylight(dateStr, dep.lat, dep.lng);
+      // Landing is judged on the ETA's own calendar date (an evening flight can land after midnight).
+      const destDl = computeDaylight(etaMs != null ? localDateStrOf(etaMs) : dateStr, dest.lat, dest.lng);
+
+      const kindNote = {
+        'normal': '',
+        'no-sunrise': 'sun stays below the horizon — day VFR legal in the civil-twilight window',
+        'all-day': 'civil twilight never ends — day VFR the whole 24 h',
+        'polar-night': 'sun stays below −6° all day — NO day-VFR window on this date'
+      };
+      const row = (label, wp, dl) => {
+        const win = dl.kind === 'all-day' ? 'all 24 h'
+                  : dl.kind === 'polar-night' ? 'none'
+                  : `${fmtLocalHM(dl.mct)}–${fmtLocalHM(dl.ect)}`;
+        return `<tr>
+          <td style="font-weight:700;">${label} ${wp.name}</td>
+          <td>☀ ${fmtLocalHM(dl.sunrise)} / ${fmtLocalHM(dl.sunset)}</td>
+          <td>Day-VFR window: <b>${win}</b></td>
+          <td style="color:var(--text-muted);">${kindNote[dl.kind]}</td>
+        </tr>`;
+      };
+
+      const warns = [];
+      const cautions = [];
+      const MARGIN_MS = 30 * 60000;   // planning margin, NOT a regulatory limit
+      if (depDl.kind === 'polar-night')
+        warns.push(`No day VFR at ${dep.name} on ${dateStr}: the sun never reaches −6° (SERA night all day).`);
+      if (destDl.kind === 'polar-night' && !(dep === dest && depDl.kind === 'polar-night'))
+        warns.push(`No day VFR at ${dest.name} on the landing date: the sun never reaches −6° (SERA night all day).`);
+      if (etdMs != null) {
+        if (depDl.mct != null && etdMs < depDl.mct)
+          warns.push(`Takeoff ${etdStr} is BEFORE morning civil twilight at ${dep.name} (${fmtLocalHM(depDl.mct)}) — that is night per SERA.`);
+        if (depDl.ect != null && etdMs > depDl.ect)
+          warns.push(`Takeoff ${etdStr} is AFTER the end of evening civil twilight at ${dep.name} (${fmtLocalHM(depDl.ect)}) — that is night per SERA.`);
+        if (destDl.mct != null && etaMs < destDl.mct)
+          warns.push(`Mission ETA ${fmtLocalHM(etaMs)} is BEFORE morning civil twilight at ${dest.name} (${fmtLocalHM(destDl.mct)}) — that is night per SERA.`);
+        if (destDl.ect != null && etaMs > destDl.ect)
+          warns.push(`Mission ETA ${fmtLocalHM(etaMs)} is AFTER the end of evening civil twilight at ${dest.name} (${fmtLocalHM(destDl.ect)}) — that is night per SERA.`);
+        else if (destDl.ect != null && etaMs > destDl.ect - MARGIN_MS)
+          cautions.push(`Mission ETA ${fmtLocalHM(etaMs)} is within 30 min of the end of civil twilight at ${dest.name} (${fmtLocalHM(destDl.ect)}). 30 min is a planning margin, not a rule — any delay eats into legal daylight.`);
+      } else {
+        cautions.push('Enter an ETD to check takeoff and landing times against the day-VFR window.');
+      }
+      if (Math.max(Math.abs(dep.lat), Math.abs(dest.lat)) > 72)
+        cautions.push('Above 72° latitude the solar algorithm loses accuracy — verify against the almanac.');
+
+      body.innerHTML =
+        `<table style="width:100%;">${row('DEP', dep, depDl)}${dep === dest ? '' : row('DEST', dest, destDl)}</table>` +
+        warns.map(m => `<div style="background:#e53e3e; color:#ffffff; font-weight:700; padding:4px 8px; border-radius:4px; margin-top:4px;">⛔ ${m}</div>`).join('') +
+        cautions.map(m => `<div style="background:#c05621; color:#ffffff; font-weight:600; padding:4px 8px; border-radius:4px; margin-top:4px;">⚠ ${m}</div>`).join('') +
+        `<div style="color:var(--text-muted); margin-top:4px;">Day VFR = start of morning to end of evening civil twilight (sun −6°) — SERA Art. 2(97), Reg. (EU) 923/2012, applied unchanged in Norway (BSL F 1-1). ` +
+        `Times are local for ${dateStr}, NOAA solar equations (±2 min). Verify official times in AIP Norge GEN 2.7 / almanac — PIC responsibility.</div>`;
     }
 
     function getReserveDisplayUnits() {
@@ -3331,6 +3533,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       remEl.innerText = runningFuelRemaining.toFixed(1) + ` ${fuelLabel(fuelUnit)}`;
       remEl.classList.toggle('low-fuel', runningFuelRemaining < getReserveDisplayUnits());
 
+      updateDaylightCard(runningAccTime);
       runIntegrityCheck();
     }
 
@@ -3560,6 +3763,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const tableTxt = document.getElementById('flight-plans-container').textContent;
       if (tableTxt.includes('NaN')) add('A non-numeric value (NaN) appeared in the flight table.');
       if (tableTxt.includes('Infinity')) add('An infinite value appeared in the flight table.');
+
+      const dlEl = document.getElementById('daylight-body');
+      const dlTxt = dlEl ? dlEl.textContent : '';
+      if (dlTxt.includes('NaN') || dlTxt.includes('Invalid'))
+        add('The daylight/VFR-day card shows an invalid time - do not trust its window.');
 
       flights.forEach((fl) => {
         fl.waypoints.forEach((wp) => {

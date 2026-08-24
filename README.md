@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.2)
+# C182 Flight Planner (v16.3)
 
 Single-file VFR flight planner for the Cessna 182T — ground planning only.
 Open `C182_FlightPlanner.html` in any browser. That file is the entire app.
@@ -8,7 +8,7 @@ Open `C182_FlightPlanner.html` in any browser. That file is the entire app.
 ```bash
 cd c182-planner
 npm install        # jsdom, for the test suite
-npm test           # must print RESULT: ALL CHECKS PASSED (144 tests)
+npm test           # must print RESULT: ALL CHECKS PASSED (157 tests)
 claude             # start Claude Code here; it reads CLAUDE.md automatically
 ```
 

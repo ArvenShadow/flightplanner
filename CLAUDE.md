@@ -77,14 +77,22 @@ claude.ai; this repo is the continuation point for Claude Code.
   chat; v16.2 contains none of it. If ever revived, note: the user's
   Excel has one verified typo — takeoff table 2300 lb / 4000 ft / 40 °C
   must be 1270 ft (POH Fig 5-6 Sheet 3), their sheet had 1165.
+- **Daylight / VFR day (v16.3)**: legal basis verified — SERA Art. 2(97)
+  (Reg. (EU) 923/2012) defines night via civil twilight, sun centre 6°
+  below the horizon; Norway's BSL F 1-1 (forskrift 2016-12-14-1578) was
+  checked and prescribes NO other period, so −6° is the Norwegian day/
+  night VFR boundary (not sunset). Solar math: NOAA/Meeus equations,
+  validated ≤0.5 min against USNO almanac fixtures (encoded in test.js,
+  ±2 min tolerance) incl. midnight sun, polar-night twilight window and
+  deep polar night. Flight Date input deliberately NOT persisted (stale
+  date must never show wrong sun times). 30-min ETA margin is labeled a
+  planning margin, not a rule. Card defers to AIP Norge GEN 2.7.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).
 
 ## Roadmap items the user approved but hasn't ordered yet
 
-- Sunrise/sunset & civil twilight warnings (pure math; valuable at 69°N,
-  handles polar night / midnight sun).
 - Crosswind calculator per runway.
 - Alternate/diversion fuel planning (ICAO-style trip+alt+reserve).
 - METAR/TAF display via api.met.no — VERIFY endpoint + browser CORS first.
