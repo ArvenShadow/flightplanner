@@ -83,6 +83,16 @@ claude.ai; this repo is the continuation point for Claude Code.
   deep polar night. Flight Date input deliberately NOT persisted (stale
   date must never show wrong sun times). 30-min ETA margin is labeled a
   planning margin, not a rule. Card defers to AIP Norge GEN 2.7.
+  Multi-sector missions: EVERY takeoff and landing is checked at its own
+  aerodrome on its own calendar date (STOP rows on the card); ETO/ETA
+  strings mark midnight rollover with "+1".
+- **MagVar (verified Aug 2026)**: the regional polynomial was
+  cross-checked against NOAA WMM2025 (epoch 2026.64): ≤0.75° error at
+  ENDU/ENTC/ENEV/ENBO/ENKR, −1.9° at ENGM (documented degradation away
+  from Troms/Nordland). Fixtures encoded in test.js pinned to that
+  epoch via getRegionalMagVar's optional yearDecimal param. Model error
+  grows ~0.06°/yr (its secular term is 0.20°/yr vs WMM's 0.26): refit
+  the polynomial coefficients around 2029-2030 or when WMM2030 lands.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).
