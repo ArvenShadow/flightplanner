@@ -1102,6 +1102,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li><b>Click the map</b> to add a waypoint. Name it in the prompt — the first click is your departure.</li>
             <li>Type <b>PATTERN</b> as the name to log traffic-circuit laps (time &amp; fuel, no distance).</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
+            <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
             <li><b>Click a leg line</b> to bend it around terrain: a diamond <b>via point</b> appears where you clicked — drag it into position, right-click to remove. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path, and the via tracks are listed in a small sub-line under the row (and per-segment in the plotting list).</li>
             <li>Climb and descent no longer split legs into separate rows: each leg row shows <b>total</b> distance/time/burn for easy copying, with the CLB/DES portion and TOC/TOD marking distance in the sub-line.</li>
@@ -1733,6 +1734,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
         cautions.map(m => `<div style="background:#c05621; color:#ffffff; font-weight:600; padding:4px 8px; border-radius:4px; margin-top:4px;">⚠ ${m}</div>`).join('') +
         `<div style="color:var(--text-muted); margin-top:4px;">Day VFR = start of morning to end of evening civil twilight (sun −6°) — SERA Art. 2(97), Reg. (EU) 923/2012, applied unchanged in Norway (BSL F 1-1). ` +
         `<b>All times local (${utcOffsetLabel(dateStr)})</b> for ${dateStr}, NOAA solar equations (±2 min). Verify official times in AIP Norge GEN 2.7 / almanac — note those tables are UTC. PIC responsibility.</div>`;
+    }
+
+    // Flight plans are displayed named after their route: first and last
+    // plotted waypoint, e.g. "ENDU-ENEV". The name follows the route live
+    // (add/delete/drag a waypoint and it updates on the next render). The
+    // stored fl.title is only the fallback while a flight has fewer than
+    // two plotted waypoints, and stays untouched in saves and exports.
+    function flightTitle(fl) {
+      const pts = (fl.waypoints || []).filter(w => !w.isPattern && w.name);
+      if (pts.length >= 2) return `${pts[0].name}-${pts[pts.length - 1].name}`;
+      return fl.title || `Flight Plan ${fl.id || ''}`.trim();
     }
 
     function getReserveDisplayUnits() {
@@ -2675,7 +2687,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const isFirstInFlight = (activeFlight.waypoints.length === 0);
       const defaultName = isFirstInFlight ? "DEP" : "WP" + (activeFlight.waypoints.length + 1);
       
-      const inputName = prompt(`Add Waypoint to [${activeFlight.title}]:\n(Tip: Type "PATTERN" to log traffic circuit laps)`, defaultName);
+      const inputName = prompt(`Add Waypoint to [${flightTitle(activeFlight)}]:\n(Tip: Type "PATTERN" to log traffic circuit laps)`, defaultName);
       if (inputName === null) return;
       
       let finalName = inputName.trim() || defaultName;
@@ -2779,7 +2791,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
         alert("Cannot remove the only flight plan.");
         return;
       }
-      if (confirm(`Delete ${flights[fIdx].title}?`)) {
+      if (confirm(`Delete ${flightTitle(flights[fIdx])}?`)) {
         pushUndoState();
         flights.splice(fIdx, 1);
         // Keep pointing at the SAME flight the user had active. Removing an
@@ -3014,7 +3026,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       flights.forEach((fl, fIdx) => {
         const fieldset = document.createElement('div');
         fieldset.style.marginBottom = '12px';
-        fieldset.innerHTML = `<h3 style="font-size:11px; font-weight:700; color:#2b6cb0; text-transform:uppercase; margin-bottom:4px;">✈ ${fl.title}</h3>`;
+        fieldset.innerHTML = `<h3 style="font-size:11px; font-weight:700; color:#2b6cb0; text-transform:uppercase; margin-bottom:4px;">✈ ${flightTitle(fl)}</h3>`;
 
         if (fl.waypoints.length < 2) {
           fieldset.innerHTML += `<p style="font-size:11px; color:var(--text-muted); font-style:italic;">No legs plotted yet for this flight.</p>`;
@@ -3446,7 +3458,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
         headerDiv.className = `flight-header ${isSelected ? 'flight-header-active' : ''}`;
         headerDiv.innerHTML = `
           <div style="display:flex; align-items:center; gap:8px;">
-            <span>✈ <b>${fl.title}</b> ${isSelected ? '<small style="color:#ecc94b;">[ACTIVE]</small>' : ''}</span>
+            <span>✈ <b>${flightTitle(fl)}</b> ${isSelected ? '<small style="color:#ecc94b;">[ACTIVE]</small>' : ''}</span>
             <span style="font-size:11px; font-weight:normal; background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px;">
               🛫 Dep. Elev: 
               <input type="number" class="flight-dep-input" value="${fl.depElev}" step="50" onfocus="this.select()" onchange="setFlightDepElevation(${fIdx}, this.value)"> ft
@@ -3788,7 +3800,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const wdir = Number(document.getElementById('def-wdir').value);
       const wspd = Number(document.getElementById('def-wspd').value);
 
-      if (!confirm(`Apply defaults to every leg of "${fl.title}"?\n\n` +
+      if (!confirm(`Apply defaults to every leg of "${flightTitle(fl)}"?\n\n` +
                    `Cruise Alt: ${alt} ft\nOAT: ${oat} °C\nWind: ${wdir}° / ${wspd} kt\n\n` +
                    `(The departure waypoint keeps its field elevation.)`)) return;
 
@@ -3966,7 +3978,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const fl = flights[fIdx];
       const distUnit = aircraftProfile.distUnit || 'NM';
       const lines = [];
-      lines.push(`${fl.title.toUpperCase()} - WAYPOINTS`);
+      lines.push(`${flightTitle(fl).toUpperCase()} - WAYPOINTS`);
       fl.waypoints.forEach((wp, i) => {
         const tag = wp.isPattern ? ` (PATTERN x${wp.laps})` : '';
         lines.push(`${String(i + 1).padEnd(3)} ${(wp.name + tag).padEnd(18)} ${toDMM(wp.lat, true)}  ${toDMM(wp.lng, false)}  ${wp.alt}'`);
