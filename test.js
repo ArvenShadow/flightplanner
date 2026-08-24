@@ -381,7 +381,7 @@ T('setting ETD shows ETO per leg and ETA in summary', () => {
 T('ETO wraps past midnight', () => {
   assert(w.computeETO(90) !== null, 'eto null');
   doc.getElementById('def-etd').value = '23:30';
-  assert(w.computeETO(60) === '00:30', 'got ' + w.computeETO(60));
+  assert(w.computeETO(60) === '00:30+1', 'got ' + w.computeETO(60));
   doc.getElementById('def-etd').value = '';
   assert(w.computeETO(60) === null, 'empty ETD should yield null');
   w.renderAllFlightTables();
@@ -1486,6 +1486,91 @@ T('guide explains the local-vs-UTC convention', () => {
   const guide = doc.querySelector('#help-modal .modal-body').textContent;
   assert(guide.includes('Times are local'), 'local-time note missing from guide');
   assert(guide.includes('add the local offset'), 'UTC cross-check hint missing from guide');
+});
+
+console.log('\n=== 47. ETO past midnight is marked +1 ===');
+T('a 23:30 ETD with a 90-minute mission reads 01:00+1, not a time before the ETD', () => {
+  doc.getElementById('def-etd').value = '23:30';
+  assert(ev('computeETO(90)') === '01:00+1', 'got ' + ev('computeETO(90)'));
+  assert(ev('computeETO(20)') === '23:50', 'same-day ETO must stay unmarked: ' + ev('computeETO(20)'));
+  assert(ev('computeETO(1500)') === '00:30+2', '25h mission crosses two midnights: ' + ev('computeETO(1500)'));
+  doc.getElementById('def-etd').value = '';
+});
+
+console.log('\n=== 48. Multi-sector daylight: every takeoff & landing checked ===');
+const SEED2 = `flights = [
+  { id: 1, title: "F1", depElev: 254, waypoints: [
+    { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 254,  oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 }
+  ]},
+  { id: 2, title: "F2", depElev: 229, waypoints: [
+    { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 229,  oat: 10, wdir: 0, wspd: 0, var: -12 },
+    { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }
+  ]}
+]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+T('an intermediate stop gets its own STOP row on the card', () => {
+  ev(SEED2);
+  doc.getElementById('def-date').value = '2026-01-15';
+  w.renderAllFlightTables();
+  const txt = doc.getElementById('daylight-body').textContent;
+  assert(txt.includes('STOP ENTC'), 'no STOP row for the intermediate aerodrome: ' + txt.slice(0, 200));
+  assert(txt.includes('DEP ENDU'), 'DEP row missing');
+});
+T('a second sector landing after civil twilight is flagged even when sector 1 is legal', () => {
+  const ect = ev('computeDaylight("2026-01-15", 69.055, 18.545).ect');
+  const totMin = parseFloat(txtOf('grand-tot-time').match(/\(([\d.]+) min\)/)[1]);
+  // ETD chosen so the FINAL landing is 20 min AFTER the window closes at ENDU,
+  // while the first takeoff (hours earlier) is comfortably inside the window.
+  doc.getElementById('def-etd').value = ev(`fmtLocalHM(${ect} - ${Math.round(totMin) - 20} * 60000)`);
+  w.renderAllFlightTables();
+  const txt = doc.getElementById('daylight-body').textContent;
+  assert(txt.includes('F2 landing') && txt.includes('AFTER the end of evening civil twilight'),
+    'late second-sector landing not flagged: ' + txt.slice(0, 400));
+  assert(!txt.includes('F1 takeoff') || !txt.includes('F1 takeoff' + ' '), 'noise check');
+  assert(!txt.includes('NaN'), 'NaN in daylight card');
+});
+T('warnings name the sector (F1/F2) so multi-sector output is unambiguous', () => {
+  const mct = ev('computeDaylight("2026-01-15", 69.055, 18.545).mct');
+  doc.getElementById('def-etd').value = ev(`fmtLocalHM(${mct} - 3600000)`);
+  w.renderAllFlightTables();
+  const txt = doc.getElementById('daylight-body').textContent;
+  assert(txt.includes('F1 takeoff') && txt.includes('BEFORE morning civil twilight'),
+    'first-sector takeoff warning missing sector tag: ' + txt.slice(0, 400));
+  // restore the single-flight seed and clean inputs for any later test
+  doc.getElementById('def-etd').value = '';
+  doc.getElementById('def-date').value = '';
+  ev(SEED);
+});
+
+console.log('\n=== 49. MagVar vs NOAA WMM2025 (fixtures fetched 2026-08-24) ===');
+// Reference declinations from NOAA's calculator (ngdc.noaa.gov/geomag-web,
+// model WMM2025, epoch 2026.6438, east-positive degrees). The app's model is
+// a regional polynomial documented as "good to roughly a degree near
+// Troms/Nordland, degrades with distance": the northern aerodromes must stay
+// within 1.0°, Oslo is encoded at its measured ~1.9° error with a 2.5° cap
+// so silent worsening still fails the suite.
+const WMM_EPOCH = 2026.6438;
+const magCase = (name, lat, lng, noaaEast, tolDeg) => {
+  T(`magvar ${name} within ${tolDeg}° of WMM2025`, () => {
+    const raw = parseFloat(ev(`getRegionalMagVar(${lat}, ${lng}, ${WMM_EPOCH}).raw`));
+    assert(Math.abs(raw - noaaEast) <= tolDeg,
+      `model ${raw}°E vs NOAA ${noaaEast}°E (diff ${(raw - noaaEast).toFixed(2)}°)`);
+  });
+};
+magCase('ENDU', 69.055, 18.544, 10.78313, 1.0);
+magCase('ENTC', 69.683, 18.919, 11.22226, 1.0);
+magCase('ENEV', 68.491, 16.678, 9.56912, 1.0);
+magCase('ENBO', 67.269, 14.365, 7.98006, 1.0);
+magCase('ENKR (east edge)', 69.725, 29.887, 17.18659, 1.0);
+magCase('ENGM (outside core region)', 60.202, 11.084, 5.20523, 2.5);
+T('magvar sign convention: east declination gives a NEGATIVE VAR value', () => {
+  const r = ev(`getRegionalMagVar(69.055, 18.544, ${WMM_EPOCH})`);
+  assert(r.val < 0, 'VAR should be negative (east) in Norway, got ' + r.val);
+  assert(r.val === -Math.round(parseFloat(r.raw)), 'val is not -round(raw)');
+});
+T('live use without an epoch still returns finite values', () => {
+  const r = ev('getRegionalMagVar(69.055, 18.544)');
+  assert(isFinite(r.val) && isFinite(parseFloat(r.raw)), 'non-finite magvar');
 });
 
 console.log('\n=== Uncaught page errors ===');
