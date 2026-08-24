@@ -1573,6 +1573,39 @@ T('live use without an epoch still returns finite values', () => {
   assert(isFinite(r.val) && isFinite(parseFloat(r.raw)), 'non-finite magvar');
 });
 
+console.log('\n=== 50. Flight plans named after first-last waypoint ===');
+T('a routed flight is titled FIRST-LAST (ENDU-ENTC)', () => {
+  ev(SEED);
+  const hdr = doc.querySelector('.flight-header').textContent;
+  assert(hdr.includes('ENDU-ENTC'), 'route name missing from header: ' + hdr.slice(0, 120));
+  assert(!hdr.includes('Flight Plan 1'), 'stored fallback title still shown despite a full route');
+});
+T('each sector of a multi-flight mission gets its own route name', () => {
+  ev(SEED2);
+  const hdrs = [...doc.querySelectorAll('.flight-header')].map(h => h.textContent);
+  assert(hdrs[0].includes('ENDU-ENTC'), 'F1 name wrong: ' + hdrs[0].slice(0, 100));
+  assert(hdrs[1].includes('ENTC-ENDU'), 'F2 name wrong: ' + hdrs[1].slice(0, 100));
+});
+T('the name follows the route when waypoints change', () => {
+  ev(SEED);
+  ev('flights[0].waypoints.pop(); renderAllFlightTables();');
+  assert(doc.querySelector('.flight-header').textContent.includes('ENDU-FINNSNES'),
+    'name did not follow the shortened route');
+  ev(SEED);
+});
+T('fewer than two waypoints falls back to the stored title; storage is untouched', () => {
+  ev('flights = [{ id: 1, title: "Flight Plan 1", depElev: 254, waypoints: [] }]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();');
+  assert(doc.querySelector('.flight-header').textContent.includes('Flight Plan 1'), 'fallback title not shown');
+  ev(SEED);
+  assert(ev('flights[0].title') === 'Flight Plan 1', 'flightTitle must not mutate the stored title');
+});
+T('pattern rows do not hijack the name', () => {
+  ev(SEED);
+  ev(`flights[0].waypoints.push({ isPattern: true, name: "ENTC", laps: 2, lat: 69.679, lng: 18.911, alt: 229 }); renderAllFlightTables();`);
+  assert(doc.querySelector('.flight-header').textContent.includes('ENDU-ENTC'), 'pattern waypoint changed the route name');
+  ev(SEED);
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
