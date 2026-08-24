@@ -1438,6 +1438,56 @@ T('guide documents the SERA rule, polar cases and the official-source caveat', (
   assert(guide.includes('GEN 2.7'), 'official AIP source missing from guide');
 });
 
+console.log('\n=== 45. Wind fetch date synced with Flight Date ===');
+T('opening the wind modal mirrors the Flight Date into the wind picker', () => {
+  ev(SEED);
+  const plus3 = ev('localDateStrOf(Date.now() + 3 * 86400000)');
+  doc.getElementById('def-date').value = plus3;
+  w.openWindModal();
+  assert(doc.getElementById('wind-fetch-date').value === plus3,
+    'wind date not mirrored: ' + doc.getElementById('wind-fetch-date').value + ' vs ' + plus3);
+  assert(txtOf('wind-fetch-status').trim() === '', 'unexpected warning for an in-range date');
+  w.closeWindModal();
+});
+T('changing the wind picker writes back to the Flight Date and the daylight card', () => {
+  const plus5 = ev('localDateStrOf(Date.now() + 5 * 86400000)');
+  doc.getElementById('wind-fetch-date').value = plus5;
+  w.syncFlightDateFromWindPicker();
+  assert(doc.getElementById('def-date').value === plus5, 'Flight Date did not follow the wind picker');
+  assert(doc.getElementById('daylight-body').textContent.includes(plus5), 'daylight card not recomputed for the synced date');
+});
+T('a Flight Date outside the forecast range clamps the picker, warns, and leaves the Flight Date alone', () => {
+  doc.getElementById('def-date').value = '2026-01-15';
+  w.openWindModal();
+  const today = ev('localDateStrOf(Date.now())');
+  assert(doc.getElementById('wind-fetch-date').value === today, 'picker not clamped to today');
+  assert(txtOf('wind-fetch-status').includes('outside the forecast range'), 'no out-of-range warning');
+  assert(doc.getElementById('def-date').value === '2026-01-15', 'Flight Date was overwritten by the clamp');
+  w.closeWindModal();
+  doc.getElementById('def-date').value = '';
+  doc.getElementById('def-etd').value = '';
+  w.renderAllFlightTables();
+});
+
+console.log('\n=== 46. Local-time labeling (no UTC/local confusion) ===');
+T('ETD input is labeled as local time', () => {
+  const label = doc.getElementById('def-etd').previousElementSibling;
+  assert(label && label.textContent.includes('local'), 'ETD label does not say local');
+});
+T('daylight card states local times and the UTC offset for the flight date', () => {
+  ev(SEED);
+  const txt = doc.getElementById('daylight-body').textContent;
+  // the harness runs pinned to TZ=UTC, so the stated offset must be UTC+0
+  assert(txt.includes('All times local (UTC+0)'), 'timezone note missing/wrong: ' + txt.slice(-220));
+  assert(txt.includes('tables are UTC'), 'AIP-is-UTC caveat missing');
+  assert(ev('utcOffsetLabel("2026-06-21")') === 'UTC+0', 'offset label wrong under TZ=UTC');
+});
+T('guide explains the local-vs-UTC convention', () => {
+  const guide = doc.querySelector('#help-modal .modal-body').textContent;
+  assert(guide.includes('Times are local'), 'local-time note missing from guide');
+  assert(guide.includes('add the local offset'), 'UTC cross-check hint missing from guide');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
