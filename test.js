@@ -1290,6 +1290,44 @@ T('airspace overlay is fully removed, stored keys purged', () => {
   assert(w.localStorage.getItem('c182_airspace_on') === null, 'stored state not purged');
 });
 
+console.log('\n=== 43. Smooth waypoint dragging; wider tile buffer ===');
+T('dragging a waypoint moves the line but does NOT rebuild the OFP tables', () => {
+  ev(SEED);
+  // A sentinel node inside the tables container: renderAllFlightTables wipes
+  // container.innerHTML, so the sentinel surviving proves no rebuild happened.
+  const sentinel = doc.createElement('div');
+  sentinel.id = 'drag-sentinel';
+  doc.getElementById('flight-plans-container').appendChild(sentinel);
+  ev(`(function(){
+    const m = markers.find(k => k._h && k._h.drag);
+    m._latlng = { lat: 69.10, lng: 18.40 };
+    m._h.drag({ target: m });
+  })()`);
+  assert(doc.getElementById('drag-sentinel') !== null, 'tables were rebuilt during drag');
+  assert(ev('flights[0].waypoints[0].lat') === 69.10, 'waypoint did not follow the drag');
+  assert(JSON.stringify(ev('polylines[0]._ll')).includes('69.1'), 'route line did not follow the drag');
+});
+T('releasing the drag does the full recalc once', () => {
+  ev(`(function(){
+    const m = markers.find(k => k._h && k._h.dragend && k._h.drag);
+    m._h.dragend({ target: m });
+  })()`);
+  assert(doc.getElementById('drag-sentinel') === null, 'dragend did not rebuild the tables');
+  assert(!doc.getElementById('flight-plans-container').textContent.includes('NaN'), 'NaN after drag recalc');
+  assert(ev('flights[0].waypoints[0].varSource') !== undefined, 'dragend did not re-resolve mag var');
+  ev(SEED); // restore the seed route for anything that runs after
+});
+T('drag handler stays lean (guard against the per-mousemove rebuild returning)', () => {
+  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const seg = raw.split("marker.on('drag'")[1].split("marker.on('dragend'")[0];
+  assert(!seg.includes('renderAllFlightTables'), 'renderAllFlightTables is back in the drag handler');
+  assert(seg.includes('setLatLngs'), 'route line no longer follows the drag');
+});
+T('base tiles keep a wider buffer so panning shows fewer grey gaps', () => {
+  assert(ev('baseTiles._opts.keepBuffer') === 4, 'keepBuffer not 4: ' + ev('baseTiles._opts.keepBuffer'));
+  assert(ev('baseTiles._opts.noWrap') === true, 'noWrap lost while touching tile options');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));

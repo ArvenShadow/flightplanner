@@ -1491,6 +1491,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
     const baseTiles = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
       maxZoom: 18,
       noWrap: true,
+      // Keep a wider ring of off-screen tiles loaded (default 2). Kartverket
+      // raster tiles arrive slowly enough that panning otherwise exposes grey
+      // gaps; this hides that latency at the cost of a few extra tile fetches.
+      keepBuffer: 4,
       attribution: '&copy; Kartverket'
     }).addTo(map);
 
@@ -2614,11 +2618,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
               pushUndoState();
             });
 
+            // During the drag only the route line follows the marker. The OFP
+            // tables must NOT rebuild here: 'drag' fires per mousemove, and a
+            // full innerHTML rewrite + integrity check per event makes the
+            // drag stutter badly. 'dragend' below does the one full recalc.
             marker.on('drag', function(e) {
               wp.lat = e.target.getLatLng().lat;
               wp.lng = e.target.getLatLng().lng;
               polylines[fIdx].setLatLngs(fl.waypoints.filter(w=>!w.isPattern).map(w => [w.lat, w.lng]));
-              renderAllFlightTables();
             });
 
             marker.on('dragend', function() {
