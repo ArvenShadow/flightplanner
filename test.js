@@ -1702,6 +1702,39 @@ T('guide states the direct-line convention and warns to steer by segment tracks'
   assert(guide.includes('steer by those'), 'steering warning missing from guide');
 });
 
+console.log('\n=== 53. Climb legs display the cruise TAS ===');
+T('a CLB+CRZ leg shows the cruise TAS in the row; climb stays in time/fuel and the sub-line', () => {
+  ev(SEED);
+  const r = ev(`computeLegTotals(flights[0].waypoints[0], flights[0].waypoints[1])`);
+  assert(r.profileTag === 'CLB+CRZ', 'seed leg 1 should be CLB+CRZ, got ' + r.profileTag);
+  const crzTas = ev('cruisePerf(2500, ' + ev('flights[0].waypoints[1].oat') + ').tas');
+  assert(r.dispTas === crzTas, 'row TAS should be cruise TAS ' + crzTas + ', got ' + r.dispTas);
+  const cell = doc.querySelector('#tbody-flight-0 tr').cells[5].textContent.trim();
+  assert(cell === String(crzTas), 'TAS cell shows ' + cell + ', want ' + crzTas);
+  const cp = ev('climbPerf(254, 2500, ' + ev('flights[0].waypoints[1].oat') + ')');
+  assert(Math.abs(r.climbInfo.timeMin - cp.timeMin) < 0.05, 'climb time no longer accounted');
+  assert(doc.querySelector('#tbody-flight-0 tr.sub-leg-row').textContent.includes('CLB'), 'climb detail left the sub-line');
+});
+T('an ALL-climb leg keeps the climb TAS (there is no cruise portion to show)', () => {
+  const r = ev(`computeLegTotals(
+    { lat: 69.0, lng: 18.0, name: 'A', alt: 254, wdir: 0, wspd: 0, oat: 10, var: -11 },
+    { lat: 69.05, lng: 18.0, name: 'B', alt: 8000, wdir: 0, wspd: 0, oat: -1, var: -11 })`);
+  assert(r.profileTag === 'CLB', 'short steep leg should be all climb, got ' + r.profileTag);
+  const cp = ev('climbPerf(254, 8000, -1)');
+  assert(r.dispTas === Math.round(cp.tasAvg), 'all-climb leg should show climb TAS ' + Math.round(cp.tasAvg) + ', got ' + r.dispTas);
+});
+T('integrity guards wind against the SLOWEST phase, not the displayed cruise TAS', () => {
+  const r = ev(`computeLegTotals(flights[0].waypoints[0], flights[0].waypoints[1])`);
+  const cp = ev('climbPerf(254, 2500, ' + ev('flights[0].waypoints[1].oat') + ')');
+  assert(r.minPhaseTas === Math.round(cp.tasAvg), 'minPhaseTas should be the climb TAS');
+  // wind above climb TAS but below cruise TAS must still trip the banner
+  ev('flights[0].waypoints[1].wspd = ' + (Math.round(cp.tasAvg) + 2) + '; renderAllFlightTables();');
+  const b = doc.getElementById('integrity-banner');
+  assert(b.style.display === 'block' && b.textContent.includes('slowest phase'), 'sub-cruise wind not flagged: ' + b.textContent.slice(0, 150));
+  ev('flights[0].waypoints[1].wspd = 0; renderAllFlightTables();');
+  assert(b.style.display === 'none', 'banner did not clear');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));

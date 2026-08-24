@@ -1126,6 +1126,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
           <h3>🛠 Aircraft Performance (⚙ Settings)</h3>
           <ul style="margin-left:16px;">
             <li><b>C182T mode</b> uses the genuine POH tables (Fig 5-8 / 5-9, 3100 lb): pick your cruise <b>RPM and MP</b>; TAS &amp; fuel flow interpolate on altitude and ISA deviation, and MP auto-caps at full throttle with altitude.</li>
+            <li>On a <b>CLB+CRZ leg</b> the row's TAS (and the WCA/MH derived from it) is the <b>cruise TAS</b> — the slower climb is fully accounted in the leg's time, fuel and GS and detailed in the ↳ sub-line. A leg that is all climb shows the climb TAS. The integrity check still compares wind against the slowest phase.</li>
             <li><b>Climb technique</b>: POH Fig 5-8 (full throttle, 90 KIAS, +10% per 10°C above ISA) or <b>Cruise climb</b> with your own observed ROC and fuel flow.</li>
             <li><b>Other aircraft</b>: switch to Manual mode and enter your own cruise/climb numbers.</li>
             <li>Units (NM/km/SM, gal/L/kg) and dark mode live here too — all values convert everywhere when you switch.</li>
@@ -2438,7 +2439,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
       let timeMin = 0, burnGal = 0;
       let climbInfo = null, descInfo = null;
-      let startTas, profileTag;
+      let startTas, profileTag, minPhaseTas;
 
       if (deltaAlt > 0) {
         const cp = climbPerf(from.alt, to.alt, to.oat);
@@ -2468,6 +2469,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
         burnGal = climbFuel + (cruiseTime / 60) * crz.gph;
         climbInfo = { timeMin: climbTimeSpent, fuelGal: climbFuel, tocAlongNM: climbDist, completed };
         profileTag = completed && cruiseTime > 0.5 ? 'CLB+CRZ' : 'CLB';
+        // Displayed TAS = the CRUISE TAS when the leg has a cruise portion
+        // (user decision, v16.4): time/fuel/GS already account for the slower
+        // climb (detailed in the sub-line), so the row's TAS/WCA/MH should
+        // describe how the bulk of the leg is flown. An all-climb leg keeps
+        // the climb TAS. The integrity check still guards wind against the
+        // SLOWEST phase via minPhaseTas.
+        if (profileTag === 'CLB+CRZ') startTas = crz.tas;
+        minPhaseTas = cp.tasAvg;
       } else if (deltaAlt < 0) {
         const tDesc = Math.abs(deltaAlt) / Math.max(1, aircraftProfile.rod);
         const crz = cruisePerf(from.alt, to.oat);
@@ -2499,12 +2508,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
         descInfo = { timeMin: descTimeSpent, todBeforeNM: descDist, fitsInLeg: remDesc <= 0.05 };
         profileTag = descDist < totalDist - 0.1 ? 'CRZ+DES' : 'DES';
         if (profileTag === 'DES') startTas = aircraftProfile.descTas;
+        minPhaseTas = Math.min(crz.tas, aircraftProfile.descTas);
       } else {
         const crz = cruisePerf(to.alt, to.oat);
         startTas = crz.tas;
         for (const s of segs) timeMin += (s.distNM / phaseGS(crz.tas, to.wdir, to.wspd, s.tt).gs) * 60;
         burnGal = (timeMin / 60) * crz.gph;
         profileTag = 'CRZ';
+        minPhaseTas = crz.tas;
       }
 
       // The OFP row's TT/MT/WCA/MH describe the DIRECT waypoint-to-waypoint
@@ -2518,7 +2529,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
       return {
         segs, distNM: totalDist, timeMin, burnGal,
         rowTT, rowWCA: Math.round(wca),
-        dispTas: Math.round(startTas), effGS: Math.round(effGS),
+        dispTas: Math.round(startTas), minPhaseTas: Math.round(minPhaseTas),
+        effGS: Math.round(effGS),
         profileTag, climbInfo, descInfo
       };
     }
@@ -3922,8 +3934,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
           if (!res) continue;
           if (!isFinite(res.timeMin) || res.timeMin < 0 || !isFinite(res.burnGal) || res.burnGal < 0)
             add(`Leg ${from.name} → ${to.name}: computed time/fuel is invalid.`);
-          if (to.wspd >= res.dispTas)
-            add(`Leg ${from.name} → ${to.name}: wind (${to.wspd} kt) meets or exceeds TAS (${res.dispTas} kt) - groundspeed and time are NOT reliable.`);
+          if (to.wspd >= res.minPhaseTas)
+            add(`Leg ${from.name} → ${to.name}: wind (${to.wspd} kt) meets or exceeds the slowest phase's TAS (${res.minPhaseTas} kt) - groundspeed and time are NOT reliable.`);
           else if (res.effGS < 30)
             add(`Leg ${from.name} → ${to.name}: effective groundspeed ${res.effGS} kt - check the wind entry.`);
         }
