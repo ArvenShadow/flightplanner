@@ -1,3 +1,4 @@
+process.env.TZ = 'UTC';   // deterministic clock for the daylight/sun tests
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 
@@ -1326,6 +1327,115 @@ T('drag handler stays lean (guard against the per-mousemove rebuild returning)',
 T('base tiles keep a wider buffer so panning shows fewer grey gaps', () => {
   assert(ev('baseTiles._opts.keepBuffer') === 4, 'keepBuffer not 4: ' + ev('baseTiles._opts.keepBuffer'));
   assert(ev('baseTiles._opts.noWrap') === true, 'noWrap lost while touching tile options');
+});
+
+console.log('\n=== 44. Daylight & VFR day (SERA night definition) ===');
+// Reference times fetched from the US Naval Observatory almanac API
+// (aa.usno.navy.mil/api/rstt/oneday, tz=0) on 2026-08-24 for 69.68N 18.92E
+// (Tromsø) and 60.20N 11.08E (Oslo). NOAA-vs-USNO agreement measured at
+// ≤0.5 min on all fixtures; the ±2 min tolerance leaves honest headroom.
+const utc = (mo, d, h, mi) => Date.UTC(2026, mo - 1, d, h, mi);
+const near = (got, want, label) => {
+  assert(got != null && Math.abs(got - want) <= 2 * 60000,
+    label + ': got ' + (got == null ? 'null' : new Date(got).toISOString()) + ' want ~' + new Date(want).toISOString());
+};
+T('Tromsø equinox 2026-03-20 matches USNO within 2 min', () => {
+  const r = ev('computeDaylight("2026-03-20", 69.68, 18.92)');
+  assert(r.kind === 'normal', 'kind: ' + r.kind);
+  near(r.mct, utc(3, 20, 3, 44), 'morning civil twilight');
+  near(r.sunrise, utc(3, 20, 4, 44), 'sunrise');
+  near(r.sunset, utc(3, 20, 17, 2), 'sunset');
+  near(r.ect, utc(3, 20, 18, 2), 'end of civil twilight');
+});
+T('Tromsø 2026-08-24 matches USNO', () => {
+  const r = ev('computeDaylight("2026-08-24", 69.68, 18.92)');
+  near(r.mct, utc(8, 24, 0, 59), 'morning civil twilight');
+  near(r.sunrise, utc(8, 24, 2, 27), 'sunrise');
+  near(r.sunset, utc(8, 24, 19, 3), 'sunset');
+  near(r.ect, utc(8, 24, 20, 29), 'end of civil twilight');
+});
+T('Tromsø 2026-01-15: a 42-minute day, hours of usable twilight', () => {
+  const r = ev('computeDaylight("2026-01-15", 69.68, 18.92)');
+  near(r.mct, utc(1, 15, 7, 58), 'morning civil twilight');
+  near(r.sunrise, utc(1, 15, 10, 33), 'sunrise');
+  near(r.sunset, utc(1, 15, 11, 15), 'sunset');
+  near(r.ect, utc(1, 15, 13, 50), 'end of civil twilight');
+});
+T('Oslo 2026-03-20 matches USNO (mid-latitude sanity)', () => {
+  const r = ev('computeDaylight("2026-03-20", 60.20, 11.08)');
+  near(r.mct, utc(3, 20, 4, 36), 'morning civil twilight');
+  near(r.sunrise, utc(3, 20, 5, 18), 'sunrise');
+  near(r.sunset, utc(3, 20, 17, 30), 'sunset');
+  near(r.ect, utc(3, 20, 18, 12), 'end of civil twilight');
+});
+T('midnight sun 2026-06-21: day VFR all 24 h, no rise/set times', () => {
+  const r = ev('computeDaylight("2026-06-21", 69.68, 18.92)');
+  assert(r.kind === 'all-day', 'kind: ' + r.kind);
+  assert(r.sunrise === null && r.sunset === null && r.mct === null, 'phantom event times');
+});
+T('polar night 2026-12-21: sun never rises, yet a LEGAL day-VFR twilight window exists', () => {
+  const r = ev('computeDaylight("2026-12-21", 69.68, 18.92)');
+  assert(r.kind === 'no-sunrise', 'kind: ' + r.kind);
+  assert(r.sunrise === null && r.sunset === null, 'phantom sunrise/sunset');
+  near(r.mct, utc(12, 21, 8, 32), 'window start');
+  near(r.ect, utc(12, 21, 12, 53), 'window end');
+});
+T('deep polar night (78°N, Dec 21): no day-VFR window at all', () => {
+  const r = ev('computeDaylight("2026-12-21", 78.25, 15.5)');
+  assert(r.kind === 'polar-night', 'kind: ' + r.kind);
+  assert(r.mct === null && r.ect === null, 'window reported in deep polar night');
+});
+T('an ETD before morning civil twilight raises a red night warning', () => {
+  ev(SEED);
+  doc.getElementById('def-date').value = '2026-01-15';
+  const mct = ev('computeDaylight("2026-01-15", flights[0].waypoints[0].lat, flights[0].waypoints[0].lng).mct');
+  doc.getElementById('def-etd').value = ev(`fmtLocalHM(${mct} - 3600000)`);
+  w.renderAllFlightTables();
+  const txt = doc.getElementById('daylight-body').textContent;
+  assert(txt.includes('BEFORE morning civil twilight'), 'no warning: ' + txt.slice(0, 200));
+  assert(!txt.includes('NaN'), 'NaN in daylight card');
+});
+T('an ETD inside the window raises no warning; legal basis is cited', () => {
+  const mct = ev('computeDaylight("2026-01-15", flights[0].waypoints[0].lat, flights[0].waypoints[0].lng).mct');
+  doc.getElementById('def-etd').value = ev(`fmtLocalHM(${mct} + 3600000)`);
+  w.renderAllFlightTables();
+  const txt = doc.getElementById('daylight-body').textContent;
+  assert(!txt.includes('night per SERA'), 'unexpected night warning: ' + txt.slice(0, 300));
+  assert(txt.includes('SERA Art. 2(97)'), 'legal basis missing');
+  assert(txt.includes('−6°'), 'the -6° boundary is not stated');
+});
+T('an ETA within 30 min of the window end raises the planning-margin caution', () => {
+  const ect = ev('computeDaylight("2026-01-15", flights[0].waypoints[2].lat, flights[0].waypoints[2].lng).ect');
+  const totMin = parseFloat(txtOf('grand-tot-time').match(/\(([\d.]+) min\)/)[1]);
+  doc.getElementById('def-etd').value = ev(`fmtLocalHM(${ect} - ${Math.round(totMin) + 15} * 60000)`);
+  w.renderAllFlightTables();
+  const txt = doc.getElementById('daylight-body').textContent;
+  assert(txt.includes('planning margin'), 'no margin caution: ' + txt.slice(0, 300));
+  assert(!txt.includes('night per SERA'), 'margin case wrongly flagged as night');
+});
+T('polar-night day at the route itself: card shows the twilight-only window', () => {
+  doc.getElementById('def-date').value = '2026-12-21';
+  doc.getElementById('def-etd').value = '';
+  w.renderAllFlightTables();
+  const txt = doc.getElementById('daylight-body').textContent;
+  assert(txt.includes('sun stays below the horizon'), 'no-sunrise note missing: ' + txt.slice(0, 300));
+  assert(txt.includes('Enter an ETD'), 'missing prompt to enter an ETD');
+  assert(!txt.includes('NaN'), 'NaN in daylight card');
+});
+T('flight date defaults to today and is not persisted in planning prefs', () => {
+  doc.getElementById('def-date').value = '';
+  w.renderAllFlightTables();
+  const today = ev('localDateStrOf(Date.now())');
+  assert(doc.getElementById('def-date').value === today, 'date did not default to today');
+  w.savePlanningPrefs();
+  assert(!('date' in JSON.parse(w.localStorage.getItem('c182_planning_prefs'))), 'flight date leaked into stored prefs');
+});
+T('guide documents the SERA rule, polar cases and the official-source caveat', () => {
+  const guide = doc.querySelector('#help-modal .modal-body').textContent;
+  assert(guide.includes('SERA Art. 2(97)'), 'SERA article missing from guide');
+  assert(guide.includes('6° below the horizon'), '6-degree boundary missing from guide');
+  assert(guide.includes('BSL F 1-1'), 'Norwegian regulation missing from guide');
+  assert(guide.includes('GEN 2.7'), 'official AIP source missing from guide');
 });
 
 console.log('\n=== Uncaught page errors ===');
