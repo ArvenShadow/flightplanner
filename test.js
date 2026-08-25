@@ -1770,6 +1770,33 @@ T('zooming back in restores full detail; guide documents the behavior', () => {
   assert(!cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'declutter stuck after zooming back in');
   const guide = doc.querySelector('#help-modal .modal-body').textContent;
   assert(guide.includes('Zooming out declutters automatically'), 'declutter missing from guide');
+});
+T('the map button shows Auto with the effective level', () => {
+  setZoom(5);
+  assert(txtOf('declutter-btn').includes('Auto (far)'), 'button label: ' + txtOf('declutter-btn'));
+  setZoom(9);
+  assert(txtOf('declutter-btn').includes('Auto (full)'), 'button label: ' + txtOf('declutter-btn'));
+});
+T('cycling locks a level regardless of zoom: full at overview, far at working zoom', () => {
+  setZoom(5);                       // zoomed far out...
+  w.cycleDeclutterMode();           // auto -> full
+  const cl = () => doc.getElementById('map').classList;
+  assert(txtOf('declutter-btn').includes('Full'), 'button label: ' + txtOf('declutter-btn'));
+  assert(!cl().contains('zoom-far') && !cl().contains('zoom-mid'), 'FULL must override the zoom');
+  w.cycleDeclutterMode();           // -> mid
+  assert(cl().contains('zoom-mid'), 'MID not applied');
+  setZoom(9);                       // ...and zoomed all the way in:
+  w.cycleDeclutterMode();           // -> far
+  assert(cl().contains('zoom-far'), 'FAR must override the zoom');
+  assert(txtOf('declutter-btn').includes('Far'), 'button label: ' + txtOf('declutter-btn'));
+});
+T('the mode persists in the profile and cycles back to Auto', () => {
+  assert(JSON.parse(w.localStorage.getItem('c182_perf_profile')).declutter === 'far', 'mode not persisted');
+  w.cycleDeclutterMode();           // far -> auto
+  assert(txtOf('declutter-btn').includes('Auto'), 'did not cycle back to Auto');
+  const cl = doc.getElementById('map').classList;
+  assert(!cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'auto at z9 should be full detail');
+  assert(fs.readFileSync('C182_FlightPlanner.html', 'utf8').includes("'minuteMark','declutter'"), 'declutter missing from the import whitelist');
   ev('window.__stubZoom = undefined;');
 });
 

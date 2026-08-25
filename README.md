@@ -8,7 +8,7 @@ Open `C182_FlightPlanner.html` in any browser. That file is the entire app.
 ```bash
 cd c182-planner
 npm install        # jsdom, for the test suite
-npm test           # must print RESULT: ALL CHECKS PASSED (197 tests)
+npm test           # must print RESULT: ALL CHECKS PASSED (200 tests)
 claude             # start Claude Code here; it reads CLAUDE.md automatically
 ```
 
