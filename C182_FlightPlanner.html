@@ -761,6 +761,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
        (From, To, Alt, MT, W/V, MH, GS, Dist, Time, AccT, Burn, Rem) */
     body.compact-cols .cc { display: none; }
     #map-container { flex: 1.05; position: relative; border-right: 2px solid var(--border-color); }
+    #declutter-btn { position: absolute; top: 10px; right: 10px; z-index: 1000; font-size: 11px; font-weight: 700;
+      padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
+      color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+    #declutter-btn:hover { background: var(--highlight-bg); }
     #map { width: 100%; height: 100%; }
     #sidebar { flex: 1.55; display: flex; flex-direction: column; background: var(--bg-sidebar); overflow-y: auto; padding: 10px; gap: 10px; }
     
@@ -850,6 +854,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .tod-label { display: inline-block; background: #c05621; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
     .pattern-label { display: inline-block; background: #553c9a; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
     .ruler-label { display: inline-block; background: #319795; color: #ffffff; font-weight: 700; font-size: 10px; padding: 2px 5px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.7); box-shadow: 0 1px 4px rgba(0,0,0,0.45); white-space: nowrap; }
+    /* Zoom declutter (see applyZoomDeclutter). Mid zoom: compact waypoint
+       labels, the big TOC/TOD and ruler chips disappear (their exact-position
+       dots stay). Far zoom: dots and route lines only. */
+    #map.zoom-mid .wp-label { font-size: 9px; padding: 1px 4px; border-width: 1px; border-left-width: 3px; box-shadow: none; }
+    #map.zoom-mid .pattern-label { font-size: 8px; padding: 1px 4px; }
+    #map.zoom-mid .toc-label, #map.zoom-mid .tod-label,
+    #map.zoom-mid .ruler-seg-label { display: none; }
+    #map.zoom-far .wp-label, #map.zoom-far .pattern-label,
+    #map.zoom-far .toc-label, #map.zoom-far .tod-label,
+    #map.zoom-far .prof-point, #map.zoom-far .via-dot,
+    #map.zoom-far .ruler-seg-label, #map.zoom-far .ruler-label { display: none; }
 
     /* Modals */
     .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
@@ -930,6 +945,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
   <div id="main">
     <div id="map-container">
       <div id="map"></div>
+      <button id="declutter-btn" class="no-print" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
     </div>
 
     <div id="sidebar">
@@ -1161,6 +1177,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail.</li>
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
             <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
+            <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (their exact-position dots remain); zoomed further out only dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
           </ul>
         </div>
 
@@ -1804,6 +1821,49 @@ svg.leaflet-image-layer.leaflet-interactive path {
       tileWarningShown = false;
       baseTiles.redraw();
     });
+
+    // ZOOM DECLUTTER. The waypoint labels and TOC/TOD chips are fixed pixel
+    // size, so zooming out shrinks the map under them until they pile into an
+    // unreadable heap. Three detail levels, switched by a single class on the
+    // map container and handled in pure CSS — no marker re-render, everything
+    // stays live and draggable:
+    //   full   everything (normal working detail)
+    //   mid    compact waypoint labels; TOC/TOD & ruler chips hidden
+    //          (their exact-position dots remain)
+    //   far    dots and route lines only — all text hidden
+    // The 🔎 button on the map cycles the mode: AUTO picks the level from the
+    // zoom (full at z>=8, mid at 6-7, far at <=5); FULL/MID/FAR lock a level
+    // regardless of zoom. The choice persists in the aircraft profile.
+    // NOTE: aircraftProfile is declared later in this script, so the initial
+    // call happens in the init sequence, not here; the zoomend handler only
+    // ever fires after the whole script has run.
+    const DECLUTTER_MODES = ['auto', 'full', 'mid', 'far'];
+    function declutterLevelForZoom(z) {
+      return z <= 5 ? 'far' : (z <= 7 ? 'mid' : 'full');
+    }
+    function applyZoomDeclutter() {
+      const el = document.getElementById('map');
+      if (!el) return;
+      const mode = DECLUTTER_MODES.includes(aircraftProfile.declutter) ? aircraftProfile.declutter : 'auto';
+      const level = mode === 'auto'
+        ? (typeof map.getZoom === 'function' ? declutterLevelForZoom(map.getZoom()) : 'full')
+        : mode;
+      el.classList.remove('zoom-mid', 'zoom-far');
+      if (level === 'far') el.classList.add('zoom-far');
+      else if (level === 'mid') el.classList.add('zoom-mid');
+      const btn = document.getElementById('declutter-btn');
+      if (btn) {
+        const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+        btn.innerText = '🔎 Declutter: ' + cap(mode) + (mode === 'auto' ? ` (${level})` : '');
+      }
+    }
+    function cycleDeclutterMode() {
+      const mode = DECLUTTER_MODES.includes(aircraftProfile.declutter) ? aircraftProfile.declutter : 'auto';
+      aircraftProfile.declutter = DECLUTTER_MODES[(DECLUTTER_MODES.indexOf(mode) + 1) % DECLUTTER_MODES.length];
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      applyZoomDeclutter();
+    }
+    map.on('zoomend', applyZoomDeclutter);
 
     let flights = defaultFlights();
     let activeFlightIndex = 0;
@@ -4385,7 +4445,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             const allowed = ['mode','cruiseRpm','cruiseMp','cruiseTas','cruiseFf',
                              'climbMode','ccRoc','ccKias','ccFf',
                              'roc','climbTas','climbFf','rod','descTas','descFf',
-                             'patternTime','patternFf','taxiFuel','theme','distUnit','fuelUnit','minuteMark'];
+                             'patternTime','patternFf','taxiFuel','theme','distUnit','fuelUnit','minuteMark','declutter'];
             allowed.forEach(k => {
               if (parsed.profile[k] !== undefined) aircraftProfile[k] = parsed.profile[k];
             });
@@ -4435,6 +4495,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     loadSavedProfile();
     loadPlanningPrefs();
     populateRouteDropdown();
+    applyZoomDeclutter();   // needs aircraftProfile, so it runs here, not at map setup
     function defaultFlights() {
       return [{ id: 1, title: "Flight Plan 1", depElev: 0, waypoints: [] }];
     }

@@ -19,7 +19,8 @@ const leafletStub = `
       on: function(ev, fn){ window.__mapHandlers[ev] = fn; },
       removeLayer: function(){},
       addLayer: function(){},
-      invalidateSize: function(){}
+      invalidateSize: function(){},
+      getZoom: function(){ return window.__stubZoom === undefined ? 8 : window.__stubZoom; }
     };},
     tileLayer: function(u, o){ var l = new Layer(); l._url = u; l._opts = o || {}; return l; },
     polyline: function(c, o){ var l = new Layer(); l._ll = c; l._opts = o || {}; return l; },
@@ -1733,6 +1734,70 @@ T('integrity guards wind against the SLOWEST phase, not the displayed cruise TAS
   assert(b.style.display === 'block' && b.textContent.includes('slowest phase'), 'sub-cruise wind not flagged: ' + b.textContent.slice(0, 150));
   ev('flights[0].waypoints[1].wspd = 0; renderAllFlightTables();');
   assert(b.style.display === 'none', 'banner did not clear');
+});
+
+console.log('\n=== 54. Zoom declutter: labels thin out when zooming out ===');
+const setZoom = z => { ev('window.__stubZoom = ' + z); ev("window.__mapHandlers['zoomend']()"); };
+T('working zoom (>=8) shows full detail — no declutter class', () => {
+  setZoom(8);
+  const cl = doc.getElementById('map').classList;
+  assert(!cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'declutter active at working zoom: ' + cl);
+  setZoom(9);
+  assert(!doc.getElementById('map').classList.contains('zoom-mid'), 'declutter active at z9');
+});
+T('region zoom (6-7) compacts labels and hides the TOC/TOD chips', () => {
+  setZoom(7);
+  assert(doc.getElementById('map').classList.contains('zoom-mid'), 'zoom-mid missing at z7');
+  setZoom(6);
+  const cl = doc.getElementById('map').classList;
+  assert(cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'wrong level at z6: ' + cl);
+  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  assert(raw.includes('#map.zoom-mid .toc-label'), 'mid-zoom TOC chip rule missing');
+  assert(/#map\.zoom-mid \.toc-label[^}]*display: none/.test(raw.replace(/\n/g, ' ')), 'TOC chips not hidden at mid zoom');
+});
+T('overview zoom (<=5) leaves only dots and lines', () => {
+  setZoom(5);
+  assert(doc.getElementById('map').classList.contains('zoom-far'), 'zoom-far missing at z5');
+  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8').replace(/\n/g, ' ');
+  assert(/#map\.zoom-far \.wp-label[^}]*display: none/.test(raw), 'waypoint labels not hidden at far zoom');
+  assert(!/#map\.zoom-far[^{]*\.wp-dot/.test(raw), 'the waypoint DOTS must never be hidden');
+  setZoom(3);
+  assert(doc.getElementById('map').classList.contains('zoom-far'), 'zoom-far missing at z3');
+});
+T('zooming back in restores full detail; guide documents the behavior', () => {
+  setZoom(9);
+  const cl = doc.getElementById('map').classList;
+  assert(!cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'declutter stuck after zooming back in');
+  const guide = doc.querySelector('#help-modal .modal-body').textContent;
+  assert(guide.includes('Zooming out declutters automatically'), 'declutter missing from guide');
+});
+T('the map button shows Auto with the effective level', () => {
+  setZoom(5);
+  assert(txtOf('declutter-btn').includes('Auto (far)'), 'button label: ' + txtOf('declutter-btn'));
+  setZoom(9);
+  assert(txtOf('declutter-btn').includes('Auto (full)'), 'button label: ' + txtOf('declutter-btn'));
+});
+T('cycling locks a level regardless of zoom: full at overview, far at working zoom', () => {
+  setZoom(5);                       // zoomed far out...
+  w.cycleDeclutterMode();           // auto -> full
+  const cl = () => doc.getElementById('map').classList;
+  assert(txtOf('declutter-btn').includes('Full'), 'button label: ' + txtOf('declutter-btn'));
+  assert(!cl().contains('zoom-far') && !cl().contains('zoom-mid'), 'FULL must override the zoom');
+  w.cycleDeclutterMode();           // -> mid
+  assert(cl().contains('zoom-mid'), 'MID not applied');
+  setZoom(9);                       // ...and zoomed all the way in:
+  w.cycleDeclutterMode();           // -> far
+  assert(cl().contains('zoom-far'), 'FAR must override the zoom');
+  assert(txtOf('declutter-btn').includes('Far'), 'button label: ' + txtOf('declutter-btn'));
+});
+T('the mode persists in the profile and cycles back to Auto', () => {
+  assert(JSON.parse(w.localStorage.getItem('c182_perf_profile')).declutter === 'far', 'mode not persisted');
+  w.cycleDeclutterMode();           // far -> auto
+  assert(txtOf('declutter-btn').includes('Auto'), 'did not cycle back to Auto');
+  const cl = doc.getElementById('map').classList;
+  assert(!cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'auto at z9 should be full detail');
+  assert(fs.readFileSync('C182_FlightPlanner.html', 'utf8').includes("'minuteMark','declutter'"), 'declutter missing from the import whitelist');
+  ev('window.__stubZoom = undefined;');
 });
 
 console.log('\n=== Uncaught page errors ===');
