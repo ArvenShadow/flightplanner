@@ -3679,7 +3679,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
           const legBurnGal = res.burnGal + taxiGal;
           const legBurn = Number(convertFuel(legBurnGal, fuelUnit).toFixed(1));
           // Leg-effective figures: what the WHOLE leg averages out to.
-          const effFF = legTime > 0 ? convertFuel(res.burnGal / (legTime / 60), fuelUnit) : 0;
+          // Divide by the UNROUNDED time: legTime is rounded to whole minutes
+          // for display, and on short legs that rounding swung the shown FF
+          // by ±2 gph around the true cruise figure (12.6 showed as 10.6-14.7).
+          const effFF = res.timeMin > 0.01 ? convertFuel(res.burnGal / (res.timeMin / 60), fuelUnit) : 0;
           const threeMinNM = Number(convertDist((res.effGS * minuteMark()) / 60, distUnit).toFixed(2));
           const altLabel = res.climbInfo ? `↗ ${to.alt}'` : (res.descInfo ? `↘ ${to.alt}'` : `${to.alt}'`);
 

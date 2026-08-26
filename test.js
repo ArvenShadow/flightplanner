@@ -1800,6 +1800,26 @@ T('the mode persists in the profile and cycles back to Auto', () => {
   ev('window.__stubZoom = undefined;');
 });
 
+console.log('\n=== 55. FF column uses unrounded leg time ===');
+T("every level leg of the user's mission shows the same cruise FF", () => {
+  const mission = JSON.parse(fs.readFileSync('c182_flight_routes.json', 'utf8')).missions['ENDU-ENSK-ENLK-ENEV-ENDU'];
+  ev('flights = ' + JSON.stringify(mission) + '; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();');
+  const crzGph = ev('cruisePerf(2500, 7).gph');
+  let checked = 0;
+  for (let f = 0; f < 5; f++) {
+    const rows = [...doc.querySelectorAll(`#tbody-flight-${f} tr:not(.sub-leg-row)`)];
+    rows.forEach(row => {
+      if (!row.textContent.includes('CRZ') || row.textContent.includes('CLB') || row.textContent.includes('DES')) return;
+      const ff = parseFloat(row.cells[17].textContent);
+      assert(Math.abs(ff - crzGph) < 0.06,
+        `level leg FF ${ff} != cruise ${crzGph} (flight ${f + 1}: ${row.cells[0].textContent}->${row.cells[1].textContent})`);
+      checked++;
+    });
+  }
+  assert(checked >= 15, 'too few level legs checked: ' + checked);
+  ev(SEED);
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
