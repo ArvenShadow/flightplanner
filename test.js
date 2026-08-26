@@ -1820,6 +1820,85 @@ T("every level leg of the user's mission shows the same cruise FF", () => {
   ev(SEED);
 });
 
+console.log('\n=== 56. Climb carries across legs; TOD backs up so constraints are met ===');
+ev(`aircraftProfile.mode = 'C182T'; aircraftProfile.climbMode = 'CRUISECLIMB';
+    aircraftProfile.ccRoc = 500; aircraftProfile.ccKias = 90; aircraftProfile.ccFf = 15;
+    aircraftProfile.rod = 500; aircraftProfile.descTas = 120; aircraftProfile.descFf = 8.5;`);
+T('a climb too big for its leg carries into the next; TOC lands on the later leg', () => {
+  // A --2 NM-- B(5000') --20 NM-- C(5000'): climb 254->5000 needs ~9.5 min (~14 NM)
+  ev(`flights = [{ id: 1, title: "T", depElev: 254, waypoints: [
+    { lat: 69.000, lng: 18.0, name: "A", alt: 254,  oat: 5, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.0333, lng: 18.0, name: "B", alt: 5000, oat: 5, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.3667, lng: 18.0, name: "C", alt: 5000, oat: 5, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const s = ev('computeFlightSchedule(flights[0])');
+  assert(s[0].stillClimbing === true, 'leg 1 should still be climbing');
+  assert(s[1] && s[1].tocAlongNM != null, 'TOC did not carry onto leg 2');
+  assert(s[1].entryAlt > 300 && s[1].entryAlt < 4900, 'leg 2 entry altitude not mid-climb: ' + s[1].entryAlt);
+  // total climb time across the two legs matches the single climb 254->5000
+  const cp = ev('climbPerf(254, 5000, 5)');
+  assert(Math.abs(s[0].climbMin + s[1].climbMin - cp.timeMin) < 0.2,
+    'split climb time drifted: ' + (s[0].climbMin + s[1].climbMin) + ' vs ' + cp.timeMin);
+  const subs = [...doc.querySelectorAll('#tbody-flight-0 tr.sub-leg-row')].map(t => t.textContent);
+  assert(subs[0].includes('still climbing at B') && subs[0].includes('carries onto the next leg'), 'leg 1 sub-line: ' + subs[0]);
+  assert(subs[1].includes('CLB (cont.') && subs[1].includes('TOC') && subs[1].includes('after B'), 'leg 2 sub-line: ' + subs[1]);
+  const tocMarkers = ev(`profileMarkers.map(m => m._opts.icon.html).filter(h => h.includes('TOC'))`);
+  assert(tocMarkers.length === 1 && tocMarkers[0].includes('after B'), 'map TOC not on leg 2: ' + tocMarkers.join());
+});
+T('a descent too big for its leg starts on the PRECEDING leg (never arrive high)', () => {
+  // A(2500) --20 NM-- B(2500) --2 NM-- C(200'): descent 2300 ft needs ~4.6 min (~9 NM)
+  ev(`flights = [{ id: 1, title: "T", depElev: 2500, waypoints: [
+    { lat: 69.000, lng: 18.0, name: "A", alt: 2500, oat: 5, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.3333, lng: 18.0, name: "B", alt: 2500, oat: 5, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.3667, lng: 18.0, name: "C", alt: 200,  oat: 5, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const s = ev('computeFlightSchedule(flights[0])');
+  assert(s[0].todStartsHere === true, 'TOD did not back up onto leg 1');
+  assert(s[0].descContinues === true, 'leg 1 descent should continue past B');
+  assert(s[1].descMin > 0.5 && !s[1].todStartsHere, 'leg 2 should be carried-in descent');
+  assert(!s[1].shortfallMin, 'descent should fit once backed up');
+  // total descent time = alt difference / ROD
+  assert(Math.abs(s[0].descMin + s[1].descMin - 2300 / 500) < 0.1,
+    'descent time wrong: ' + (s[0].descMin + s[1].descMin));
+  const subs = [...doc.querySelectorAll('#tbody-flight-0 tr.sub-leg-row')].map(t => t.textContent);
+  assert(subs[0].includes('TOD') && subs[0].includes('before B') && subs[0].includes("down to 200' at C"),
+    'leg 1 sub-line: ' + subs[0]);
+  assert(subs[1].includes('DES (cont.)'), 'leg 2 sub-line: ' + subs[1]);
+  const todMarkers = ev(`profileMarkers.map(m => m._opts.icon.html).filter(h => h.includes('TOD'))`);
+  assert(todMarkers.length === 1 && todMarkers[0].includes('before B') && todMarkers[0].includes('at C'),
+    'map TOD marker: ' + todMarkers.join());
+  assert(doc.getElementById('integrity-banner').style.display === 'none', 'banner should be clear');
+});
+T('an impossible descent trips the integrity banner instead of silently arriving high', () => {
+  ev(`flights = [{ id: 1, title: "T", depElev: 10000, waypoints: [
+    { lat: 69.000, lng: 18.0, name: "A", alt: 10000, oat: -5, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.05, lng: 18.0, name: "B", alt: 200,  oat: 5, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const b = doc.getElementById('integrity-banner');
+  assert(b.style.display === 'block' && b.textContent.includes('cannot get down to 200 ft at B'),
+    'shortfall not flagged: ' + b.textContent.slice(0, 200));
+});
+T('a climb that never completes before the flight ends is flagged', () => {
+  ev(`flights = [{ id: 1, title: "T", depElev: 254, waypoints: [
+    { lat: 69.000, lng: 18.0, name: "A", alt: 254,  oat: 5, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.0333, lng: 18.0, name: "B", alt: 5000, oat: 5, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const b = doc.getElementById('integrity-banner');
+  assert(b.style.display === 'block' && b.textContent.includes('does not fit within the flight'),
+    'unfinished climb not flagged: ' + b.textContent.slice(0, 200));
+});
+T('when everything fits, the schedule matches the independent per-leg engine', () => {
+  ev(SEED);
+  const s = ev('computeFlightSchedule(flights[0])');
+  const solo = ev('computeLegTotals(flights[0].waypoints[0], flights[0].waypoints[1])');
+  const schd = ev('computeLegTotals(flights[0].waypoints[0], flights[0].waypoints[1], computeFlightSchedule(flights[0])[0])');
+  assert(Math.abs(solo.timeMin - schd.timeMin) < 0.05, 'time diverged: ' + solo.timeMin + ' vs ' + schd.timeMin);
+  assert(Math.abs(solo.burnGal - schd.burnGal) < 0.02, 'burn diverged');
+  assert(solo.profileTag === schd.profileTag, 'profile tag diverged: ' + solo.profileTag + ' vs ' + schd.profileTag);
+  assert(Math.abs(solo.climbInfo.tocAlongNM - schd.climbInfo.tocAlongNM) < 0.05, 'TOC position diverged');
+  assert(doc.getElementById('integrity-banner').style.display === 'none', 'banner should be clear on the seed');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
