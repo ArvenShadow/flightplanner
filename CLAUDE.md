@@ -99,6 +99,17 @@ claude.ai; this repo is the continuation point for Claude Code.
   per-segment tracks live in the ↳ sub-line and the plotting list, and
   the guide says to steer by those. Distance/time/fuel/GS always walk
   the bent path. Do not switch the row back to first-segment track.
+- **Flight altitude schedule (v16.5, user decision)**: legs are NOT
+  independent. computeFlightSchedule(fl) does a forward pass (climb
+  spillover: TOC lands on the leg where the target altitude is actually
+  reached; POH partial climbs inverted via climbCumulative bisection)
+  and a backward pass (TOD backs up onto earlier legs so every waypoint
+  is crossed AT its planned altitude, never above). Pattern stops break
+  the chain. Impossible descents / unfinished climbs go to the red
+  integrity banner. computeLegTotals(from,to) WITHOUT a schedule leg
+  keeps the old independent behavior (tests and one-off tools rely on
+  it); all UI paths (OFP rows, map markers, plotting list, integrity)
+  pass the schedule.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).

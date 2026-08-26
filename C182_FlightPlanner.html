@@ -1176,6 +1176,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
           <ul style="margin-left:16px;">
             <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail.</li>
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
+            <li><b>Climbs and descents are planned across leg boundaries</b>: a climb that doesn't fit its leg simply continues on the next (the ▲ TOC lands on the leg where the altitude is actually reached), and a descent that doesn't fit its leg <b>backs up onto earlier legs</b> — the ▼ TOD names the low waypoint it serves (e.g. "TOD · 7.2 NM before B → 200' at C") — so you always cross a waypoint AT its planned altitude, never above it. A circuit (pattern) stop breaks the chain. If even all the preceding distance can't absorb the descent, the red integrity banner says so instead of letting you plan an arrival that's too high.</li>
             <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
             <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (their exact-position dots remain); zoomed further out only dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
           </ul>
@@ -2491,7 +2492,68 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // ONE leg, fully computed over the bent path: total distance, time and
     // burn, with the climb occupying the front of the path and the descent
     // the back, each at their own per-segment groundspeeds.
-    function computeLegTotals(from, to) {
+    // SL (optional) = this leg's entry in the flight altitude schedule from
+    // computeFlightSchedule(). With it, climb/descent phases may have been
+    // carried in from neighbouring legs; without it the leg is computed
+    // independently exactly as before (kept for tools and tests that look at
+    // one leg in isolation).
+    function computeLegTotals(from, to, SL) {
+      if (SL) {
+        const cruiseAlt = (SL.tocAlongNM != null || SL.stillClimbing) ? to.alt : SL.entryAlt;
+        const crz = cruisePerf(cruiseAlt, to.oat);
+        const cruiseDist = Math.max(0, SL.distNM - SL.climbDistNM - SL.descDistNM);
+        let acc = 0, cruiseTime = 0;
+        for (const s of SL.segs) {
+          const midStart = Math.max(acc, SL.climbDistNM);
+          const midEnd = Math.min(acc + s.distNM, SL.climbDistNM + cruiseDist);
+          if (midEnd - midStart > 0.001)
+            cruiseTime += ((midEnd - midStart) / phaseGS(crz.tas, to.wdir, to.wspd, s.tt).gs) * 60;
+          acc += s.distNM;
+        }
+        const timeMin = SL.climbMin + cruiseTime + SL.descMin;
+        const burnGal = SL.climbFuelGal + (cruiseTime / 60) * crz.gph + (SL.descMin / 60) * aircraftProfile.descFf;
+        const parts = [];
+        if (SL.climbMin > 0.05) parts.push('CLB');
+        if (cruiseTime > 0.5) parts.push('CRZ');
+        if (SL.descMin > 0.05) parts.push('DES');
+        const profileTag = parts.join('+') || 'CRZ';
+        // Displayed TAS: cruise TAS when the leg has a cruise portion (user
+        // decision, v16.4); otherwise the dominant phase's TAS.
+        let startTas;
+        if (cruiseTime > 0.5 || parts.length === 0) startTas = crz.tas;
+        else if (SL.climbMin >= SL.descMin) startTas = SL.climbTas || crz.tas;
+        else startTas = aircraftProfile.descTas;
+        const tasCands = [];
+        if (SL.climbMin > 0.05) tasCands.push(SL.climbTas || crz.tas);
+        if (cruiseTime > 0.5 || parts.length === 0) tasCands.push(crz.tas);
+        if (SL.descMin > 0.05) tasCands.push(aircraftProfile.descTas);
+        const rowTT = Math.round(calcTrueTrack(from.lat, from.lng, to.lat, to.lng));
+        const { wca } = phaseGS(startTas, to.wdir, to.wspd, rowTT);
+        const effGS = timeMin > 0 ? SL.distNM / (timeMin / 60) : 0;
+        const climbInfo = SL.climbMin > 0.05 ? {
+          timeMin: SL.climbMin, fuelGal: SL.climbFuelGal,
+          tocAlongNM: SL.tocAlongNM != null ? SL.tocAlongNM : SL.climbDistNM,
+          completed: SL.tocAlongNM != null,
+          carriedIn: SL.entryAlt < from.alt - 1, fromAlt: SL.entryAlt
+        } : null;
+        const descInfo = SL.descMin > 0.05 ? {
+          timeMin: SL.descMin,
+          todBeforeNM: SL.todStartsHere ? SL.todBeforeNM : null,
+          startsHere: SL.todStartsHere,
+          carriedIn: SL.descMin > 0.05 && !SL.todStartsHere,
+          continues: SL.descContinues,
+          fitsInLeg: SL.todStartsHere && !SL.descContinues,
+          targetName: SL.descTargetName, targetAlt: SL.descTargetAlt
+        } : null;
+        return {
+          segs: SL.segs, distNM: SL.distNM, timeMin, burnGal,
+          rowTT, rowWCA: Math.round(wca),
+          dispTas: Math.round(startTas), minPhaseTas: Math.round(Math.min(...tasCands)),
+          effGS: Math.round(effGS), profileTag, climbInfo, descInfo,
+          stillClimbing: SL.stillClimbing, entryAlt: Math.round(SL.entryAlt), exitAlt: Math.round(SL.exitAlt),
+          shortfall: SL.shortfallMin > 0.001 ? { min: SL.shortfallMin, target: SL.descTargetName, alt: SL.descTargetAlt } : null
+        };
+      }
       const segs = pathSegments(from, to);
       if (segs.length === 0) return null;
       const totalDist = segs.reduce((a, s) => a + s.distNM, 0);
@@ -2615,6 +2677,162 @@ svg.leaflet-image-layer.leaflet-interactive path {
                  lat: pt.lat, lng: pt.lng, alt: to.alt, tt: pt.tt };
       }
       return null;
+    }
+
+    // =========================================================================
+    // 4c. FLIGHT ALTITUDE SCHEDULE (v16.5)
+    // Legs are NOT independent: a climb that does not finish within its leg
+    // CARRIES INTO the next legs (the TOC lands on the leg where the target
+    // altitude is actually reached), and a descent that does not fit within
+    // its own leg STARTS ON AN EARLIER LEG (the TOD backs up) so the aircraft
+    // arrives at every waypoint AT its planned altitude - never above a point
+    // that must be crossed low. One forward pass places climbs, one backward
+    // pass places descents; computeLegTotals consumes the per-leg phases.
+    // A circuit (pattern) entry breaks the chain in both directions. If even
+    // all the preceding distance cannot absorb a descent, the shortfall is
+    // reported by the integrity banner instead of silently arriving high.
+    // =========================================================================
+
+    // Altitude actually reached after flying `minutesFlown` of a climb from
+    // fromAlt toward targetAlt. For the POH table the cumulative time column
+    // is inverted by bisection (the ISA correction scales total time evenly,
+    // so the time FRACTION maps 1:1 onto the uncorrected table).
+    function climbAltReached(fromAlt, targetAlt, minutesFlown, oat) {
+      const cp = climbPerf(fromAlt, targetAlt, oat);
+      if (minutesFlown >= cp.timeMin - 0.001) return targetAlt;
+      if (minutesFlown <= 0) return fromAlt;
+      if (aircraftProfile.mode === 'MANUAL')
+        return Math.min(targetAlt, fromAlt + aircraftProfile.roc * minutesFlown);
+      if (aircraftProfile.climbMode === 'CRUISECLIMB')
+        return Math.min(targetAlt, fromAlt + aircraftProfile.ccRoc * minutesFlown);
+      const frac = minutesFlown / cp.timeMin;
+      const t0 = climbCumulative(fromAlt).t;
+      const tGoal = t0 + frac * (climbCumulative(targetAlt).t - t0);
+      let lo = fromAlt, hi = targetAlt;
+      for (let n = 0; n < 40; n++) {
+        const mid = (lo + hi) / 2;
+        if (climbCumulative(mid).t < tGoal) lo = mid; else hi = mid;
+      }
+      return (lo + hi) / 2;
+    }
+
+    // Per-flight altitude schedule: an array indexed like the waypoint legs
+    // (legs[i] = wp[i] -> wp[i+1]; null for pattern pairs).
+    function computeFlightSchedule(fl) {
+      const wps = fl.waypoints || [];
+      const legs = new Array(Math.max(0, wps.length - 1)).fill(null);
+
+      // ---- forward: entry altitudes and climb placement (climbs may span legs)
+      let alt = null;
+      for (let i = 0; i < wps.length - 1; i++) {
+        const from = wps[i], to = wps[i + 1];
+        if (from.isPattern || to.isPattern) continue;
+        const segs = pathSegments(from, to);
+        if (!segs.length) continue;
+        const L = { i, from, to, segs, distNM: segs.reduce((a, s) => a + s.distNM, 0),
+                    climbMin: 0, climbFuelGal: 0, climbDistNM: 0, climbTas: 0,
+                    tocAlongNM: null, stillClimbing: false,
+                    descMin: 0, descDistNM: 0, todStartsHere: false, todBeforeNM: null,
+                    descContinues: false, descTargetName: null, descTargetAlt: null,
+                    shortfallMin: 0 };
+        if (alt === null) alt = from.alt;
+        L.entryAlt = alt;
+        const target = to.alt;
+        if (target > alt + 1) {
+          const cp = climbPerf(alt, target, to.oat);
+          L.climbTas = cp.tasAvg;
+          let rem = cp.timeMin, dist = 0;
+          for (const s of segs) {
+            if (rem <= 0.001) break;
+            const gsC = phaseGS(cp.tasAvg, to.wdir, to.wspd, s.tt).gs;
+            const here = Math.min(s.distNM, gsC * (rem / 60));
+            rem -= (here / gsC) * 60;
+            dist += here;
+          }
+          L.climbMin = cp.timeMin - Math.max(0, rem);
+          L.climbFuelGal = cp.timeMin > 0 ? cp.fuelGal * (L.climbMin / cp.timeMin) : 0;
+          L.climbDistNM = Math.min(dist, L.distNM);
+          if (rem <= 0.05) {
+            L.tocAlongNM = L.climbDistNM;
+            alt = target;
+          } else {
+            L.stillClimbing = true;
+            alt = climbAltReached(L.entryAlt, target, L.climbMin, to.oat);
+          }
+        } else {
+          alt = target;   // level, or a descent placed by the backward pass
+        }
+        L.exitAlt = alt;
+        legs[i] = L;
+      }
+
+      // ---- backward: descent placement (descents may back up across legs)
+      for (let i = legs.length - 1; i >= 0; i--) {
+        const L = legs[i];
+        if (!L) continue;
+        const target = L.to.alt;
+        const highAlt = L.stillClimbing ? L.exitAlt
+                      : (target > L.entryAlt ? target : L.entryAlt);
+        if (target >= highAlt - 1) continue;
+        let remMin = (highAlt - target) / Math.max(1, aircraftProfile.rod);
+        for (let k = i; k >= 0 && remMin > 0.001; k--) {
+          const Lk = legs[k];
+          if (!Lk) break;   // a pattern stop ends the chain
+          const availDist = Lk.distNM - Lk.climbDistNM - Lk.descDistNM;
+          if (availDist > 0.01) {
+            // walk this leg's segments from the END; the very back may
+            // already belong to a descent placed for a LATER low waypoint.
+            let skip = Lk.descDistNM, usedDist = 0, usedMin = 0;
+            for (let s = Lk.segs.length - 1; s >= 0 && remMin > 0.001; s--) {
+              const seg = Lk.segs[s];
+              let left = seg.distNM;
+              if (skip > 0) { const sk = Math.min(skip, left); skip -= sk; left -= sk; }
+              if (left <= 0.001) continue;
+              left = Math.min(left, availDist - usedDist);
+              if (left <= 0.001) break;
+              const gsD = phaseGS(aircraftProfile.descTas, Lk.to.wdir, Lk.to.wspd, seg.tt).gs;
+              const here = Math.min(left, gsD * (remMin / 60));
+              const tHere = (here / gsD) * 60;
+              usedDist += here; usedMin += tHere; remMin -= tHere;
+            }
+            Lk.descMin += usedMin;
+            Lk.descDistNM += usedDist;
+            if (!Lk.descTargetName) { Lk.descTargetName = L.to.name; Lk.descTargetAlt = target; }
+            if (remMin <= 0.001) {
+              Lk.todStartsHere = true;
+              Lk.todBeforeNM = Lk.descDistNM;
+              Lk.descTargetName = L.to.name;
+              Lk.descTargetAlt = target;
+            }
+          }
+          if (k < i) Lk.descContinues = true;
+          // a climb on this leg blocks any earlier descent: TOD can back up
+          // at most to just after that climb's TOC.
+          if (remMin > 0.001 && (Lk.tocAlongNM != null || Lk.stillClimbing)) break;
+        }
+        if (remMin > 0.001) L.shortfallMin = remMin;
+      }
+      return legs;
+    }
+
+    // Map/plotting markers for one leg under the flight schedule: a leg can
+    // now carry a TOC (possibly from a climb begun legs earlier) AND a TOD
+    // (possibly for a low waypoint legs later), so this returns a list.
+    function computeLegMarkers(from, to, SL) {
+      if (!SL) { const p = computeLegProfile(from, to); return p ? [p] : []; }
+      const out = [];
+      if (SL.tocAlongNM != null && SL.tocAlongNM > 0.05 && SL.tocAlongNM < SL.distNM - 0.05) {
+        const pt = pointAlongSegments(SL.segs, SL.tocAlongNM);
+        out.push({ kind: 'TOC', distNM: SL.tocAlongNM, refName: from.name, rel: 'after',
+                   lat: pt.lat, lng: pt.lng, alt: to.alt, tt: pt.tt });
+      }
+      if (SL.todStartsHere && SL.todBeforeNM > 0.05 && SL.todBeforeNM < SL.distNM - 0.05) {
+        const pt = pointAlongSegments(SL.segs, SL.distNM - SL.todBeforeNM);
+        out.push({ kind: 'TOD', distNM: SL.todBeforeNM, refName: to.name, rel: 'before',
+                   lat: pt.lat, lng: pt.lng, alt: SL.descTargetAlt, tt: pt.tt,
+                   targetName: SL.descTargetName });
+      }
+      return out;
     }
 
     // =========================================================================
@@ -3056,9 +3274,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
         // and are offset ~20px perpendicular-RIGHT of their own track. Since a
         // return leg flies the reciprocal track, its labels land on the
         // OPPOSITE side of the shared line - out/return no longer overlap.
+        const schedM = computeFlightSchedule(fl);
         for (let i = 0; i < fl.waypoints.length - 1; i++) {
-          const prof = computeLegProfile(fl.waypoints[i], fl.waypoints[i + 1]);
-          if (!prof) continue;
+          computeLegMarkers(fl.waypoints[i], fl.waypoints[i + 1], schedM[i]).forEach(prof => {
 
           const distUnit = aircraftProfile.distUnit || 'NM';
           const distTxt = `${convertDist(prof.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)}`;
@@ -3069,10 +3287,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
           // A dot marks the EXACT point on the line; the readable chip floats
           // beside it, centered on a point ~30px perpendicular to the track.
+          // A TOD whose low waypoint lies legs ahead names that target too.
           const chipStyle = `position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(${dx}px,${dy}px);`;
+          const todTgt = (prof.kind === 'TOD' && prof.targetName && prof.targetName !== prof.refName)
+            ? ` → ${prof.alt}' at ${prof.targetName}` : '';
           const labelHtml = prof.kind === 'TOC'
             ? `<div class="prof-point toc"></div><div class="toc-label" style="${chipStyle}">${fTag}▲ TOC ${prof.alt}' · ${distTxt} after ${prof.refName}</div>`
-            : `<div class="prof-point tod"></div><div class="tod-label" style="${chipStyle}">${fTag}▼ TOD · ${distTxt} before ${prof.refName}</div>`;
+            : `<div class="prof-point tod"></div><div class="tod-label" style="${chipStyle}">${fTag}▼ TOD · ${distTxt} before ${prof.refName}${todTgt}</div>`;
 
           const m = L.marker([prof.lat, prof.lng], {
             interactive: false,
@@ -3084,6 +3305,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             })
           }).addTo(map);
           profileMarkers.push(m);
+          });
         }
       });
     }
@@ -3606,6 +3828,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
         const tbody = table.querySelector(`#tbody-flight-${fIdx}`);
         let sectorDist = 0, sectorTime = 0, sectorBurn = 0;
+        const sched = computeFlightSchedule(fl);   // climbs/descents may span legs
 
         for (let i = 0; i < fl.waypoints.length - 1; i++) {
           const from = fl.waypoints[i];
@@ -3663,7 +3886,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
           // ---- ONE row per leg: totals over the (possibly via-bent) path;
           //      climb / descent / via detail goes in a sub-line underneath. ----
-          const res = computeLegTotals(from, to);
+          const res = computeLegTotals(from, to, sched[i]);
           if (!res) continue;
 
           const dist = Number(convertDist(res.distNM, distUnit).toFixed(1));
@@ -3990,18 +4213,25 @@ svg.leaflet-image-layer.leaflet-interactive path {
           if (isFinite(wp.wspd) && (wp.wspd < 0 || wp.wspd > 120))
             add(`Waypoint "${wp.name}" wind speed ${wp.wspd} kt is implausible for VFR planning.`);
         });
+        const schedI = computeFlightSchedule(fl);
+        let lastTravelRes = null, lastTravelTo = null;
         for (let i = 0; i < fl.waypoints.length - 1; i++) {
           const from = fl.waypoints[i], to = fl.waypoints[i + 1];
           if (from.isPattern || to.isPattern) continue;
-          const res = computeLegTotals(from, to);
+          const res = computeLegTotals(from, to, schedI[i]);
           if (!res) continue;
+          lastTravelRes = res; lastTravelTo = to;
           if (!isFinite(res.timeMin) || res.timeMin < 0 || !isFinite(res.burnGal) || res.burnGal < 0)
             add(`Leg ${from.name} → ${to.name}: computed time/fuel is invalid.`);
           if (to.wspd >= res.minPhaseTas)
             add(`Leg ${from.name} → ${to.name}: wind (${to.wspd} kt) meets or exceeds the slowest phase's TAS (${res.minPhaseTas} kt) - groundspeed and time are NOT reliable.`);
           else if (res.effGS < 30)
             add(`Leg ${from.name} → ${to.name}: effective groundspeed ${res.effGS} kt - check the wind entry.`);
+          if (res.shortfall)
+            add(`Leg ${from.name} → ${to.name}: cannot get down to ${res.shortfall.alt} ft at ${res.shortfall.target} - the descent is ${res.shortfall.min.toFixed(1)} min short even when started on earlier legs. Lower the cruise altitude or expect to arrive HIGH.`);
         }
+        if (lastTravelRes && lastTravelRes.stillClimbing)
+          add(`${flightTitle(fl)}: still climbing at ${lastTravelTo.name} - the climb to ${lastTravelTo.alt} ft does not fit within the flight (reaches ~${lastTravelRes.exitAlt} ft).`);
       });
 
       const remEl = document.getElementById('grand-final-rem');
@@ -4032,17 +4262,24 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const parts = [];
       if (res.climbInfo) {
         const c = res.climbInfo;
-        parts.push(`▲ CLB ${Math.round(c.timeMin)} min · ${convertFuel(c.fuelGal, fuelUnit).toFixed(1)} ${fuelLabel(fuelUnit)}` +
+        const cont = c.carriedIn ? ` (cont. from ~${Math.round(c.fromAlt)}')` : '';
+        parts.push(`▲ CLB${cont} ${Math.round(c.timeMin)} min · ${convertFuel(c.fuelGal, fuelUnit).toFixed(1)} ${fuelLabel(fuelUnit)}` +
           (c.completed
             ? ` · TOC ${convertDist(c.tocAlongNM, distUnit).toFixed(1)} ${dl} after ${from.name}`
-            : ` · still climbing at ${to.name}`));
+            : ` · still climbing at ${to.name} — TOC carries onto the next leg`));
       }
       if (res.descInfo) {
         const d = res.descInfo;
-        parts.push(`▼ DES ${Math.round(d.timeMin)} min` +
-          (d.fitsInLeg
-            ? ` · TOD ${convertDist(d.todBeforeNM, distUnit).toFixed(1)} ${dl} before ${to.name}`
-            : ` · descent fills the whole leg`));
+        const tgt = (d.targetName && d.targetName !== to.name)
+          ? ` — down to ${d.targetAlt}' at ${d.targetName}` : '';
+        if (d.startsHere) {
+          parts.push(`▼ DES ${Math.round(d.timeMin)} min · TOD ${convertDist(d.todBeforeNM, distUnit).toFixed(1)} ${dl} before ${to.name}` +
+            (d.continues ? ` · descent continues past ${to.name}${tgt}` : ''));
+        } else if (d.carriedIn) {
+          parts.push(`▼ DES (cont.) ${Math.round(d.timeMin)} min${d.continues ? ` · continues past ${to.name}` : ''}${tgt}`);
+        } else {
+          parts.push(`▼ DES ${Math.round(d.timeMin)} min · descent fills the whole leg${tgt}`);
+        }
       }
       if (res.segs.length > 1) {
         const segTxt = res.segs.map(sg => {
@@ -4087,22 +4324,23 @@ svg.leaflet-image-layer.leaflet-interactive path {
       });
       lines.push('');
       lines.push(`LEGS (whole-leg, as drawn on chart)`);
+      const schedT = computeFlightSchedule(fl);
       for (let i = 0; i < fl.waypoints.length - 1; i++) {
         const from = fl.waypoints[i], to = fl.waypoints[i + 1];
         if (from.isPattern || to.isPattern) continue;
-        const res = computeLegTotals(from, to);
+        const res = computeLegTotals(from, to, schedT[i]);
         if (!res) continue;
-        const prof = computeLegProfile(from, to);
-        const profAlong = prof ? (prof.kind === 'TOC' ? prof.distNM : res.distNM - prof.distNM) : null;
+        const profs = computeLegMarkers(from, to, schedT[i]);
         let acc = 0;
         res.segs.forEach((sg, k) => {
           const nameA = k === 0 ? from.name : 'v' + k;
           const nameB = k === res.segs.length - 1 ? to.name : 'v' + (k + 1);
           const smt = Math.round((sg.tt + to.var + 360) % 360);
-          const hasProf = prof && profAlong > acc - 0.001 && profAlong <= acc + sg.distNM + 0.001;
-          const profTxt = hasProf
-            ? `  | ${prof.kind} ${convertDist(prof.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${prof.rel} ${prof.refName}`
-            : '';
+          const profTxt = profs
+            .filter(p => { const along = p.kind === 'TOC' ? p.distNM : res.distNM - p.distNM;
+                           return along > acc - 0.001 && along <= acc + sg.distNM + 0.001; })
+            .map(p => `  | ${p.kind} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`)
+            .join('');
           lines.push(`${(nameA + ' - ' + nameB).padEnd(28)} TT ${String(sg.tt).padStart(3, '0')}  MT ${String(smt).padStart(3, '0')}  ${convertDist(sg.distNM, distUnit).toFixed(1).padStart(5)} ${distLabel(distUnit)}${profTxt}`);
           acc += sg.distNM;
         });
@@ -4155,24 +4393,26 @@ svg.leaflet-image-layer.leaflet-interactive path {
       });
 
       let legRows = '';
+      const schedP = computeFlightSchedule(fl);
       for (let i = 0; i < fl.waypoints.length - 1; i++) {
         const from = fl.waypoints[i], to = fl.waypoints[i + 1];
         if (from.isPattern || to.isPattern) continue;
-        const res = computeLegTotals(from, to);
+        const res = computeLegTotals(from, to, schedP[i]);
         if (!res) continue;
-        const prof = computeLegProfile(from, to);
-        // Which along-path distance the TOC/TOD sits at (for placing the
-        // note on the segment you'd actually mark it on).
-        const profAlong = prof ? (prof.kind === 'TOC' ? prof.distNM : res.distNM - prof.distNM) : null;
+        const profs = computeLegMarkers(from, to, schedP[i]);
         const nViaSegs = res.segs.length;
         let acc = 0;
         res.segs.forEach((sg, k) => {
           const nameA = k === 0 ? from.name : `·${k}`;
           const nameB = k === nViaSegs - 1 ? to.name : `·${k + 1}`;
           const smt = Math.round((sg.tt + to.var + 360) % 360);
-          const hasProf = prof && profAlong > acc - 0.001 && profAlong <= acc + sg.distNM + 0.001;
+          // TOC/TOD notes on the segment you'd actually mark them on.
+          const segMarks = profs.filter(p => { const along = p.kind === 'TOC' ? p.distNM : res.distNM - p.distNM;
+                                               return along > acc - 0.001 && along <= acc + sg.distNM + 0.001; });
+          const hasProf = segMarks.length > 0;
+          const prof = segMarks[0];
           const profTxt = hasProf
-            ? `${prof.kind === 'TOC' ? '▲ TOC' : '▼ TOD'} ${convertDist(prof.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${prof.rel} ${prof.refName}`
+            ? segMarks.map(p => `${p.kind === 'TOC' ? '▲ TOC' : '▼ TOD'} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`).join(' · ')
             : '—';
           legRows += `
           <tr>
