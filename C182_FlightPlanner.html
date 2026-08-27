@@ -1821,7 +1821,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     async function checkForUpdate() {
       try {
-        const resp = await fetch(UPDATE_URL, { cache: 'no-store' });
+        // The unique query string defeats the raw.githubusercontent CDN cache
+        // (max-age=300): without it a check within ~5 min of a release still
+        // saw the OLD version and said "latest".
+        const resp = await fetch(UPDATE_URL + '?ts=' + Date.now(), { cache: 'no-store' });
         if (!resp.ok) return;
         const pkg = await resp.json();
         if (pkg && pkg.version) renderVersionBadge(String(pkg.version).replace(/\.0$/, ''));
