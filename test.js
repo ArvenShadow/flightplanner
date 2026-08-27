@@ -1899,6 +1899,37 @@ T('when everything fits, the schedule matches the independent per-leg engine', (
   assert(doc.getElementById('integrity-banner').style.display === 'none', 'banner should be clear on the seed');
 });
 
+console.log('\n=== 57. Version badge & GitHub update check ===');
+T('the header shows the running version', () => {
+  const badge = txtOf('app-version-badge');
+  assert(badge.includes('v' + ev('APP_VERSION')), 'badge missing/wrong: "' + badge + '"');
+});
+T('APP_VERSION and package.json stay in sync (major.minor)', () => {
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  assert(ev(`compareVersions(APP_VERSION, '${pkg}')`) === 0,
+    'APP_VERSION ' + ev('APP_VERSION') + ' != package.json ' + pkg);
+});
+T('version comparison handles multi-digit and padded forms', () => {
+  assert(ev('compareVersions("16.9", "16.10")') === -1, '16.9 must be older than 16.10');
+  assert(ev('compareVersions("16.5", "16.5.0")') === 0, '16.5 must equal 16.5.0');
+  assert(ev('compareVersions("17.0", "16.10")') === 1, '17.0 must be newer than 16.10');
+});
+T('a newer remote version turns the badge into an update link; same version says latest', () => {
+  ev('renderVersionBadge("99.9")');
+  const el = doc.getElementById('app-version-badge');
+  assert(el.textContent.includes('available'), 'no update hint: ' + el.textContent);
+  const a = el.querySelector('a');
+  assert(a && a.href.includes('github.com/ArvenShadow/flightplanner'), 'update link wrong: ' + (a && a.href));
+  ev('renderVersionBadge(APP_VERSION)');
+  assert(el.textContent.includes('latest') && !el.querySelector('a'), 'same-version state wrong: ' + el.textContent);
+  ev('renderVersionBadge()');   // back to the offline/startup state
+  assert(el.textContent === 'v' + ev('APP_VERSION'), 'plain state wrong: ' + el.textContent);
+});
+T('an OLDER remote version (repo behind local dev copy) never nags', () => {
+  ev('renderVersionBadge("1.0")');
+  assert(!txtOf('app-version-badge').includes('available'), 'downgrade offered as update');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));

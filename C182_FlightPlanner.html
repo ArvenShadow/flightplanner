@@ -907,7 +907,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 <body class="light-mode">
 
   <div id="header">
-    <h1>C182 Multi-Leg VFR Flight Planner</h1>
+    <h1>C182 Multi-Leg VFR Flight Planner <span id="app-version-badge" style="font-size:11px; font-weight:600; color:#a0aec0; margin-left:8px; vertical-align:middle; white-space:nowrap;"></span></h1>
     
     <div class="route-controls no-print">
       <select id="route-selector" class="route-select" onchange="loadSelectedRouteOrMission()">
@@ -1206,6 +1206,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li>Work is auto-saved in <b>this browser's storage</b> — it survives restarts, but it does NOT live inside the HTML file and won't follow you to another browser or computer.</li>
             <li><b>Save</b> stores a named route or whole mission; the dropdown loads them back.</li>
             <li><b>Export</b> writes a JSON file with everything: routes, missions, current flights, aircraft settings and planning preferences. <b>Import</b> restores it anywhere. Export after any session you'd mind losing.</li>
+          </ul>
+        </div>
+
+        <div class="setting-section">
+          <h3>🔢 Version &amp; updates</h3>
+          <ul style="margin-left:16px;">
+            <li>The <b>version badge</b> next to the title shows which version you are running. At startup (when online) it checks the GitHub repository once: "· latest" means you're current; a yellow <b>⬆ available</b> link means a newer C182_FlightPlanner.html can be downloaded from the repo. Offline it just shows the version — the check never blocks anything.</li>
           </ul>
         </div>
 
@@ -1771,6 +1778,54 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const el = document.getElementById('fuel-reserve');
       const v = el ? Number(el.value) : 0;
       return isNaN(v) ? 0 : v;
+    }
+
+    // =========================================================================
+    // 1b. VERSION & UPDATE CHECK
+    // =========================================================================
+    // Single source of truth for the app version; package.json in the repo
+    // mirrors it and the test suite guards that they stay in sync. The update
+    // check fetches the repo's package.json from raw.githubusercontent.com —
+    // VERIFIED (Aug 2026): the repo is public and both raw.githubusercontent
+    // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
+    // legal even from a double-clicked local file (origin "null"). The check
+    // fails SILENTLY when offline — the planner never depends on it.
+    const APP_VERSION = '16.5';
+    const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
+    const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
+
+    // -1 / 0 / +1 for dotted numeric versions ('16.9' < '16.10' compares right;
+    // '16.5' and '16.5.0' are equal).
+    function compareVersions(a, b) {
+      const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const x = pa[i] || 0, y = pb[i] || 0;
+        if (x !== y) return x < y ? -1 : 1;
+      }
+      return 0;
+    }
+
+    function renderVersionBadge(remoteVersion) {
+      const el = document.getElementById('app-version-badge');
+      if (!el) return;
+      if (remoteVersion && compareVersions(APP_VERSION, remoteVersion) < 0) {
+        el.innerHTML = `v${APP_VERSION} · <a href="${REPO_URL}" target="_blank" rel="noopener" style="color:#ecc94b; font-weight:700;">⬆ v${remoteVersion} available on GitHub</a>`;
+        el.title = 'A newer version is on GitHub - download the latest C182_FlightPlanner.html';
+      } else {
+        // textContent, not innerText: it must also CLEAR a previously
+        // rendered update link (and jsdom only implements textContent).
+        el.textContent = 'v' + APP_VERSION + (remoteVersion ? ' · latest' : '');
+        el.title = remoteVersion ? 'You are on the latest version' : 'The GitHub version check runs when online';
+      }
+    }
+
+    async function checkForUpdate() {
+      try {
+        const resp = await fetch(UPDATE_URL, { cache: 'no-store' });
+        if (!resp.ok) return;
+        const pkg = await resp.json();
+        if (pkg && pkg.version) renderVersionBadge(String(pkg.version).replace(/\.0$/, ''));
+      } catch (e) { /* offline or blocked: the badge keeps showing just the version */ }
     }
 
     // =========================================================================
@@ -4739,6 +4794,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
     loadPlanningPrefs();
     populateRouteDropdown();
     applyZoomDeclutter();   // needs aircraftProfile, so it runs here, not at map setup
+    renderVersionBadge();
+    checkForUpdate();       // one shot at startup; silent when offline
     function defaultFlights() {
       return [{ id: 1, title: "Flight Plan 1", depElev: 0, waypoints: [] }];
     }
