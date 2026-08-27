@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.5)
+# C182 Flight Planner (v16.6)
 
 Single-file VFR flight planner for the Cessna 182T — ground planning only.
 Open `C182_FlightPlanner.html` in any browser. That file is the entire app.
