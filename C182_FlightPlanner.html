@@ -765,6 +765,19 @@ svg.leaflet-image-layer.leaflet-interactive path {
       padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
       color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
     #declutter-btn:hover { background: var(--highlight-bg); }
+    #airspace-overlay-btn { position: absolute; top: 40px; right: 10px; z-index: 1000; font-size: 11px; font-weight: 700;
+      padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
+      color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+    #airspace-overlay-btn:hover { background: var(--highlight-bg); }
+    #airspace-status { position: absolute; top: 70px; right: 10px; z-index: 1000; max-width: 260px; font-size: 10px;
+      padding: 5px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
+      color: var(--text-main); box-shadow: 0 1px 4px rgba(0,0,0,0.35); line-height: 1.5; }
+    #airspace-status .as-warn { color: #ffffff; background: #c05621; font-weight: 700; padding: 1px 5px; border-radius: 3px; display: inline-block; margin-top: 2px; }
+    #airspace-info { position: absolute; left: 10px; bottom: 24px; z-index: 1000; max-width: 340px; max-height: 45%;
+      overflow-y: auto; font-size: 10.5px; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--border-color);
+      background: var(--bg-card); color: var(--text-main); box-shadow: 0 2px 8px rgba(0,0,0,0.45); line-height: 1.5; }
+    #airspace-info h4 { font-size: 11px; margin: 4px 0 1px 0; }
+    #airspace-info .as-close { float: right; cursor: pointer; font-weight: 700; padding: 0 4px; }
     #map { width: 100%; height: 100%; }
     #sidebar { flex: 1.55; display: flex; flex-direction: column; background: var(--bg-sidebar); overflow-y: auto; padding: 10px; gap: 10px; }
     
@@ -946,6 +959,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
     <div id="map-container">
       <div id="map"></div>
       <button id="declutter-btn" class="no-print" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
+      <button id="airspace-overlay-btn" class="no-print" title="Overlay Norwegian airspace from the official Avinor eAIP (TMA/CTA + prohibited/restricted/danger areas). Right-click the map to list every airspace at that point. Data ships as files in the data/ folder next to this HTML." onclick="toggleAirspaceOverlay()">🗂 Airspace: Off</button>
+      <div id="airspace-status" class="no-print" style="display:none;"></div>
+      <div id="airspace-info" class="no-print" style="display:none;"></div>
     </div>
 
     <div id="sidebar">
@@ -1179,6 +1195,18 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li><b>Climbs and descents are planned across leg boundaries</b>: a climb that doesn't fit its leg simply continues on the next (the ▲ TOC lands on the leg where the altitude is actually reached), and a descent that doesn't fit its leg <b>backs up onto earlier legs</b> — the ▼ TOD names the low waypoint it serves (e.g. "TOD · 7.2 NM before B → 200' at C") — so you always cross a waypoint AT its planned altitude, never above it. A circuit (pattern) stop breaks the chain. If even all the preceding distance can't absorb the descent, the red integrity banner says so instead of letting you plan an arrival that's too high.</li>
             <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
             <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (their exact-position dots remain); zoomed further out only dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
+          </ul>
+        </div>
+
+        <div class="setting-section">
+          <h3>🗂 Airspace overlay (official Avinor eAIP)</h3>
+          <ul style="margin-left:16px;">
+            <li>The <b>🗂 Airspace button</b> on the map overlays Norwegian airspace — TMA/CTA from ENR 2.1 and prohibited/restricted/danger areas from ENR 5.1 — extracted from the <b>official Avinor eAIP</b> and stamped with its <b>AIRAC cycle date</b> (shown on the map while the overlay is on).</li>
+            <li><b>Right-click</b> anywhere on the map to list <b>every airspace stacked over that point</b> with class, vertical limits, frequency and remarks. Left-click keeps adding waypoints as always.</li>
+            <li>The <b>lower-limit filter</b> hides airspace that starts above your altitude band (e.g. ≤ 5500 ft hides high CTAs but never a GND-based zone).</li>
+            <li>The data lives in the <b>data/</b> folder next to this HTML file — keep them together (both come from the repository). No internet needed once you have the files; missing files just disable the overlay with a note.</li>
+            <li><b>Currency</b>: AIP data changes every 28 days. When the flight date falls outside the data's AIRAC cycle the overlay shows a red warning — regenerate with <code>node tools/scrape_eaip.js</code> and update your copy. Boundaries that follow a national border are drawn as straight dotted approximations and say so.</li>
+            <li>As always: the overlay is a planning aid. The current <b>AIP and VFR chart govern</b>, and verifying airspace remains PIC responsibility.</li>
           </ul>
         </div>
 
@@ -1790,7 +1818,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.6';
+    const APP_VERSION = '16.7';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1923,6 +1951,198 @@ svg.leaflet-image-layer.leaflet-interactive path {
       applyZoomDeclutter();
     }
     map.on('zoomend', applyZoomDeclutter);
+
+    // =========================================================================
+    // 2b. AIRSPACE OVERLAY — official Avinor eAIP data sidecars
+    // =========================================================================
+    // Data source: data/airspace_*.js next to this HTML, GENERATED from the
+    // official Avinor eAIP by tools/scrape_eaip.js (one run per AIRAC cycle).
+    // They are plain classic scripts because a file:// page may not fetch()
+    // sibling files, but MAY load sibling <script>s — verified in Chromium.
+    // Each sidecar pushes { set, airac, source, areas } onto
+    // window.AIRSPACE_SETS. Areas carry polys (rings of [lat,lng]), vertical
+    // limits verbatim from the AIP, frequencies, and approxBorder flags where
+    // a boundary follows a national border that is drawn here as a straight
+    // approximation. LEFT-click keeps adding waypoints (polygons are
+    // deliberately non-interactive: a TMA covers the whole working area);
+    // RIGHT-click lists EVERY airspace stacked above that point.
+    const AIRSPACE_FILES = ['data/airspace_enr21.js', 'data/airspace_enr51.js'];
+    let airspaceLoadState = 'idle';   // idle | loading | loaded | missing
+    let airspacePolys = [];
+
+    function airspaceStyle(a) {
+      const base = { weight: 1.4, fillOpacity: 0.06, interactive: false };
+      const byType = {
+        PROHIBITED: { color: '#9b2c2c', weight: 2, fillOpacity: 0.14 },
+        RESTRICTED: { color: '#e53e3e', fillOpacity: 0.10 },
+        DANGER:     { color: '#dd6b20', fillOpacity: 0.08 },
+        TMA:        { color: '#3182ce', dashArray: '6,4' },
+        CTA:        { color: '#805ad5', dashArray: '2,5', fillOpacity: 0.03 },
+        CTR:        { color: '#2b6cb0', weight: 2 },
+        TIZ:        { color: '#2c7a7b', dashArray: '6,4' },
+        TIA:        { color: '#2c7a7b', dashArray: '2,5' }
+      };
+      const st = Object.assign(base, byType[a.type] || { color: '#718096' });
+      if (a.approxBorder) st.dashArray = '2,7';   // visibly "approximate"
+      return st;
+    }
+
+    // "GND", "1500 FT AMSL", "195 FL" -> feet for the altitude filter.
+    // Unknown formats return 0 so the area is NEVER hidden by accident.
+    function limitToFt(txt) {
+      if (!txt) return 0;
+      const t = String(txt).toUpperCase();
+      if (t.includes('GND') || t.includes('SFC')) return 0;
+      if (t.includes('UNL')) return 999999;
+      const m = t.match(/([\d.]+)/);
+      if (!m) return 0;
+      return t.includes('FL') ? Number(m[1]) * 100 : Number(m[1]);
+    }
+    function fmtLimit(txt) {
+      if (!txt) return '?';
+      return String(txt).replace(/^(\d+)\s*FL$/i, 'FL $1');
+    }
+
+    function airspaceMaxFt() {
+      const v = Number(aircraftProfile.airspaceMaxFt);
+      return isFinite(v) && v > 0 ? v : 999999;
+    }
+
+    // AIRAC cycles are 28 days; data older than its own cycle must say so.
+    function airspaceStaleness(airac) {
+      const p = String(airac).split('-').map(Number);
+      if (p.length !== 3 || !isFinite(p[0])) return { ok: false, txt: 'unknown AIRAC' };
+      const eff = Date.UTC(p[0], p[1] - 1, p[2]);
+      const next = eff + 28 * 86400000;
+      const dateEl = document.getElementById('def-date');
+      const ref = (dateEl && dateEl.value) ? Date.UTC(...dateEl.value.split('-').map((n, i) => i === 1 ? n - 1 : Number(n))) : Date.now();
+      return { ok: ref < next, txt: airac };
+    }
+
+    function loadAirspaceSidecar(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => resolve(src);
+        s.onerror = () => reject(new Error(src));
+        document.head.appendChild(s);
+      });
+    }
+
+    function ensureAirspaceLoaded() {
+      if (airspaceLoadState !== 'idle') return;
+      airspaceLoadState = 'loading';
+      Promise.allSettled(AIRSPACE_FILES.map(loadAirspaceSidecar)).then(results => {
+        airspaceLoadState = (window.AIRSPACE_SETS && window.AIRSPACE_SETS.length) ? 'loaded' : 'missing';
+        const failed = results.filter(r => r.status === 'rejected').length;
+        if (failed && airspaceLoadState === 'loaded')
+          console.warn('airspace: ' + failed + ' sidecar(s) missing - overlay is partial');
+        renderAirspaceOverlay();
+      });
+    }
+
+    function toggleAirspaceOverlay() {
+      aircraftProfile.airspaceOn = !aircraftProfile.airspaceOn;
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      if (aircraftProfile.airspaceOn) ensureAirspaceLoaded();
+      renderAirspaceOverlay();
+    }
+
+    function renderAirspaceOverlay() {
+      airspacePolys.forEach(p => map.removeLayer(p));
+      airspacePolys = [];
+      const btn = document.getElementById('airspace-overlay-btn');
+      const status = document.getElementById('airspace-status');
+      const on = !!aircraftProfile.airspaceOn;
+      if (btn) btn.textContent = '🗂 Airspace: ' + (on ? 'On' : 'Off');
+      if (!on) {
+        if (status) status.style.display = 'none';
+        hideAirspaceInfo();
+        return;
+      }
+      const sets = window.AIRSPACE_SETS || [];
+      if (airspaceLoadState === 'missing' || (airspaceLoadState === 'loaded' && !sets.length)) {
+        if (status) {
+          status.style.display = 'block';
+          status.innerHTML = '<span class="as-warn">⚠ Airspace data files not found</span><br>' +
+            'Keep the <b>data/</b> folder next to this HTML (both come from the repository). The rest of the planner is unaffected.';
+        }
+        return;
+      }
+      if (airspaceLoadState !== 'loaded') {
+        if (status) { status.style.display = 'block'; status.textContent = 'Loading airspace data…'; }
+        return;
+      }
+      const maxFt = airspaceMaxFt();
+      let shown = 0, total = 0;
+      sets.forEach(set => set.areas.forEach(a => {
+        total++;
+        if (limitToFt(a.lower) > maxFt) return;
+        shown++;
+        a.polys.forEach(ring => {
+          const p = L.polygon(ring, airspaceStyle(a)).addTo(map);
+          airspacePolys.push(p);
+        });
+      }));
+      if (status) {
+        const st = airspaceStaleness(sets[0].airac);
+        status.style.display = 'block';
+        status.innerHTML =
+          `<b>Avinor eAIP · AIRAC ${st.txt}</b><br>` +
+          `${shown}/${total} areas · lower limit ≤ <input id="airspace-maxft" type="number" step="500" value="${maxFt === 999999 ? '' : maxFt}" placeholder="any" ` +
+          `style="width:52px; font-size:10px;" onchange="aircraftProfile.airspaceMaxFt = Number(this.value) || 0; localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile)); renderAirspaceOverlay();"> ft<br>` +
+          `Right-click the map for airspace at a point.` +
+          (st.ok ? '' : '<br><span class="as-warn">⚠ Data older than one AIRAC cycle — verify against the current AIP / regenerate data/ (tools/scrape_eaip.js)</span>') +
+          '<br><span style="color:var(--text-muted);">Planning aid only — the AIP & VFR chart govern. Dotted rings: border approximated.</span>';
+      }
+    }
+
+    // Ray-casting point-in-ring (lat/lng degrees; fine at airspace scale).
+    function pointInRing(lat, lng, ring) {
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [yi, xi] = ring[i], [yj, xj] = ring[j];
+        if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+      return inside;
+    }
+
+    function airspacesAt(lat, lng) {
+      const out = [];
+      (window.AIRSPACE_SETS || []).forEach(set => set.areas.forEach(a => {
+        if (a.polys.some(ring => pointInRing(lat, lng, ring))) out.push(a);
+      }));
+      return out;
+    }
+
+    function hideAirspaceInfo() {
+      const el = document.getElementById('airspace-info');
+      if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+    }
+
+    function showAirspaceInfoAt(lat, lng) {
+      const el = document.getElementById('airspace-info');
+      if (!el) return;
+      const hits = airspacesAt(lat, lng);
+      const rows = hits.map(a =>
+        `<h4>${a.id ? a.id + ' ' : ''}${a.name} <span style="color:var(--text-muted);">(${a.type}${a.class ? ' · class ' + a.class : ''})</span></h4>` +
+        `<div>${fmtLimit(a.lower)} → ${fmtLimit(a.upper)}` +
+        (a.freqs && a.freqs.length ? ` · ${a.freqs.map(f => f.toFixed(3)).join(' / ')} MHz` : '') + '</div>' +
+        (a.remarks ? `<div style="color:var(--text-muted);">${a.remarks.slice(0, 180)}</div>` : '') +
+        (a.approxBorder ? '<div class="as-warn">boundary follows a national border — drawn approximated</div>' : '')
+      );
+      el.innerHTML = `<span class="as-close" onclick="hideAirspaceInfo()">×</span>` +
+        `<b>Airspace at ${toDMM(lat, true)} ${toDMM(lng, false)}</b>` +
+        (rows.length ? rows.join('<hr style="border:none; border-top:1px solid var(--border-color); margin:4px 0;">')
+                     : '<div>None in the loaded data at this point.</div>');
+      el.style.display = 'block';
+    }
+
+    map.on('contextmenu', function(e) {
+      if (!aircraftProfile.airspaceOn || airspaceLoadState !== 'loaded') return;
+      if (e.originalEvent && e.originalEvent.preventDefault) e.originalEvent.preventDefault();
+      showAirspaceInfoAt(e.latlng.lat, e.latlng.lng);
+    });
 
     let flights = defaultFlights();
     let activeFlightIndex = 0;
@@ -4746,7 +4966,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             const allowed = ['mode','cruiseRpm','cruiseMp','cruiseTas','cruiseFf',
                              'climbMode','ccRoc','ccKias','ccFf',
                              'roc','climbTas','climbFf','rod','descTas','descFf',
-                             'patternTime','patternFf','taxiFuel','theme','distUnit','fuelUnit','minuteMark','declutter'];
+                             'patternTime','patternFf','taxiFuel','theme','distUnit','fuelUnit','minuteMark','declutter','airspaceOn','airspaceMaxFt'];
             allowed.forEach(k => {
               if (parsed.profile[k] !== undefined) aircraftProfile[k] = parsed.profile[k];
             });
@@ -4799,6 +5019,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
     applyZoomDeclutter();   // needs aircraftProfile, so it runs here, not at map setup
     renderVersionBadge();
     checkForUpdate();       // one shot at startup; silent when offline
+    if (aircraftProfile.airspaceOn) ensureAirspaceLoaded();
+    renderAirspaceOverlay();
     function defaultFlights() {
       return [{ id: 1, title: "Flight Plan 1", depElev: 0, waypoints: [] }];
     }
