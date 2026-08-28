@@ -28,7 +28,18 @@
 
 const fs = require('fs');
 const path = require('path');
-const { JSDOM } = require('jsdom');
+// jsdom is a devDependency: give a plain instruction instead of a stack
+// trace when the folder has not had `npm install` run in it yet.
+let JSDOM;
+try {
+  ({ JSDOM } = require('jsdom'));
+} catch (e) {
+  console.error('\nThis tool needs the "jsdom" package, which is not installed yet.');
+  console.error('Run this once in the flightplanner folder:\n');
+  console.error('    npm install\n');
+  console.error('then run the tool again (npm run airspace).');
+  process.exit(1);
+}
 
 const AIP_INDEX = 'https://aim-prod.avinor.no/no/AIP/';
 const UA = { headers: { 'User-Agent': 'C182-FlightPlanner-airspace-tool (github.com/ArvenShadow/flightplanner)' } };

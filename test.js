@@ -2018,6 +2018,25 @@ T('openAIP remains gone: the official overlay reuses none of it', () => {
   assert(ev('typeof toggleAirspace') === 'undefined', 'legacy toggleAirspace name reused');
 });
 
+console.log('\n=== 59. Airspace tool is runnable by a non-developer ===');
+T('a Windows double-click wrapper exists and runs the tool via Node', () => {
+  const cmd = fs.readFileSync('tools/scrape_eaip.cmd', 'utf8');
+  assert(/node "tools\\scrape_eaip\.js"/.test(cmd), 'wrapper does not invoke node on the tool');
+  assert(cmd.includes('cd /d "%~dp0.."'), 'wrapper must run from the repo root (npm + data/ paths)');
+  assert(/npm install/.test(cmd), 'wrapper should install the dependency on first run');
+  assert(/pause/.test(cmd), 'wrapper must keep the window open so output is readable');
+});
+T('npm run airspace is wired up', () => {
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  assert(pkg.scripts && pkg.scripts.airspace === 'node tools/scrape_eaip.js', 'missing airspace script: ' + JSON.stringify(pkg.scripts));
+  assert(pkg.devDependencies && pkg.devDependencies.jsdom, 'jsdom must stay a declared dependency');
+});
+T('a missing jsdom yields an instruction, not a stack trace', () => {
+  const src = fs.readFileSync('tools/scrape_eaip.js', 'utf8');
+  assert(/try\s*\{\s*\(\{ JSDOM \} = require\('jsdom'\)\);/.test(src.replace(/\n/g, ' ')), 'jsdom require is not guarded');
+  assert(src.includes('npm install'), 'the guard must tell the user to run npm install');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
