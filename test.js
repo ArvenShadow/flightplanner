@@ -2263,6 +2263,19 @@ T('the worker is version-stamped and only registers on a secure context', () => 
   assert(!fs.readFileSync(APP_HTML, 'utf8').includes("navigator.serviceWorker.register"),
     'the file:// artifact must not attempt service-worker registration');
 });
+T('Windows can run both deliveries without a command line or git', () => {
+  // The user downloads the repo as a ZIP and double-clicks; git and npm on
+  // the PATH cannot be assumed.
+  for (const f of ['build.cmd', 'serve.cmd']) assert(fs.existsSync(f), 'missing Windows helper: ' + f);
+  const serve = fs.readFileSync('serve.cmd', 'utf8');
+  assert(serve.includes('npm install'), 'serve.cmd does not install dependencies on first run');
+  assert(/node tools\\serve\.mjs/.test(serve), 'serve.cmd does not start the server');
+  assert(serve.includes('localhost:8182'), 'serve.cmd does not open the planner');
+  // bare .js run under Windows Script Host was a real support incident
+  assert(serve.includes('Windows Script Host'), 'the WSH warning is gone from serve.cmd');
+  const srv = fs.readFileSync('tools/serve.mjs', 'utf8');
+  assert(srv.includes('EADDRINUSE'), 'a taken port would dump a raw stack trace at the user');
+});
 T('the runtime rules are actually verified somewhere, not just asserted here', () => {
   assert(fs.existsSync('tools/verify-hosted.mjs'), 'the hosted-build runtime verification is missing');
   const v = fs.readFileSync('tools/verify-hosted.mjs', 'utf8');

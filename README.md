@@ -2,6 +2,10 @@
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
+**No git, no Node, nothing to install:** open the hosted URL. That is the
+whole story for everyday use — it is always the current version, and after
+the first visit it works offline.
+
 **Three ways to run it**, from the same source:
 
 | | how | offline chart tiles |
@@ -28,6 +32,11 @@ chart from a superseded cycle is a safety problem, not a stale asset.
 modules; `tools/build.mjs` bundles them as a classic script, inlines it, and
 enforces the ship checklist (both scripts parse, no duplicate DOM ids,
 APP_VERSION matches package.json) before anything reaches `dist/`.
+
+On Windows you can skip the command line entirely: `build.cmd` rebuilds the
+double-click file, `serve.cmd` builds and serves the hosted version locally.
+Both install dependencies on first run. Without git installed, "Download ZIP"
+from the repo's Code button gets you the same files.
 
 ```bash
 npm install        # esbuild + jsdom

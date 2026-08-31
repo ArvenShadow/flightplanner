@@ -80,6 +80,22 @@ if (!missing) {
   process.exit(1);
 }
 
+// A raw EADDRINUSE stack trace is useless to someone who double-clicked
+// serve.cmd; say what happened and what to do about it.
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\nPort ${PORT} is already in use.`);
+    console.error('Either the planner is already serving in another window -');
+    console.error(`try http://localhost:${PORT} first - or something else has the port.`);
+    console.error(`To use a different one:  set PORT=9000  then run this again.\n`);
+  } else if (err.code === 'EACCES') {
+    console.error(`\nNot allowed to open port ${PORT}. Pick one above 1024, e.g. set PORT=9000\n`);
+  } else {
+    console.error('\nCould not start the server: ' + err.message + '\n');
+  }
+  process.exit(1);
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   const lan = lanAddresses();
   console.log(`\nC182 Flight Planner - serving site/ on port ${PORT}\n`);
