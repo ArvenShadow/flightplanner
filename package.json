@@ -1,7 +1,14 @@
 {
   "name": "c182-flight-planner",
-  "version": "16.7.0",
-  "description": "Single-file VFR flight planner for Cessna 182T (ground planning only)",
-  "scripts": { "test": "node test.js" },
-  "devDependencies": { "jsdom": "^24.0.0" }
+  "version": "16.8.0",
+  "description": "VFR flight planner for Cessna 182T, built to one self-contained HTML file (ground planning only)",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "watch": "node tools/build.mjs --watch",
+    "test": "npm run build --silent && node test.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^24.0.0"
+  }
 }
