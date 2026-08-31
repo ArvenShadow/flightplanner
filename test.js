@@ -1930,6 +1930,49 @@ T('an OLDER remote version (repo behind local dev copy) never nags', () => {
   assert(!txtOf('app-version-badge').includes('available'), 'downgrade offered as update');
 });
 
+console.log('\n=== 58. Base chart: Kartverket topo <-> official ICAO VFR ===');
+T('tile bbox math matches an independently computed Web-Mercator tile', () => {
+  // tile z9/x282/y115 covers Tromsø; expected bbox computed separately
+  assert(ev('tileBbox3857(9, 282, 115)') === '2035059.44,10958012.37,2113330.96,11036283.89',
+    'bbox: ' + ev('tileBbox3857(9, 282, 115)'));
+  const u = ev('vfrTileUrl(9, 282, 115)');
+  assert(u.startsWith('https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer/export?'), 'wrong service: ' + u);
+  assert(u.includes('bboxSR=3857') && u.includes('imageSR=3857') && u.includes('size=256,256'),
+    'reprojection params missing: ' + u);
+});
+T('default chart is topo and the label bar says so (with the projection)', () => {
+  assert(ev('baseChart()') === 'topo', 'default not topo');
+  assert(txtOf('chart-btn').includes('Chart: Topo'), 'button: ' + txtOf('chart-btn'));
+  const lbl = txtOf('chart-label');
+  assert(lbl.includes('Kartverket topo') && lbl.includes('EPSG:3857'), 'label: ' + lbl);
+});
+T('toggling shows the ICAO chart, states LCC->Mercator, and persists', () => {
+  ev('toggleBaseChart()');
+  assert(ev('baseChart()') === 'vfr', 'not switched');
+  assert(txtOf('chart-btn').includes('VFR ICAO'), 'button: ' + txtOf('chart-btn'));
+  const lbl = txtOf('chart-label');
+  assert(lbl.includes('ICAO VFR 1:500 000'), 'label missing chart name: ' + lbl);
+  assert(lbl.includes('Lambert conformal conic 59°40′/69°20′'), 'label missing native projection: ' + lbl);
+  assert(lbl.includes('Web Mercator'), 'label missing display projection: ' + lbl);
+  assert(JSON.parse(w.localStorage.getItem('c182_perf_profile')).baseChart === 'vfr', 'choice not persisted');
+  assert(fs.readFileSync('C182_FlightPlanner.html', 'utf8').includes("'declutter','baseChart'"), 'baseChart missing from import whitelist');
+});
+T('the JSONP edition callback lands in the label', () => {
+  ev('window.__icaoEdition({ layers: [{ name: "AIRAC_19MAR26" }] })');
+  assert(txtOf('chart-label').includes('AIRAC 19MAR26'), 'edition missing: ' + txtOf('chart-label'));
+});
+T('toggling back restores topo; VFR layer carries the Avinor attribution', () => {
+  ev('toggleBaseChart()');
+  assert(ev('baseChart()') === 'topo' && txtOf('chart-label').includes('Kartverket topo'), 'not restored');
+  assert(ev('vfrTiles._opts.attribution').includes('Avinor'), 'attribution: ' + ev('vfrTiles._opts.attribution'));
+  assert(ev('vfrTiles._opts.maxNativeZoom') === 11, 'native zoom cap missing (chart raster is ~42 m/px)');
+});
+T('guide documents the official source and the cannot-move-a-point guarantee', () => {
+  const guide = doc.querySelector('#help-modal .modal-body').textContent;
+  assert(guide.includes('official ICAO VFR 1:500 000'), 'source missing from guide');
+  assert(guide.includes('waypoints sit on exactly the same spot on both charts'), 'alignment guarantee missing');
+});
+
 console.log('\n=== Uncaught page errors ===');
 console.log(errors.length ? errors : '  none');
 console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));

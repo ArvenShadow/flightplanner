@@ -765,6 +765,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
       padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
       color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
     #declutter-btn:hover { background: var(--highlight-bg); }
+    #chart-btn { position: absolute; top: 40px; right: 10px; z-index: 1000; font-size: 11px; font-weight: 700;
+      padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
+      color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+    #chart-btn:hover { background: var(--highlight-bg); }
+    #chart-label { position: absolute; bottom: 2px; left: 6px; z-index: 1000; font-size: 9px;
+      color: #333; background: rgba(255,255,255,0.65); padding: 1px 6px; border-radius: 3px;
+      pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #map { width: 100%; height: 100%; }
     #sidebar { flex: 1.55; display: flex; flex-direction: column; background: var(--bg-sidebar); overflow-y: auto; padding: 10px; gap: 10px; }
     
@@ -945,6 +952,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
   <div id="main">
     <div id="map-container">
       <div id="map"></div>
+      <button id="chart-btn" class="no-print" title="Switch the base chart: Kartverket topo (offline-cached) or the official ICAO VFR 1:500 000 from Avinor (needs internet). Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
+      <div id="chart-label"></div>
       <button id="declutter-btn" class="no-print" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
     </div>
 
@@ -1178,6 +1187,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
             <li><b>Climbs and descents are planned across leg boundaries</b>: a climb that doesn't fit its leg simply continues on the next (the ▲ TOC lands on the leg where the altitude is actually reached), and a descent that doesn't fit its leg <b>backs up onto earlier legs</b> — the ▼ TOD names the low waypoint it serves (e.g. "TOD · 7.2 NM before B → 200' at C") — so you always cross a waypoint AT its planned altitude, never above it. A circuit (pattern) stop breaks the chain. If even all the preceding distance can't absorb the descent, the red integrity banner says so instead of letting you plan an arrival that's too high.</li>
             <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
+            <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service (needs internet; topo is the offline choice). The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
             <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (their exact-position dots remain); zoomed further out only dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
           </ul>
         </div>
@@ -1790,7 +1800,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.6';
+    const APP_VERSION = '16.7';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1923,6 +1933,107 @@ svg.leaflet-image-layer.leaflet-interactive path {
       applyZoomDeclutter();
     }
     map.on('zoomend', applyZoomDeclutter);
+
+    // =========================================================================
+    // 2b. BASE CHART: Kartverket topo <-> official ICAO VFR 1:500 000
+    // =========================================================================
+    // TOPO is Kartverket's WMTS "webmercator" tile cache: what this app
+    // displays is EPSG:3857 (Web Mercator). (Norway's official CRS is
+    // EUREF89 / UTM - a transverse Mercator - and norgeskart.no itself
+    // displays in UTM33, but the cache we consume is the Web Mercator one.)
+    //
+    // VFR is the OFFICIAL ICAO 1:500 000 chart: Avinor's public ArcGIS map
+    // service (verified Aug 2026: item owner "AvinorSuperbruker", public;
+    // mosaic layer named after the chart edition, e.g. AIRAC_19MAR26). The
+    // printed chart is Lambert Conformal Conic, EUREF89, standard parallels
+    // 59deg40' / 69deg20', central meridian 9E - confirmed in the service's
+    // WKT. The service is DYNAMIC (singleFusedMapCache: false), so every
+    // request is reprojected SERVER-SIDE with imageSR=3857: both base
+    // charts therefore render in EPSG:3857 and a waypoint's WGS84 lat/lng
+    // projects to the SAME pixel on both - switching charts cannot move a
+    // point. (EUREF89 vs WGS84 differ <1 m: invisible at 1:500 000.)
+    // Alignment verified against the chart's own printed graticule.
+    const VFR_EXPORT_URL = 'https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer/export';
+    const VFR_META_URL = 'https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer/layers';
+
+    // Web-Mercator bbox of slippy tile (z,x,y) - pure, unit-tested.
+    function tileBbox3857(z, x, y) {
+      const W = 20037508.342789244, n = Math.pow(2, z);
+      const xmin = (x / n) * 2 * W - W, xmax = ((x + 1) / n) * 2 * W - W;
+      const ymax = W - (y / n) * 2 * W, ymin = W - ((y + 1) / n) * 2 * W;
+      return xmin.toFixed(2) + ',' + ymin.toFixed(2) + ',' + xmax.toFixed(2) + ',' + ymax.toFixed(2);
+    }
+    function vfrTileUrl(z, x, y) {
+      return VFR_EXPORT_URL + '?bbox=' + tileBbox3857(z, x, y) +
+        '&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=false&f=image';
+    }
+
+    const vfrTiles = L.tileLayer('', {
+      // chart raster is ~42 m/px (1:500 000): native detail runs out around
+      // z11 at these latitudes; beyond that Leaflet upscales.
+      maxZoom: 18, maxNativeZoom: 11, minZoom: 4, noWrap: true,
+      attribution: '&copy; Avinor · ICAO 1:500 000 &copy; Kartverket'
+    });
+    vfrTiles.getTileUrl = function(coords) { return vfrTileUrl(coords.z, coords.x, coords.y); };
+    vfrTiles.on('tileerror', function() {
+      if (baseChart() !== 'vfr' || tileWarningShown) return;
+      tileWarningShown = true;
+      const note = document.createElement('div');
+      note.id = 'offline-tile-note';
+      note.style.cssText = 'position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:1000; background:#c05621; color:white; font-size:11px; font-weight:600; padding:6px 12px; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.4); max-width:90%; text-align:center;';
+      note.innerHTML = '📡 The ICAO VFR chart needs internet (it is streamed from Avinor). Waypoints and calculations still work - switch back to Topo for the offline-cached map.';
+      document.getElementById('map-container').appendChild(note);
+      setTimeout(() => { const n = document.getElementById('offline-tile-note'); if (n) n.remove(); }, 12000);
+    });
+
+    // Live chart edition for the label bar, via JSONP (the REST endpoint
+    // sends no CORS header, but supports ?callback= - and a file:// page
+    // may load scripts). Purely cosmetic: failure leaves the label generic.
+    let vfrEdition = null, vfrEditionAsked = false;
+    window.__icaoEdition = function(j) {
+      try { vfrEdition = j.layers[0].name.replace(/_/g, ' '); } catch (e) {}
+      updateChartLabel();
+    };
+    function askVfrEdition() {
+      if (vfrEditionAsked) return;
+      vfrEditionAsked = true;
+      const s = document.createElement('script');
+      s.src = VFR_META_URL + '?f=json&callback=__icaoEdition';
+      s.onerror = function() {};
+      document.head.appendChild(s);
+    }
+
+    function baseChart() {
+      return aircraftProfile.baseChart === 'vfr' ? 'vfr' : 'topo';
+    }
+
+    function updateChartLabel() {
+      const el = document.getElementById('chart-label');
+      const btn = document.getElementById('chart-btn');
+      if (btn) btn.textContent = '🗺 Chart: ' + (baseChart() === 'vfr' ? 'VFR ICAO' : 'Topo');
+      if (!el) return;
+      el.textContent = baseChart() === 'vfr'
+        ? 'ICAO VFR 1:500 000 (Avinor' + (vfrEdition ? ' · ' + vfrEdition : '') + ') — Lambert conformal conic 59°40′/69°20′, served reprojected to Web Mercator (EPSG:3857)'
+        : 'Kartverket topo — Web Mercator (EPSG:3857) tile cache';
+    }
+
+    function applyBaseChart() {
+      if (baseChart() === 'vfr') {
+        map.removeLayer(baseTiles);
+        vfrTiles.addTo(map);
+        askVfrEdition();
+      } else {
+        map.removeLayer(vfrTiles);
+        baseTiles.addTo(map);
+      }
+      updateChartLabel();
+    }
+
+    function toggleBaseChart() {
+      aircraftProfile.baseChart = baseChart() === 'vfr' ? 'topo' : 'vfr';
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      applyBaseChart();
+    }
 
     let flights = defaultFlights();
     let activeFlightIndex = 0;
@@ -4746,7 +4857,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             const allowed = ['mode','cruiseRpm','cruiseMp','cruiseTas','cruiseFf',
                              'climbMode','ccRoc','ccKias','ccFf',
                              'roc','climbTas','climbFf','rod','descTas','descFf',
-                             'patternTime','patternFf','taxiFuel','theme','distUnit','fuelUnit','minuteMark','declutter'];
+                             'patternTime','patternFf','taxiFuel','theme','distUnit','fuelUnit','minuteMark','declutter','baseChart'];
             allowed.forEach(k => {
               if (parsed.profile[k] !== undefined) aircraftProfile[k] = parsed.profile[k];
             });
@@ -4797,6 +4908,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     loadPlanningPrefs();
     populateRouteDropdown();
     applyZoomDeclutter();   // needs aircraftProfile, so it runs here, not at map setup
+    applyBaseChart();       // also needs aircraftProfile (persisted chart choice)
     renderVersionBadge();
     checkForUpdate();       // one shot at startup; silent when offline
     function defaultFlights() {
