@@ -2312,6 +2312,28 @@ T('the worker is version-stamped and only registers on a secure context', () => 
   assert(!fs.readFileSync(APP_HTML, 'utf8').includes("navigator.serviceWorker.register"),
     'the file:// artifact must not attempt service-worker registration');
 });
+T('the build survives a Windows clone (CRLF line endings)', () => {
+  // git's core.autocrlf checks the source out as CRLF on Windows, which broke
+  // the @BUNDLE marker: the regex matched "\n" and the file had "\r\n". A ZIP
+  // download preserves LF, so this only ever failed on a cloned repo.
+  const buildSrc = fs.readFileSync('tools/build.mjs', 'utf8');
+  const m = buildSrc.match(/const MARKER = (\/.*\/[a-z]*);/);
+  assert(m, 'could not find the @BUNDLE marker regex in tools/build.mjs');
+  const marker = eval(m[1]);
+  const line = '  <!-- @BUNDLE: build inlines src/main.js here as a classic script -->';
+  assert(marker.test(line + '\n'), 'the marker no longer matches an LF source');
+  assert(marker.test(line + '\r\n'), 'the marker does not match a CRLF source - a Windows clone cannot build');
+  // and the working tree must be pinned to LF so it does not come up again
+  assert(fs.existsSync('.gitattributes'), '.gitattributes is missing - Windows clones will get CRLF');
+  const ga = fs.readFileSync('.gitattributes', 'utf8');
+  assert(/^\* text=auto eol=lf$/m.test(ga), '.gitattributes does not pin the working tree to LF');
+  assert(/\*\.cmd text eol=crlf/.test(ga), '.cmd files must stay CRLF for cmd.exe');
+  // and the build must EMIT lf whatever the tree uses, or a rebuild on a
+  // Windows clone rewrites dist/ and blocks the next `git pull`
+  assert(/replace\(\/\\r\\n\/g, '\\n'\)/.test(buildSrc), 'the build no longer normalizes its output to LF');
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(!built.includes('\r\n'), 'the committed artifact contains CRLF line endings');
+});
 T('Windows can run both deliveries without a command line or git', () => {
   // The user downloads the repo as a ZIP and double-clicks; git and npm on
   // the PATH cannot be assumed.
