@@ -1,10 +1,27 @@
-# C182 Flight Planner (v16.13)
+# C182 Flight Planner (v16.14)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
-**To fly with it:** open `dist/C182_FlightPlanner.html` — one self-contained
-file, no install, works offline (live winds/VFR chart need internet). On
-Windows, `build.cmd` rebuilds it and opens it in one double-click.
+**Three ways to run it**, from the same source:
+
+| | how | offline chart tiles |
+|---|---|---|
+| Hosted | the GitHub Pages URL | yes — service worker |
+| Local server | `npm run serve`, then `http://localhost:8182` | yes — localhost is a secure context |
+| Same, from a phone | `npm run serve`, then `http://<your-ip>:8182` over wifi or a hotspot | no — see below |
+| Double-click | open `dist/C182_FlightPlanner.html` | no — `file://` cannot register a worker |
+
+Browsers only allow a service worker on a **secure context** — HTTPS or
+`localhost`. A plain-http LAN address is not one, so the phone/tablet case
+runs the planner fine but streams every chart tile live. Nothing breaks; the
+registration is feature-detected.
+
+The double-click file remains the fallback that needs no server, no install
+and no network. On Windows, `build.cmd` rebuilds it and opens it in one go.
+
+Cached chart tiles are keyed to the **AIRAC edition**, and the worker refuses
+to serve a tile from cache until the page has told it which cycle is live — a
+chart from a superseded cycle is a safety problem, not a stale asset.
 
 **To work on it:** edit `src/`, then rebuild. `src/index.html` holds the page
 (markup, CSS and the not-yet-extracted script); `src/lib/*.js` holds extracted
@@ -16,7 +33,10 @@ APP_VERSION matches package.json) before anything reaches `dist/`.
 npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
-npm test           # builds, then runs the suite against dist (248 tests)
+npm test           # builds, then runs the suite against dist (252 tests)
+npm run serve      # build + serve site/ on localhost and the LAN
+node tools/verify-hosted.mjs   # Chromium check of the service-worker rules
+                               # (needs `npm install --no-save playwright`)
 claude             # start Claude Code here; it reads CLAUDE.md automatically
 ```
 
