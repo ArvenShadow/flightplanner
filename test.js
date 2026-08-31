@@ -2076,8 +2076,47 @@ T('tile bbox math matches an independently computed Web-Mercator tile', () => {
     'bbox: ' + ev('tileBbox3857(9, 282, 115)'));
   const u = ev('vfrTileUrl(9, 282, 115)');
   assert(u.startsWith('https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer/export?'), 'wrong service: ' + u);
-  assert(u.includes('bboxSR=3857') && u.includes('imageSR=3857') && u.includes('size=256,256'),
-    'reprojection params missing: ' + u);
+  assert(u.includes('bboxSR=3857') && u.includes('imageSR=3857'), 'reprojection params missing: ' + u);
+});
+T('the source raster resolution is the measured one, not an estimate', () => {
+  // Read from the service itself: MapServer/2/query -> footprint LowPS.
+  // 31.75 m/px is exactly 400 dpi at 1:500 000.
+  assert(ev('VFR_SOURCE_PS_M') === 31.75, 'VFR_SOURCE_PS_M: ' + ev('VFR_SOURCE_PS_M'));
+  assert(Math.abs(ev('tileCenterLat(9, 115)') - 69.78) < 0.05, 'tile centre lat: ' + ev('tileCenterLat(9, 115)'));
+});
+T('tile raster density asks for exactly what the chart holds, never more', () => {
+  // Tromso column of tiles. A CSS pixel is 105.7 m at z9 against 31.75 m of
+  // source, so 3.33x is real chart ink; measured, the source-matched 856 px
+  // tile carries 2.1x the detail of the old 256 px one and 0.4% LESS than a
+  // 1024 px one that costs 32% more bytes. At z11 the CSS pixel is already
+  // 26.5 m - finer than the source - so the ratio bottoms out at 1.
+  assert(Math.abs(ev('vfrPixelRatio(9, 115, 1)') - 3.328) < 0.01, 'z9 ratio: ' + ev('vfrPixelRatio(9, 115, 1)'));
+  assert(Math.abs(ev('vfrPixelRatio(10, 231, 1)') - 1.664) < 0.01, 'z10 ratio: ' + ev('vfrPixelRatio(10, 231, 1)'));
+  assert(ev('vfrPixelRatio(11, 462, 1)') === 1, 'z11 oversampled: ' + ev('vfrPixelRatio(11, 462, 1)'));
+  assert(ev('vfrPixelRatio(6, 14, 1)') === 4, 'z6 must clamp to 4x, got ' + ev('vfrPixelRatio(6, 14, 1)'));
+  // the ratio must fall as you zoom in - the source stops giving
+  assert(ev('vfrPixelRatio(8, 57, 1)') > ev('vfrPixelRatio(9, 115, 1)'), 'ratio must decrease with zoom');
+});
+T('a HiDPI screen floors the density, and 4x is never exceeded', () => {
+  assert(ev('vfrPixelRatio(11, 462, 2)') === 2, 'dpr 2 ignored at z11: ' + ev('vfrPixelRatio(11, 462, 2)'));
+  // dpr 3 at z9 changes nothing - the chart itself already justifies 3.33x
+  assert(Math.abs(ev('vfrPixelRatio(9, 115, 3)') - 3.328) < 0.01, 'dpr below the useful ratio must not bind: ' + ev('vfrPixelRatio(9, 115, 3)'));
+  assert(ev('vfrPixelRatio(11, 462, 5)') === 4, 'an absurd dpr must still cap at 4x: ' + ev('vfrPixelRatio(11, 462, 5)'));
+  assert(ev('vfrPixelRatio(6, 14, 8)') === 4, 'ceiling must hold when both inputs exceed it');
+  assert(ev('vfrPixelRatio(11, 462, 0)') === 1, 'a bogus devicePixelRatio must fall back to 1');
+  assert(ev('vfrTilePx(11, 462, 1)') === 256, 'z11 must not drop below the display grid');
+  assert(ev('vfrTilePx(11, 462, 2)') === 512, 'HiDPI z11 px: ' + ev('vfrTilePx(11, 462, 2)'));
+});
+T('the export request asks for the higher-resolution raster in a lossless format', () => {
+  const lo = ev('vfrTileUrl(9, 282, 115)'), hi = ev('vfrTileUrl(11, 1129, 462)');
+  assert(lo.includes('size=856,856'), 'z9 not requested at source resolution: ' + lo);
+  assert(hi.includes('size=256,256'), 'z11 wastefully oversampled: ' + hi);
+  // dpi stays 96 at every density: verified byte-identical output, and the
+  // mosaic has no scale-dependent symbology.
+  assert(lo.includes('dpi=96') && hi.includes('dpi=96'), 'dpi should not be scaled: ' + lo);
+  // Lossy formats shift chart ink (png8 by 71 levels, jpg by 37) - the small
+  // print is the reason for the whole feature.
+  assert(lo.includes('format=png24') && !/format=(png8|jpg|jpeg)/.test(lo), 'not a lossless format: ' + lo);
 });
 T('default chart is topo and the label bar says so (with the projection)', () => {
   assert(ev('baseChart()') === 'topo', 'default not topo');

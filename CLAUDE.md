@@ -162,10 +162,32 @@ claude.ai; this repo is the continuation point for Claude Code.
   charts render in Web Mercator and waypoints project identically -
   alignment verified against the chart's own printed graticule. No WMS,
   no CORS on the REST JSON but JSONP works (used for the edition label).
-  ~1.3 s per 256px export tile, browser-cached by URL. A bottom-left
-  label bar always names the active chart + projection + edition. VFR
-  needs internet; topo remains the offline base. Do not swap the export
-  approach for the LCC tile cache without re-checking alignment.
+  A bottom-left label bar always names the active chart + projection +
+  edition. VFR needs internet; topo remains the offline base. Do not swap
+  the export approach for the LCC tile cache without re-checking alignment.
+- **VFR chart resolution (v16.12, measured against the service)**: the
+  chart raster is 31.75 m/px - NOT an estimate, it is the mosaic's own
+  footprint attribute LowPS (MapServer/2/query ->
+  ICAO_500k_Norway_ScreenMapMosaic), and exactly 400 dpi at 1:500 000.
+  The old flat `size=256,256` therefore threw the chart away at low zoom.
+  `vfrPixelRatio(z,y,dpr)` now requests exactly the resolution the source
+  holds - cssRes/31.75, floored by devicePixelRatio, capped at 4x - and
+  `vfrTilePx` rounds up to a multiple of 8; tiles stay 256 CSS px, only
+  the raster inside them gets denser. Measured over Tromso at z9: the
+  source-matched 856 px tile carries 2.1x the high-frequency detail of
+  the 256 px one, and 0.4% LESS than a 1024 px one costing 32% more
+  bytes - so do NOT flat-4x it the way the friend's planner does. At z11
+  the CSS pixel is already 26.5 m, finer than the source, so the ratio
+  bottoms out at 1 and the zoom you actually read the chart at costs
+  nothing extra (20 tiles / 1.5 MB / 1.0 s, unchanged); the z9 overview
+  pays 13.8 MB / 3.2 s for a screen, browser-cached by URL thereafter.
+  Two params were settled by measurement, not convention: `dpi` is a
+  NO-OP here (dpi=384 returned a byte-identical image to dpi=96 - the
+  mosaic has no scale-dependent symbology, minScale/maxScale 0), so it
+  stays 96; and `format=png24` is pixel-identical to png32 (alpha unused
+  under transparent=false) at 10% fewer bytes. png8 and jpg are BANNED -
+  measured to shift chart ink by 71 and 37 levels, and the small print
+  (frequencies, MEF, airspace limits) is the entire point of the feature.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).

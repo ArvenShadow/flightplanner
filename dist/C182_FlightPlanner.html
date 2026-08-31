@@ -3661,7 +3661,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.11';
+    const APP_VERSION = '16.12';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3855,14 +3855,63 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const ymax = W - (y / n) * 2 * W, ymin = W - ((y + 1) / n) * 2 * W;
       return xmin.toFixed(2) + ',' + ymin.toFixed(2) + ',' + xmax.toFixed(2) + ',' + ymax.toFixed(2);
     }
+
+    // Native ground resolution of the chart raster, 31.75 m/px. NOT a guess:
+    // the mosaic's own footprint attribute LowPS, read from the service
+    // (MapServer/2/query -> ICAO_500k_Norway_ScreenMapMosaic, LowPS 31.75).
+    // It is exactly 400 dpi at 1:500 000 (31.75 m / 500 000 = 63.5 um).
+    // Asking the service for anything finer returns NO extra information.
+    const VFR_SOURCE_PS_M = 31.75;
+
+    // Latitude of the centre of slippy-tile row y at zoom z.
+    function tileCenterLat(z, y) {
+      const n = Math.pow(2, z);
+      return Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 0.5) / n))) * 180 / Math.PI;
+    }
+
+    // Raster pixels to request per CSS pixel: exactly enough to resolve the
+    // chart, never more. A 256 px export throws most of the chart away at
+    // low zoom - measured over Tromso at z9, the source-matched tile carries
+    // 2.1x the high-frequency detail (real ink, not resampling). Going
+    // FURTHER is pure waste: 1024 px at z9 costs 32% more bytes than the
+    // 856 px the source justifies and measured 0.4% more detail. And at z11
+    // a CSS pixel is already 26.5 m, finer than the 31.75 m source, so the
+    // ratio drops to 1 instead of multiplying the bytes by 16 for nothing.
+    // Floor is the screen's own density (a HiDPI panel needs those pixels
+    // even where the chart has no more detail to give); ceiling is 4x.
+    function vfrPixelRatio(z, y, dpr) {
+      const lat = tileCenterLat(z, y);
+      const cssRes = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z);
+      const floor = dpr > 0 ? dpr : 1;
+      return Math.min(4, Math.max(floor, cssRes / VFR_SOURCE_PS_M));
+    }
+
+    // Export size for one 256 CSS px tile, rounded UP to a multiple of 8 so
+    // the request never lands below the resolution the chart holds.
+    function vfrTilePx(z, y, dpr) {
+      return Math.ceil(256 * vfrPixelRatio(z, y, dpr) / 8) * 8;
+    }
+
     function vfrTileUrl(z, x, y) {
+      const px = vfrTilePx(z, y, typeof window !== 'undefined' ? window.devicePixelRatio : 1);
+      // dpi is deliberately left at 96 whatever the pixel ratio: the mosaic
+      // has no scale-dependent symbology (minScale/maxScale 0), and dpi=384
+      // was verified to return a BYTE-IDENTICAL image to dpi=96 at the same
+      // size. png24 rather than png32 because transparent=false means the
+      // alpha channel is unused - also verified pixel-identical, 10% smaller
+      // and ~30% faster to render. The lossy formats are not an option: png8
+      // and jpg shift chart ink by up to 71 and 37 levels, and the small
+      // print (frequencies, MEF, airspace limits) is the whole point.
       return VFR_EXPORT_URL + '?bbox=' + tileBbox3857(z, x, y) +
-        '&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=false&f=image';
+        '&bboxSR=3857&imageSR=3857&size=' + px + ',' + px +
+        '&dpi=96&format=png24&transparent=false&f=image';
     }
 
     const vfrTiles = L.tileLayer('', {
-      // chart raster is ~42 m/px (1:500 000): native detail runs out around
-      // z11 at these latitudes; beyond that Leaflet upscales.
+      // Source raster is 31.75 m/px (measured, see VFR_SOURCE_PS_M): a CSS
+      // pixel at z11 is already 26.5 m at these latitudes, so native detail
+      // runs out at z11; beyond that Leaflet upscales. Tiles stay 256 CSS px
+      // - vfrPixelRatio only raises the RASTER density inside them.
       maxZoom: 18, maxNativeZoom: 11, minZoom: 4, noWrap: true,
       attribution: '&copy; Avinor · ICAO 1:500 000 &copy; Kartverket'
     });
