@@ -17,9 +17,39 @@ claude.ai; this repo is the continuation point for Claude Code.
 
 ## Architecture (deliberate, do not "modernize")
 
-- The SHIPPED ARTIFACT is ONE self-contained HTML file, opened by
-  double-click, offline except live-data features. That requirement is
-  permanent. Vanilla JS, Leaflet inlined, Kartverket topo tiles.
+- **v16.14 (user decision, premise changed AGAIN): the planner is now
+  HOSTED as well.** The user asked for GitHub Pages plus the ability to
+  serve it on the local wifi or a phone hotspot. `tools/build.mjs` emits
+  TWO deliveries from one source: `dist/C182_FlightPlanner.html` (the
+  double-click file, unchanged) and `site/` (index.html + app.js + sw.js,
+  deployed by .github/workflows/pages.yml, served locally by
+  `npm run serve`). `site/` is gitignored; `dist/` stays committed.
+  - The single-file artifact is STILL a supported delivery and must keep
+    working - it is the fallback on a machine that has never seen the app.
+  - Both deliveries use the SAME classic-script IIFE bundle. For site/
+    that is not inertia: the page script is a classic script whose top
+    level calls setAircraftProfile() and whose 61 inline on*= handlers
+    need its functions as globals. A `type="module"` script is DEFERRED,
+    so it would run AFTER the page script - too late. site/ can move to a
+    real module graph only once Phase 1 has extracted the page script and
+    the handlers are bound in code. Do not "just add type=module".
+  - SERVICE WORKER (src/sw.js) is the whole point of hosting: a file://
+    page cannot register one, so chart tiles could never be cached. It
+    only runs on a secure context - HTTPS or localhost - so the
+    plain-http LAN case (phone on the hotspot) works but caches nothing.
+    Registration is feature-detected; nothing about the worker is
+    load-bearing.
+  - THE STALE-CHART RULE: tile URLs do NOT carry the AIRAC cycle, so the
+    same URL returns whatever Avinor currently publishes. The worker
+    therefore refuses to read or write a tile cache until the page posts
+    the live edition (from the JSONP layer name). Tile caches are keyed
+    by cycle and retired by cycle - an app release must not discard a
+    downloaded chart, and a new cycle MUST. Weather is never cached: a
+    cached forecast is a wrong forecast. jsdom cannot test any of this;
+    `tools/verify-hosted.mjs` drives real Chromium and asserts all four
+    rules, and test.js guards the structure they depend on.
+- The single-file artifact: ONE self-contained HTML file, opened by
+  double-click, offline except live-data features. Vanilla JS, Leaflet inlined, Kartverket topo tiles.
 - v16.8 restructure (user decision, premise changed): the single file is
   now BUILT, not hand-edited. Source lives in `src/` (`index.html` = page
   + shrinking inline script; `src/lib/*.js` = extracted modules);

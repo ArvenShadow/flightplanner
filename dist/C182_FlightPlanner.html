@@ -3878,7 +3878,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.13';
+    const APP_VERSION = '16.14';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4151,6 +4151,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
     window.__icaoEdition = function(j) {
       try { vfrEdition = j.layers[0].name.replace(/_/g, ' '); } catch (e) {}
       updateChartLabel();
+      // Tell the service worker (hosted build only) which AIRAC cycle is
+      // live. Tile URLs do not carry the edition, so until the worker knows
+      // it, it refuses to serve any tile from cache - a cached chart from a
+      // superseded cycle is a safety problem, not a stale asset.
+      try {
+        if (vfrEdition && navigator.serviceWorker && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'chart-edition', edition: vfrEdition });
+        }
+      } catch (e) { /* no worker (file:// or plain-http LAN): tiles stay live */ }
     };
     function askVfrEdition() {
       if (vfrEditionAsked) return;
