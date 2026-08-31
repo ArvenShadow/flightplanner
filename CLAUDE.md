@@ -21,11 +21,6 @@ claude.ai; this repo is the continuation point for Claude Code.
   Vanilla JS, Leaflet from CDN, Kartverket topo tiles. No build step, no
   framework, no server. The file IS the product and the complete state;
   users double-click it, it works offline except live-data features.
-- v16.7 amendment (user decision): BULK DATASETS live as optional
-  `data/*.js` sidecars next to the HTML (classic scripts setting
-  window globals — fetch() cannot read file:// siblings, <script src>
-  can). The app must stay fully functional without them; each sidecar
-  carries its AIRAC/source stamp; they load lazily on feature toggle.
 - The user explicitly evaluated alternatives (React/desktop/server) and
   chose to keep this architecture. Capability limits so far were always
   data/licensing walls, never the file format.
@@ -64,25 +59,12 @@ claude.ai; this repo is the continuation point for Claude Code.
   1000–600 hPa, u/v vector averaging, 3 samples per leg, model selector
   incl. COMPARE3 spread report. CC BY attribution required. MET Nordic
   (api.met.no) was verified to have NO pressure-level data — rejected.
-- **Airspace overlay (v16.7, official source)**: the openAIP version was
-  REMOVED (community data lagged the chart) and openAIP must stay gone —
-  init still purges `c182_openaip_key`/`c182_airspace_on`, tests guard
-  the endpoint's absence. The overlay RETURNED built on the OFFICIAL
-  Avinor eAIP: tools/scrape_eaip.js extracts ENR 2.1 (TMA/CTA) and
-  ENR 5.1 (P/R/D) from the structured SD/sdParams markup (verified: the
-  eAIP HTML is a database export; amendment rows carry AmdtDeletedAIRAC
-  and must be stripped), handles full circles, sector/annulus text
-  geometries and multi-shape areas, flags border-following boundaries as
-  approxBorder (drawn straight+dotted), refuses to emit on validation
-  failure, and stamps the AIRAC date. Sidecars data/airspace_*.js load
-  lazily as classic scripts (fetch() of file:// siblings is blocked;
-  <script src> is not — verified in Chromium). Overlay: left-click still
-  adds waypoints (polygons non-interactive by design), right-click lists
-  ALL stacked airspace at a point, lower-limit filter, red staleness
-  warning when the flight date leaves the data's 28-day cycle. Re-run
-  the tool each AIRAC. FIR/oceanic polygons deliberately excluded.
-  Avinor also offers AIXM 5.1 on request (avinor.no/en/ais/aisdata) -
-  the gold-standard upgrade path if the school emails them.
+- **Airspace overlay**: built on openAIP tiles, then REMOVED at the
+  user's request because community data lagged the current VFR chart.
+  Verified there is no official alternative yet (Avinor AIXM downloads
+  are only "planned"). Do not re-add without an official, current source.
+  Init code purges old localStorage keys `c182_openaip_key` /
+  `c182_airspace_on`; tests guard the feature's absence.
 - **Terrain/elevation**: Kartverket høydedata API exists and is open
   (ws.geonorge.no/hoydedata/v1/punkt), but the user DECLINED elevation
   features. Chart contours + MEF remain the terrain reference.

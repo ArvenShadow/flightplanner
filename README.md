@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.7)
+# C182 Flight Planner (v16.6)
 
 Single-file VFR flight planner for the Cessna 182T — ground planning only.
 Open `C182_FlightPlanner.html` in any browser. That file is the entire app.
@@ -8,7 +8,7 @@ Open `C182_FlightPlanner.html` in any browser. That file is the entire app.
 ```bash
 cd c182-planner
 npm install        # jsdom, for the test suite
-npm test           # must print RESULT: ALL CHECKS PASSED (220 tests)
+npm test           # must print RESULT: ALL CHECKS PASSED (211 tests)
 claude             # start Claude Code here; it reads CLAUDE.md automatically
 ```
 
@@ -20,23 +20,3 @@ claude.ai development chats.
 
 The repo starts at v16.2 (tagged). Suggested flow: one branch per
 feature, run `npm test` before every commit, tag shipped versions.
-
-## Airspace data (data/ folder)
-
-`data/airspace_*.js` are GENERATED from the official Avinor eAIP. Re-run
-once per 28-day AIRAC cycle, review the diff, commit, bump the version:
-
-```bash
-npm install          # once per folder (the tool needs jsdom)
-npm run airspace     # = node tools/scrape_eaip.js
-```
-
-**On Windows just double-click `tools/scrape_eaip.cmd`** — it installs the
-dependency on first run and keeps the window open so you can read the
-output. Do NOT double-click the `.js`: Windows hands bare .js files to the
-legacy Windows Script Host, which cannot run Node programs ("Ugyldig tegn").
-Requires Node.js 18+ (nodejs.org).
-
-Keep the `data/` folder next to `C182_FlightPlanner.html` — the airspace
-overlay reads it locally; the planner works fine without it (overlay
-disabled with a note).

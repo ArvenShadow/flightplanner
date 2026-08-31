@@ -24,7 +24,6 @@ const leafletStub = `
     };},
     tileLayer: function(u, o){ var l = new Layer(); l._url = u; l._opts = o || {}; return l; },
     polyline: function(c, o){ var l = new Layer(); l._ll = c; l._opts = o || {}; return l; },
-    polygon: function(c, o){ var l = new Layer(); l._ll = c; l._opts = o || {}; return l; },
     marker: function(ll, o){ var l = new Layer(); l._latlng = ll; l._opts = o || {}; return l; },
     divIcon: function(o){ return o; }
   };
@@ -1929,112 +1928,6 @@ T('a newer remote version turns the badge into an update link; same version says
 T('an OLDER remote version (repo behind local dev copy) never nags', () => {
   ev('renderVersionBadge("1.0")');
   assert(!txtOf('app-version-badge').includes('available'), 'downgrade offered as update');
-});
-
-console.log('\n=== 58. Airspace: eAIP extractor & overlay ===');
-const EAIP = require('./tools/scrape_eaip.js');
-T('AIP coordinate strings parse exactly (DDMMSS / DDDMMSS)', () => {
-  const c = EAIP.parseAipCoord('700500N', '0185000E');
-  assert(Math.abs(c.lat - (70 + 5 / 60)) < 1e-6 && Math.abs(c.lng - (18 + 50 / 60)) < 1e-6, JSON.stringify(c));
-  const s = EAIP.parseAipCoord('595500N', '0104400E');
-  assert(Math.abs(s.lat - 59.916667) < 1e-4 && Math.abs(s.lng - 10.733333) < 1e-4, JSON.stringify(s));
-  assert(EAIP.parseAipCoord('badness', '0104400E') === null, 'junk must yield null');
-});
-T('circle discretization: every point sits at the requested radius', () => {
-  const ring = EAIP.discretizeCircle({ lat: 69.68, lng: 18.92 }, 5);
-  assert(ring.length === 73 && ring[0][0] === ring[72][0], 'ring not closed');
-  ring.slice(0, 72).forEach(([lat, lng]) => {
-    const d = ev(`calcDistanceNM(69.68, 18.92, ${lat}, ${lng})`);
-    assert(Math.abs(d - 5) < 0.02, 'radius off: ' + d);
-  });
-});
-T('sector text geometry: pie, annulus, circle-with-centre, mixed shapes', () => {
-  const pie = EAIP.parseTextGeometry('691642N 0160031E - Sector 270° - 360° (T), radius 1 NM');
-  assert(pie && pie.length === 1 && pie[0].length > 10, 'pie failed');
-  const ann = EAIP.parseTextGeometry('691719N 0160133E - Sector 291° - 020° (T), radius 12 - 39 NM');
-  assert(ann && ann.length === 1, 'annulus failed');
-  // every annulus point is 12-39 NM from the centre
-  ann[0].slice(0, -1).forEach(([lat, lng]) => {
-    const d = ev(`calcDistanceNM(69.288611, 16.025833, ${lat}, ${lng})`);
-    assert(d > 11.9 && d < 39.1, 'annulus point at ' + d + ' NM');
-  });
-  const mixed = EAIP.parseTextGeometry('672223N 0140758E - 671810N 0140354E - 671948N 0135122E - 672402N 0135505E - A circle, radius 5.4 NM centred on 672740N 0140524E');
-  assert(mixed && mixed.length === 2 && mixed[0].length === 5 && mixed[1].length === 73, 'mixed shapes: ' + (mixed && mixed.map(r => r.length)));
-  const two = EAIP.parseTextGeometry('642000N 0092454E - 1. A circle, radius 1.1 NM2. A sector 330° - 030° (T), radius 3.3 NM');
-  assert(two && two.length === 2, 'two-shape composite failed');
-});
-T('the generated sidecars carry the verified fixture areas', () => {
-  const s51 = fs.readFileSync('data/airspace_enr51.js', 'utf8');
-  const s21 = fs.readFileSync('data/airspace_enr21.js', 'utf8');
-  ev('window.AIRSPACE_SETS = [];');
-  ev(s51); ev(s21);
-  assert(ev('window.AIRSPACE_SETS.length') === 2, 'sidecars did not register');
-  const oslo = ev(`window.AIRSPACE_SETS[0].areas.find(a => a.id === 'ENR102')`);
-  assert(oslo.name === 'Oslo Sentrum' && oslo.type === 'RESTRICTED' && oslo.lower === 'GND' && oslo.upper === '3000 FT AMSL', JSON.stringify({n:oslo.name,t:oslo.type,l:oslo.lower,u:oslo.upper}));
-  const tromso = ev(`window.AIRSPACE_SETS[1].areas.find(a => a.name === 'Tromsø TMA')`);
-  assert(tromso.class === 'C' && tromso.lower === '4500 FT AMSL' && tromso.freqs.includes(123.755), JSON.stringify({c:tromso.class,l:tromso.lower,f:tromso.freqs}));
-  assert(ev(`window.AIRSPACE_SETS.every(s => s.airac === '2026-06-11')`), 'AIRAC stamp missing');
-});
-T('overlay renders polygons; the altitude filter hides high airspace but never GND areas', () => {
-  ev(`airspaceLoadState = 'loaded'; aircraftProfile.airspaceOn = true; aircraftProfile.airspaceMaxFt = 0; renderAirspaceOverlay();`);
-  const all = ev('airspacePolys.length');
-  assert(all > 250, 'too few polygons rendered: ' + all);
-  ev(`aircraftProfile.airspaceMaxFt = 2000; renderAirspaceOverlay();`);
-  const low = ev('airspacePolys.length');
-  assert(low < all && low > 50, 'altitude filter had no effect: ' + low + ' of ' + all);
-  assert(txtOf('airspace-status').includes('AIRAC 2026-06-11'), 'status missing AIRAC: ' + txtOf('airspace-status').slice(0, 120));
-});
-T('right-click lists every airspace stacked over a point (Tromsø: TMA above, not at GND)', () => {
-  ev(`aircraftProfile.airspaceMaxFt = 0; renderAirspaceOverlay();`);
-  const hitsHigh = ev('airspacesAt(69.8, 18.6).map(a => a.name + "/" + a.type)');
-  assert(hitsHigh.some(h => h === 'Tromsø TMA/TMA'), 'Tromsø TMA not found overhead: ' + hitsHigh.join());
-  ev(`window.__mapHandlers['contextmenu']({ latlng: { lat: 69.8, lng: 18.6 }, originalEvent: { preventDefault(){} } })`);
-  const info = txtOf('airspace-info');
-  assert(info.includes('Tromsø TMA') && info.includes('4500 FT AMSL'), 'info panel wrong: ' + info.slice(0, 200));
-  assert(info.includes('123.755'), 'frequency missing from info panel');
-});
-T('turning the overlay off clears everything; missing data files degrade gracefully', () => {
-  ev('toggleAirspaceOverlay();');   // -> off
-  assert(ev('airspacePolys.length') === 0, 'polygons not cleared');
-  assert(doc.getElementById('airspace-status').style.display === 'none', 'status not hidden');
-  ev(`window.AIRSPACE_SETS = []; airspaceLoadState = 'missing'; aircraftProfile.airspaceOn = true; renderAirspaceOverlay();`);
-  assert(txtOf('airspace-status').includes('data files not found'), 'missing-files note absent');
-  assert(!doc.getElementById('integrity-banner').textContent.includes('airspace'), 'missing data must not trip the integrity banner');
-  ev(`aircraftProfile.airspaceOn = false; airspaceLoadState = 'idle'; renderAirspaceOverlay();`);
-});
-T('a superseded AIRAC cycle warns against stale data', () => {
-  const st = ev(`airspaceStaleness('2026-06-11')`);
-  // today (2026-08-28) is > 2026-06-11 + 28 days, so this cycle is stale
-  assert(st.ok === false, 'stale cycle not detected');
-  doc.getElementById('def-date').value = '2026-06-20';
-  const ok = ev(`airspaceStaleness('2026-06-11')`);
-  assert(ok.ok === true, 'in-cycle flight date wrongly stale');
-  doc.getElementById('def-date').value = '';
-});
-T('openAIP remains gone: the official overlay reuses none of it', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
-  assert(!raw.includes('tiles.openaip'), 'openAIP endpoint crept back in');
-  assert(raw.includes("removeItem('c182_openaip_key')"), 'legacy key purge must stay');
-  assert(ev('typeof toggleAirspace') === 'undefined', 'legacy toggleAirspace name reused');
-});
-
-console.log('\n=== 59. Airspace tool is runnable by a non-developer ===');
-T('a Windows double-click wrapper exists and runs the tool via Node', () => {
-  const cmd = fs.readFileSync('tools/scrape_eaip.cmd', 'utf8');
-  assert(/node "tools\\scrape_eaip\.js"/.test(cmd), 'wrapper does not invoke node on the tool');
-  assert(cmd.includes('cd /d "%~dp0.."'), 'wrapper must run from the repo root (npm + data/ paths)');
-  assert(/npm install/.test(cmd), 'wrapper should install the dependency on first run');
-  assert(/pause/.test(cmd), 'wrapper must keep the window open so output is readable');
-});
-T('npm run airspace is wired up', () => {
-  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-  assert(pkg.scripts && pkg.scripts.airspace === 'node tools/scrape_eaip.js', 'missing airspace script: ' + JSON.stringify(pkg.scripts));
-  assert(pkg.devDependencies && pkg.devDependencies.jsdom, 'jsdom must stay a declared dependency');
-});
-T('a missing jsdom yields an instruction, not a stack trace', () => {
-  const src = fs.readFileSync('tools/scrape_eaip.js', 'utf8');
-  assert(/try\s*\{\s*\(\{ JSDOM \} = require\('jsdom'\)\);/.test(src.replace(/\n/g, ' ')), 'jsdom require is not guarded');
-  assert(src.includes('npm install'), 'the guard must tell the user to run npm install');
 });
 
 console.log('\n=== Uncaught page errors ===');
