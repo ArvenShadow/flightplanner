@@ -14,8 +14,9 @@
  */
 import * as magvar from './lib/magvar.js';
 import * as geodesy from './lib/geodesy.js';
+import * as dialog from './lib/dialog.js';
 
-const api = { ...magvar, ...geodesy };
+const api = { ...magvar, ...geodesy, ...dialog };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {
