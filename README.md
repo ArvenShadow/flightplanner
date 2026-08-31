@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.12)
+# C182 Flight Planner (v16.13)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -16,7 +16,7 @@ APP_VERSION matches package.json) before anything reaches `dist/`.
 npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
-npm test           # builds, then runs the suite against dist (245 tests)
+npm test           # builds, then runs the suite against dist (248 tests)
 claude             # start Claude Code here; it reads CLAUDE.md automatically
 ```
 

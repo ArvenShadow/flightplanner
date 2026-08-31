@@ -2164,7 +2164,43 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   assert(geodesyModule.calcDistanceNM(69.055, 18.545, 69.679, 18.911) === 38.4,
     'ENDU->ENTC: ' + geodesyModule.calcDistanceNM(69.055, 18.545, 69.679, 18.911));
   assert(geodesyModule.calcTrueTrack(60, 18, 61, 18) === 0, 'due north broken');
-  moduleExports = { magvar: magvarModule, geodesy: geodesyModule };
+  const perfModule = require('./src/lib/performance.js');
+  const fmtModule = require('./src/lib/format.js');
+  moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule };
+});
+T('the POH performance engine runs with no DOM and no globals', () => {
+  const P = moduleExports.perf;
+  // POH Fig 5-8 Sheet 2 reads 6 min / 1.6 gal / 10 NM cumulative at 4000 ft
+  const c = P.climbCumulative(4000);
+  assert(c.t === 6 && c.f === 1.6 && c.d === 10, 'POH climb row 4000 ft: ' + JSON.stringify(c));
+  // standalone it must run on POH defaults, with no page object handed over
+  assert(P.activeAircraftProfile().mode === 'C182T', 'module has no usable default profile');
+  assert(typeof P.setAircraftProfile === 'function', 'the profile dependency is not injectable');
+  assert(P.isaTemp(0) === 15 && P.isaTemp(6000) === 3, 'ISA lapse broken: ' + P.isaTemp(6000));
+  // the tables themselves must arrive intact, not re-derived
+  // Fig 5-8 Sheet 2 ends at 10 000 ft; the cruise levels run to 14 000, and
+  // climbCumulative extrapolates the last segment between the two.
+  assert(P.C182T_CLIMB[P.C182T_CLIMB.length - 1][0] === 10000, 'POH climb table does not end where Fig 5-8 does');
+  assert(P.C182T_LEVELS[P.C182T_LEVELS.length - 1] === 14000, 'cruise levels truncated');
+  assert(P.climbCumulative(20000).t === P.climbCumulative(14000).t, 'climb must cap at 14 000 ft');
+  assert(Object.keys(P.C182T_CRUISE).length > 0, 'POH cruise table empty');
+});
+T('WCA cannot go NaN when the wind is stronger than the aircraft', () => {
+  const P = moduleExports.perf;
+  // asin of >1 used to poison MH, GS, time and fuel all the way down
+  assert(P.calcWCA(60, 120, Math.PI / 2) === 90, 'over-strength wind: ' + P.calcWCA(60, 120, Math.PI / 2));
+  assert(P.calcWCA(0, 20, 1) === 0 && P.calcWCA(110, 0, 1) === 0, 'degenerate inputs must give 0');
+  assert(!isNaN(P.calcWCA(110, 500, 1.2)), 'WCA went NaN');
+});
+T('the ETO clock never reads earlier than the departure it follows', () => {
+  const F = moduleExports.fmt;
+  assert(F.clockFromMinutes('23:30', 90) === '01:00+1', 'midnight rollover: ' + F.clockFromMinutes('23:30', 90));
+  assert(F.clockFromMinutes('08:00', 45) === '08:45', 'same-day ETO: ' + F.clockFromMinutes('08:00', 45));
+  assert(F.clockFromMinutes('23:00', 1500) === '00:00+2', 'two-day rollover: ' + F.clockFromMinutes('23:00', 1500));
+  // a missing or malformed ETD must yield nothing, never an invented time
+  assert(F.clockFromMinutes('', 60) === null && F.clockFromMinutes('7pm', 60) === null, 'bad ETD invented a time');
+  assert(F.formatTimeHHMM(undefined) === '-' && F.formatTimeHHMM(125) === '02:05', 'formatTimeHHMM broken');
+  assert(F.toDMM(69.6805, true) === "69\u00b040.83'N", 'toDMM: ' + F.toDMM(69.6805, true));
 });
 T('every module export and the built page agree exactly', () => {
   const fixtures = [[69.055, 18.544], [69.683, 18.919], [60.202, 11.084]];
@@ -2175,6 +2211,15 @@ T('every module export and the built page agree exactly', () => {
     const md = moduleExports.geodesy.calcDistanceNM(lat, lng, 69.68, 18.92);
     const pd = ev(`calcDistanceNM(${lat}, ${lng}, 69.68, 18.92)`);
     assert(md === pd, `distance mismatch from ${lat},${lng}: ${md} vs ${pd}`);
+    assert(moduleExports.fmt.toDMM(lat, true) === ev(`toDMM(${lat}, true)`), 'toDMM mismatch at ' + lat);
+  }
+  // the performance engine is what fuel and endurance hang on: walk the
+  // whole POH envelope, not a sample, and demand exact agreement
+  for (let alt = 0; alt <= 14000; alt += 500) {
+    const m = moduleExports.perf.climbPerf(0, alt, 15), p = ev(`climbPerf(0, ${alt}, 15)`);
+    assert(JSON.stringify(m) === JSON.stringify(p), `climbPerf mismatch at ${alt} ft: ${JSON.stringify(m)} vs ${JSON.stringify(p)}`);
+    const mc = moduleExports.perf.cruisePerf(alt, -5), pc = ev(`cruisePerf(${alt}, -5)`);
+    assert(JSON.stringify(mc) === JSON.stringify(pc), `cruisePerf mismatch at ${alt} ft: ${JSON.stringify(mc)} vs ${JSON.stringify(pc)}`);
   }
 });
 T('the built artifact is generated, self-contained and double-clickable', () => {
@@ -2189,7 +2234,9 @@ T('the built artifact is generated, self-contained and double-clickable', () => 
 });
 T('the page script no longer defines what the modules own', () => {
   const src = fs.readFileSync('src/index.html', 'utf8');
-  for (const fn of ['resolveMagVar', 'calcDistanceNM', 'calcTrueTrack', 'interpolateGeo']) {
+  for (const fn of ['resolveMagVar', 'calcDistanceNM', 'calcTrueTrack', 'interpolateGeo',
+                    'climbCumulative', 'climbPerf', 'cruiseAtLevel', 'cruisePerf', 'isaTemp',
+                    'calcWCA', 'formatTimeHHMM', 'toDMM']) {
     assert(!new RegExp('function ' + fn + '\\s*\\(').test(src),
       fn + ' is still defined in the page script (duplicate of its module)');
   }
