@@ -72,8 +72,16 @@ claude.ai; this repo is the continuation point for Claude Code.
   - Phase 1 progress: `performance.js` (POH climb/cruise tables, isaTemp,
     climbPerf, cruisePerf, calcWCA) and `format.js` (formatTimeHHMM,
     toDMM, clockFromMinutes) are out; the page script is down from 5121
-    to 4922 lines. Still inline: map setup, base chart, leg engine,
-    altitude schedule, map interactions, winds, table rendering, modals,
+    to 4922 lines, and `legs.js` (v16.15: the via-point leg engine and
+    the v16.5 altitude schedule - legPath, pathSegments,
+    pointAlongSegments, distToSegmentNM, phaseGS, computeLegTotals,
+    computeLegProfile, climbAltReached, computeFlightSchedule,
+    computeLegMarkers) took it to 4531. `insertViaAtLatLng` deliberately
+    stayed in the page: it mutates app state and drives the UI, so it
+    belongs with the map interactions, not the engine. legs.js takes the
+    aircraft profile from performance.js (`activeAircraftProfile()`), so
+    there is still exactly ONE injected copy. Still inline: map setup,
+    base chart, map interactions, winds, table rendering, modals,
     integrity check, plotting list, storage.
   - HIDDEN GLOBALS ARE THE TRAP when extracting. `performance.js` read
     `aircraftProfile`, which is declared `let` at the top level of the
