@@ -38,7 +38,22 @@ claude.ai; this repo is the continuation point for Claude Code.
     artifact stays double-clickable.
   - Migration order: extract module -> delete from the page script ->
     leave a `-> src/lib/x.js` pointer comment -> module unit tests + an
-    equality test against the built page. `src/main.js` puts every export
+    equality test against the built page.
+  - Phase 1 progress: `performance.js` (POH climb/cruise tables, isaTemp,
+    climbPerf, cruisePerf, calcWCA) and `format.js` (formatTimeHHMM,
+    toDMM, clockFromMinutes) are out; the page script is down from 5121
+    to 4922 lines. Still inline: map setup, base chart, leg engine,
+    altitude schedule, map interactions, winds, table rendering, modals,
+    integrity check, plotting list, storage.
+  - HIDDEN GLOBALS ARE THE TRAP when extracting. `performance.js` read
+    `aircraftProfile`, which is declared `let` at the top level of the
+    page script: that is a global LEXICAL binding, shared with the
+    bundle's IIFE, so it resolved in the browser and every page test
+    passed - but `require()`ing the module threw. The rule: a module
+    takes what it needs as an argument or through an explicit injector
+    (`setAircraftProfile(ref)`, called once where the page declares the
+    object), never off the ambient scope. Grepping for `document.` is
+    NOT enough to prove a slice is pure; requiring it in bare Node is. `src/main.js` puts every export
     on `window` (and `window.C182`) so not-yet-migrated inline code and
     the test suite keep working during the move.
   - Bundling made real libraries possible; prefer an authoritative one
