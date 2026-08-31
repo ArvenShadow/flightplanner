@@ -69,6 +69,41 @@ function T(name, fn) {
   try { fn(); console.log('  PASS  ' + name); }
   catch (e) { console.log('  FAIL  ' + name + ' -> ' + e.message); errors.push(name + ': ' + e.message); }
 }
+// Async tests: the app's dialogs are promise-based, so a test drives them by
+// starting the action, answering the dialog, then awaiting. Queued here and
+// run after the synchronous suite, before the summary.
+const asyncQueue = [];
+function TA(name, fn) { asyncQueue.push([name, fn]); }
+async function runAsyncTests() {
+  for (const [name, fn] of asyncQueue) {
+    try { await fn(); console.log('  PASS  ' + name); }
+    catch (e) { console.log('  FAIL  ' + name + ' -> ' + e.message); errors.push(name + ': ' + e.message); }
+  }
+}
+/** The dialog currently on screen, or null. */
+const openDlg = () => doc.getElementById('app-dialog');
+/** Click a dialog option by its visible label (substring match). */
+function answerDialog(labelPart) {
+  const dlg = openDlg();
+  if (!dlg) throw new Error('no dialog is open (expected one offering "' + labelPart + '")');
+  const btn = [...dlg.querySelectorAll('.dlg-btn')].find(b => b.textContent.includes(labelPart));
+  if (!btn) throw new Error(`dialog has no option matching "${labelPart}": ` +
+    [...dlg.querySelectorAll('.dlg-btn')].map(b => b.textContent.trim()).join(' | '));
+  btn.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+}
+/** Type into the dialog's text field. */
+function typeInDialog(value) {
+  const input = openDlg() && openDlg().querySelector('.dlg-input');
+  if (!input) throw new Error('the open dialog has no text field');
+  input.value = value;
+}
+const dialogText = () => (openDlg() ? openDlg().textContent : '');
+const toastText = () => {
+  const host = doc.getElementById('app-toasts');
+  return host ? host.textContent : '';
+};
+/** Let queued promise callbacks run. */
+const tick = () => new Promise(r => setTimeout(r, 0));
 const assert = (c, m) => { if (!c) throw new Error(m || 'assertion failed'); };
 // jsdom does not implement innerText, so assignments land as plain props.
 const txtOf = id => { const e = doc.getElementById(id); return e.innerText !== undefined ? e.innerText : e.textContent; };
@@ -200,13 +235,16 @@ T('unit change converts initial fuel & relabels', () => {
 });
 
 console.log('\n=== 5. Bulk apply ===');
-T('applyBulkDefaultsToActive sets winds, keeps dep elevation', () => {
+TA('applyBulkDefaultsToActive sets winds, keeps dep elevation', async () => {
   doc.getElementById('def-wdir').value = '310';
   doc.getElementById('def-wspd').value = '22';
   doc.getElementById('def-oat').value = '-4';
   doc.getElementById('def-alt').value = '3500';
   const depAltBefore = ev('flights[0].waypoints[0].alt');
-  w.applyBulkDefaultsToActive();
+  const p = w.applyBulkDefaultsToActive();
+  await tick();
+  answerDialog('Apply to all legs');
+  await p;
   const wps = ev('flights[0].waypoints');
   assert(wps.every(x => x.wdir === 310 && x.wspd === 22 && x.oat === -4), 'winds not applied');
   assert(wps[0].alt === depAltBefore, 'departure elevation was overwritten');
@@ -214,13 +252,13 @@ T('applyBulkDefaultsToActive sets winds, keeps dep elevation', () => {
 });
 
 console.log('\n=== 6. Wind stronger than TAS (old NaN crash) ===');
-T('gale-force wind does not produce NaN', () => {
+TA('gale-force wind does not produce NaN', async () => {
   doc.getElementById('def-wspd').value = '400';
-  w.applyBulkDefaultsToActive();
+  await (async () => { const p = w.applyBulkDefaultsToActive(); await tick(); answerDialog('Apply to all legs'); await p; })();
   const txt = doc.getElementById('flight-plans-container').textContent;
   assert(!txt.includes('NaN'), 'NaN leaked into table with wspd > TAS');
   doc.getElementById('def-wspd').value = '15';
-  w.applyBulkDefaultsToActive();
+  const q = w.applyBulkDefaultsToActive(); await tick(); answerDialog('Apply to all legs'); await q;
 });
 
 console.log('\n=== 7. PATTERN waypoint (old showDelete ReferenceError) ===');
@@ -237,7 +275,7 @@ T('pattern leg renders without throwing', () => {
 });
 
 console.log('\n=== 8. Multi-flight index handling ===');
-T('add flight plans then delete an earlier one keeps active pointer', () => {
+TA('add flight plans then delete an earlier one keeps active pointer', async () => {
   w.addNewFlightPlan();
   w.addNewFlightPlan();
   assert(ev('flights.length') === 3, 'expected 3 flights, got ' + ev('flights.length'));
@@ -245,24 +283,39 @@ T('add flight plans then delete an earlier one keeps active pointer', () => {
   assert(new Set(ids).size === ids.length, 'duplicate flight ids: ' + ids);
   w.setActiveFlight(2);
   const activeId = ev('flights[2].id');
-  w.removeFlightPlan(0);
+  await (async () => { const p = w.removeFlightPlan(0); await tick(); answerDialog('Delete flight'); await p; })();
   assert(ev('flights.length') === 2, 'delete failed');
   assert(ev('flights[activeFlightIndex].id') === activeId,
          'active pointer drifted: expected id ' + activeId + ' got ' + ev('flights[activeFlightIndex].id'));
 });
 
 console.log('\n=== 9. Clear all ===');
-T('clearAllFlights resets to one empty plan', () => {
-  w.clearAllFlights();
+TA('clearAllFlights resets to one empty plan', async () => {
+  const p = w.clearAllFlights();
+  await tick();
+  answerDialog('Clear everything');
+  await p;
   assert(ev('flights.length') === 1, 'not reset');
   assert(ev('flights[0].waypoints.length') === 0, 'waypoints not cleared');
   assert(ev('activeFlightIndex') === 0, 'index not reset');
   const txt = doc.getElementById('flight-plans-container').textContent;
   assert(!txt.includes('NaN'), 'NaN after clear');
 });
-T('map click on empty plan does not throw', () => {
-  w.__mapHandlers.click({ latlng: { lat: 69.1, lng: 18.5 } });
+TA('map click on empty plan adds a waypoint through the dialog', async () => {
+  const p = w.__mapHandlers.click({ latlng: { lat: 69.1, lng: 18.5 } });
+  await tick();
+  assert(dialogText().includes('Add departure point'), 'no naming dialog: ' + dialogText().slice(0, 80));
+  answerDialog('Add waypoint');
+  await p;
   assert(ev('flights[0].waypoints.length') === 1, 'waypoint not added');
+});
+TA('cancelling the naming dialog adds nothing', async () => {
+  const before = ev('flights[0].waypoints.length');
+  const p = w.__mapHandlers.click({ latlng: { lat: 69.2, lng: 18.6 } });
+  await tick();
+  answerDialog('Cancel');
+  await p;
+  assert(ev('flights[0].waypoints.length') === before, 'cancel still added a waypoint');
 });
 
 console.log('\n=== 10. Undo / redo ===');
@@ -282,21 +335,30 @@ T('sanitiseFlights rejects junk', () => {
 });
 
 console.log('\n=== 12. Custom route save / load / delete round trip ===');
-T('save current flight as a route, then load it back', () => {
+TA('save current flight as a route, then load it back', async () => {
   ev(SEED);
-  w.saveCurrentMission();                       // confirm=true -> single route, prompt default "ENDU to ENTC"
+  ev(`localStorage.removeItem('c182_custom_routes'); loadedRouteRef = null; populateRouteDropdown();`);
+  const p = w.saveCurrentMission();
+  await tick();
+  answerDialog('Save active flight as a new route');
+  await tick();
+  answerDialog('Save');                          // accept the default name
+  await p;
   const names = Object.keys(w.getStoredSingleRoutes());
   assert(names.length === 1, 'expected 1 stored route, got ' + names.length);
-  w.clearAllFlights();
+  await (async () => { const c = w.clearAllFlights(); await tick(); answerDialog('Clear everything'); await c; })();
   doc.getElementById('route-selector').value = 'route:' + names[0];
   w.loadSelectedRouteOrMission();
   assert(ev('flights[activeFlightIndex].waypoints.length') === 3, 'route did not load');
   assert(!doc.getElementById('flight-plans-container').textContent.includes('NaN'), 'NaN after route load');
 });
-T('deleting a custom route removes it and empties the dropdown group', () => {
+TA('deleting a custom route removes it and empties the dropdown group', async () => {
   const names = Object.keys(w.getStoredSingleRoutes());
   doc.getElementById('route-selector').value = 'route:' + names[0];
-  w.deleteCurrentMission();
+  const p = w.deleteCurrentMission();
+  await tick();
+  answerDialog('Delete');
+  await p;
   assert(Object.keys(w.getStoredSingleRoutes()).length === 0, 'route not deleted');
   ev(SEED);
 });
@@ -331,15 +393,20 @@ T('zero-length ruler click adds no segment chip', () => {
 });
 
 console.log('\n=== 14. Save / export round trip ===');
-T('save mission + export produce valid JSON', () => {
-  w.saveCurrentMission();
+TA('save mission + export produce valid JSON', async () => {
+  const p = w.saveCurrentMission();
+  await tick();
+  answerDialog('Save the whole mission as new');
+  await tick();
+  answerDialog('Save');
+  await p;
   w.exportMissionFile();
-  assert(true);
+  assert(w.__lastBlob, 'no export blob produced');
 });
 
 console.log('\n=== 15. Taxi fuel charged exactly once ===');
-T('taxi fuel applied once per mission', () => {
-  w.clearAllFlights();
+TA('taxi fuel applied once per mission', async () => {
+  const c = w.clearAllFlights(); await tick(); answerDialog('Clear everything'); await c;
   ev(SEED);
   doc.getElementById('fuel-dep').value = '64';
   w.renderAllFlightTables();
@@ -467,7 +534,7 @@ T('copy text includes TOC marking info', () => {
 });
 
 console.log('\n=== 21. Export / import portability ===');
-T('export carries profile and planning prefs', async () => {
+TA('export carries profile and planning prefs', async () => {
   w.exportMissionFile();
   assert(w.__lastBlob, 'no blob captured');
 });
@@ -855,7 +922,8 @@ T('request URL contains everything the docs require', () => {
     assert(url.includes(k), 'URL missing ' + k));
   assert((url.match(/latitude=([^&]*)/)[1].split(',').length) === 6, 'lat list wrong');
 });
-T('fetch fills the wind matrix from a mocked multi-location response', async () => {
+TA('fetch fills the wind matrix from a mocked multi-location response', async () => {
+  ev(SEED);   // these ran inline before; now queued, so seed explicitly
   // synthetic column: 200/10kt at ~500m, 250/30kt at ~1500m, so 2500ft (762m)
   // interpolates between them; OAT 8C -> 2C
   const mkLoc = () => ({ elevation: 50, hourly: (() => {
@@ -890,7 +958,7 @@ T('fetch fills the wind matrix from a mocked multi-location response', async () 
   assert(st.includes('Filled 2 legs') && st.includes('Save'), 'status wrong: ' + st);
   w.closeWindModal();
 });
-T('fetch failure reports cleanly without applying anything', async () => {
+TA('fetch failure reports cleanly without applying anything', async () => {
   w.fetch = async () => { throw new Error('offline'); };
   w.openWindModal();
   await w.fetchForecastWinds();
@@ -898,14 +966,14 @@ T('fetch failure reports cleanly without applying anything', async () => {
   assert(st.includes('Fetch failed') && st.includes('offline'), 'error status wrong: ' + st);
   w.closeWindModal();
 });
-T('single-location object response is normalized too', async () => {
+TA('single-location object response is normalized too', async () => {
   // one leg only -> API may... still 3 sample points, so force 1 pt by direct call
   const loc = { elevation: 0, hourly: { time: Array(24).fill(0),
     wind_speed_10m: Array(24).fill(12), wind_direction_10m: Array(24).fill(90), temperature_2m: Array(24).fill(10) } };
   const r = ev(`extractPointWeather(${JSON.stringify(loc)}, 9, 254)`);
   assert(r && Math.round(r.dir) === 90 && Math.round(r.spd) === 12, 'surface-only column failed: ' + JSON.stringify(r));
 });
-T('fetched values feed the normal Save & Apply path', async () => {
+TA('fetched values feed the normal Save & Apply path', async () => {
   const mk = () => ({ elevation: 50, hourly: (() => {
     const H = { wind_speed_10m: Array(24).fill(8), wind_direction_10m: Array(24).fill(300), temperature_2m: Array(24).fill(5) };
     ev('OM_LEVELS').forEach(L => { H['wind_speed_'+L+'hPa']=Array(24).fill(20); H['wind_direction_'+L+'hPa']=Array(24).fill(310); H['temperature_'+L+'hPa']=Array(24).fill(0); H['geopotential_height_'+L+'hPa']=Array(24).fill(L>=950?400:2000); });
@@ -939,7 +1007,7 @@ T('fractional hour blends two forecast hours in u/v', () => {
   const whole = ev(`extractPointWeather(${JSON.stringify(loc)}, 9, 300)`);
   assert(Math.round(whole.dir) === 200 && Math.round(whole.spd) === 10, 'whole hour changed: ' + whole.dir + '/' + whole.spd);
 });
-T('single-model fetch reports the model by name', async () => {
+TA('single-model fetch reports the model by name', async () => {
   const mk = () => ({ elevation: 50, hourly: (() => {
     const H = { wind_speed_10m: Array(24).fill(8), wind_direction_10m: Array(24).fill(300), temperature_2m: Array(24).fill(5) };
     ev('OM_LEVELS').forEach(L => { H['wind_speed_'+L+'hPa']=Array(24).fill(20); H['wind_direction_'+L+'hPa']=Array(24).fill(310); H['temperature_'+L+'hPa']=Array(24).fill(0); H['geopotential_height_'+L+'hPa']=Array(24).fill(L>=950?400:2000); });
@@ -951,8 +1019,11 @@ T('single-model fetch reports the model by name', async () => {
   const st = doc.getElementById('wind-fetch-status').textContent;
   assert(st.includes('ECMWF IFS 0.25'), 'model name not shown: ' + st);
 });
-T('Compare mode fills the 3-model mean and reports spread', async () => {
-  // ECMWF 260/20, ICON 280/24, GFS 300/28 aloft -> mean dir 280, spread 8kt/40deg
+TA('Compare mode fills the 3-model mean and reports spread', async () => {
+  ev(SEED);   // self-contained: earlier async tests may have changed the route
+  // ECMWF 260/20, ICON 280/24, GFS 300/28 aloft. The app averages in u/v
+  // space, so the mean is SPEED-WEIGHTED: the faster models pull it past the
+  // arithmetic 280 to 282.3deg / 23.1kt (verified by hand). Spread 8kt/40deg.
   const mkFor = (dir, spd) => () => ({ elevation: 50, hourly: (() => {
     const H = { wind_speed_10m: Array(24).fill(5), wind_direction_10m: Array(24).fill(dir), temperature_2m: Array(24).fill(5) };
     ev('OM_LEVELS').forEach(L => { H['wind_speed_'+L+'hPa']=Array(24).fill(spd); H['wind_direction_'+L+'hPa']=Array(24).fill(dir); H['temperature_'+L+'hPa']=Array(24).fill(0); H['geopotential_height_'+L+'hPa']=Array(24).fill(L>=950?100:150); });
@@ -967,14 +1038,14 @@ T('Compare mode fills the 3-model mean and reports spread', async () => {
   const dir = Number(doc.getElementById('wmodal-dir-0-1').value);
   const spd = Number(doc.getElementById('wmodal-spd-0-1').value);
   console.log('        mean filled: ' + String(dir).padStart(3,'0') + '/' + spd + 'kt');
-  assert(Math.abs(dir - 280) <= 1, 'mean dir wrong: ' + dir);
+  assert(Math.abs(dir - 282) <= 1, 'mean dir wrong: ' + dir + ' (u/v vector mean is 282.3, not the arithmetic 280)');
   assert(spd >= 23 && spd <= 24, 'mean spd wrong: ' + spd);
   const st = doc.getElementById('wind-fetch-status').textContent;
   assert(st.includes('MEAN of'), 'no mean note');
   assert(st.includes('8 kt') && st.includes('40'), 'spread wrong: ' + st);
   assert(st.includes('disagree'), 'no disagreement warning at 40 deg spread');
 });
-T('Compare survives one model failing (mean of remaining two)', async () => {
+TA('Compare survives one model failing (mean of remaining two)', async () => {
   const mkFor = (dir, spd) => () => ({ elevation: 50, hourly: (() => {
     const H = { wind_speed_10m: Array(24).fill(5), wind_direction_10m: Array(24).fill(dir), temperature_2m: Array(24).fill(5) };
     ev('OM_LEVELS').forEach(L => { H['wind_speed_'+L+'hPa']=Array(24).fill(spd); H['wind_direction_'+L+'hPa']=Array(24).fill(dir); H['temperature_'+L+'hPa']=Array(24).fill(0); H['geopotential_height_'+L+'hPa']=Array(24).fill(L>=950?100:150); });
@@ -1254,14 +1325,20 @@ T('switching the active flight moves the dimming', () => {
   assert(ev('polylines[0]._opts.opacity') === 0.95, 'flight 1 should be prominent now');
   assert(ev('polylines[0]._opts.interactive') === true, 'flight 1 should be clickable now');
 });
-T('view mode: every flight at full strength', () => {
+TA('view mode: every flight at full strength', async () => {
+  ev(SEED);
+  w.addNewFlightPlan();          // this test needs two flights of its own
+  ev('refreshMap();');
   w.toggleDoneMode();
   assert(ev('polylines[0]._opts.opacity') === 0.95 && ev('polylines[1]._opts.opacity') === 0.95, 'view mode dimmed something');
   assert(ev('markers.filter(m => m._opts && m._opts.opacity === 0.35).length') === 0, 'dimmed markers in view mode');
   assert(ev('markers.filter(m => m._opts && m._opts.interactive === false).length') === 0, 'locked markers in view mode');
   w.toggleDoneMode();
   // drop flight 2 again so later tests see a single-flight world
-  w.removeFlightPlan(1);
+  const p = w.removeFlightPlan(1);
+  await tick();
+  answerDialog('Delete flight');
+  await p;
   assert(ev('flights.length') === 1, 'cleanup failed');
 });
 
@@ -1689,16 +1766,18 @@ T('free-text fields keep the browser\'s native undo', () => {
   keyZ({});
   assert(ev('flights[0].waypoints.length') === 3, 'restore failed');
 });
-T('an exhausted stack is silent on the keyboard but still alerts on the buttons', () => {
+T('an exhausted stack is silent on the keyboard but still notifies on the buttons', () => {
   ev('undoStack = []; redoStack = [];');
-  let alerts = 0;
-  const orig = w.alert; w.alert = () => { alerts++; };
+  const count = () => (doc.getElementById('app-toasts') || { children: [] }).children.length;
+  const before = count();
   keyZ({});
   keyZ({ shiftKey: true });
-  assert(alerts === 0, 'keyboard on empty stacks must be silent, got ' + alerts + ' alert(s)');
+  assert(count() === before, 'keyboard on empty stacks must be silent, got ' + (count() - before) + ' toast(s)');
   w.undoLast();
-  assert(alerts === 1, 'Undo button lost its empty-stack alert');
-  w.alert = orig;
+  assert(count() === before + 1, 'the Undo button lost its empty-stack notice');
+  assert(toastText().includes('Nothing to undo'), 'wrong toast: ' + toastText());
+  // toasts must never be a blocking dialog
+  assert(!openDlg(), 'a notification opened a modal dialog');
 });
 T('guide documents the shortcuts', () => {
   const guide = doc.querySelector('#help-modal .modal-body').textContent;
@@ -2136,7 +2215,7 @@ T('editing the VAR cell marks it manual so it survives future loads', () => {
   assert(input, 'VAR input not found');
   assert(/varSource='MANUAL'/.test(input.getAttribute('onchange')), 'VAR edit does not mark the value manual');
 });
-T('re-saving a loaded route offers to UPDATE it in place', () => {
+TA('saving offers every option at once, update-in-place first', async () => {
   ev(SEED);
   ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({ 'MY ROUTE': [
     { lat: 69.0, lng: 18.0, name: 'A', alt: 500, oat: 10, wdir: 0, wspd: 0, var: -11 },
@@ -2145,34 +2224,113 @@ T('re-saving a loaded route offers to UPDATE it in place', () => {
   doc.getElementById('route-selector').value = 'route:MY ROUTE';
   ev('loadSelectedRouteOrMission();');
   assert(ev('loadedRouteRef && loadedRouteRef.name') === 'MY ROUTE', 'load did not remember the source');
-  // change the plan, then save: the FIRST prompt must offer to update in place
   ev(`flights[activeFlightIndex].waypoints[1].alt = 4500;`);
-  const asked = [];
-  const origConfirm = w.confirm, origPrompt = w.prompt, origAlert = w.alert;
-  w.confirm = (m) => { asked.push(m); return true; };      // accept "update in place"
-  w.prompt = () => { throw new Error('must not ask for a NAME when updating in place'); };
-  w.alert = () => {};
-  ev('saveCurrentMission();');
-  w.confirm = origConfirm; w.prompt = origPrompt; w.alert = origAlert;
-  assert(/Update the saved route "MY ROUTE"/.test(asked[0]), 'no update-in-place offer: ' + asked[0]);
+
+  const p = w.saveCurrentMission();
+  await tick();
+  // ONE dialog, not a chain of yes/no questions
+  const opts = [...openDlg().querySelectorAll('.dlg-btn')].map(b => b.textContent.replace(/\s+/g, ' ').trim());
+  assert(opts.length === 4, 'expected 4 options, got: ' + opts.join(' | '));
+  assert(opts[0].includes('Update "MY ROUTE"'), 'update-in-place is not the first option: ' + opts[0]);
+  assert(opts.some(o => o.includes('new route')) && opts.some(o => o.includes('whole mission')),
+    'save-as-new options missing: ' + opts.join(' | '));
+  answerDialog('Update "MY ROUTE"');
+  await p;
+
   const saved = ev(`getStoredSingleRoutes()['MY ROUTE']`);
   assert(saved[1].alt === 4500, 'the saved route was not updated: ' + saved[1].alt);
   assert(Object.keys(ev('getStoredSingleRoutes()')).length === 1, 'a duplicate entry was created');
+  assert(toastText().includes('updated'), 'no confirmation toast: ' + toastText());
 });
-T('declining the offer falls through to save-as-new', () => {
-  const origConfirm = w.confirm, origPrompt = w.prompt, origAlert = w.alert;
-  const asked = [];
-  w.confirm = (m) => { asked.push(m); return asked.length === 1 ? false : true; };  // no update; then "single route"
-  w.prompt = () => 'COPY';
-  w.alert = () => {};
-  ev('saveCurrentMission();');
-  w.confirm = origConfirm; w.prompt = origPrompt; w.alert = origAlert;
+TA('choosing "save as new" asks for a name and keeps both entries', async () => {
+  const p = w.saveCurrentMission();
+  await tick();
+  answerDialog('Save active flight as a new route');
+  await tick();
+  assert(openDlg().querySelector('.dlg-input'), 'no name field offered');
+  typeInDialog('COPY');
+  answerDialog('Save');
+  await p;
   const routes = ev('getStoredSingleRoutes()');
   assert(routes['MY ROUTE'] && routes['COPY'], 'save-as-new did not run: ' + Object.keys(routes).join());
   assert(ev('loadedRouteRef.name') === 'COPY', 'the new name should become the update target');
 });
+TA('cancelling the save dialog stores nothing', async () => {
+  const before = Object.keys(ev('getStoredSingleRoutes()')).length;
+  const p = w.saveCurrentMission();
+  await tick();
+  answerDialog('Cancel');
+  await p;
+  assert(Object.keys(ev('getStoredSingleRoutes()')).length === before, 'cancel still saved something');
+  assert(!openDlg(), 'dialog stayed open after cancel');
+});
 
-console.log('\n=== Uncaught page errors ===');
-console.log(errors.length ? errors : '  none');
-console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
-process.exit(errors.length ? 1 : 0);
+console.log('\n=== 61. In-app dialogs replace the native ones ===');
+T('no native alert/confirm/prompt remains in the app', () => {
+  const src = fs.readFileSync('src/index.html', 'utf8');
+  for (const fn of ['confirm', 'prompt', 'alert']) {
+    const hits = (src.match(new RegExp('(?<![.\\w])' + fn + '\\s*\\(', 'g')) || [])
+      .filter((_, i) => true);
+    assert(hits.length === 0, `native ${fn}() still called ${hits.length}x in the page`);
+  }
+});
+TA('a dialog offers any number of options and returns the one chosen', async () => {
+  const p = ev(`ask({ title: 'Pick one', message: 'Three ways forward', buttons: [
+    { id: 'a', label: 'Alpha', variant: 'primary' }, { id: 'b', label: 'Bravo' },
+    { id: 'c', label: 'Charlie' }, { id: 'cancel', label: 'Cancel' } ] })`);
+  await tick();
+  const dlg = openDlg();
+  assert(dlg, 'no dialog rendered');
+  assert(dlg.querySelectorAll('.dlg-btn').length === 4, 'expected 4 options');
+  assert(dialogText().includes('Three ways forward'), 'message missing');
+  answerDialog('Charlie');
+  const r = await p;
+  assert(r.id === 'c', 'wrong option returned: ' + r.id);
+  assert(!openDlg(), 'dialog not removed after choosing');
+});
+TA('Escape cancels and the number keys pick options', async () => {
+  let p = ev(`ask({ title: 'Esc test', buttons: [{ id: 'ok', label: 'OK', variant: 'primary' }, { id: 'cancel', label: 'Cancel' }] })`);
+  await tick();
+  doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert((await p).id === 'cancel', 'Escape did not cancel');
+
+  p = ev(`ask({ title: 'Key test', buttons: [{ id: 'one', label: 'First' }, { id: 'two', label: 'Second' }] })`);
+  await tick();
+  doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: '2', bubbles: true, cancelable: true }));
+  assert((await p).id === 'two', 'number key did not select the second option');
+
+  p = ev(`ask({ title: 'Enter test', buttons: [{ id: 'no', label: 'No' }, { id: 'yes', label: 'Yes', variant: 'primary' }] })`);
+  await tick();
+  doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  assert((await p).id === 'yes', 'Enter did not take the primary option');
+});
+TA('the text-entry dialog returns the typed value, or null when cancelled', async () => {
+  let p = ev(`promptDialog('Name it', 'Route name', 'DEFAULT')`);
+  await tick();
+  assert(openDlg().querySelector('.dlg-input').value === 'DEFAULT', 'default value not pre-filled');
+  typeInDialog('  Tromso local  ');
+  answerDialog('Save');
+  assert((await p).trim() === 'Tromso local', 'wrong value returned');
+
+  p = ev(`promptDialog('Name it', 'Route name', 'X')`);
+  await tick();
+  answerDialog('Cancel');
+  assert((await p) === null, 'cancel must return null');
+});
+T('toasts notify without stealing a click', () => {
+  const host0 = doc.getElementById('app-toasts');
+  const before = host0 ? host0.children.length : 0;
+  ev(`say('Test notice', 'good')`);
+  const host = doc.getElementById('app-toasts');
+  assert(host && host.children.length === before + 1, 'no toast appended');
+  assert(host.lastChild.className.includes('toast-good'), 'tone class missing: ' + host.lastChild.className);
+  assert(!openDlg(), 'a toast must not open a modal');
+  host.innerHTML = '';
+});
+
+runAsyncTests().then(() => {
+  console.log('\n=== Uncaught page errors ===');
+  console.log(errors.length ? errors : '  none');
+  console.log('\nRESULT: ' + (errors.length ? 'FAILURES PRESENT' : 'ALL CHECKS PASSED'));
+  process.exit(errors.length ? 1 : 0);
+});

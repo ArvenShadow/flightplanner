@@ -170,6 +170,25 @@ claude.ai; this repo is the continuation point for Claude Code.
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).
 
+## Dialogs (v16.11)
+
+`src/lib/dialog.js` replaced every window.alert/confirm/prompt (20 call
+sites, now zero). `ask()` takes any number of options and resolves the
+chosen id; `confirmDialog`/`promptDialog` wrap it; `say()` is a toast
+for notifications so they cost no click. Keyboard: Enter = primary,
+1-9 = pick, Esc = cancel. Plain DOM (no <dialog>) so jsdom and Chromium
+behave alike. The save flow is the reason this exists: as native
+dialogs it had to ask "[OK] route / [Cancel] mission", and it is now
+ONE dialog listing update-in-place, save-as-route, save-as-mission,
+cancel. Call sites are async - functions that ask something must be
+`async` and awaited.
+
+TEST HARNESS: tests are queued via `TA(name, async fn)` and awaited by
+`runAsyncTests()` before the summary; drive dialogs with
+`answerDialog(label)` / `typeInDialog(v)`. NOTE: `T()` does NOT await,
+so an async body passed to it reports PASS without asserting - eight
+tests were silently doing this and are now converted.
+
 ## Saved-route freshness (v16.10)
 
 Saved routes store the magnetic variation current WHEN SAVED, so

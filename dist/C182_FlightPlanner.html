@@ -874,6 +874,35 @@ svg.leaflet-image-layer.leaflet-interactive path {
     #map.zoom-far .ruler-seg-label, #map.zoom-far .ruler-label { display: none; }
 
     /* Modals */
+    /* In-app dialogs & toasts (replace alert/confirm/prompt) */
+    .dlg-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10001;
+      display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .dlg { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color);
+      border-radius: 10px; width: 460px; max-width: 100%; padding: 16px 18px 14px;
+      box-shadow: 0 18px 48px rgba(0,0,0,0.45); }
+    .dlg-title { font-size: 14px; font-weight: 800; margin-bottom: 6px; }
+    .dlg-msg { font-size: 12px; line-height: 1.6; margin-bottom: 12px; }
+    .dlg-field { margin: 4px 0 12px; }
+    .dlg-field label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 3px; }
+    .dlg-input { width: 100%; padding: 6px 8px; font-size: 13px; border-radius: 5px;
+      border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); }
+    .dlg-buttons { display: flex; flex-direction: column; gap: 6px; }
+    .dlg-btn { display: flex; align-items: center; gap: 8px; text-align: left; width: 100%;
+      padding: 8px 10px; font-size: 12px; font-weight: 700; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); }
+    .dlg-btn:hover, .dlg-btn:focus { outline: none; border-color: #3182ce; background: var(--highlight-bg); }
+    .dlg-key { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px;
+      border-radius: 4px; background: rgba(127,127,127,0.22); font-size: 10px; font-weight: 700; }
+    .dlg-hint { display: block; font-weight: 500; font-size: 10px; color: var(--text-muted); margin-left: auto; }
+    .dlg-primary { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+    .dlg-primary:hover, .dlg-primary:focus { background: #2c5282; }
+    .dlg-danger { background: #c53030; color: #fff; border-color: #c53030; }
+    .dlg-danger:hover, .dlg-danger:focus { background: #9b2c2c; }
+    #app-toasts { position: fixed; bottom: 14px; right: 14px; z-index: 10002; display: flex;
+      flex-direction: column; gap: 6px; align-items: flex-end; }
+    .toast { font-size: 11.5px; font-weight: 600; padding: 8px 12px; border-radius: 6px; cursor: pointer;
+      max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); background: #2d3748; color: #fff; }
+    .toast-good { background: #276749; } .toast-warn { background: #c05621; } .toast-bad { background: #c53030; }
     .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
     .modal { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 8px; width: 520px; max-width: 95vw; padding: 18px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); max-height: 90vh; display: flex; flex-direction: column; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
@@ -1126,7 +1155,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
           <h3>🚀 Quick Start</h3>
           <ul style="margin-left:16px;">
             <li><b>Click the map</b> to add a waypoint. Name it in the prompt — the first click is your departure.</li>
-            <li>Type <b>PATTERN</b> as the name to log traffic-circuit laps (time &amp; fuel, no distance).</li>
+            <li>Type <b>PATTERN</b> as the name — or press the <b>traffic-circuit</b> option — to log circuit laps (time &amp; fuel, no distance).</li>
+            <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> redoes (⌘ on Mac), step by step up to 30 states — same stacks as the Undo/Redo buttons. Inside a text field the keys keep their normal text-editing meaning.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
@@ -3156,8 +3186,166 @@ svg.leaflet-image-layer.leaflet-interactive path {
     return [p.lat2, p.lon2];
   }
 
+  // src/lib/dialog.js
+  var dialog_exports = {};
+  __export(dialog_exports, {
+    ask: () => ask,
+    closeDialog: () => closeDialog,
+    confirmDialog: () => confirmDialog,
+    dialogIsOpen: () => dialogIsOpen,
+    promptDialog: () => promptDialog,
+    say: () => say
+  });
+  var openDialog = null;
+  function el(tag, props = {}, children = []) {
+    const node = document.createElement(tag);
+    Object.assign(node, props);
+    if (props.style) node.style.cssText = props.style;
+    for (const c of children) node.appendChild(c);
+    return node;
+  }
+  function dialogIsOpen() {
+    return openDialog !== null;
+  }
+  function closeDialog(result) {
+    if (openDialog) openDialog(result);
+  }
+  function ask(opts) {
+    const { title, message, buttons = [], input = null, cancelId = "cancel" } = opts;
+    if (openDialog) closeDialog({ id: cancelId, value: null });
+    const backdrop = el("div", { className: "dlg-backdrop", id: "app-dialog" });
+    const box = el("div", { className: "dlg" });
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    box.appendChild(el("div", { className: "dlg-title", textContent: title }));
+    if (message) {
+      const body = el("div", { className: "dlg-msg" });
+      String(message).split("\n").forEach((line, i) => {
+        if (i) body.appendChild(el("br"));
+        body.appendChild(document.createTextNode(line));
+      });
+      box.appendChild(body);
+    }
+    let field = null;
+    if (input) {
+      const wrap = el("div", { className: "dlg-field" });
+      if (input.label) wrap.appendChild(el("label", { textContent: input.label }));
+      field = el("input", { type: "text", value: input.value || "", placeholder: input.placeholder || "" });
+      field.className = "dlg-input";
+      wrap.appendChild(field);
+      box.appendChild(wrap);
+    }
+    const row = el("div", { className: "dlg-buttons" });
+    const nodes = buttons.map((b, i) => {
+      const btn = el("button", {
+        className: "dlg-btn dlg-" + (b.variant || "ghost"),
+        type: "button"
+      });
+      btn.appendChild(el("span", { className: "dlg-key", textContent: String(i + 1) }));
+      btn.appendChild(document.createTextNode(" " + b.label));
+      if (b.hint) btn.appendChild(el("small", { className: "dlg-hint", textContent: b.hint }));
+      btn.addEventListener("click", () => finish(b.id));
+      row.appendChild(btn);
+      return btn;
+    });
+    box.appendChild(row);
+    backdrop.appendChild(box);
+    let settle;
+    const promise = new Promise((resolve) => {
+      settle = resolve;
+    });
+    function finish(id) {
+      if (!openDialog) return;
+      const value = field ? field.value : null;
+      document.removeEventListener("keydown", onKey, true);
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+      openDialog = null;
+      settle({ id, value });
+    }
+    function onKey(e) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(cancelId);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const def = buttons.findIndex((b) => b.variant === "primary" || b.variant === "danger");
+        finish(buttons[def >= 0 ? def : 0] ? buttons[def >= 0 ? def : 0].id : cancelId);
+        return;
+      }
+      if (/^[1-9]$/.test(e.key) && (!field || document.activeElement !== field)) {
+        const idx = Number(e.key) - 1;
+        if (buttons[idx]) {
+          e.preventDefault();
+          finish(buttons[idx].id);
+        }
+      }
+    }
+    backdrop.addEventListener("mousedown", (e) => {
+      if (e.target === backdrop) finish(cancelId);
+    });
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(backdrop);
+    openDialog = finish;
+    const focusTarget = field || nodes.find((_, i) => buttons[i].variant === "primary" || buttons[i].variant === "danger") || nodes[0];
+    if (focusTarget && focusTarget.focus) {
+      try {
+        focusTarget.focus();
+        if (field && field.select) field.select();
+      } catch (e) {
+      }
+    }
+    return promise;
+  }
+  async function confirmDialog(title, message, opts = {}) {
+    const r = await ask({
+      title,
+      message,
+      buttons: [
+        { id: "ok", label: opts.okLabel || "OK", variant: opts.danger ? "danger" : "primary" },
+        { id: "cancel", label: opts.cancelLabel || "Cancel", variant: "ghost" }
+      ]
+    });
+    return r.id === "ok";
+  }
+  async function promptDialog(title, label, value = "", opts = {}) {
+    const r = await ask({
+      title,
+      message: opts.message,
+      input: { label, value, placeholder: opts.placeholder },
+      buttons: [
+        { id: "ok", label: opts.okLabel || "Save", variant: "primary" },
+        { id: "cancel", label: "Cancel", variant: "ghost" }
+      ]
+    });
+    return r.id === "ok" ? r.value === null ? "" : r.value : null;
+  }
+  function say(message, tone = "info", ms = 5e3) {
+    let host = document.getElementById("app-toasts");
+    if (!host) {
+      host = el("div", { id: "app-toasts", className: "no-print" });
+      document.body.appendChild(host);
+    }
+    const toast = el("div", { className: "toast toast-" + tone });
+    String(message).split("\n").forEach((line, i) => {
+      if (i) toast.appendChild(el("br"));
+      toast.appendChild(document.createTextNode(line));
+    });
+    toast.addEventListener("click", () => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    });
+    host.appendChild(toast);
+    const timer = setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, ms);
+    toast.__timer = timer;
+    return toast;
+  }
+
   // src/main.js
-  var api = { ...magvar_exports, ...geodesy_exports };
+  var api = { ...magvar_exports, ...geodesy_exports, ...dialog_exports };
   for (const [name, value] of Object.entries(api)) {
     window[name] = value;
   }
@@ -3473,7 +3661,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.10';
+    const APP_VERSION = '16.11';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4660,7 +4848,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // holding Ctrl+Z past the end doesn't fire an alert per keypress.
     function undoLast(quiet) {
       if (undoStack.length === 0) {
-        if (!quiet) alert("Nothing to undo.");
+        if (!quiet) say("Nothing to undo.", "warn");
         return;
       }
       redoStack.push(JSON.stringify(flights));
@@ -4675,7 +4863,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     function redoLast(quiet) {
       if (redoStack.length === 0) {
-        if (!quiet) alert("Nothing to redo.");
+        if (!quiet) say("Nothing to redo.", "warn");
         return;
       }
       undoStack.push(JSON.stringify(flights));
@@ -4797,19 +4985,28 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const isFirstInFlight = (activeFlight.waypoints.length === 0);
       const defaultName = isFirstInFlight ? "DEP" : "WP" + (activeFlight.waypoints.length + 1);
       
-      const inputName = prompt(`Add Waypoint to [${flightTitle(activeFlight)}]:\n(Tip: Type "PATTERN" to log traffic circuit laps)`, defaultName);
-      if (inputName === null) return;
-      
-      let finalName = inputName.trim() || defaultName;
-      let isPattern = finalName.toUpperCase().includes("PATTERN");
+      const named = await ask({
+        title: isFirstInFlight ? 'Add departure point' : 'Add waypoint',
+        message: `To [${flightTitle(activeFlight)}]`,
+        input: { label: 'Waypoint name', value: defaultName },
+        buttons: [
+          { id: 'ok', label: 'Add waypoint', variant: 'primary' },
+          { id: 'pattern', label: 'Log traffic-circuit laps here', hint: 'PATTERN' },
+          { id: 'cancel', label: 'Cancel' }
+        ]
+      });
+      if (named.id === 'cancel') return;
+
+      let finalName = (named.value || '').trim() || defaultName;
+      let isPattern = named.id === 'pattern' || finalName.toUpperCase().includes("PATTERN");
       let laps = 3;
 
       if (isPattern) {
         finalName = "PATTERN";
-        const lapsInput = prompt("Number of Laps in Pattern (~5 min/lap @ 12GPH):", "3");
-        if (lapsInput !== null && !isNaN(parseInt(lapsInput))) {
-          laps = Math.max(1, parseInt(lapsInput));
-        }
+        const lapsInput = await promptDialog('Traffic circuit', 'Number of laps', '3',
+          { message: 'About 5 min and 1 gal per lap at 12 GPH.', okLabel: 'Add pattern' });
+        if (lapsInput === null) return;
+        if (!isNaN(parseInt(lapsInput))) laps = Math.max(1, parseInt(lapsInput));
       }
 
       pushUndoState();
@@ -4896,12 +5093,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
       saveActiveState();
     }
 
-    function removeFlightPlan(fIdx) {
+    async function removeFlightPlan(fIdx) {
       if (flights.length <= 1) {
-        alert("Cannot remove the only flight plan.");
+        say("Cannot remove the only flight plan.", "warn");
         return;
       }
-      if (confirm(`Delete ${flightTitle(flights[fIdx])}?`)) {
+      const ok = await confirmDialog(`Delete ${flightTitle(flights[fIdx])}?`,
+        'The flight plan and its waypoints are removed from this mission. Undo (Ctrl+Z) restores it.',
+        { okLabel: 'Delete flight', danger: true });
+      if (ok) {
         pushUndoState();
         flights.splice(fIdx, 1);
         // Keep pointing at the SAME flight the user had active. Removing an
@@ -5906,10 +6106,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
     }
 
     // Push the "Flight Defaults" panel values onto every leg of the ACTIVE flight.
-    function applyBulkDefaultsToActive() {
+    async function applyBulkDefaultsToActive() {
       const fl = flights[activeFlightIndex];
       if (!fl || fl.waypoints.length === 0) {
-        alert("The active flight has no waypoints yet.");
+        say("The active flight has no waypoints yet.", "warn");
         return;
       }
 
@@ -5918,9 +6118,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
       const wdir = Number(document.getElementById('def-wdir').value);
       const wspd = Number(document.getElementById('def-wspd').value);
 
-      if (!confirm(`Apply defaults to every leg of "${flightTitle(fl)}"?\n\n` +
-                   `Cruise Alt: ${alt} ft\nOAT: ${oat} °C\nWind: ${wdir}° / ${wspd} kt\n\n` +
-                   `(The departure waypoint keeps its field elevation.)`)) return;
+      const ok = await confirmDialog(`Apply defaults to every leg of "${flightTitle(fl)}"?`,
+        `Cruise Alt: ${alt} ft\nOAT: ${oat} °C\nWind: ${wdir}° / ${wspd} kt\n\n` +
+        `The departure waypoint keeps its field elevation.`,
+        { okLabel: 'Apply to all legs' });
+      if (!ok) return;
 
       pushUndoState();
       fl.waypoints.forEach((wp, idx) => {
@@ -5936,8 +6138,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
       saveActiveState();
     }
 
-    function clearAllFlights() {
-      if (!confirm("Clear ALL flight plans and start from an empty sheet?\n\nSaved routes and missions are NOT deleted.")) return;
+    async function clearAllFlights() {
+      const ok = await confirmDialog('Clear ALL flight plans?',
+        'Start from an empty sheet. Saved routes and missions are NOT deleted, and Ctrl+Z undoes this.',
+        { okLabel: 'Clear everything', danger: true });
+      if (!ok) return;
       pushUndoState();
       flights = [{
         id: 1,
@@ -6401,73 +6606,97 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // offer to UPDATE it instead of silently creating a near-duplicate.
     let loadedRouteRef = null;
 
-    function saveCurrentMission() {
+    async function saveCurrentMission() {
       const activeFlight = flights[activeFlightIndex];
-      const defaultName = activeFlight.waypoints.length >= 2 
+      const defaultName = activeFlight.waypoints.length >= 2
         ? activeFlight.waypoints[0].name + " to " + activeFlight.waypoints[activeFlight.waypoints.length - 1].name
         : "Mission " + new Date().toLocaleDateString();
 
-      // Loaded from a saved entry? Offer to update THAT entry first.
+      // ONE dialog offering every route the save can take. As two chained
+      // yes/no confirms this needed "[OK] = route, [Cancel] = mission",
+      // which is exactly the kind of question a native dialog cannot ask.
+      const buttons = [];
       if (loadedRouteRef) {
+        buttons.push({
+          id: 'update',
+          label: `Update "${loadedRouteRef.name}"`,
+          variant: 'primary',
+          hint: loadedRouteRef.type === 'route' ? 'saved route' : 'saved mission'
+        });
+      }
+      buttons.push({ id: 'route', label: 'Save active flight as a new route',
+                     variant: loadedRouteRef ? 'ghost' : 'primary',
+                     hint: flightTitle(activeFlight) });
+      buttons.push({ id: 'mission', label: 'Save the whole mission as new',
+                     hint: flights.length + (flights.length === 1 ? ' flight' : ' flights') });
+      buttons.push({ id: 'cancel', label: 'Cancel' });
+
+      const choice = await ask({
+        title: 'Save flight plan',
+        message: loadedRouteRef
+          ? `This plan came from the saved ${loadedRouteRef.type} "${loadedRouteRef.name}".`
+          : 'Store this plan in the browser so it can be reloaded later.',
+        buttons
+      });
+
+      if (choice.id === 'update' && loadedRouteRef) {
         const label = loadedRouteRef.type === 'route' ? 'route' : 'mission';
-        if (confirm(`Update the saved ${label} "${loadedRouteRef.name}" with the current plan?\n\n` +
-                    `[OK] overwrite "${loadedRouteRef.name}"\n[Cancel] save as a new entry instead`)) {
-          if (loadedRouteRef.type === 'route') {
-            const routes = getStoredSingleRoutes();
-            routes[loadedRouteRef.name] = activeFlight.waypoints;
-            localStorage.setItem('c182_custom_routes', JSON.stringify(routes));
-          } else {
-            const missions = getStoredMissions();
-            missions[loadedRouteRef.name] = flights;
-            localStorage.setItem('c182_custom_missions', JSON.stringify(missions));
-          }
-          populateRouteDropdown();
-          document.getElementById('route-selector').value = loadedRouteRef.type + ':' + loadedRouteRef.name;
-          alert(`Saved ${label} "${loadedRouteRef.name}" updated.`);
-          return;
+        if (loadedRouteRef.type === 'route') {
+          const routes = getStoredSingleRoutes();
+          routes[loadedRouteRef.name] = activeFlight.waypoints;
+          localStorage.setItem('c182_custom_routes', JSON.stringify(routes));
+        } else {
+          const missions = getStoredMissions();
+          missions[loadedRouteRef.name] = flights;
+          localStorage.setItem('c182_custom_missions', JSON.stringify(missions));
         }
+        populateRouteDropdown();
+        document.getElementById('route-selector').value = loadedRouteRef.type + ':' + loadedRouteRef.name;
+        say(`Saved ${label} "${loadedRouteRef.name}" updated.`, 'good');
+        return;
       }
 
-      const choice = confirm("Click [OK] to save current Active Flight as a Single Route.\nClick [Cancel] to save Entire Multi-Flight Mission.");
-      
-      if (choice) {
-        const name = prompt("Enter Route Name:", defaultName);
+      if (choice.id === 'route') {
+        const name = await promptDialog('Save as a new route', 'Route name', defaultName);
         if (name === null) return;
         const finalName = name.trim() || defaultName;
-
-        const customRoutes = localStorage.getItem('c182_custom_routes') ? JSON.parse(localStorage.getItem('c182_custom_routes')) : {};
+        const customRoutes = getStoredSingleRoutes();
         customRoutes[finalName] = activeFlight.waypoints;
         localStorage.setItem('c182_custom_routes', JSON.stringify(customRoutes));
         loadedRouteRef = { type: 'route', name: finalName };
         populateRouteDropdown();
         document.getElementById('route-selector').value = "route:" + finalName;
-        alert(`Route "${finalName}" saved!`);
-      } else {
-        const name = prompt("Enter Mission Name:", defaultName);
+        say(`Route "${finalName}" saved.`, 'good');
+        return;
+      }
+
+      if (choice.id === 'mission') {
+        const name = await promptDialog('Save the whole mission', 'Mission name', defaultName);
         if (name === null) return;
         const finalName = name.trim() || defaultName;
-
         const customMissions = getStoredMissions();
         customMissions[finalName] = flights;
         localStorage.setItem('c182_custom_missions', JSON.stringify(customMissions));
         loadedRouteRef = { type: 'mission', name: finalName };
         populateRouteDropdown();
         document.getElementById('route-selector').value = "mission:" + finalName;
-        alert(`Multi-Flight Mission "${finalName}" saved!`);
+        say(`Mission "${finalName}" saved.`, 'good');
       }
     }
 
-    function deleteCurrentMission() {
+    async function deleteCurrentMission() {
       const selVal = document.getElementById('route-selector').value;
       if (!selVal) {
-        alert("Select a saved route or mission from the dropdown to delete it.");
+        say("Select a saved route or mission from the dropdown to delete it.", "warn");
         return;
       }
       const sepIdx = selVal.indexOf(':');
       const type = selVal.slice(0, sepIdx);
       const name = selVal.slice(sepIdx + 1);
 
-      if (confirm(`Delete "${name}"?`)) {
+      if (await confirmDialog(`Delete saved ${type === 'route' ? 'route' : 'mission'} "${name}"?`,
+            'This removes it from this browser permanently - it cannot be undone.',
+            { okLabel: 'Delete', danger: true })) {
         if (type === 'route') {
           const customRoutes = localStorage.getItem('c182_custom_routes') ? JSON.parse(localStorage.getItem('c182_custom_routes')) : {};
           delete customRoutes[name];
@@ -6603,9 +6832,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
           refreshMap();
           renderAllFlightTables();
           saveActiveState();
-          alert('Import complete!' + (parsed.profile ? '\nAircraft settings and planning preferences were included and applied.' : '\nNote: this file has no aircraft settings (older export) - this computer keeps its current performance profile.'));
+          say('Import complete. ' + (parsed.profile ? 'Aircraft settings and planning preferences were applied.' : 'This file has no aircraft settings (older export) - the current performance profile is kept.'), 'good', 8000);
         } catch (err) {
-          alert("Invalid JSON file format: " + err.message);
+          say('Could not read that file: ' + err.message, 'bad', 9000);
         }
       };
       reader.readAsText(file);
