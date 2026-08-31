@@ -2166,7 +2166,50 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   assert(geodesyModule.calcTrueTrack(60, 18, 61, 18) === 0, 'due north broken');
   const perfModule = require('./src/lib/performance.js');
   const fmtModule = require('./src/lib/format.js');
-  moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule };
+  const legsModule = require('./src/lib/legs.js');
+  moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule, legs: legsModule };
+});
+// The leg engine carries two settled decisions. Both are asserted here in
+// bare Node - no jsdom, no globals - because they are what the fuel figure
+// and the crossing altitude actually depend on.
+const WP = (n, lat, lng, alt, extra) => Object.assign({ name: n, lat, lng, alt, oat: 0, wdir: 0, wspd: 0, var: 0 }, extra || {});
+T('a via leg walks the bent path but reports the DIRECT chart track (v16.4)', () => {
+  const L = moduleExports.legs, G = moduleExports.geodesy;
+  const to = WP('B', 69.4, 18.0, 2500, { via: [{ lat: 69.2, lng: 19.5 }] });
+  const r = L.computeLegTotals(WP('A', 69.0, 18.0, 2500), to, null);
+  const direct = G.calcDistanceNM(69.0, 18.0, 69.4, 18.0);
+  assert(r.segs.length === 2, 'the via point did not split the leg: ' + r.segs.length);
+  assert(r.distNM > direct * 2, 'distance must walk the bent path, got ' + r.distNM + ' vs direct ' + direct);
+  // the OFP row shows the line you measure on the chart between the fixes
+  assert(r.rowTT === G.calcTrueTrack(69.0, 18.0, 69.4, 18.0), 'row track is not the direct waypoint-to-waypoint line: ' + r.rowTT);
+});
+T('a climb that does not finish spills onto the next leg (v16.5 forward pass)', () => {
+  const L = moduleExports.legs;
+  // 254 -> 9500 ft with a 6 NM first leg: it cannot be done in one leg
+  const s = L.computeFlightSchedule({ waypoints: [WP('A', 69.0, 18.0, 254), WP('B', 69.1, 18.0, 9500), WP('C', 70.2, 18.0, 9500)] });
+  assert(s[0].stillClimbing === true, 'leg 1 should still be climbing at its end');
+  assert(s[1].climbMin > 0, 'the climb did not carry onto leg 2');
+  assert(s[1].stillClimbing === false, 'the climb never finished');
+  assert(s[0].exitAlt < 9500, 'leg 1 cannot reach the target: exitAlt ' + s[0].exitAlt);
+});
+T('a descent backs up onto an earlier leg so the fix is crossed AT altitude (v16.5 backward pass)', () => {
+  const L = moduleExports.legs;
+  const s = L.computeFlightSchedule({ waypoints: [WP('A', 69.0, 18.0, 9500), WP('B', 69.6, 18.0, 9500), WP('C', 70.1, 18.0, 1000)] });
+  assert(s[0].descMin > 0, 'the descent did not start on the earlier leg - C would be crossed too high');
+  assert(s[1].descMin > 0, 'the final leg is not descending');
+  assert(!s[0].shortfallMin, 'this descent is achievable and must not be flagged');
+});
+T('an impossible descent is flagged, never silently fudged', () => {
+  const L = moduleExports.legs;
+  // 9500 -> 1000 ft in 1.2 NM: physically impossible at any sane ROD
+  const s = L.computeFlightSchedule({ waypoints: [WP('A', 69.0, 18.0, 9500), WP('B', 69.02, 18.0, 1000)] });
+  assert(s[0].shortfallMin > 0, 'no shortfall reported for an impossible descent');
+  assert(s[0].descTargetName === 'B', 'the shortfall does not name the fix it cannot make');
+});
+T('a pattern stop breaks the schedule chain', () => {
+  const L = moduleExports.legs;
+  const s = L.computeFlightSchedule({ waypoints: [WP('A', 69, 18, 254), WP('P', 69.05, 18, 254, { isPattern: true }), WP('C', 69.9, 18, 6500)] });
+  assert(s.some(leg => leg === null), 'a pattern leg must break the chain, not be scheduled through');
 });
 T('the POH performance engine runs with no DOM and no globals', () => {
   const P = moduleExports.perf;
@@ -2213,6 +2256,12 @@ T('every module export and the built page agree exactly', () => {
     assert(md === pd, `distance mismatch from ${lat},${lng}: ${md} vs ${pd}`);
     assert(moduleExports.fmt.toDMM(lat, true) === ev(`toDMM(${lat}, true)`), 'toDMM mismatch at ' + lat);
   }
+  // the whole schedule, module vs built page, on the suite's seed route
+  ev(SEED);
+  const seedFlight = `{ waypoints: flights[0].waypoints }`;
+  const pageSched = ev(`JSON.stringify(computeFlightSchedule(${seedFlight}))`);
+  const modSched = JSON.stringify(moduleExports.legs.computeFlightSchedule(JSON.parse(ev('JSON.stringify({ waypoints: flights[0].waypoints })'))));
+  assert(modSched === pageSched, 'the altitude schedule differs between module and page');
   // the performance engine is what fuel and endurance hang on: walk the
   // whole POH envelope, not a sample, and demand exact agreement
   for (let alt = 0; alt <= 14000; alt += 500) {
@@ -2298,7 +2347,10 @@ T('the page script no longer defines what the modules own', () => {
   const src = fs.readFileSync('src/index.html', 'utf8');
   for (const fn of ['resolveMagVar', 'calcDistanceNM', 'calcTrueTrack', 'interpolateGeo',
                     'climbCumulative', 'climbPerf', 'cruiseAtLevel', 'cruisePerf', 'isaTemp',
-                    'calcWCA', 'formatTimeHHMM', 'toDMM']) {
+                    'calcWCA', 'formatTimeHHMM', 'toDMM',
+                    'legPath', 'pathSegments', 'pointAlongSegments', 'distToSegmentNM', 'phaseGS',
+                    'computeLegTotals', 'computeLegProfile', 'climbAltReached',
+                    'computeFlightSchedule', 'computeLegMarkers']) {
     assert(!new RegExp('function ' + fn + '\\s*\\(').test(src),
       fn + ' is still defined in the page script (duplicate of its module)');
   }
