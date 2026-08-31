@@ -925,7 +925,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       <button class="btn btn-outline btn-sm" style="color:white; border-color:#718096;" onclick="exportMissionFile()" title="Download JSON file">Export</button>
       <button class="btn btn-outline btn-sm" style="color:white; border-color:#718096;" onclick="document.getElementById('import-file').click()" title="Load JSON file">Import</button>
       <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importMissionFile(event)">
-      <span id="mag-status-badge" class="mag-badge" title="Regional polynomial fit to the WMM, tuned for Northern Scandinavia. Auto-calculated per waypoint and editable in the VAR column. Cross-check against your chart.">🟢 MagVAR: Auto (Regional Model)</span>
+      <span id="mag-status-badge" class="mag-badge" title="World Magnetic Model (WMM2025 coefficients, valid to 2030), evaluated per waypoint at today's date. Matches NOAA to ~0.005 deg. Editable in the VAR column; cross-check against your chart.">🟢 MagVAR: Auto (WMM2025)</span>
     </div>
 
     <div class="toolbar no-print">
@@ -1801,7 +1801,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.8';
+    const APP_VERSION = '16.9';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2290,11 +2290,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
     }
 
     // =========================================================================
-    // 3. MAGNETIC VARIATION MODEL -> src/lib/magvar.js
+    // 3. MAGNETIC VARIATION -> src/lib/magvar.js
     //
-    // Extracted to a module (see that file for the WMM cross-check and the
-    // refit horizon). The build inlines it above this script, so
-    // getRegionalMagVar() / resolveMagVar() remain available by name.
+    // The real WMM (WMM2025 coefficients) replaced the regional polynomial
+    // in v16.9; see that file for the NOAA comparison. resolveMagVar() is
+    // the app-facing call and keeps its signature.
     // =========================================================================
 
     // =========================================================================
@@ -2506,38 +2506,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
       return Math.round(toDeg(Math.asin(Math.max(-1, Math.min(1, ratio)))));
     }
 
-    function calcDistanceNM(lat1, lon1, lat2, lon2) {
-      const rLat1 = toRad(lat1), rLat2 = toRad(lat2);
-      const dLon = toRad(lon2 - lon1);
-      const cosD = Math.sin(rLat1) * Math.sin(rLat2) + Math.cos(rLat1) * Math.cos(rLat2) * Math.cos(dLon);
-      return Number((toDeg(Math.acos(Math.max(-1, Math.min(1, cosD)))) * 60).toFixed(1));
-    }
-
-    function calcTrueTrack(lat1, lon1, lat2, lon2) {
-      const rLat1 = toRad(lat1), rLat2 = toRad(lat2);
-      const dLon = toRad(lon2 - lon1);
-      const y = Math.sin(dLon) * Math.cos(rLat2);
-      const x = Math.cos(rLat1) * Math.sin(rLat2) - Math.sin(rLat1) * Math.cos(rLat2) * Math.cos(dLon);
-      return Math.round((toDeg(Math.atan2(y, x)) + 360) % 360);
-    }
-
-    function interpolateGeo(lat1, lon1, lat2, lon2, distNM, totalDistNM) {
-      if (totalDistNM <= 0 || distNM <= 0) return [lat1, lon1];
-      if (distNM >= totalDistNM) return [lat2, lon2];
-      const f = distNM / totalDistNM;
-      const rLat1 = toRad(lat1), rLon1 = toRad(lon1);
-      const rLat2 = toRad(lat2), rLon2 = toRad(lon2);
-      const d = 2 * Math.asin(Math.sqrt(Math.sin((rLat2 - rLat1)/2)**2 + Math.cos(rLat1)*Math.cos(rLat2)*Math.sin((rLon2 - rLon1)/2)**2));
-      if (d === 0) return [lat1, lon1];
-      const A = Math.sin((1 - f) * d) / Math.sin(d);
-      const B = Math.sin(f * d) / Math.sin(d);
-      const x = A * Math.cos(rLat1) * Math.cos(rLon1) + B * Math.cos(rLat2) * Math.cos(rLon2);
-      const y = A * Math.cos(rLat1) * Math.sin(rLon1) + B * Math.cos(rLat2) * Math.sin(rLon2);
-      const z = A * Math.sin(rLat1) + B * Math.sin(rLat2);
-      const latRes = Math.atan2(z, Math.sqrt(x**2 + y**2));
-      const lonRes = Math.atan2(y, x);
-      return [toDeg(latRes), toDeg(lonRes)];
-    }
+    // calcDistanceNM / calcTrueTrack / interpolateGeo -> src/lib/geodesy.js
+    // (exact WGS-84 geodesics via GeographicLib; see that file for the
+    // measured bias of the spherical model this replaced).
 
     // =========================================================================
     // 4b. VIA POINTS & UNIFIED LEG ENGINE
@@ -4031,7 +4002,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
           const tt = res.rowTT;
           const mt = Math.round((tt + to.var + 360) % 360);
           const mh = Math.round((mt + res.rowWCA + 360) % 360);
-          const varIndicator = "Auto (regional model) - editable";
+          const varIndicator = `Auto (${window.WMM_MODEL || "WMM"}) - editable`;
           const legTime = Math.round(res.timeMin);
 
           // Startup/taxi/takeoff burn is a one-off for the whole mission.

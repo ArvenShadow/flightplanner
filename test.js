@@ -1172,16 +1172,32 @@ T('vias survive the sanitiser; junk vias are dropped', () => {
   assert(clean[0].waypoints[1].via.length === 1, 'via not sanitised: ' + JSON.stringify(clean[0].waypoints[1].via));
 });
 
-console.log('\n=== 37. Geodesy verified against analytically known values ===');
-T('1 degree of latitude = 60.0 NM; due-north bearing = 000', () => {
-  assert(ev('calcDistanceNM(60, 18, 61, 18)') === 60.0, '1 deg lat != 60 NM');
+console.log('\n=== 37. Geodesy verified against WGS-84 reference values ===');
+T('bearings are exact on meridians and the equator', () => {
   assert(ev('calcTrueTrack(60, 18, 61, 18)') === 0, 'due north != 0');
   assert(ev('calcTrueTrack(61, 18, 60, 18)') === 180, 'due south != 180');
-  assert(ev('calcDistanceNM(0, 0, 0, 1)') === 60.0, '1 deg lon at equator != 60 NM');
   assert(ev('calcTrueTrack(0, 0, 0, 1)') === 90, 'due east at equator != 090');
-  // midpoint of a meridian arc lies exactly halfway
-  const mid = ev('interpolateGeo(60, 18, 62, 18, 60, 120)');
-  assert(Math.abs(mid[0] - 61) < 1e-6 && Math.abs(mid[1] - 18) < 1e-6, 'midpoint wrong: ' + mid);
+});
+T('distances are ELLIPSOIDAL, not the 60 NM-per-degree spherical idealisation', () => {
+  // On WGS-84 a degree of latitude grows toward the poles (59.705 NM at the
+  // equator, 60.235 NM at 69N). A spherical model returns exactly 60.0
+  // everywhere, so these values also prove which model is in use.
+  assert(ev('calcDistanceNM(60, 18, 61, 18)') === 60.2, '1 deg lat at 60N: ' + ev('calcDistanceNM(60, 18, 61, 18)'));
+  assert(ev('calcDistanceNM(0, 0, 0, 1)') === 60.1, '1 deg lon at equator: ' + ev('calcDistanceNM(0, 0, 0, 1)'));
+  const atEquator = ev('distanceNMExact(0, 18, 1, 18)');
+  const atTroms = ev('distanceNMExact(69, 18, 70, 18)');
+  assert(atTroms > atEquator + 0.4, `a degree of latitude must lengthen poleward: ${atEquator} -> ${atTroms}`);
+  assert(Math.abs(atEquator - 59.705) < 0.01 && Math.abs(atTroms - 60.235) < 0.01,
+    `off the WGS-84 meridian arc: ${atEquator} / ${atTroms}`);
+});
+T('interpolation walks the geodesic (meridian midpoint lands halfway)', () => {
+  const total = ev('distanceNMExact(60, 18, 62, 18)');
+  const mid = ev(`interpolateGeo(60, 18, 62, 18, ${total / 2}, ${total})`);
+  assert(Math.abs(mid[0] - 61.000075) < 1e-4 && Math.abs(mid[1] - 18) < 1e-6, 'midpoint wrong: ' + mid);
+  // endpoints are returned verbatim
+  const start = ev(`interpolateGeo(60, 18, 62, 18, 0, ${total})`);
+  const end = ev(`interpolateGeo(60, 18, 62, 18, ${total}, ${total})`);
+  assert(start[0] === 60 && end[0] === 62, 'endpoints not exact: ' + start + ' / ' + end);
 });
 
 console.log('\n=== 38. Runtime integrity check ===');
@@ -1552,35 +1568,48 @@ T('warnings name the sector (F1/F2) so multi-sector output is unambiguous', () =
   ev(SEED);
 });
 
-console.log('\n=== 49. MagVar vs NOAA WMM2025 (fixtures fetched 2026-08-24) ===');
+console.log('\n=== 49. MagVar: the real WMM against NOAA ===');
 // Reference declinations from NOAA's calculator (ngdc.noaa.gov/geomag-web,
-// model WMM2025, epoch 2026.6438, east-positive degrees). The app's model is
-// a regional polynomial documented as "good to roughly a degree near
-// Troms/Nordland, degrades with distance": the northern aerodromes must stay
-// within 1.0°, Oslo is encoded at its measured ~1.9° error with a 2.5° cap
-// so silent worsening still fails the suite.
+// WMM2025, epoch 2026.6438, east-positive degrees). v16.9 replaced the
+// regional polynomial with the actual WMM, so the tolerance drops from
+// "within a degree" to rounding noise.
 const WMM_EPOCH = 2026.6438;
-const magCase = (name, lat, lng, noaaEast, tolDeg) => {
-  T(`magvar ${name} within ${tolDeg}° of WMM2025`, () => {
-    const raw = parseFloat(ev(`getRegionalMagVar(${lat}, ${lng}, ${WMM_EPOCH}).raw`));
-    assert(Math.abs(raw - noaaEast) <= tolDeg,
-      `model ${raw}°E vs NOAA ${noaaEast}°E (diff ${(raw - noaaEast).toFixed(2)}°)`);
+const magCase = (name, lat, lng, noaaEast) => {
+  T(`magvar ${name} matches NOAA WMM2025 to 0.02 deg`, () => {
+    const east = parseFloat(ev(`resolveMagVar(${lat}, ${lng}, ${WMM_EPOCH}).raw`));
+    assert(Math.abs(east - noaaEast) <= 0.02,
+      `model ${east} deg E vs NOAA ${noaaEast} deg E (diff ${(east - noaaEast).toFixed(4)})`);
   });
 };
-magCase('ENDU', 69.055, 18.544, 10.78313, 1.0);
-magCase('ENTC', 69.683, 18.919, 11.22226, 1.0);
-magCase('ENEV', 68.491, 16.678, 9.56912, 1.0);
-magCase('ENBO', 67.269, 14.365, 7.98006, 1.0);
-magCase('ENKR (east edge)', 69.725, 29.887, 17.18659, 1.0);
-magCase('ENGM (outside core region)', 60.202, 11.084, 5.20523, 2.5);
+magCase('ENDU', 69.055, 18.544, 10.78313);
+magCase('ENTC', 69.683, 18.919, 11.22226);
+magCase('ENEV', 68.491, 16.678, 9.56912);
+magCase('ENBO', 67.269, 14.365, 7.98006);
+magCase('ENKR (east edge)', 69.725, 29.887, 17.18659);
+magCase('ENGM (south, where the old polynomial was 1.9 deg out)', 60.202, 11.084, 5.20523);
 T('magvar sign convention: east declination gives a NEGATIVE VAR value', () => {
-  const r = ev(`getRegionalMagVar(69.055, 18.544, ${WMM_EPOCH})`);
+  const r = ev(`resolveMagVar(69.055, 18.544, ${WMM_EPOCH})`);
   assert(r.val < 0, 'VAR should be negative (east) in Norway, got ' + r.val);
   assert(r.val === -Math.round(parseFloat(r.raw)), 'val is not -round(raw)');
+  assert(r.source === 'WMM2025', 'source should name the model, got ' + r.source);
 });
-T('live use without an epoch still returns finite values', () => {
-  const r = ev('getRegionalMagVar(69.055, 18.544)');
+T('live use without an epoch returns finite values inside the model validity', () => {
+  const r = ev('resolveMagVar(69.055, 18.544)');
   assert(isFinite(r.val) && isFinite(parseFloat(r.raw)), 'non-finite magvar');
+  assert(ev('isWmmCurrent()') === true, 'WMM2025 should still be current; if this fails the model needs updating');
+  assert(ev('WMM_VALID_UNTIL') === 2030, 'validity horizon: ' + ev('WMM_VALID_UNTIL'));
+});
+T('the retired regional polynomial is gone', () => {
+  assert(ev('typeof getRegionalMagVar') === 'undefined', 'the old polynomial is still defined');
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(!built.includes('secularVariationPerYear'), 'polynomial coefficients still shipped');
+  assert(built.includes('WMM2025'), 'the artifact should name the magnetic model');
+});
+T('the UI names the magnetic model rather than "regional"', () => {
+  assert(txtOf('mag-status-badge').includes('WMM2025'), 'badge: ' + txtOf('mag-status-badge'));
+  ev(SEED);
+  const varTitle = doc.querySelector('#tbody-flight-0 tr td input[title^="Mag VAR"]').title;
+  assert(varTitle.includes('WMM2025'), 'VAR cell tooltip: ' + varTitle);
 });
 
 console.log('\n=== 50. Flight plans named after first-last waypoint ===');
@@ -1983,22 +2012,29 @@ T('guide documents the official source and the cannot-move-a-point guarantee', (
 });
 
 console.log('\n=== 59. Build harness & extracted modules ===');
+let moduleExports = null;
 // Modules are importable and testable WITHOUT the DOM - the point of the
 // restructure. Same fixtures as section 49, exercised through the module.
-const magvarModule = require('./src/lib/magvar.js');
-T('the magvar module is importable on its own (no jsdom, no globals)', () => {
-  const r = magvarModule.getRegionalMagVar(69.055, 18.544, 2026.6438);
-  assert(Math.abs(parseFloat(r.raw) - 10.78313) <= 1.0, 'ENDU drifted from WMM2025: ' + r.raw);
+T('extracted modules are importable on their own (no jsdom, no globals)', () => {
+  const magvarModule = require('./src/lib/magvar.js');
+  const geodesyModule = require('./src/lib/geodesy.js');
+  const r = magvarModule.resolveMagVar(69.055, 18.544, 2026.6438);
+  assert(Math.abs(parseFloat(r.raw) - 10.78313) <= 0.02, 'ENDU off NOAA: ' + r.raw);
   assert(r.val === -Math.round(parseFloat(r.raw)), 'sign convention broken');
-  assert(magvarModule.resolveMagVar(69.68, 18.92).source === 'REGIONAL', 'resolveMagVar broken');
+  assert(geodesyModule.calcDistanceNM(69.055, 18.545, 69.679, 18.911) === 38.4,
+    'ENDU->ENTC: ' + geodesyModule.calcDistanceNM(69.055, 18.545, 69.679, 18.911));
+  assert(geodesyModule.calcTrueTrack(60, 18, 61, 18) === 0, 'due north broken');
+  moduleExports = { magvar: magvarModule, geodesy: geodesyModule };
 });
-T('the module and the built page agree exactly', () => {
+T('every module export and the built page agree exactly', () => {
   const fixtures = [[69.055, 18.544], [69.683, 18.919], [60.202, 11.084]];
   for (const [lat, lng] of fixtures) {
-    const fromModule = magvarModule.getRegionalMagVar(lat, lng, 2026.6438);
-    const fromPage = ev(`getRegionalMagVar(${lat}, ${lng}, 2026.6438)`);
-    assert(fromModule.raw === fromPage.raw && fromModule.val === fromPage.val,
-      `mismatch at ${lat},${lng}: module ${fromModule.raw} vs page ${fromPage.raw}`);
+    const m = moduleExports.magvar.resolveMagVar(lat, lng, 2026.6438);
+    const p = ev(`resolveMagVar(${lat}, ${lng}, 2026.6438)`);
+    assert(m.raw === p.raw && m.val === p.val, `magvar mismatch at ${lat},${lng}: ${m.raw} vs ${p.raw}`);
+    const md = moduleExports.geodesy.calcDistanceNM(lat, lng, 69.68, 18.92);
+    const pd = ev(`calcDistanceNM(${lat}, ${lng}, 69.68, 18.92)`);
+    assert(md === pd, `distance mismatch from ${lat},${lng}: ${md} vs ${pd}`);
   }
 });
 T('the built artifact is generated, self-contained and double-clickable', () => {
@@ -2011,12 +2047,15 @@ T('the built artifact is generated, self-contained and double-clickable', () => 
   assert(externals.length === 0, 'artifact loads external scripts: ' + externals.join(', '));
   assert(built.includes('window.C182'), 'module namespace missing from the bundle');
 });
-T('the page script no longer defines what the module owns', () => {
+T('the page script no longer defines what the modules own', () => {
   const src = fs.readFileSync('src/index.html', 'utf8');
-  assert(!/function getRegionalMagVar/.test(src), 'magvar still duplicated in the page script');
-  assert(/3\. MAGNETIC VARIATION MODEL -> src\/lib\/magvar\.js/.test(src), 'pointer comment missing');
-  assert(fs.readFileSync(APP_HTML, 'utf8').includes('function getRegionalMagVar'),
-    'the built artifact must still contain the implementation');
+  for (const fn of ['resolveMagVar', 'calcDistanceNM', 'calcTrueTrack', 'interpolateGeo']) {
+    assert(!new RegExp('function ' + fn + '\\s*\\(').test(src),
+      fn + ' is still defined in the page script (duplicate of its module)');
+  }
+  assert(/-> src\/lib\/magvar\.js/.test(src) && /-> src\/lib\/geodesy\.js/.test(src), 'pointer comments missing');
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(built.includes('geographiclib') || built.includes('InverseLine'), 'geodesy library not bundled into the artifact');
 });
 T('the build rejects a version mismatch between page and package.json', () => {
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
@@ -2025,6 +2064,19 @@ T('the build rejects a version mismatch between page and package.json', () => {
   const build = fs.readFileSync('tools/build.mjs', 'utf8');
   assert(build.includes('checkDuplicateIds') && build.includes('checkSyntax') && build.includes('checkVersion'),
     'the build must keep enforcing the ship checklist');
+});
+
+T('the project memory and docs are intact (guards against truncation)', () => {
+  // CLAUDE.md was once silently emptied by a scripted edit; it is the
+  // project's verification record, so its presence is now a test.
+  const memory = fs.readFileSync('CLAUDE.md', 'utf8');
+  assert(memory.split('\n').length > 100, 'CLAUDE.md looks truncated: ' + memory.split('\n').length + ' lines');
+  for (const anchor of ['non-negotiable rules', 'NO GUESSTIMATES', 'Domain decisions already settled',
+                        'Safety posture', 'src/lib/geodesy.js', 'WMM2025']) {
+    assert(memory.includes(anchor), 'CLAUDE.md lost its "' + anchor + '" section');
+  }
+  const readme = fs.readFileSync('README.md', 'utf8');
+  assert(readme.includes('npm run build') && readme.includes('dist/'), 'README lost the build instructions');
 });
 
 console.log('\n=== Uncaught page errors ===');
