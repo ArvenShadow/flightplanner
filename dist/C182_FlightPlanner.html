@@ -1012,6 +1012,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       </div>
 
       <!-- CONTAINER FOR MULTIPLE STACKED FLIGHT PLANS -->
+      <div id="magvar-refresh-note" class="no-print" style="display:none; background:#2c5282; color:#ffffff; font-size:11px; font-weight:600; padding:6px 12px; border-radius:6px; margin-bottom:8px;"></div>
       <div id="integrity-banner" style="display:none; background:#e53e3e; color:#ffffff; font-size:11px; font-weight:700; padding:8px 12px; border-radius:6px; margin-bottom:8px; line-height:1.5;"></div>
       <div id="flight-plans-container"></div>
 
@@ -1144,6 +1145,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li><b>Initial Fuel</b> starts the Rem column; startup/taxi/takeoff burn (POH 1.7 gal) is charged once per mission.</li>
             <li>Set a <b>Reserve</b> — any leg landing below it turns the Rem cell <span style="color:#e53e3e; font-weight:700;">red</span>.</li>
             <li>Enter an <b>ETD</b> to get an ETO clock time on every leg and a mission ETA.</li>
+            <li><b>Saved routes refresh their magnetic variation when loaded.</b> A route saved years ago carries the variation that was current then, so every waypoint is re-computed with today's WMM on load and a note says how many changed. A VAR you typed yourself is treated as a deliberate override and is never touched.</li>
+            <li><b>Re-saving a route you loaded offers to update it in place</b> ("Update the saved route …?"), so refining a mission does not leave a trail of near-duplicate copies. Decline and it saves as a new entry as before.</li>
           </ul>
         </div>
 
@@ -1222,7 +1225,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
         <div class="setting-section">
           <h3>🔢 Version &amp; updates</h3>
           <ul style="margin-left:16px;">
-            <li>The <b>version badge</b> next to the title shows which version you are running. At startup (when online) it checks the GitHub repository once: "· latest" means you're current; a yellow <b>⬆ available</b> link means a newer C182_FlightPlanner.html can be downloaded from the repo. Offline it just shows the version — the check never blocks anything.</li>
+            <li>The <b>version badge</b> next to the title shows which version you are running and what the update check found: <b>latest (hh:mm)</b> with the time it checked, a yellow <b>⬆ available</b> link when a newer release exists, or <b>update check failed</b> when GitHub could not be reached. Click the underlined part to check again at any time. The check never blocks anything — the planner works the same offline.</li>
           </ul>
         </div>
 
@@ -3470,7 +3473,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.9';
+    const APP_VERSION = '16.10';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3485,30 +3488,61 @@ svg.leaflet-image-layer.leaflet-interactive path {
       return 0;
     }
 
+    // The badge must make the CHECK's outcome legible, not just the version:
+    // "up to date" and "the check never ran" used to look almost identical,
+    // so a silently failing check was indistinguishable from success. States:
+    //   idle     v16.9 · check for updates   (click to run)
+    //   checking v16.9 · checking…
+    //   latest   v16.9 · latest (21:32)
+    //   update   v16.9 · ⬆ v17.0 available on GitHub
+    //   failed   v16.9 · update check failed - click to retry
+    let updateState = { phase: 'idle', remote: null, at: null };
+
     function renderVersionBadge(remoteVersion) {
+      // back-compat: a bare call with a version behaves like a finished check
+      if (arguments.length && remoteVersion) updateState = { phase: 'done', remote: remoteVersion, at: new Date() };
+      else if (arguments.length) updateState = { phase: 'idle', remote: null, at: null };
       const el = document.getElementById('app-version-badge');
       if (!el) return;
-      if (remoteVersion && compareVersions(APP_VERSION, remoteVersion) < 0) {
-        el.innerHTML = `v${APP_VERSION} · <a href="${REPO_URL}" target="_blank" rel="noopener" style="color:#ecc94b; font-weight:700;">⬆ v${remoteVersion} available on GitHub</a>`;
-        el.title = 'A newer version is on GitHub - download the latest C182_FlightPlanner.html';
+      const { phase, remote, at } = updateState;
+      const clock = at ? String(at.getHours()).padStart(2, '0') + ':' + String(at.getMinutes()).padStart(2, '0') : '';
+      const click = ' <span class="ver-recheck" onclick="checkForUpdate(true)" style="cursor:pointer; text-decoration:underline dotted;">';
+
+      if (phase === 'done' && remote && compareVersions(APP_VERSION, remote) < 0) {
+        el.innerHTML = `v${APP_VERSION} · <a href="${REPO_URL}" target="_blank" rel="noopener" style="color:#ecc94b; font-weight:700;">⬆ v${remote} available on GitHub</a>`;
+        el.title = 'A newer version is on GitHub - download the latest dist/C182_FlightPlanner.html';
+      } else if (phase === 'done') {
+        el.innerHTML = `v${APP_VERSION} ·${click}latest (${clock})</span>`;
+        el.title = 'Checked GitHub at ' + clock + ' - this is the newest release. Click to check again.';
+      } else if (phase === 'checking') {
+        el.textContent = `v${APP_VERSION} · checking…`;
+        el.title = 'Contacting GitHub';
+      } else if (phase === 'failed') {
+        el.innerHTML = `v${APP_VERSION} ·${click}update check failed - retry</span>`;
+        el.title = 'Could not reach GitHub (offline, or the network blocks it). Click to try again.';
       } else {
-        // textContent, not innerText: it must also CLEAR a previously
-        // rendered update link (and jsdom only implements textContent).
-        el.textContent = 'v' + APP_VERSION + (remoteVersion ? ' · latest' : '');
-        el.title = remoteVersion ? 'You are on the latest version' : 'The GitHub version check runs when online';
+        el.innerHTML = `v${APP_VERSION} ·${click}check for updates</span>`;
+        el.title = 'Click to ask GitHub whether a newer version exists';
       }
     }
 
-    async function checkForUpdate() {
+    async function checkForUpdate(manual) {
+      updateState = { phase: 'checking', remote: null, at: null };
+      renderVersionBadge();
       try {
         // The unique query string defeats the raw.githubusercontent CDN cache
         // (max-age=300): without it a check within ~5 min of a release still
         // saw the OLD version and said "latest".
         const resp = await fetch(UPDATE_URL + '?ts=' + Date.now(), { cache: 'no-store' });
-        if (!resp.ok) return;
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const pkg = await resp.json();
-        if (pkg && pkg.version) renderVersionBadge(String(pkg.version).replace(/\.0$/, ''));
-      } catch (e) { /* offline or blocked: the badge keeps showing just the version */ }
+        if (!pkg || !pkg.version) throw new Error('no version field');
+        updateState = { phase: 'done', remote: String(pkg.version).replace(/\.0$/, ''), at: new Date() };
+      } catch (e) {
+        // Offline is normal for this app - never block anything, just say so.
+        updateState = { phase: 'failed', remote: null, at: new Date() };
+      }
+      renderVersionBadge();
     }
 
     // =========================================================================
@@ -5742,7 +5776,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
         <td class="calc-cell cc">${tas}</td>
         <td class="calc-cell cc">${tt}°</td>
         <td class="cc" title="Declination Source: ${varIndicator}">
-          <input type="number" value="${magVar}" title="Mag VAR (${varIndicator})" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].var=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}>
+          <input type="number" value="${magVar}" title="Mag VAR (${varIndicator})" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].var=Number(this.value); flights[${fIdx}].waypoints[${wpIndex+1}].varSource='MANUAL'; refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}>
         </td>
         <td class="calc-cell">${mt}°</td>
         <td class="wv-cell" title="Click to open Quick Wind Matrix" onclick="${isDoneMode ? '' : 'openWindModal()'}">
@@ -6284,6 +6318,41 @@ svg.leaflet-image-layer.leaflet-interactive path {
       }
     }
 
+    // Saved routes carry the magnetic variation that was current WHEN THEY
+    // WERE SAVED. The model itself changes (v16.9 replaced a regional
+    // polynomial with the real WMM, and the WMM's own values drift with
+    // date), so a route loaded years later would otherwise fly yesterday's
+    // headings. Every waypoint is therefore re-resolved on load - EXCEPT
+    // values the pilot typed themselves, which are marked varSource
+    // 'MANUAL' and always survive.
+    function refreshMagVarOnLoad(flightList) {
+      let updated = 0, kept = 0;
+      (flightList || []).forEach(fl => (fl.waypoints || []).forEach(wp => {
+        if (!isFinite(wp.lat) || !isFinite(wp.lng)) return;
+        if (wp.varSource === 'MANUAL') { kept++; return; }
+        const fresh = resolveMagVar(wp.lat, wp.lng);
+        if (wp.var !== fresh.val) updated++;
+        wp.var = fresh.val;
+        wp.varSource = fresh.source;
+      }));
+      return { updated, kept };
+    }
+
+    function reportMagVarRefresh(res, what) {
+      if (!res || (!res.updated && !res.kept)) return;
+      const bits = [];
+      if (res.updated) bits.push(`${res.updated} waypoint${res.updated > 1 ? 's' : ''} re-computed with ${window.WMM_MODEL || 'the current model'}`);
+      if (res.kept) bits.push(`${res.kept} manual VAR value${res.kept > 1 ? 's' : ''} kept`);
+      if (!res.updated) return;   // nothing changed: stay quiet
+      windFetchStatus('', false);
+      const el = document.getElementById('magvar-refresh-note');
+      if (!el) return;
+      el.textContent = `🧭 ${what}: ${bits.join(' · ')}.`;
+      el.style.display = 'block';
+      clearTimeout(el.__t);
+      el.__t = setTimeout(() => { el.style.display = 'none'; }, 9000);
+    }
+
     function loadSelectedRouteOrMission() {
       const selVal = document.getElementById('route-selector').value;
       if (!selVal) return;
@@ -6300,6 +6369,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
           const wps = JSON.parse(JSON.stringify(singleRoutes[name]));
           flights[activeFlightIndex].waypoints = wps;
           flights[activeFlightIndex].title = name;
+          loadedRouteRef = { type: 'route', name };
+          reportMagVarRefresh(refreshMagVarOnLoad([{ waypoints: wps }]), `Route "${name}"`);
           if (wps.length > 0) {
             flights[activeFlightIndex].depElev = wps[0].alt;
             document.getElementById('def-dep-elev').value = wps[0].alt;
@@ -6314,6 +6385,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
           pushUndoState();
           flights = sanitiseFlights(JSON.parse(JSON.stringify(customMissions[name]))) || flights;
           activeFlightIndex = 0;
+          loadedRouteRef = { type: 'mission', name };
+          reportMagVarRefresh(refreshMagVarOnLoad(flights), `Mission "${name}"`);
           if (flights[0] && flights[0].depElev !== undefined) {
             document.getElementById('def-dep-elev').value = flights[0].depElev;
           }
@@ -6324,11 +6397,36 @@ svg.leaflet-image-layer.leaflet-interactive path {
       }
     }
 
+    // Which saved route/mission the current plan came from, so a re-save can
+    // offer to UPDATE it instead of silently creating a near-duplicate.
+    let loadedRouteRef = null;
+
     function saveCurrentMission() {
       const activeFlight = flights[activeFlightIndex];
       const defaultName = activeFlight.waypoints.length >= 2 
         ? activeFlight.waypoints[0].name + " to " + activeFlight.waypoints[activeFlight.waypoints.length - 1].name
         : "Mission " + new Date().toLocaleDateString();
+
+      // Loaded from a saved entry? Offer to update THAT entry first.
+      if (loadedRouteRef) {
+        const label = loadedRouteRef.type === 'route' ? 'route' : 'mission';
+        if (confirm(`Update the saved ${label} "${loadedRouteRef.name}" with the current plan?\n\n` +
+                    `[OK] overwrite "${loadedRouteRef.name}"\n[Cancel] save as a new entry instead`)) {
+          if (loadedRouteRef.type === 'route') {
+            const routes = getStoredSingleRoutes();
+            routes[loadedRouteRef.name] = activeFlight.waypoints;
+            localStorage.setItem('c182_custom_routes', JSON.stringify(routes));
+          } else {
+            const missions = getStoredMissions();
+            missions[loadedRouteRef.name] = flights;
+            localStorage.setItem('c182_custom_missions', JSON.stringify(missions));
+          }
+          populateRouteDropdown();
+          document.getElementById('route-selector').value = loadedRouteRef.type + ':' + loadedRouteRef.name;
+          alert(`Saved ${label} "${loadedRouteRef.name}" updated.`);
+          return;
+        }
+      }
 
       const choice = confirm("Click [OK] to save current Active Flight as a Single Route.\nClick [Cancel] to save Entire Multi-Flight Mission.");
       
@@ -6340,6 +6438,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
         const customRoutes = localStorage.getItem('c182_custom_routes') ? JSON.parse(localStorage.getItem('c182_custom_routes')) : {};
         customRoutes[finalName] = activeFlight.waypoints;
         localStorage.setItem('c182_custom_routes', JSON.stringify(customRoutes));
+        loadedRouteRef = { type: 'route', name: finalName };
         populateRouteDropdown();
         document.getElementById('route-selector').value = "route:" + finalName;
         alert(`Route "${finalName}" saved!`);
@@ -6351,6 +6450,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
         const customMissions = getStoredMissions();
         customMissions[finalName] = flights;
         localStorage.setItem('c182_custom_missions', JSON.stringify(customMissions));
+        loadedRouteRef = { type: 'mission', name: finalName };
         populateRouteDropdown();
         document.getElementById('route-selector').value = "mission:" + finalName;
         alert(`Multi-Flight Mission "${finalName}" saved!`);
@@ -6519,7 +6619,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     applyZoomDeclutter();   // needs aircraftProfile, so it runs here, not at map setup
     applyBaseChart();       // also needs aircraftProfile (persisted chart choice)
     renderVersionBadge();
-    checkForUpdate();       // one shot at startup; silent when offline
+    checkForUpdate();       // one shot at startup; failure is shown, never fatal
     function defaultFlights() {
       return [{ id: 1, title: "Flight Plan 1", depElev: 0, waypoints: [] }];
     }
