@@ -2,7 +2,16 @@ process.env.TZ = 'UTC';   // deterministic clock for the daylight/sun tests
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 
-let html = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+// Tests run against the BUILT artifact (npm test builds first): it contains
+// both the module bundle and the page script, so source-level guards keep
+// working wherever a given piece of code currently lives.
+const APP_HTML = 'dist/C182_FlightPlanner.html';
+if (!fs.existsSync(APP_HTML)) {
+  console.error('dist/C182_FlightPlanner.html is missing - run: npm run build');
+  process.exit(1);
+}
+
+let html = fs.readFileSync(APP_HTML, 'utf8');
 // Remove the embedded leaflet bundle (it fights jsdom); the stub replaces it.
 html = html.replace(/<!-- Leaflet 1\.9\.4 JS embedded for offline use -->\s*<script>[\s\S]*?<\/script>/, '');
 
@@ -408,7 +417,7 @@ T('planning prefs persist', () => {
 
 console.log('\n=== 19. Offline packaging ===');
 T('leaflet JS and CSS are embedded in the file itself', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   assert(raw.includes('Leaflet 1.9.4 JS embedded'), 'js not embedded');
   assert(raw.includes('Leaflet 1.9.4 CSS embedded'), 'css not embedded');
   assert(!raw.includes('unpkg.com'), 'still references unpkg CDN');
@@ -663,7 +672,7 @@ T('fresh instance opens at ISA for 2500 ft (10C)', () => {
   assert(doc.getElementById('def-oat').value !== '', 'empty');
   // fresh-open value comes from the HTML default, before any test touched it —
   // verify against the raw file instead of the mutated live DOM
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   assert(raw.includes('id="def-oat" value="10"'), 'HTML default is not ISA(2500)=10');
 });
 T('OAT tracks cruise altitude until touched', () => {
@@ -687,7 +696,7 @@ T('manual OAT edit stops the auto-tracking', () => {
 });
 T('built-in routes are fully removed from the file', () => {
   assert(ev("typeof EMBEDDED_SAVED_ROUTES") === 'undefined', 'constant still exists');
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   assert(!raw.includes('FAKSFJORDEN') && !raw.includes('Aglapsvik'), 'route data still embedded');
 });
 T('ISA OAT hits the POH standard column exactly', () => {
@@ -1010,7 +1019,7 @@ T('view mode still locks inputs and disables dragging', () => {
 
 console.log('\n=== 31. Embedded app icon ===');
 T('favicon links are embedded as data URIs (still one file)', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   assert(raw.includes('rel="icon" type="image/svg+xml" href="data:image/svg+xml,'), 'svg favicon missing');
   assert(raw.includes('rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,'), 'png fallback missing');
   assert(raw.includes('rel="apple-touch-icon"'), 'apple-touch-icon missing');
@@ -1023,7 +1032,7 @@ T('favicon links are embedded as data URIs (still one file)', () => {
 
 console.log('\n=== 32. Map label chips paint their full background ===');
 T('all divIcon containers override Leaflet 12px default sizing', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   const rule = raw.match(/\.toc-custom-icon[^}]+}/)[0];
   ['tod-custom-icon', 'wp-custom-icon', 'ruler-icon', 'ruler-seg-icon', 'ruler-total-icon']
     .forEach(c => assert(raw.match(/\.toc-custom-icon[\s\S]{0,200}?{/)[0].includes(c), 'selector missing ' + c));
@@ -1031,7 +1040,7 @@ T('all divIcon containers override Leaflet 12px default sizing', () => {
   assert(rule.includes('height: max-content !important'), 'height override missing');
 });
 T('every label chip is inline-block so its background covers all text', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   ['.toc-label', '.tod-label', '.pattern-label', '.ruler-label'].forEach(c => {
     const rule = raw.split(c + ' {')[1].split('}')[0];
     assert(rule.includes('display: inline-block') || rule.includes('inline-block;'), c + ' not inline-block');
@@ -1041,7 +1050,7 @@ T('every label chip is inline-block so its background covers all text', () => {
 
 console.log('\n=== 33. TOC/TOD chips anchored to an exact point dot ===');
 T('marker HTML contains the point dot and a chip centered off it', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   assert(raw.includes('class="prof-point toc"') && raw.includes('class="prof-point tod"'), 'point dots missing');
   assert(raw.includes('translate(-50%,-50%) translate(${dx}px,${dy}px)'), 'chip not centered on offset point');
   assert(raw.includes('iconAnchor: [0, 0]'), 'anchor not at the exact TOC/TOD point');
@@ -1051,7 +1060,7 @@ T('marker HTML contains the point dot and a chip centered off it', () => {
 
 console.log('\n=== 34. Waypoint dots pinned to true coordinates ===');
 T('waypoint marker anchors dot exactly on the lat/lng', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   assert(raw.includes(`class="wp-dot" style="position:absolute; left:-7px; top:-7px;`), 'dot not pinned to anchor');
   assert(raw.includes('transform:translateX(-50%); margin-top:0;'), 'label not centered under dot');
   const wpBlock = raw.split("className: 'wp-custom-icon'")[1].slice(0, 120);
@@ -1274,7 +1283,7 @@ T('2-minute marks work and the choice persists via profile', () => {
 
 console.log('\n=== 42. Map locked to one copy of the earth ===');
 T('map is bounded at the antimeridian with solid viscosity; tiles do not wrap', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   const mapInit = raw.split("L.map('map', {")[1].split('}).setView')[0];
   assert(mapInit.includes('maxBounds: [[-90, -180], [90, 180]]'), 'maxBounds missing');
   assert(mapInit.includes('maxBoundsViscosity: 1.0'), 'viscosity not solid');
@@ -1282,7 +1291,7 @@ T('map is bounded at the antimeridian with solid viscosity; tiles do not wrap', 
   assert(base.includes('noWrap: true'), 'base tiles still wrap');
 });
 T('airspace overlay is fully removed, stored keys purged', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   assert(!raw.includes('airspace-btn') && !raw.includes('qol-openaip-key'), 'UI remnants remain');
   assert(!raw.includes('api.tiles.openaip.net'), 'endpoint remnant remains');
   assert(ev('typeof toggleAirspace') === 'undefined', 'toggleAirspace still defined');
@@ -1320,7 +1329,7 @@ T('releasing the drag does the full recalc once', () => {
   ev(SEED); // restore the seed route for anything that runs after
 });
 T('drag handler stays lean (guard against the per-mousemove rebuild returning)', () => {
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   const seg = raw.split("marker.on('drag'")[1].split("marker.on('dragend'")[0];
   assert(!seg.includes('renderAllFlightTables'), 'renderAllFlightTables is back in the drag handler');
   assert(seg.includes('setLatLngs'), 'route line no longer follows the drag');
@@ -1751,14 +1760,14 @@ T('region zoom (6-7) compacts labels and hides the TOC/TOD chips', () => {
   setZoom(6);
   const cl = doc.getElementById('map').classList;
   assert(cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'wrong level at z6: ' + cl);
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
   assert(raw.includes('#map.zoom-mid .toc-label'), 'mid-zoom TOC chip rule missing');
   assert(/#map\.zoom-mid \.toc-label[^}]*display: none/.test(raw.replace(/\n/g, ' ')), 'TOC chips not hidden at mid zoom');
 });
 T('overview zoom (<=5) leaves only dots and lines', () => {
   setZoom(5);
   assert(doc.getElementById('map').classList.contains('zoom-far'), 'zoom-far missing at z5');
-  const raw = fs.readFileSync('C182_FlightPlanner.html', 'utf8').replace(/\n/g, ' ');
+  const raw = fs.readFileSync(APP_HTML, 'utf8').replace(/\n/g, ' ');
   assert(/#map\.zoom-far \.wp-label[^}]*display: none/.test(raw), 'waypoint labels not hidden at far zoom');
   assert(!/#map\.zoom-far[^{]*\.wp-dot/.test(raw), 'the waypoint DOTS must never be hidden');
   setZoom(3);
@@ -1796,7 +1805,7 @@ T('the mode persists in the profile and cycles back to Auto', () => {
   assert(txtOf('declutter-btn').includes('Auto'), 'did not cycle back to Auto');
   const cl = doc.getElementById('map').classList;
   assert(!cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'auto at z9 should be full detail');
-  assert(fs.readFileSync('C182_FlightPlanner.html', 'utf8').includes("'minuteMark','declutter'"), 'declutter missing from the import whitelist');
+  assert(fs.readFileSync(APP_HTML, 'utf8').includes("'minuteMark','declutter'"), 'declutter missing from the import whitelist');
   ev('window.__stubZoom = undefined;');
 });
 
@@ -1955,7 +1964,7 @@ T('toggling shows the ICAO chart, states LCC->Mercator, and persists', () => {
   assert(lbl.includes('Lambert conformal conic 59°40′/69°20′'), 'label missing native projection: ' + lbl);
   assert(lbl.includes('Web Mercator'), 'label missing display projection: ' + lbl);
   assert(JSON.parse(w.localStorage.getItem('c182_perf_profile')).baseChart === 'vfr', 'choice not persisted');
-  assert(fs.readFileSync('C182_FlightPlanner.html', 'utf8').includes("'declutter','baseChart'"), 'baseChart missing from import whitelist');
+  assert(fs.readFileSync(APP_HTML, 'utf8').includes("'declutter','baseChart'"), 'baseChart missing from import whitelist');
 });
 T('the JSONP edition callback lands in the label', () => {
   ev('window.__icaoEdition({ layers: [{ name: "AIRAC_19MAR26" }] })');
@@ -1971,6 +1980,51 @@ T('guide documents the official source and the cannot-move-a-point guarantee', (
   const guide = doc.querySelector('#help-modal .modal-body').textContent;
   assert(guide.includes('official ICAO VFR 1:500 000'), 'source missing from guide');
   assert(guide.includes('waypoints sit on exactly the same spot on both charts'), 'alignment guarantee missing');
+});
+
+console.log('\n=== 59. Build harness & extracted modules ===');
+// Modules are importable and testable WITHOUT the DOM - the point of the
+// restructure. Same fixtures as section 49, exercised through the module.
+const magvarModule = require('./src/lib/magvar.js');
+T('the magvar module is importable on its own (no jsdom, no globals)', () => {
+  const r = magvarModule.getRegionalMagVar(69.055, 18.544, 2026.6438);
+  assert(Math.abs(parseFloat(r.raw) - 10.78313) <= 1.0, 'ENDU drifted from WMM2025: ' + r.raw);
+  assert(r.val === -Math.round(parseFloat(r.raw)), 'sign convention broken');
+  assert(magvarModule.resolveMagVar(69.68, 18.92).source === 'REGIONAL', 'resolveMagVar broken');
+});
+T('the module and the built page agree exactly', () => {
+  const fixtures = [[69.055, 18.544], [69.683, 18.919], [60.202, 11.084]];
+  for (const [lat, lng] of fixtures) {
+    const fromModule = magvarModule.getRegionalMagVar(lat, lng, 2026.6438);
+    const fromPage = ev(`getRegionalMagVar(${lat}, ${lng}, 2026.6438)`);
+    assert(fromModule.raw === fromPage.raw && fromModule.val === fromPage.val,
+      `mismatch at ${lat},${lng}: module ${fromModule.raw} vs page ${fromPage.raw}`);
+  }
+});
+T('the built artifact is generated, self-contained and double-clickable', () => {
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(built.includes('GENERATED by tools/build.mjs'), 'build banner missing');
+  assert(!built.includes('@BUNDLE'), 'bundle marker survived into the artifact');
+  // no external script/link srcs: everything needed is inline (data/ sidecars
+  // stay optional and are loaded lazily at runtime, not at parse time)
+  const externals = [...built.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m => m[1]);
+  assert(externals.length === 0, 'artifact loads external scripts: ' + externals.join(', '));
+  assert(built.includes('window.C182'), 'module namespace missing from the bundle');
+});
+T('the page script no longer defines what the module owns', () => {
+  const src = fs.readFileSync('src/index.html', 'utf8');
+  assert(!/function getRegionalMagVar/.test(src), 'magvar still duplicated in the page script');
+  assert(/3\. MAGNETIC VARIATION MODEL -> src\/lib\/magvar\.js/.test(src), 'pointer comment missing');
+  assert(fs.readFileSync(APP_HTML, 'utf8').includes('function getRegionalMagVar'),
+    'the built artifact must still contain the implementation');
+});
+T('the build rejects a version mismatch between page and package.json', () => {
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  const page = fs.readFileSync(APP_HTML, 'utf8').match(/const APP_VERSION = '([^']+)'/)[1];
+  assert(pkg.split('.').slice(0, 2).join('.') === page, `page ${page} vs package ${pkg}`);
+  const build = fs.readFileSync('tools/build.mjs', 'utf8');
+  assert(build.includes('checkDuplicateIds') && build.includes('checkSyntax') && build.includes('checkVersion'),
+    'the build must keep enforcing the ship checklist');
 });
 
 console.log('\n=== Uncaught page errors ===');
