@@ -170,6 +170,18 @@ claude.ai; this repo is the continuation point for Claude Code.
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).
 
+## Saved-route freshness (v16.10)
+
+Saved routes store the magnetic variation current WHEN SAVED, so
+`loadSelectedRouteOrMission` re-resolves every waypoint through
+`resolveMagVar` on load and reports how many changed. Values the pilot
+typed are stamped `varSource: 'MANUAL'` by the VAR cell's onchange and
+are never overwritten. `loadedRouteRef` remembers which saved entry the
+plan came from so a re-save offers "update in place" before falling
+through to save-as-new. The version badge is a state machine
+(idle/checking/done/failed) because "up to date" and "the check never
+ran" previously looked identical; it is click-to-recheck.
+
 ## Safety posture
 
 A red integrity banner (`runIntegrityCheck`) validates all rendered

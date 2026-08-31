@@ -1952,16 +1952,38 @@ T('version comparison handles multi-digit and padded forms', () => {
   assert(ev('compareVersions("16.5", "16.5.0")') === 0, '16.5 must equal 16.5.0');
   assert(ev('compareVersions("17.0", "16.10")') === 1, '17.0 must be newer than 16.10');
 });
-T('a newer remote version turns the badge into an update link; same version says latest', () => {
+T('a newer remote version turns the badge into an update link', () => {
   ev('renderVersionBadge("99.9")');
   const el = doc.getElementById('app-version-badge');
   assert(el.textContent.includes('available'), 'no update hint: ' + el.textContent);
   const a = el.querySelector('a');
   assert(a && a.href.includes('github.com/ArvenShadow/flightplanner'), 'update link wrong: ' + (a && a.href));
-  ev('renderVersionBadge(APP_VERSION)');
-  assert(el.textContent.includes('latest') && !el.querySelector('a'), 'same-version state wrong: ' + el.textContent);
-  ev('renderVersionBadge()');   // back to the offline/startup state
-  assert(el.textContent === 'v' + ev('APP_VERSION'), 'plain state wrong: ' + el.textContent);
+});
+T('every check outcome is DISTINGUISHABLE (the point of the rework)', () => {
+  const el = doc.getElementById('app-version-badge');
+  const seen = {};
+  ev(`updateState = { phase: 'idle', remote: null, at: null }; renderVersionBadge();`);
+  seen.idle = el.textContent;
+  assert(/check for updates/.test(seen.idle), 'idle: ' + seen.idle);
+  ev(`updateState = { phase: 'checking', remote: null, at: null }; renderVersionBadge();`);
+  seen.checking = el.textContent;
+  assert(/checking/.test(seen.checking), 'checking: ' + seen.checking);
+  ev(`updateState = { phase: 'done', remote: APP_VERSION, at: new Date(2026, 0, 2, 21, 32) }; renderVersionBadge();`);
+  seen.latest = el.textContent;
+  assert(/latest \(21:32\)/.test(seen.latest), 'latest must show WHEN it checked: ' + seen.latest);
+  ev(`updateState = { phase: 'failed', remote: null, at: new Date() }; renderVersionBadge();`);
+  seen.failed = el.textContent;
+  assert(/failed/.test(seen.failed) && /retry/.test(seen.failed), 'failed: ' + seen.failed);
+  // the bug this fixes: "up to date" and "never ran" used to look the same
+  assert(new Set(Object.values(seen)).size === 4, 'states are not distinguishable: ' + JSON.stringify(seen));
+  assert(!el.querySelector('a'), 'no update link should show when there is no newer version');
+});
+T('the badge can be re-checked on demand', () => {
+  ev(`updateState = { phase: 'failed', remote: null, at: new Date() }; renderVersionBadge();`);
+  const clickable = doc.querySelector('#app-version-badge .ver-recheck');
+  assert(clickable, 'no clickable re-check affordance in the failed state');
+  assert(/checkForUpdate\(true\)/.test(clickable.getAttribute('onclick')), 'retry does not call checkForUpdate');
+  assert(ev('typeof checkForUpdate') === 'function', 'checkForUpdate missing');
 });
 T('an OLDER remote version (repo behind local dev copy) never nags', () => {
   ev('renderVersionBadge("1.0")');
@@ -2077,6 +2099,77 @@ T('the project memory and docs are intact (guards against truncation)', () => {
   }
   const readme = fs.readFileSync('README.md', 'utf8');
   assert(readme.includes('npm run build') && readme.includes('dist/'), 'README lost the build instructions');
+});
+
+console.log('\n=== 60. Saved routes: fresh magvar on load, update-in-place on save ===');
+T('loading a saved route re-computes stale magnetic variation', () => {
+  ev(SEED);
+  // a route saved under the OLD regional polynomial: ENGM was ~2 deg out
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({ 'OSLO OLD': [
+    { lat: 60.202, lng: 11.084, name: 'ENGM', alt: 681,  oat: 10, wdir: 0, wspd: 0, var: -3 },
+    { lat: 60.121, lng: 11.500, name: 'EAST', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -3 }
+  ] }));`);
+  ev('populateRouteDropdown();');
+  doc.getElementById('route-selector').value = 'route:OSLO OLD';
+  ev('loadSelectedRouteOrMission();');
+  const wp = ev('flights[activeFlightIndex].waypoints[0]');
+  const expected = ev('resolveMagVar(60.202, 11.084).val');
+  assert(wp.var === expected, `stale VAR survived load: ${wp.var} (should be ${expected})`);
+  assert(wp.varSource === 'WMM2025', 'varSource not stamped: ' + wp.varSource);
+  assert(txtOf('magvar-refresh-note').includes('re-computed'), 'no note shown: ' + txtOf('magvar-refresh-note'));
+});
+T('a manually typed VAR is NEVER overwritten by the refresh', () => {
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({ 'MANUAL': [
+    { lat: 60.202, lng: 11.084, name: 'ENGM', alt: 681,  oat: 10, wdir: 0, wspd: 0, var: -99, varSource: 'MANUAL' },
+    { lat: 60.121, lng: 11.500, name: 'EAST', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -3 }
+  ] }));`);
+  ev('populateRouteDropdown();');
+  doc.getElementById('route-selector').value = 'route:MANUAL';
+  ev('loadSelectedRouteOrMission();');
+  const wps = ev('flights[activeFlightIndex].waypoints');
+  assert(wps[0].var === -99, 'manual VAR was overwritten: ' + wps[0].var);
+  assert(wps[1].var === ev('resolveMagVar(60.121, 11.5).val'), 'auto VAR was not refreshed');
+});
+T('editing the VAR cell marks it manual so it survives future loads', () => {
+  ev(SEED);
+  const input = doc.querySelector('#tbody-flight-0 tr td input[title^="Mag VAR"]');
+  assert(input, 'VAR input not found');
+  assert(/varSource='MANUAL'/.test(input.getAttribute('onchange')), 'VAR edit does not mark the value manual');
+});
+T('re-saving a loaded route offers to UPDATE it in place', () => {
+  ev(SEED);
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({ 'MY ROUTE': [
+    { lat: 69.0, lng: 18.0, name: 'A', alt: 500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.3, lng: 18.2, name: 'B', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 } ] }));`);
+  ev('populateRouteDropdown();');
+  doc.getElementById('route-selector').value = 'route:MY ROUTE';
+  ev('loadSelectedRouteOrMission();');
+  assert(ev('loadedRouteRef && loadedRouteRef.name') === 'MY ROUTE', 'load did not remember the source');
+  // change the plan, then save: the FIRST prompt must offer to update in place
+  ev(`flights[activeFlightIndex].waypoints[1].alt = 4500;`);
+  const asked = [];
+  const origConfirm = w.confirm, origPrompt = w.prompt, origAlert = w.alert;
+  w.confirm = (m) => { asked.push(m); return true; };      // accept "update in place"
+  w.prompt = () => { throw new Error('must not ask for a NAME when updating in place'); };
+  w.alert = () => {};
+  ev('saveCurrentMission();');
+  w.confirm = origConfirm; w.prompt = origPrompt; w.alert = origAlert;
+  assert(/Update the saved route "MY ROUTE"/.test(asked[0]), 'no update-in-place offer: ' + asked[0]);
+  const saved = ev(`getStoredSingleRoutes()['MY ROUTE']`);
+  assert(saved[1].alt === 4500, 'the saved route was not updated: ' + saved[1].alt);
+  assert(Object.keys(ev('getStoredSingleRoutes()')).length === 1, 'a duplicate entry was created');
+});
+T('declining the offer falls through to save-as-new', () => {
+  const origConfirm = w.confirm, origPrompt = w.prompt, origAlert = w.alert;
+  const asked = [];
+  w.confirm = (m) => { asked.push(m); return asked.length === 1 ? false : true; };  // no update; then "single route"
+  w.prompt = () => 'COPY';
+  w.alert = () => {};
+  ev('saveCurrentMission();');
+  w.confirm = origConfirm; w.prompt = origPrompt; w.alert = origAlert;
+  const routes = ev('getStoredSingleRoutes()');
+  assert(routes['MY ROUTE'] && routes['COPY'], 'save-as-new did not run: ' + Object.keys(routes).join());
+  assert(ev('loadedRouteRef.name') === 'COPY', 'the new name should become the update target');
 });
 
 console.log('\n=== Uncaught page errors ===');
