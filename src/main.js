@@ -13,8 +13,9 @@
  * artifact double-clickable is a hard requirement.
  */
 import * as magvar from './lib/magvar.js';
+import * as geodesy from './lib/geodesy.js';
 
-const api = { ...magvar };
+const api = { ...magvar, ...geodesy };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {

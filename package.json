@@ -1,6 +1,6 @@
 {
   "name": "c182-flight-planner",
-  "version": "16.8.0",
+  "version": "16.9.0",
   "description": "VFR flight planner for Cessna 182T, built to one self-contained HTML file (ground planning only)",
   "scripts": {
     "build": "node tools/build.mjs",
@@ -10,5 +10,9 @@
   "devDependencies": {
     "esbuild": "^0.28.2",
     "jsdom": "^24.0.0"
+  },
+  "dependencies": {
+    "geographiclib-geodesic": "^2.2.0",
+    "magvar": "^2.2.0"
   }
 }
