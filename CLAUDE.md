@@ -110,6 +110,22 @@ claude.ai; this repo is the continuation point for Claude Code.
   keeps the old independent behavior (tests and one-off tools rely on
   it); all UI paths (OFP rows, map markers, plotting list, integrity)
   pass the schedule.
+- **Base chart switch (v16.7, verified Aug 2026)**: the map toggles
+  between Kartverket topo (WMTS webmercator cache = EPSG:3857) and the
+  OFFICIAL ICAO VFR 1:500 000 chart from Avinor's public ArcGIS service
+  (avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer,
+  item owner AvinorSuperbruker, mosaic layer named per edition e.g.
+  AIRAC_19MAR26). The paper chart is Lambert conformal conic (EUREF89,
+  SP 59°40'/69°20', CM 9°E - confirmed in the service WKT), but the
+  service is DYNAMIC (singleFusedMapCache:false) and reprojects
+  server-side: we request export tiles with imageSR=3857, so both base
+  charts render in Web Mercator and waypoints project identically -
+  alignment verified against the chart's own printed graticule. No WMS,
+  no CORS on the REST JSON but JSONP works (used for the edition label).
+  ~1.3 s per 256px export tile, browser-cached by URL. A bottom-left
+  label bar always names the active chart + projection + edition. VFR
+  needs internet; topo remains the offline base. Do not swap the export
+  approach for the LCC tile cache without re-checking alignment.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers),
   auto-METAR from aviationweather.gov (browser CORS never verified).
