@@ -1334,9 +1334,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
           <h3>🚀 Quick Start</h3>
           <ul style="margin-left:16px;">
             <li><b>Click the map</b> to add a waypoint. Name it in the prompt — the first click is your departure.</li>
-            <li>Type <b>PATTERN</b> as the name — or press the <b>traffic-circuit</b> option — to log circuit laps (time &amp; fuel, no distance).</li>
+            <li>Type <b>PATTERN</b> as the name — or press the <b>traffic-circuit</b> option — to log circuit laps (time &amp; fuel, no distance). The <b>circuit altitude is filled in from the aerodrome you are at</b>: the published field elevation rounded to the nearest 100 ft, plus 1000 ft — so ENTC's 31 ft gives 1000 ft. ENDU is set to <b>1500 ft</b>, the figure the school flies. This is a <b>derived default, not a published value</b> — the eAIP gives us elevations, never circuit altitudes, so check the VAC and edit the cell if it differs. More than 5 NM from any aerodrome nothing is derived and the cell is yours to fill.</li>
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
+            <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
             <li><b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> redoes (⌘ on Mac), step by step up to 30 states — same stacks as the Undo/Redo buttons. Inside a text field the keys keep their normal text-editing meaning.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
@@ -1405,7 +1406,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service. <b>Both charts need internet</b> — neither is stored on your machine. The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
             <li><b>⬢ Airspace</b> draws the published airspace from <b>AIP Norge</b> — CTR and TIZ solid, TMA and TIA dashed, CTA finely dashed, the mandatory zones (RMZ/TMZ) in orange. <b>Hover any airspace</b> for a card showing its type, ICAO class, published vertical limits, and one row per service you would actually use — <b>ATIS, Approach, Tower</b>, or <b>Information</b> at an AFIS field. Nothing is drawn below zoom 7: at country zoom the polygons bury the chart you are trying to read. Clicking still adds a waypoint, so route building inside a TMA is unaffected — the information is on hover only. The choice is remembered with your settings.</li>
             <li><b>Right-click the track</b> for that leg's settings: the altitude it is crossed at, and <b>where its climb and descent sit</b>. Three corners are yours to name — <b>start the climb</b> N&nbsp;NM after the fix (hold your current altitude, then go up), <b>be level by</b> N&nbsp;NM after it (which sets the start of the climb for you), and <b>level off</b> N&nbsp;NM before the next fix (get down early, then run in level). Both are pure geometry: the climb and descent are unchanged, they just move, so they are always flyable. The <b>Here</b> buttons turn the spot you right-clicked into the number. A live preview shows the leg's time, fuel and where each corner lands before you apply anything, and the pinned corners are drawn on the map as <b>BOC</b> and <b>BOD</b> marks beside the usual TOC and TOD. Right-clicking used to insert a waypoint outright; that is now the first action <i>in</i> the panel, at the exact point you clicked, so nothing was lost.</li>
-            <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b>, with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Taking it gives you <b>one continuous climb</b>: the earlier leg's climb is delayed so it tops out exactly on that fix and runs straight on, rather than levelling off there and climbing again. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
+            <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b> — always a <b>whole hundred feet</b>, rounded <i>up</i>, because the figure is a minimum and the nearest hundred would be below it half the time — with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Taking it gives you <b>one continuous climb</b>: the earlier leg's climb is delayed so it tops out exactly on that fix and runs straight on, rather than levelling off there and climbing again. The rounding buys you a little height, so you top out slightly <i>before</i> the distance you asked for rather than exactly on it — "be level by" is a deadline, and early is safe. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
             <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
             <li><b>What the airspace layer will not do.</b> Vertical limits are shown <b>exactly as published</b> — GND, UNL and flight levels stay as they are, and a flight level is never converted to an altitude. Where the source states no class, the card says so rather than guessing. Airspaces whose published boundary cannot be resolved are <b>absent rather than approximated</b>: the offshore zones defined as a circle radius, the <i>maritime</i> stretch of the Norway–Sweden boundary in the Skagerrak, and one citing the Finland–Sweden border. Where the AIP does say a boundary <b>follows the national border</b>, the real border is drawn from Kartverket’s official line — 51 such stretches in this edition, on 41 airspaces. <b>ATS delegation areas are not drawn at all</b>, and that is deliberate: ENR 2.2 section 5 publishes the areas where two states have agreed to transfer <i>who provides the service</i>, not the airspace itself. Silver 1 and Silver 2 are inside SWEDEN FIR, Halti and Manto inside HELSINKI FIR — 13 of the 17 lie in a foreign FIR, and drawing them as class-C volumes made them look like controlled airspace you had to clear. The card lists only the frequencies you would dial: clearance delivery and ground are left out, military channels are excluded (both the flagged ones and everything outside the 118–137 MHz civil band), and <b>121.500 is never listed</b> — you know it. An airspace worked only by an area control centre still shows that frequency, because otherwise there would be nobody to call. <b>Polaris CTA is a special case</b>: it is one airspace over the whole country, so the AIP lists all 26 sector frequencies against it. The card therefore names the <b>sector your cursor is in</b> — ENR 2.2 publishes each Polaris sector as its own volume, so this is a lookup, not a guess, and the frequency shown is always one the hovered airspace itself publishes. Where the AIP stacks sectors vertically you get one row per sector, each labelled with the band it works, so you pick by planned level. Over the Oslofjord, where Sectors 3 and 4 cannot be drawn (their boundary follows the <i>maritime</i> Norway–Sweden line, which is not in Kartverket’s land-border data), the card says so and shows no frequency rather than reciting all 26. ATIS rows are labelled <b>&lt;ICAO&gt; ATIS</b> rather than by the published callsign, which in Norway is often "…Information" and reads exactly like the AFIS service you would actually talk to. Every published service and frequency remains in the data. <b>This is a planning aid — verify against the current AIP and NOTAM.</b></li>
@@ -4372,7 +4373,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       if (fits(mid)) hi = mid;
       else lo = mid;
     }
-    return Math.ceil(hi);
+    return Math.min(Math.ceil(Math.ceil(hi) / 100) * 100, Math.ceil(targetAlt));
   }
   function pinNM(v, maxNM) {
     const n = Number(v);
@@ -4431,6 +4432,11 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
         /** @type {number|null} */
         tocNeedsEntryAlt: null,
         tocNoAltHelps: false,
+        // This leg's climb is handed over from the previous leg, which
+        // topped out on the shared fix: it starts AT the fix and cannot
+        // be delayed, so a "be level by" target here is a deadline to
+        // check rather than a position to set.
+        tocContinuation: false,
         /** Where the earlier leg's "be level by" pin would go, and where
          *  its climb would then begin - both read from the trial that
          *  VERIFIED the advice, so the sentence offering it cannot
@@ -4456,21 +4462,29 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
         L.climbTas = cp.tasAvg;
         const wdirC = Number(to.wdir), wspdC = Number(to.wspd);
         const tocT = pinNM(to.tocNM, L.distNM);
+        const missTarget = () => {
+          const availMin = phaseMinutes(segs, 0, tocT, cp.tasAvg, wdirC, wspdC);
+          L.tocTargetMet = false;
+          L.climbRateReqFpm = availMin > 1e-3 ? Math.round((target - L.entryAlt) / availMin) : null;
+          L.tocNeedsEntryAlt = i > 0 ? entryAltForClimbBy(
+            target,
+            Number(to.oat),
+            L.entryAlt,
+            (tas) => phaseMinutes(segs, 0, tocT, tas, wdirC, wspdC)
+          ) : null;
+        };
         if (tocT > 0) {
           L.tocTargetNM = tocT;
           L.tocDerivedBoc = true;
-          const back = climbStartForToc(segs, tocT, cp.timeMin, cp.tasAvg, wdirC, wspdC);
-          L.climbStartNM = back.startNM;
-          if (back.shortMin > 1e-3) {
-            const availMin = phaseMinutes(segs, 0, tocT, cp.tasAvg, wdirC, wspdC);
-            L.tocTargetMet = false;
-            L.climbRateReqFpm = availMin > 1e-3 ? Math.round((target - alt) / availMin) : null;
-            L.tocNeedsEntryAlt = i > 0 ? entryAltForClimbBy(
-              target,
-              Number(to.oat),
-              alt,
-              (tas) => phaseMinutes(segs, 0, tocT, tas, wdirC, wspdC)
-            ) : null;
+          const prevL = legs[i - 1];
+          const handedOver = !!prevL && prevL.climbDistNM > EDGE_NM && prevL.tocAlongNM !== null && prevL.distNM - prevL.tocAlongNM <= EDGE_NM;
+          L.tocContinuation = handedOver;
+          if (handedOver) {
+            L.climbStartNM = 0;
+          } else {
+            const back = climbStartForToc(segs, tocT, cp.timeMin, cp.tasAvg, wdirC, wspdC);
+            L.climbStartNM = back.startNM;
+            if (back.shortMin > 1e-3) missTarget();
           }
         } else {
           L.climbStartNM = pinNM(to.bocNM, L.distNM);
@@ -4501,6 +4515,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
           alt = climbAltReached(L.entryAlt, target, L.climbMin, Number(to.oat));
         }
         if (L.tocTargetNM != null && L.tocAlongNM == null) L.tocTargetMet = false;
+        if (L.tocContinuation && L.tocTargetMet && (L.tocAlongNM === null || L.tocAlongNM > tocT + EDGE_NM)) missTarget();
       } else {
         alt = target;
       }
@@ -4908,6 +4923,9 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     FIX_SIZE_MAX: () => FIX_SIZE_MAX,
     FIX_SIZE_MIN: () => FIX_SIZE_MIN,
     FIX_STYLES: () => FIX_STYLES,
+    KNOWN_PATTERN_ALT_FT: () => KNOWN_PATTERN_ALT_FT,
+    PATTERN_AD_MAX_NM: () => PATTERN_AD_MAX_NM,
+    PATTERN_AGL_FT: () => PATTERN_AGL_FT,
     REPORTING_POINT_MIN_ZOOM: () => REPORTING_POINT_MIN_ZOOM,
     anchorAttribution: () => anchorAttribution,
     anchorCoverage: () => anchorCoverage,
@@ -4919,6 +4937,8 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     foldName: () => foldName,
     isHexColor: () => isHexColor,
     normaliseFixStyle: () => normaliseFixStyle,
+    patternAltitude: () => patternAltitude,
+    patternAltitudeAt: () => patternAltitudeAt,
     roughNM: () => roughNM,
     searchAnchors: () => searchAnchors,
     visibleAnchors: () => visibleAnchors
@@ -5070,6 +5090,39 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       // Stamped so the row can say the coordinate came from the AIP and not
       // from a click. Never a person, a machine or a place beyond the fix name.
       anchor: a.kind === "AD" ? "AIP-AD" : "AIP-RP"
+    };
+  }
+  var PATTERN_AGL_FT = 1e3;
+  var PATTERN_AD_MAX_NM = 5;
+  var KNOWN_PATTERN_ALT_FT = { ENDU: 1500 };
+  function patternAltitude(ad) {
+    if (!ad) return null;
+    const known = ad.icao ? KNOWN_PATTERN_ALT_FT[String(ad.icao).toUpperCase()] : void 0;
+    if (typeof known === "number") return known;
+    if (typeof ad.elevFt !== "number" || !isFinite(ad.elevFt)) return null;
+    return Math.round(ad.elevFt / 100) * 100 + PATTERN_AGL_FT;
+  }
+  function patternAltitudeAt(lat, lng, anchors) {
+    if (!isFinite(lat) || !isFinite(lng) || !Array.isArray(anchors)) return null;
+    let best = null, bestD = Infinity;
+    for (const a of anchors) {
+      if (a.kind !== "AD") continue;
+      const d = roughNM([lat, lng], [a.lat, a.lng]);
+      if (d < bestD) {
+        bestD = d;
+        best = a;
+      }
+    }
+    if (!best || bestD > PATTERN_AD_MAX_NM) return null;
+    const alt = patternAltitude(best);
+    if (alt === null) return null;
+    return {
+      alt,
+      icao: best.icao || null,
+      name: best.name,
+      elevFt: typeof best.elevFt === "number" ? best.elevFt : null,
+      known: !!(best.icao && KNOWN_PATTERN_ALT_FT[String(best.icao).toUpperCase()]),
+      distNM: bestD
     };
   }
   function anchorAttribution(dataset) {
@@ -5885,7 +5938,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.39';
+    const APP_VERSION = '16.40';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6893,11 +6946,22 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       const magData = resolveMagVar(e.latlng.lat, e.latlng.lng);
       const initialAlt = isFirstInFlight ? activeFlight.depElev : Number(document.getElementById('def-alt').value);
 
+      // A CIRCUIT IS FLOWN AT A KNOWN HEIGHT ABOVE A KNOWN FIELD (v16.40).
+      // Every aerodrome's published elevation is in the AIP dataset, so the
+      // circuit altitude is derived rather than inherited from whatever the
+      // previous waypoint happened to be at - see patternAltitude in
+      // src/lib/anchors.js for the rule and where the 1500 ft ENDU figure comes
+      // from. If the stop is not near a known aerodrome nothing is invented and
+      // the old inherit-the-previous-altitude behaviour stands.
+      const patAlt = isPattern ? patternAltitudeAt(e.latlng.lat, e.latlng.lng, AIP_ANCHORS) : null;
+
       activeFlight.waypoints.push({
         lat: e.latlng.lat,
         lng: e.latlng.lng,
         name: finalName,
-        alt: isPattern ? (activeFlight.waypoints[activeFlight.waypoints.length-1]?.alt || activeFlight.depElev) : initialAlt,
+        alt: isPattern
+          ? (patAlt ? patAlt.alt : (activeFlight.waypoints[activeFlight.waypoints.length-1]?.alt || activeFlight.depElev))
+          : initialAlt,
         oat: Number(document.getElementById('def-oat').value),
         wdir: Number(document.getElementById('def-wdir').value),
         wspd: Number(document.getElementById('def-wspd').value),
@@ -6910,6 +6974,16 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
+      if (patAlt) {
+        say('Circuit at ' + patAlt.name + ': ' + patAlt.alt + ' ft' +
+            (patAlt.known
+              ? ' (the published circuit altitude for this field).'
+              : ' \u2014 ' + PATTERN_AGL_FT + ' ft above ' + patAlt.elevFt +
+                ' ft elevation, rounded. Check the VAC.'), 'info', 6000);
+      } else if (isPattern) {
+        say('No aerodrome within ' + PATTERN_AD_MAX_NM + ' NM, so no circuit altitude was derived \u2014 set it in the row.',
+            'info', 6000);
+      }
     });
 
     function setFlightDepElevation(fIdx, val) {
@@ -7067,6 +7141,14 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
               iconAnchor: [0, 0]
             })
           }).addTo(map);
+
+          if (!dimmed && !isDoneMode) {
+            marker.on('contextmenu', function(ev) {
+              // Or the route line underneath opens its leg panel as well.
+              if (ev.originalEvent) L.DomEvent.stop(ev.originalEvent);
+              openWaypointMenu(fIdx, idx);
+            });
+          }
 
           marker.on('click', function() {
             if (isDoneMode) {
@@ -7269,6 +7351,42 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
           });
         }
       });
+    }
+
+    /**
+     * Right-click a waypoint: rename it, or delete it, without leaving the map
+     * (v16.40, user request).
+     *
+     * ONE dialog, not a menu then a prompt: the name field is pre-filled, so
+     * Rename is Enter and Delete is one click. A circuit stop is offered ONLY
+     * the delete - its name is the marker "PATTERN" that the add-flow and the
+     * return-leg builder test for, so letting it be renamed would quietly break
+     * both.
+     *
+     * The gesture had to be given to the MARKER, not the map: right-clicking
+     * the route line opens the leg panel (v16.37), and a waypoint sits on that
+     * line. Leaflet markers do not bubble to the map, and the propagation is
+     * stopped as well, so exactly one of the two panels can open.
+     */
+    async function openWaypointMenu(fIdx, wpIdx) {
+      const fl = flights[fIdx];
+      const wp = fl && fl.waypoints[wpIdx];
+      if (!wp || isDoneMode) return;
+      const isPat = !!wp.isPattern;
+      const r = await ask({
+        title: (isPat ? 'Circuit stop' : 'Waypoint ' + (wpIdx + 1)) + ': ' + wp.name,
+        message: isPat
+          ? 'Logged at ' + wp.alt + " ft, " + (wp.laps || 3) + ' laps.'
+          : toDMM(wp.lat, true) + ' ' + toDMM(wp.lng, false) + ' \u00b7 ' + wp.alt + " ft",
+        input: isPat ? null : { label: 'Waypoint name', value: wp.name },
+        buttons: [
+          ...(isPat ? [] : [{ id: 'rename', label: 'Rename', variant: 'primary' }]),
+          { id: 'delete', label: isPat ? 'Delete this circuit stop' : 'Delete this waypoint', variant: 'danger' },
+          { id: 'cancel', label: 'Cancel', variant: 'ghost' }
+        ]
+      });
+      if (r.id === 'rename') renameWaypoint(fIdx, wpIdx, r.value);
+      else if (r.id === 'delete') deleteWaypointFromFlight(fIdx, wpIdx);
     }
 
     function deleteWaypointFromFlight(fIdx, wpIdx) {
@@ -8594,7 +8712,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
               <td><b>${from.name}</b></td>
               <td><b>PATTERN</b></td>
               <td class="cc"><span class="type-pattern">PATTERN</span></td>
-              <td>${to.alt}'</td>
+              <td><input type="number" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority)" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${i+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
               <td class="cc">${to.oat}°</td>
               <td class="cc">-</td>
               <td class="cc">-</td>

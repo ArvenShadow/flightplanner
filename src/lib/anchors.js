@@ -359,6 +359,80 @@ export function anchorWaypoint(a, defaults) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// CIRCUIT (PATTERN) ALTITUDE
+// ---------------------------------------------------------------------------
+
+/** The convention a circuit altitude is derived from when nothing is published
+ *  to us: 1000 ft above the field. */
+export const PATTERN_AGL_FT = 1000;
+
+/** How near an aerodrome a circuit stop has to be for that aerodrome to be the
+ *  one it is flown at. NOT a picked number: the two closest aerodromes in the
+ *  dataset are ENGM and ENKJ at 14.07 NM apart, so anything under ~7 NM cannot
+ *  resolve to the wrong field, and a VFR circuit is flown within ~3 NM of the
+ *  runway. Beyond this the circuit is not at a known aerodrome and NO altitude
+ *  is derived - the caller keeps whatever it had rather than inventing one. */
+export const PATTERN_AD_MAX_NM = 5;
+
+/** Circuit altitudes we have been TOLD, which override the derived figure.
+ *  ENDU is the user's home field and the flight school flies its circuit at
+ *  1500 ft, not the 1300 ft the convention would give. This is a table on
+ *  purpose: the eAIP does not hand us circuit altitudes, so anything in here
+ *  arrives from a person who knows the field, and the VAC remains the
+ *  authority. Keys are ICAO codes.
+ *  @type {Record<string, number>} */
+export const KNOWN_PATTERN_ALT_FT = { ENDU: 1500 };
+
+/**
+ * The circuit altitude for an aerodrome, in feet AMSL.
+ *
+ * The field elevation is rounded to the nearest 100 ft BEFORE the 1000 ft is
+ * added, so the result is a whole hundred a pilot can fly and write down -
+ * ENTC's 31 ft gives 1000 ft, ENDU's 254 ft would give 1300 ft. Rounding the
+ * SUM instead would differ only on a half-hundred and reads less like the
+ * arithmetic a pilot does in their head.
+ *
+ * This is a DERIVED DEFAULT, not a published value: the eAIP gives us the
+ * elevation, never the circuit altitude. It is editable in the OFP row and the
+ * guide says the VAC is what to check.
+ *
+ * @param {{icao?: string|null, elevFt?: number|null}|null} ad
+ * @returns {number|null} null when the field elevation is unknown
+ */
+export function patternAltitude(ad) {
+  if (!ad) return null;
+  const known = ad.icao ? KNOWN_PATTERN_ALT_FT[String(ad.icao).toUpperCase()] : undefined;
+  if (typeof known === 'number') return known;
+  if (typeof ad.elevFt !== 'number' || !isFinite(ad.elevFt)) return null;
+  return Math.round(ad.elevFt / 100) * 100 + PATTERN_AGL_FT;
+}
+
+/**
+ * The circuit altitude for a point, resolved to the aerodrome it is at.
+ *
+ * @param {number} lat @param {number} lng
+ * @param {Anchor[]} anchors
+ * @returns {{alt: number, icao: string|null, name: string, elevFt: number|null,
+ *            known: boolean, distNM: number}|null} null when no aerodrome is near
+ */
+export function patternAltitudeAt(lat, lng, anchors) {
+  if (!isFinite(lat) || !isFinite(lng) || !Array.isArray(anchors)) return null;
+  let best = null, bestD = Infinity;
+  for (const a of anchors) {
+    if (a.kind !== 'AD') continue;
+    const d = roughNM([lat, lng], [a.lat, a.lng]);
+    if (d < bestD) { bestD = d; best = a; }
+  }
+  if (!best || bestD > PATTERN_AD_MAX_NM) return null;
+  const alt = patternAltitude(best);
+  if (alt === null) return null;
+  return { alt, icao: best.icao || null, name: best.name,
+           elevFt: typeof best.elevFt === 'number' ? best.elevFt : null,
+           known: !!(best.icao && KNOWN_PATTERN_ALT_FT[String(best.icao).toUpperCase()]),
+           distNM: bestD };
+}
+
 /**
  * The attribution the anchor layer must show whenever it is on.
  *

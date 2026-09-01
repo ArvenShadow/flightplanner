@@ -213,6 +213,9 @@ interface ScheduleLeg {
   /** Where the earlier leg's "be level by" pin goes when the advice is taken
    *  (its full length), and where its climb then begins. Both are read from the
    *  trial that verified the advice. Null when there is no earlier leg. */
+  /** The climb is handed over from the previous leg (which topped out on the
+   *  shared fix), so it starts AT the fix and a target here is a deadline. */
+  tocContinuation: boolean;
   tocAdviceLevelByNM: number | null;
   tocAdviceClimbFromNM: number | null;
   /** This leg's climb tops out ON its end fix and the next leg climbs straight
