@@ -531,16 +531,30 @@ export function computeFlightSchedule(fl) {
 export function computeLegMarkers(from, to, SL) {
   if (!SL) { const p = computeLegProfile(from, to); return p ? [p] : []; }
   const out = [];
-  if (SL.tocAlongNM != null && SL.tocAlongNM > 0.05 && SL.tocAlongNM < SL.distNM - 0.05) {
-    const pt = pointAlongSegments(SL.segs, SL.tocAlongNM);
+  // A marker sitting ON a waypoint is still real information, and dropping it
+  // is the v16.27 bug: when a descent filled a whole leg, the TOD landed
+  // within a few hundredths of a mile of the leg's START and the old guard
+  // (`< distNM - 0.05`) threw it away - so the pilot saw the descent begin
+  // with no TOD anywhere on the map. It is now KEPT and flagged `atWaypoint`,
+  // because "start down at B" is what that case actually means. The remaining
+  // guard is only against a degenerate marker: a climb or descent that
+  // occupies no distance on THIS leg belongs to the neighbouring one, which
+  // draws it.
+  const EDGE_NM = 0.05;
+  if (SL.tocAlongNM != null && SL.tocAlongNM > EDGE_NM) {
+    const along = Math.min(SL.tocAlongNM, SL.distNM);
+    const pt = pointAlongSegments(SL.segs, along);
     out.push({ kind: 'TOC', distNM: SL.tocAlongNM, refName: from.name, rel: 'after',
-               lat: pt.lat, lng: pt.lng, alt: to.alt, tt: pt.tt });
+               lat: pt.lat, lng: pt.lng, alt: to.alt, tt: pt.tt,
+               atWaypoint: SL.distNM - SL.tocAlongNM <= EDGE_NM ? to.name : null });
   }
-  if (SL.todStartsHere && SL.todBeforeNM !== null && SL.todBeforeNM > 0.05 && SL.todBeforeNM < SL.distNM - 0.05) {
-    const pt = pointAlongSegments(SL.segs, SL.distNM - SL.todBeforeNM);
+  if (SL.todStartsHere && SL.todBeforeNM !== null && SL.todBeforeNM > EDGE_NM) {
+    const along = Math.max(0, SL.distNM - SL.todBeforeNM);
+    const pt = pointAlongSegments(SL.segs, along);
     out.push({ kind: 'TOD', distNM: SL.todBeforeNM, refName: to.name, rel: 'before',
                lat: pt.lat, lng: pt.lng, alt: SL.descTargetAlt, tt: pt.tt,
-               targetName: SL.descTargetName });
+               targetName: SL.descTargetName,
+               atWaypoint: along <= EDGE_NM ? from.name : null });
   }
   return out;
 }

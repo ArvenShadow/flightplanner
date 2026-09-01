@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.27)
+# C182 Flight Planner (v16.28)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 

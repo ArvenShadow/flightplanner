@@ -1122,14 +1122,36 @@ T('every label chip is inline-block so its background covers all text', () => {
   assert(raw.includes('.wp-label { width: max-content;'), 'wp-label not content-sized');
 });
 
-console.log('\n=== 33. TOC/TOD chips anchored to an exact point dot ===');
-T('marker HTML contains the point dot and a chip centered off it', () => {
+console.log('\n=== 33. TOC/TOD: a tick across the track, plus a small chip ===');
+T('the mark is a tick rotated ACROSS the track, anchored on the exact point', () => {
   const raw = fs.readFileSync(APP_HTML, 'utf8');
-  assert(raw.includes('class="prof-point toc"') && raw.includes('class="prof-point tod"'), 'point dots missing');
+  assert(raw.includes('class="prof-tick ${kindCls}"'), 'the TOC/TOD tick is gone');
+  assert(!raw.includes('prof-point'), 'the old diamond dot is back');
+  // a bar drawn along north, rotated to the local track and then a further
+  // 90 degrees, is a bar that CROSSES the track
+  assert(raw.includes('rotate(${Math.round(prof.tt + 90)}deg)'), 'the tick is not rotated across the track');
   assert(raw.includes('translate(-50%,-50%) translate(${dx}px,${dy}px)'), 'chip not centered on offset point');
   assert(raw.includes('iconAnchor: [0, 0]'), 'anchor not at the exact TOC/TOD point');
-  const css = raw.split('.prof-point {')[1].split('}')[0];
-  assert(css.includes('left: -5px') && css.includes('top: -5px'), 'dot not centered on anchor');
+  // above the waypoint markers, or a TOD landing on a fix is drawn UNDER that
+  // fix's own name label - exactly the case the fix exists to make visible
+  const mk = raw.split('computeLegMarkers(fl.waypoints[i]')[1].split('profileMarkers.push')[0];
+  assert(/zIndexOffset:\s*\d{3}/.test(mk), 'the TOC/TOD mark can be hidden behind a waypoint label');
+  const css = raw.split('.prof-tick {')[1].split('}')[0];
+  const w = +(css.match(/width:\s*(\d+)px/) || [])[1], h = +(css.match(/height:\s*(\d+)px/) || [])[1];
+  assert(w >= 2 && w <= 4 && h >= 14 && h <= 30 && h > w * 4,
+    'the tick is not a thin bar across the track: ' + w + 'x' + h);
+});
+T('the chip is just TOC / TOD, with the sentence on hover', () => {
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  // the chip text must be the bare kind, not the whole sentence
+  assert(raw.includes('title="${tip}">${fTag}${prof.kind}</div>'), 'the chip is not just the kind + a tooltip');
+  assert(!/TOC \$\{prof\.alt\}' /.test(raw), 'the old spelled-out chip is back');
+  // the tooltip has to be reachable: the marker is non-interactive, so the
+  // chip needs pointer-events of its own or nothing ever hovers it
+  for (const cls of ['.toc-label', '.tod-label']) {
+    const rule = raw.split(cls + ' {')[1].split('}')[0];
+    assert(/pointer-events:\s*auto/.test(rule), cls + ' cannot be hovered, so its tooltip never shows');
+  }
 });
 
 console.log('\n=== 34. Waypoint dots pinned to true coordinates ===');
@@ -2561,6 +2583,88 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
     'the card does not tell the pilot to get a real briefing');
 });
 
+console.log('\n=== 62b. TOC/TOD marks (the vanishing TOD, v16.28) ===');
+T('a TOD that lands ON a waypoint is still drawn (v16.28 bug fix)', () => {
+  const L2 = moduleExports.legs;
+  const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 0, wspd: 0, var: -11 });
+  // Find a route whose descent fills the WHOLE last leg, so the TOD falls a
+  // few hundredths of a mile after B. The lengths are searched rather than
+  // hard-coded because the boundary depends on the profile's rate of descent.
+  // The old guard (`todBeforeNM < distNM - 0.05`) threw that marker away, so
+  // the pilot saw a descent start with no TOD anywhere on the map.
+  let fixture = null;
+  for (let cruise = 4500; cruise <= 9500 && !fixture; cruise += 500) {
+    for (let l3 = 0.05; l3 <= 1.2 && !fixture; l3 += 0.005) {
+      const wps = [W('ENDU', 68.8, 18.5, 254), W('A', 68.85, 18.5, cruise),
+                   W('B', 69.30, 18.5, cruise), W('ENTC', 69.30 + l3, 18.5, 254)];
+      const sched = L2.computeFlightSchedule({ id: 1, waypoints: wps });
+      const last = sched[2];
+      if (last && last.todStartsHere && last.distNM - last.todBeforeNM < 0.05
+          && !sched.some(x => x && x.shortfallMin > 0.001)) fixture = { wps, sched, last };
+    }
+  }
+  assert(fixture, 'could not build a route whose descent starts exactly at a waypoint');
+  const m = L2.computeLegMarkers(fixture.wps[2], fixture.wps[3], fixture.last);
+  const tod = m.find(x => x.kind === 'TOD');
+  assert(tod, 'the TOD vanished when it landed on the waypoint');
+  // and it says WHERE it is in the only useful way: at B, not "27 NM before ENTC"
+  assert(tod.atWaypoint === 'B', 'the mark does not name the fix it sits on: ' + tod.atWaypoint);
+  assert(Math.abs(tod.lat - fixture.wps[2].lat) < 0.01, 'the mark is not drawn at that fix');
+  // a mark part-way along a leg still reports no waypoint
+  const mid = L2.computeLegMarkers(fixture.wps[1], fixture.wps[2], fixture.sched[1])
+    .find(x => x.kind === 'TOC');
+  assert(mid && !mid.atWaypoint, 'a mid-leg TOC wrongly claims to sit on a fix');
+});
+T('the plotting list and the OFP sub-line both say "at <fix>" for a boundary mark', () => {
+  const P = moduleExports.plot;
+  const L2 = moduleExports.legs;
+  const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 0, wspd: 0, var: -11 });
+  let fl = null;
+  for (let cruise = 4500; cruise <= 9500 && !fl; cruise += 500) {
+    for (let l3 = 0.05; l3 <= 1.2 && !fl; l3 += 0.005) {
+      const wps = [W('ENDU', 68.80, 18.5, 254), W('A', 68.85, 18.5, cruise),
+                   W('B', 69.30, 18.5, cruise), W('ENTC', 69.30 + l3, 18.5, 254)];
+      const sc = L2.computeFlightSchedule({ id: 1, waypoints: wps });
+      if (sc[2] && sc[2].todStartsHere && sc[2].distNM - sc[2].todBeforeNM < 0.05
+          && !sc.some(x => x && x.shortfallMin > 0.001)) fl = { id: 1, waypoints: wps };
+    }
+  }
+  assert(fl, 'could not build the boundary route');
+  const txt = P.buildPlottingText(fl, 'NM');
+  assert(/TOD at B/.test(txt), 'the plotting list still reports the boundary TOD by distance: ' + txt);
+  // and the same route rendered in the page
+  ev(`flights = ${JSON.stringify([fl])}; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const subs = [...doc.querySelectorAll('#tbody-flight-0 tr.sub-leg-row')].map(t => t.textContent).join(' || ');
+  assert(/TOD at B/.test(subs), 'the OFP sub-line still reports it by distance: ' + subs);
+});
+T('no route places a descent without drawing a TOD somewhere', () => {
+  const L2 = moduleExports.legs;
+  const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 0, wspd: 0, var: -11 });
+  // Sweep leg lengths and cruise altitudes. Every route whose descent the
+  // schedule actually PLACED (no shortfall - those get the red banner) must
+  // show exactly one TOD, and never two.
+  let checked = 0, missing = 0, duplicated = 0;
+  for (let cruise = 2500; cruise <= 9500; cruise += 2000)
+  for (let l1 = 0.1; l1 <= 1.0; l1 += 0.1)
+  for (let l2 = 0.1; l2 <= 1.0; l2 += 0.1)
+  for (let l3 = 0.05; l3 <= 0.6; l3 += 0.05) {
+    const wps = [W('ENDU', 68.8, 18.5, 254), W('A', 68.8 + l1, 18.5, cruise),
+                 W('B', 68.8 + l1 + l2, 18.5, cruise), W('ENTC', 68.8 + l1 + l2 + l3, 18.5, 254)];
+    const sched = L2.computeFlightSchedule({ id: 1, waypoints: wps });
+    if (!sched.some(x => x && x.descDistNM > 0.05)) continue;
+    if (sched.some(x => x && x.shortfallMin > 0.001)) continue;
+    checked++;
+    let tods = 0;
+    for (let i = 0; i < 3; i++) tods += L2.computeLegMarkers(wps[i], wps[i + 1], sched[i])
+      .filter(x => x.kind === 'TOD').length;
+    if (tods === 0) missing++;
+    if (tods > 1) duplicated++;
+  }
+  assert(checked > 500, 'the sweep did not exercise enough routes: ' + checked);
+  assert(missing === 0, missing + ' of ' + checked + ' routes descend with no TOD drawn');
+  assert(duplicated === 0, duplicated + ' routes drew the TOD twice');
+});
+
 console.log('\n=== 63. Drag the line to bend it, and insert waypoints mid-route (v16.27) ===');
 T('the drawn path walks waypoints AND via points, and skips patterns', () => {
   const L2 = moduleExports.legs;
@@ -2710,43 +2814,30 @@ TA('cancelling the insert changes nothing', async () => {
   await p;
   assert(ev('JSON.stringify(flights)') === before, 'cancelling the insert still changed the route');
 });
-TA('right-clicking the line inserts a waypoint; the "+" button uses the leg midpoint', async () => {
+TA('right-clicking the line inserts a waypoint there', async () => {
   ev(SEED);
   ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.45, lng: 18.90 }, originalEvent: { preventDefault: function(){} } })`);
   await tick();
   typeInDialog('BEND');
   answerDialog('Insert waypoint');
   await tick(); await tick();
-  assert(ev('flights[0].waypoints.map(w => w.name)').includes('BEND'), 'right-click did not insert a waypoint');
-
-  ev(SEED);
-  w.insertWaypointMidLeg(0, 0);
-  await tick();
-  typeInDialog('HALF');
-  answerDialog('Insert waypoint');
-  await tick(); await tick();
-  const wps = ev('flights[0].waypoints');
-  assert(wps[1].name === 'HALF', 'the + button inserted in the wrong place: ' + JSON.stringify(wps.map(x=>x.name)));
-  // halfway along ENDU -> FINNSNES
-  assert(Math.abs(wps[1].lat - (69.05505349 + 69.23781330) / 2) < 0.01,
-    'the + button did not use the leg midpoint: ' + wps[1].lat);
+  const names = ev('flights[0].waypoints.map(w => w.name)');
+  assert(JSON.stringify(names) === JSON.stringify(['ENDU', 'FINNSNES', 'BEND', 'ENTC']),
+    'right-click inserted in the wrong place: ' + JSON.stringify(names));
 });
-T('every leg row offers the insert button, and PATTERN rows do not', () => {
+T('the OFP row carries only the delete button', () => {
+  // v16.28: the per-row "+" was removed at the user's request - clicking the
+  // map adds a waypoint, and right-clicking the line inserts one mid-route,
+  // so a button in every row was paying table width for nothing.
   ev(SEED);
   const rows = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')];
   assert(rows.length === 2, 'seed route should have two leg rows');
   for (const tr of rows) {
-    assert(/insertWaypointMidLeg\(0, \d+\)/.test(tr.innerHTML), 'a leg row has no insert button');
+    const btns = [...tr.querySelectorAll('button')].map(b => b.textContent.trim());
+    assert(JSON.stringify(btns) === '["\u00d7"]', 'row buttons are ' + JSON.stringify(btns));
   }
-  // and the argument is the leg's START index, or it splits the wrong leg
-  assert(rows[0].innerHTML.includes('insertWaypointMidLeg(0, 0)'), 'row 1 points at the wrong leg');
-  assert(rows[1].innerHTML.includes('insertWaypointMidLeg(0, 1)'), 'row 2 points at the wrong leg');
-  // a traffic circuit is not a line on the ground and cannot be split
-  ev(`flights[0].waypoints.push({ lat: 69.68, lng: 18.91, name: 'PATTERN', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12, isPattern: true, laps: 3 });
-      refreshMap(); renderAllFlightTables();`);
-  const pat = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')]
-    .find(tr => tr.textContent.includes('PATTERN'));
-  assert(pat && !pat.innerHTML.includes('insertWaypointMidLeg'), 'a PATTERN row offers to split itself');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  assert(!raw.includes('insertWaypointMidLeg'), 'the + button command is still in the build');
 });
 T('the guide explains both gestures', () => {
   const built = fs.readFileSync(APP_HTML, 'utf8');

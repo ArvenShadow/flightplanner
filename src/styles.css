@@ -841,21 +841,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .btn-done { background: #38a169; color: white; font-weight: 700; }
     .btn-edit-mode { background: #d69e2e; color: white; font-weight: 700; }
     .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
-    /* The per-row "insert a waypoint into this leg" button. Deliberately quiet
-       next to the red delete: it sits in every row and must not shout. */
-    .btn-insert { background: transparent; border: 1px solid var(--border-color);
-      color: var(--text-muted); font-weight: 700; }
-    /* The OFP row's + / x cell. Deliberately cramped: at a narrow window the
+    /* The OFP row's delete cell. Deliberately cramped: at a narrow window the
        table is already compressed to fit, so every pixel this column takes is
        one the VAR / Alt / OAT inputs lose - and VAR feeds the magnetic
-       heading. Two buttons here cost about the same as one used to. */
+       heading. */
     .row-actions { white-space: nowrap; text-align: center; padding: 1px 2px; }
     .row-actions .btn { padding: 1px 3px; line-height: 1.15; gap: 0;
-      /* a transparent border on the delete button so both are the same
-         height as the outlined insert button sitting next to it */
       border: 1px solid transparent; min-width: 15px; justify-content: center; }
-    .row-actions .btn-insert { border-color: var(--border-color); }
-    .btn-insert:hover { background: #38a169; border-color: #38a169; color: #ffffff; opacity: 1; }
     .btn-add-flight { background: #2b6cb0; color: white; width: 100%; justify-content: center; padding: 7px; margin-top: 4px; }
     .btn:hover { opacity: 0.9; }
     .btn-sm { padding: 2px 5px; font-size: 10px; }
@@ -876,26 +868,35 @@ svg.leaflet-image-layer.leaflet-interactive path {
       background: transparent !important;
       border: none !important;
     }
-    /* The precise TOC/TOD point on the track line; the text chip floats
-       beside it, offset perpendicular to the track. */
-    .prof-point { position: absolute; left: -5px; top: -5px; width: 10px; height: 10px;
-      border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.6); }
-    .prof-point.toc { background: #276749; }
-    .prof-point.tod { background: #c05621; }
-    .toc-label { display: inline-block; background: #22543d; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
-    .tod-label { display: inline-block; background: #c05621; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
+    /* The TOC/TOD mark: a short tick ACROSS the track, the way it is drawn on
+       a paper chart. The element is a vertical bar; the page rotates it to
+       (local true track + 90deg). It is 2px wide with a white outline so it
+       reads over both the topo map and the ICAO chart, and it stays legible
+       when the mark lands ON a waypoint - which a descent filling a whole leg
+       does. The small chip floats beside it, perpendicular to the track. */
+    .prof-tick { position: absolute; left: 0; top: 0; width: 3px; height: 22px; border-radius: 1px;
+      box-shadow: 0 0 0 1.5px rgba(255,255,255,0.95), 0 1px 3px rgba(0,0,0,0.5); }
+    .prof-tick.toc { background: #276749; }
+    .prof-tick.tod { background: #c05621; }
+    /* Just "TOC" / "TOD". The full sentence is the title tooltip, and the
+       numbers are in the OFP sub-line and the plotting list, which is where
+       they are copied from. pointer-events is needed for the tooltip to
+       appear at all - the marker itself is non-interactive, and a click here
+       still falls through to the map. */
+    .toc-label { display: inline-block; background: #22543d; color: #ffffff; font-weight: 800; font-size: 9px; letter-spacing: 0.3px; padding: 1px 4px; border-radius: 3px; border: 1px solid #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.5); white-space: nowrap; pointer-events: auto; cursor: help; }
+    .tod-label { display: inline-block; background: #c05621; color: #ffffff; font-weight: 800; font-size: 9px; letter-spacing: 0.3px; padding: 1px 4px; border-radius: 3px; border: 1px solid #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.5); white-space: nowrap; pointer-events: auto; cursor: help; }
     .pattern-label { display: inline-block; background: #553c9a; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
     .ruler-label { display: inline-block; background: #319795; color: #ffffff; font-weight: 700; font-size: 10px; padding: 2px 5px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.7); box-shadow: 0 1px 4px rgba(0,0,0,0.45); white-space: nowrap; }
     /* Zoom declutter (see applyZoomDeclutter). Mid zoom: compact waypoint
-       labels, the big TOC/TOD and ruler chips disappear (their exact-position
-       dots stay). Far zoom: dots and route lines only. */
+       labels, the TOC/TOD and ruler chips disappear (their track ticks stay).
+       Far zoom: waypoint dots and route lines only. */
     #map.zoom-mid .wp-label { font-size: 9px; padding: 1px 4px; border-width: 1px; border-left-width: 3px; box-shadow: none; }
     #map.zoom-mid .pattern-label { font-size: 8px; padding: 1px 4px; }
     #map.zoom-mid .toc-label, #map.zoom-mid .tod-label,
     #map.zoom-mid .ruler-seg-label { display: none; }
     #map.zoom-far .wp-label, #map.zoom-far .pattern-label,
     #map.zoom-far .toc-label, #map.zoom-far .tod-label,
-    #map.zoom-far .prof-point, #map.zoom-far .via-dot,
+    #map.zoom-far .prof-tick, #map.zoom-far .via-dot,
     #map.zoom-far .ruler-seg-label, #map.zoom-far .ruler-label { display: none; }
 
     /* Modals */

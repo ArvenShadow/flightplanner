@@ -244,9 +244,11 @@ errors is the standard.
   features. Chart contours + MEF remain the terrain reference.
 - **Map**: locked to a single world copy (maxBounds ±180°, viscosity 1,
   noWrap on tiles). Kartverket tile URL is WMTS webmercator cache.
-- **Mass & Balance**: out of scope — the user keeps M&B in their Excel
-  OFP. Do not build M&B, fuel-requirement or POH takeoff/landing
-  features into the planner.
+- **Mass & Balance**: WAS out of scope — the user kept M&B in their Excel
+  OFP. SUPERSEDED at v16.28: it is roadmap item 5 (see Roadmap below), but
+  nothing is built yet and it needs the real sheet plus the POH arms and
+  limits in hand first. Fuel-requirement and POH takeoff/landing features
+  remain out of scope.
 - **Daylight / VFR day (v16.3)**: legal basis verified — SERA Art. 2(97)
   (Reg. (EU) 923/2012) defines night via civil twilight, sun centre 6°
   below the horizon; Norway's BSL F 1-1 (forskrift 2016-12-14-1578) was
@@ -459,11 +461,77 @@ errors is the standard.
     (which caught the trailing-click double-insert), but press-drag-release,
     the 7 px grab, map-pan suppression and the live bend were all measured in
     real Chromium with `page.mouse`.
+- **TOC / TOD marks (v16.28, bug fix + the user's preference)**: they are
+  now a short TICK ACROSS THE TRACK with a small `TOC` / `TOD` chip beside
+  it, and the sentence moved to the chip's hover tooltip.
+  - THE BUG: `computeLegMarkers` dropped any mark falling within 0.05 NM of
+    a leg's end (`todBeforeNM < distNM - 0.05`). When a descent fills a
+    WHOLE leg - which happens whenever the last leg is exactly long enough -
+    the TOD lands a few hundredths of a mile after the previous fix and was
+    thrown away, so the pilot saw a descent begin with no TOD anywhere.
+    Measured over ~60 000 generated routes: 667 of them descended with the
+    mark silently missing. It is now KEPT and carries `atWaypoint`, so the
+    label says "at B" instead of "27.1 NM before ENTC" - which is the only
+    useful reading of a descent that starts on a fix. The same sweep now
+    reports 0 missing and 0 duplicated marks, and that sweep IS the test.
+  - The remaining guard is only against a degenerate mark: a climb or
+    descent occupying no distance on THIS leg belongs to the neighbouring
+    one, which draws it. That is what stops duplicates.
+  - Z-ORDER MATTERED: a TOD landing on a fix was drawn UNDER that fix's own
+    name label - invisible in exactly the case the fix exists to expose.
+    `zIndexOffset: 650` puts the marks above the waypoint markers.
+  - THE HALO MUST BE A BOX-SHADOW, not a border. A white 1px border on each
+    side of a 2px bar leaves almost no colour once the rotation is
+    antialiased; the first attempt rendered as a pale smear and was only
+    caught by looking at a 4x crop of a real screenshot.
+  - The numbers are NOT lost: they stay in the leg's sub-line and the
+    plotting list, which is what gets copied and what prints. A tooltip
+    does not print, and that is fine because it never carried the only copy.
+- **The per-row "+" insert button (v16.27) was REMOVED at v16.28** on the
+  user's request - clicking the map adds a waypoint and right-clicking the
+  line inserts one mid-route, so a button in every OFP row was paying table
+  width for nothing. `legMidpoint` stays in legs.js (tested, cheap) in case
+  a positioned insert is wanted again. The right-click gesture and the
+  leg-splitting rules are unchanged.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
   NO CORS header, so it is genuinely unusable from a browser - MET Norway
   is used instead, and is the authoritative source for Norway anyway.
+
+## Roadmap (the user's list, v16.28 - NOT yet agreed in detail)
+
+Written down so it is not lost. NOTHING here is built, and none of it is
+approved for implementation without asking first - several items need
+verification work under the NO GUESSTIMATES rule before they can even be
+scoped. In the user's order:
+
+1. **Right-click the track -> a settings panel** for that leg: altitude,
+   where along the line to start the climb, where to reach an altitude -
+   which means the schedule would gain BOTTOM of climb and BOTTOM of
+   descent as placeable points, not just TOC/TOD. This is the biggest
+   change to `computeFlightSchedule` since v16.5: today the forward and
+   backward passes DERIVE where climbs and descents fall, and this asks to
+   let the pilot pin them. Note the map already uses right-click on the
+   line for "insert a waypoint here"; that gesture would have to move.
+2. **An editable radius ring (default 1 NM) around the whole track**, for
+   MSA planning - a corridor buffer drawn along the route.
+3. **AIP reimplementation with anchored waypoints**: aerodromes with their
+   reporting points and the information for each. Airspace data was REMOVED
+   at v16.x for being community-sourced and stale (see "Airspace overlay"
+   above); this must come from the official AIP Norge, and the licence and
+   update path have to be verified BEFORE any of it is built.
+4. **More AIP: draw every airspace** with hoverable name, vertical limits,
+   class, and the frequencies plus station callsigns. Same sourcing rule as
+   3, and the same reason the old overlay was deleted: a chart that lags the
+   current VFR chart is a plausible wrong answer.
+5. **Mass & Balance from the Excel sheet.** NOTE: CLAUDE.md currently
+   records M&B as explicitly OUT OF SCOPE at the user's own decision. That
+   entry is now superseded by this roadmap item, but the work needs the
+   real sheet and the POH arms/limits in hand before a line is written.
+6. **A print page that pixel-matches the real OFP / M&B form**, so the PDF
+   can be copied straight onto the company paperwork.
+7. More to come.
 
 ## Dialogs (v16.11)
 
