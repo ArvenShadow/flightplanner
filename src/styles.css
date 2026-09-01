@@ -816,6 +816,18 @@ svg.leaflet-image-layer.leaflet-interactive path {
       color: #14243d; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff, 0 1px 2px #fff; }
     .fix-label.rp { font-weight: 600; }
 
+    /* LEG SETTINGS PREVIEW. The pins are computed on a COPY of the flight
+   through the real engine, so what this shows is what applying will do. */
+    .leg-preview { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 5px; background: var(--highlight-bg); font-size: 11px; line-height: 1.6; }
+    .leg-preview .lp-row { display: grid; grid-template-columns: 74px 1fr; gap: 8px; }
+    .leg-preview .lp-k { color: var(--text-muted); text-transform: uppercase; font-size: 9px;
+      letter-spacing: 0.4px; padding-top: 2px; }
+    .leg-preview .lp-v { font-weight: 600; }
+    .leg-preview .leg-warn { margin-top: 6px; padding: 5px 7px; border-radius: 4px;
+      background: #fed7d7; color: #742a2a; font-weight: 600; font-size: 10.5px; line-height: 1.45; }
+    body.dark-mode .leg-preview .leg-warn { background: #4a1d1d; color: #fed7d7; }
+
     /* SETTINGS PAGES. Two tabs rather than one long scroll: the aircraft page
    is configured once per machine, the map page is pure display preference, and
    mixing them meant scrolling past the POH tables to change a symbol colour. */

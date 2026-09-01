@@ -41,7 +41,10 @@ export function buildPlottingText(fl, distUnit) {
       const nameB = k === res.segs.length - 1 ? to.name : 'v' + (k + 1);
       const smt = magneticTrackLabel(sg.tt, to.var);
       const profTxt = profs
-        .filter(p => { const along = p.kind === 'TOC' ? p.distNM : res.distNM - p.distNM;
+        // Which end the distance is measured from is `rel`, not the kind: a
+        // pinned BOC is measured after the start fix and a BOD before the end
+        // one, so testing for 'TOC' put two of the four marks on the wrong end.
+        .filter(p => { const along = p.rel === 'after' ? p.distNM : res.distNM - p.distNM;
                        return along > acc - 0.001 && along <= acc + sg.distNM + 0.001; })
         .map(p => p.atWaypoint
           ? `  | ${p.kind} at ${p.atWaypoint}`

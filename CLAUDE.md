@@ -298,6 +298,85 @@ errors is the standard.
   per-segment tracks live in the ↳ sub-line and the plotting list, and
   the guide says to steer by those. Distance/time/fuel/GS always walk
   the bent path. Do not switch the row back to first-segment track.
+- **PINNED CLIMB AND DESCENT CORNERS (v16.37, roadmap item 1)**: the pilot can
+  now place the BOTTOM of climb and the BOTTOM of descent on a leg. Right-click
+  the track opens the leg panel (section 2g of the page); `pinNM` and the
+  extended `computeFlightSchedule` are in `src/lib/legs.js`.
+  - **ONLY TWO OF THE FOUR CORNERS ARE PINNABLE, and that is the NO
+    GUESSTIMATES rule doing real work.** BOC ("hold this altitude for 12 NM,
+    then climb") and BOD ("be level 5 NM before the fix, then run in level")
+    are pure GEOMETRY: the climb and descent are unchanged, they only move, so
+    they are always flyable and the existing spillover/back-up machinery
+    handles them. "Be at 6500 by this point" is different - it implies a RATE
+    OF CLIMB, and if that rate is steeper than the profile's, the POH tables
+    say NOTHING about the fuel flow or the TAS at it. So a TOC request is a
+    TARGET, not a pin: the schedule stays on the profile's performance and the
+    leg reports whether the target was met and what rate it would need. A
+    number the pilot can act on beats a fabricated climb.
+  - PINS LIVE ON THE LEG'S **TO** WAYPOINT (`bocNM`, `bodNM`, `tocNM`), where
+    alt, OAT and wind already do. Distances are along the FLOWN path, stated
+    the way a pilot says them: BOC and TOC after the start fix, BOD before the
+    end fix. Cleared means `null`, not 0, so a saved route reads identically to
+    one made before pins existed - a test asserts that.
+  - **A BOD PIN IS REFUSED, NOT HALF-APPLIED**, when a descent for a LATER,
+    lower fix already runs through that leg's tail: the aircraft is still going
+    down there, so "be level before this fix" cannot be true. `bodPinNM` keeps
+    the request, `bodTailNM` is what was actually applied, `bodRefused` says
+    which. The red banner names it. Contradictory pins (a TOC target before the
+    BOC) are named as contradicting rather than reported as a rate of nothing.
+  - THE SWEEP IS THE TEST, exactly as for the v16.28 vanishing TOD. It found
+    FOUR real bugs while this was being written, and every one of them would
+    have put a wrong number on the OFP:
+    1. the descent placed INSIDE a delayed climb - `availDist` has to subtract
+       `climbStartNM + climbDistNM`, not just the climb's length;
+    2. the BOD tail read from the RAW pin on legs that do not terminate the
+       descent, so `computeLegTotals` and the markers disagreed with the walk;
+    3. phase distances not summing to the leg;
+    4. `todBeforeNM` LATCHED mid-walk, then wrong once a second descent
+       extended further back on the same leg. It is now settled in one pass
+       after all placement. That flaw was latent before the pins - the right
+       altitudes alone could always have produced two descents on one leg -
+       and 0 of 39 483 unpinned legs hit it, which is why it was never seen.
+    20 000 pinned routes now pass with 0 violations, and the no-pin schedule is
+    BIT-IDENTICAL to the derived v16.5 one (asserted on climb/descent minutes,
+    fuel, TOC, TOD and the leg totals).
+  - `computeLegTotals` HAD TO CHANGE its level-flight maths. Before the pins
+    there was one level stretch and it always FOLLOWED the climb, so the code
+    could assume `[climbDistNM, climbDistNM + cruiseDist]`. A BOC puts level
+    flight before the climb and a BOD after the descent, so there are up to
+    THREE level pieces - and they are not at the same altitude. Each is now
+    priced at its own: the lead at the entry altitude, the middle at cruise,
+    the run-in at the arrival altitude.
+  - MARKERS: BOC and BOD are drawn ONLY when pinned. With no pin the bottom of
+    a climb IS the start fix, and marking a point that is already a named
+    waypoint is pure clutter - the same reasoning that leaves a degenerate TOC
+    to the neighbouring leg. `computeLegMarkers` now also sorts its output into
+    FLIGHT ORDER, because the plotting list and the OFP sub-line print it
+    straight through and "TOC ... BOC" down a leg flown BOC-first makes the
+    pilot reorder it in their head. Which end a distance is measured from is
+    `rel`, not the kind - testing for `'TOC'` put two of the four marks on the
+    wrong end of the leg, in both the page and plotting.js.
+  - THE RIGHT-CLICK GESTURE MOVED WITHOUT LOSING ANYTHING. Right-click used to
+    insert a waypoint outright; it is now the first action IN the panel, at the
+    exact point clicked. That freed the gesture the user asked for with no new
+    modifier to learn. `alongLegNM` (legs.js) turns the click into a distance
+    along the flown path, which is what the "Here" buttons use - the pin is
+    easier to set by gesture than to type, which is the whole point.
+  - The panel's PREVIEW runs the real engine on a COPY of the flight, so it
+    cannot disagree with what Apply will do - same rule as the v16.35 fix-style
+    preview. It is also where an unmet target or a refused pin is shown BEFORE
+    committing, rather than only afterwards in the banner.
+  - jsdom cannot prove a right-click reaches a 20 px invisible hit-line, or
+    that a rotated tick is painted where the schedule says.
+    `tools/verify-leg-panel.mjs` drives real Chromium: the gesture, the panel on
+    screen, the Here buttons, both warning shapes, Apply reaching the schedule,
+    all four marks measured against the projection of their OWN coordinates,
+    and - because the gesture changed - that the panel still inserts a waypoint
+    and that a LEFT click still bends the line. TWO TRAPS it hit: the declutter
+    feature hides the TOC/TOD chips at far zoom on purpose, so measuring them at
+    zoom 7 reads `display:none` and proves nothing; and `page.evaluate` AWAITS
+    what the function returns, so returning `insertWaypointFromLegPanel()`
+    deadlocks against answering the dialog it opens.
 - **Flight altitude schedule (v16.5, user decision)**: legs are NOT
   independent. computeFlightSchedule(fl) does a forward pass (climb
   spillover: TOC lands on the leg where the target altitude is actually
@@ -1010,14 +1089,10 @@ approved for implementation without asking first - several items need
 verification work under the NO GUESSTIMATES rule before they can even be
 scoped. In the user's order:
 
-1. **Right-click the track -> a settings panel** for that leg: altitude,
-   where along the line to start the climb, where to reach an altitude -
-   which means the schedule would gain BOTTOM of climb and BOTTOM of
-   descent as placeable points, not just TOC/TOD. This is the biggest
-   change to `computeFlightSchedule` since v16.5: today the forward and
-   backward passes DERIVE where climbs and descents fall, and this asks to
-   let the pilot pin them. Note the map already uses right-click on the
-   line for "insert a waypoint here"; that gesture would have to move.
+1. **DONE at v16.37** - right-click the track -> a leg settings panel, with
+   BOC and BOD placeable. See "PINNED CLIMB AND DESCENT CORNERS" above.
+   The insert-a-waypoint gesture moved INTO the panel rather than being
+   replaced, so nothing was lost.
 2. **An editable radius ring (default 1 NM) around the whole track**, for
    MSA planning - a corridor buffer drawn along the route.
 3. **DONE at v16.34** — AIP reimplementation with anchored waypoints:

@@ -3879,6 +3879,213 @@ T('border-resolved airspaces record how far the published corner sat off', () =>
   assert(evenes.some((f) => f.borderSegments > 0), 'Evenes TMA lost its border stretch');
 });
 
+console.log('\n=== 62a. Pinned bottom of climb / bottom of descent (v16.37) ===');
+T('with no pin the schedule is bit-identical to the derived v16.5 behaviour', () => {
+  const L2 = moduleExports.legs;
+  // The whole feature must be invisible until somebody pins something. This is
+  // the guard that lets the pins ship at all: every existing route, every saved
+  // flight and every number on the OFP has to be untouched.
+  const W = (n, lat, alt) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
+  const wps = [W('ENDU', 68.6, 254), W('A', 69.1, 6500), W('B', 69.6, 4500), W('ENTC', 69.9, 254)];
+  const plain = L2.computeFlightSchedule({ id: 1, waypoints: wps.map((w) => ({ ...w })) });
+  // the same route with pins present but ZERO / null / absent
+  const zeroed = L2.computeFlightSchedule({ id: 1, waypoints: wps.map((w) =>
+    ({ ...w, bocNM: 0, bodNM: null, tocNM: undefined })) });
+  const shape = (sch) => sch.map((x) => x && [x.climbMin, x.climbFuelGal, x.descMin, x.descDistNM,
+    x.tocAlongNM, x.todBeforeNM, x.entryAlt, x.exitAlt]);
+  assert(JSON.stringify(shape(plain)) === JSON.stringify(shape(zeroed)), 'an empty pin changed the schedule');
+  // and the totals, which is what actually reaches the OFP
+  for (let i = 0; i < plain.length; i++) {
+    if (!plain[i]) continue;
+    const a = L2.computeLegTotals(plain[i].from, plain[i].to, plain[i]);
+    const b = L2.computeLegTotals(zeroed[i].from, zeroed[i].to, zeroed[i]);
+    assert(Math.abs(a.timeMin - b.timeMin) < 1e-9 && Math.abs(a.burnGal - b.burnGal) < 1e-9,
+      'leg ' + i + ' totals moved: ' + a.timeMin + '/' + a.burnGal + ' vs ' + b.timeMin + '/' + b.burnGal);
+  }
+  // no BOC/BOD marks are drawn when nothing was pinned - with no pin the
+  // bottom of a climb IS the start fix and marking it is pure clutter
+  for (const S of plain) {
+    if (!S) continue;
+    const kinds = L2.computeLegMarkers(S.from, S.to, S).map((m) => m.kind);
+    assert(!kinds.includes('BOC') && !kinds.includes('BOD'), 'leg ' + S.i + ' drew ' + kinds.join(','));
+  }
+});
+T('a BOC pin holds altitude, then climbs - and it is a delay, not a rate change', () => {
+  const L2 = moduleExports.legs;
+  const W = (n, lat, alt, x) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 0, wspd: 0, var: -11, ...x });
+  const base = L2.computeFlightSchedule({ id: 1, waypoints: [W('ENDU', 68.4, 254), W('A', 69.4, 5500)] })[0];
+  assert(base.tocAlongNM != null, 'the unpinned climb does not finish on this leg');
+  const pinNM = 8;
+  const pinned = L2.computeFlightSchedule({ id: 1,
+    waypoints: [W('ENDU', 68.4, 254), W('A', 69.4, 5500, { bocNM: pinNM })] })[0];
+  assert(Math.abs(pinned.climbStartNM - pinNM) < 1e-9, 'the BOC was not applied: ' + pinned.climbStartNM);
+  // THE CLIMB ITSELF IS UNCHANGED - same minutes, same fuel, same length. Only
+  // its position moved. That is what makes a BOC always flyable.
+  assert(Math.abs(pinned.climbMin - base.climbMin) < 1e-6, 'the climb time changed: ' + pinned.climbMin);
+  assert(Math.abs(pinned.climbFuelGal - base.climbFuelGal) < 1e-6, 'the climb fuel changed');
+  assert(Math.abs(pinned.climbDistNM - base.climbDistNM) < 1e-6, 'the climb length changed');
+  // ...and the TOC moved exactly that far down the leg
+  assert(Math.abs(pinned.tocAlongNM - (base.tocAlongNM + pinNM)) < 1e-6,
+    'TOC did not move with the pin: ' + pinned.tocAlongNM + ' vs ' + (base.tocAlongNM + pinNM));
+  // The lead is flown level at the ENTRY altitude, so the leg takes longer than
+  // the unpinned one only by the difference between cruise-low and cruise-high
+  // groundspeed - the point is that it is priced at its own altitude, not the
+  // cruise one.
+  const t = L2.computeLegTotals(pinned.from, pinned.to, pinned);
+  assert(isFinite(t.timeMin) && isFinite(t.burnGal) && t.timeMin > 0, JSON.stringify(t));
+  // and the BOC is marked, on the leg, at the pinned distance
+  const boc = L2.computeLegMarkers(pinned.from, pinned.to, pinned).find((m) => m.kind === 'BOC');
+  assert(boc && Math.abs(boc.distNM - pinNM) < 1e-9, 'no BOC mark: ' + JSON.stringify(boc));
+  assert(boc.rel === 'after' && boc.refName === 'ENDU', JSON.stringify(boc));
+  assert(Math.abs(boc.alt - 254) < 1 && isFinite(boc.lat) && isFinite(boc.lng),
+    'the BOC mark is not at the entry altitude on the ground track: ' + JSON.stringify(boc));
+});
+T('a BOD pin levels off early by starting down earlier', () => {
+  const L2 = moduleExports.legs;
+  const W = (n, lat, alt, x) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 0, wspd: 0, var: -11, ...x });
+  const route = (x) => L2.computeFlightSchedule({ id: 1,
+    waypoints: [W('ENDU', 68.3, 254), W('A', 69.0, 7500), W('ENTC', 69.9, 1500, x)] });
+  const base = route({});
+  const pinned = route({ bodNM: 6 });
+  const b = base[1], p = pinned[1];
+  assert(b.todStartsHere && p.todStartsHere, 'the descent does not start on the last leg in both cases');
+  assert(Math.abs(p.bodTailNM - 6) < 1e-9, 'the BOD tail was not applied: ' + p.bodTailNM);
+  assert(p.bodRefused === false, 'the pin was refused when there was room for it');
+  // The descent is the same length - it just finishes 6 NM early, so it starts
+  // 6 NM earlier. Pure geometry, no rate change.
+  assert(Math.abs(p.descDistNM - b.descDistNM) < 1e-6, 'the descent length changed: ' + p.descDistNM);
+  assert(Math.abs(p.descMin - b.descMin) < 1e-6, 'the descent time changed');
+  assert(Math.abs(p.todBeforeNM - (b.todBeforeNM + 6)) < 1e-6,
+    'TOD did not move earlier by the pin: ' + p.todBeforeNM + ' vs ' + (b.todBeforeNM + 6));
+  const bod = L2.computeLegMarkers(p.from, p.to, p).find((m) => m.kind === 'BOD');
+  assert(bod && Math.abs(bod.distNM - 6) < 1e-9 && bod.rel === 'before' && bod.refName === 'ENTC',
+    'no BOD mark: ' + JSON.stringify(bod));
+  assert(Math.abs(bod.alt - 1500) < 1, 'the BOD mark is not at the arrival altitude: ' + bod.alt);
+});
+T('a BOD pin is REFUSED, not half-applied, when the leg is still descending there', () => {
+  const L2 = moduleExports.legs;
+  const W = (n, lat, alt, x) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 0, wspd: 0, var: -11, ...x });
+  // A descent for a LATER, lower fix runs through this leg's tail, so the
+  // aircraft is still going down there and "be level before this fix" cannot be
+  // true. Half-applying it would put a level stretch inside a descent.
+  let found = null;
+  for (let d = 0.15; d <= 1.2 && !found; d += 0.05) {
+    const sch = L2.computeFlightSchedule({ id: 1, waypoints: [
+      W('ENDU', 68.2, 254), W('A', 69.2, 9500), W('B', 69.2 + d, 6000, { bodNM: 5 }), W('C', 69.2 + d + 0.06, 800)] });
+    if (sch[1] && sch[1].bodRefused) found = sch;
+  }
+  assert(found, 'could not build a route where a later descent claims the tail');
+  const L1 = found[1];
+  assert(L1.bodPinNM === 5, 'the request was not recorded: ' + L1.bodPinNM);
+  assert(L1.bodTailNM === 0, 'a refused pin still moved the descent: ' + L1.bodTailNM);
+  // Refused means REPORTED, and the mark is not drawn for something that is
+  // not happening.
+  assert(!L2.computeLegMarkers(L1.from, L1.to, L1).some((m) => m.kind === 'BOD'),
+    'a refused BOD was still marked on the map');
+});
+T('a TOC request is a TARGET that is checked, never a climb rate that is invented', () => {
+  const L2 = moduleExports.legs;
+  const W = (n, lat, alt, x) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 0, wspd: 0, var: -11, ...x });
+  const route = (x) => L2.computeFlightSchedule({ id: 1,
+    waypoints: [W('ENDU', 68.3, 254), W('A', 69.5, 6500, x)] })[0];
+  const base = route({});
+  // A target BEYOND where the climb tops out is met, and changes nothing.
+  const easy = route({ tocNM: base.tocAlongNM + 5 });
+  assert(easy.tocTargetMet === true, 'a comfortable target was reported as missed');
+  assert(Math.abs(easy.climbMin - base.climbMin) < 1e-9 && Math.abs(easy.climbFuelGal - base.climbFuelGal) < 1e-9,
+    'a met target changed the climb - it must never touch performance');
+  assert(Math.abs(easy.tocAlongNM - base.tocAlongNM) < 1e-9, 'a met target moved the TOC');
+  // A target EARLIER than the profile can manage is MISSED, and the leg reports
+  // the rate it would actually need. THIS IS THE POINT: the POH tables say
+  // nothing about the fuel flow or TAS at that rate, so the schedule stays on
+  // the profile's performance and hands the pilot the number instead.
+  const hard = route({ tocNM: base.tocAlongNM / 2 });
+  assert(hard.tocTargetMet === false, 'an impossible target was reported as met');
+  assert(Math.abs(hard.climbMin - base.climbMin) < 1e-9, 'a missed target changed the climb time');
+  assert(Math.abs(hard.climbFuelGal - base.climbFuelGal) < 1e-9, 'a missed target changed the climb fuel');
+  assert(Math.abs(hard.tocAlongNM - base.tocAlongNM) < 1e-9, 'a missed target moved the TOC');
+  assert(hard.climbRateReqFpm > 0 && isFinite(hard.climbRateReqFpm),
+    'no required rate reported: ' + hard.climbRateReqFpm);
+  // roughly double the distance halved => roughly double the rate
+  const derivedRate = (6500 - 254) / base.climbMin;
+  assert(hard.climbRateReqFpm > derivedRate * 1.5,
+    'the required rate is not higher than the profile: ' + hard.climbRateReqFpm + ' vs ' + derivedRate);
+  // With no request there is no target and no rate to report.
+  assert(base.tocTargetNM === null && base.climbRateReqFpm === null && base.tocTargetMet === true,
+    JSON.stringify({ t: base.tocTargetNM, r: base.climbRateReqFpm, m: base.tocTargetMet }));
+});
+T('pins never produce impossible geometry - swept over generated routes', () => {
+  // THE SWEEP IS THE TEST, the same way the v16.28 vanishing-TOD fix was
+  // proved. It found four real bugs while this feature was being written: a
+  // descent placed inside a delayed climb, a BOD tail read from the raw pin on
+  // legs that do not terminate the descent, phase distances that did not sum to
+  // the leg, and todBeforeNM latched before a second descent extended further
+  // back on the same leg.
+  const L2 = moduleExports.legs;
+  const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
+  const rnd = (() => { let s = 12345; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
+  const bad = [];
+  let legs = 0, withBoc = 0, withBod = 0, refused = 0, missed = 0;
+  for (let iter = 0; iter < 4000; iter++) {
+    const nWp = 2 + Math.floor(rnd() * 3);
+    const wps = []; let lat = 68.5 + rnd() * 1.0;
+    for (let k = 0; k < nWp; k++) {
+      lat += 0.05 + rnd() * 0.6;
+      wps.push(W('W' + k, lat, 18.0 + (rnd() - 0.5) * 0.8,
+        k === 0 ? 254 : Math.round((500 + rnd() * 9000) / 100) * 100));
+    }
+    const base = L2.computeFlightSchedule({ id: 1, waypoints: wps.map((w) => ({ ...w })) });
+    const pin = wps.map((w) => ({ ...w }));
+    const li = 1 + Math.floor(rnd() * (nWp - 1));
+    const legDist = base[li - 1] ? base[li - 1].distNM : 0;
+    if (li < pin.length) {
+      if (rnd() < 0.6) pin[li].bocNM = +(rnd() * legDist * 0.9).toFixed(2);
+      if (rnd() < 0.6) pin[li].bodNM = +(rnd() * legDist * 0.9).toFixed(2);
+      if (rnd() < 0.4) pin[li].tocNM = +(rnd() * legDist).toFixed(2);
+    }
+    for (const S of L2.computeFlightSchedule({ id: 1, waypoints: pin })) {
+      if (!S) continue;
+      legs++;
+      if (S.climbStartNM > 0.05) withBoc++;
+      if (S.bodTailNM > 0.05) withBod++;
+      if (S.bodRefused) refused++;
+      if (S.tocTargetNM != null && !S.tocTargetMet) missed++;
+      const climbB = S.climbStartNM + S.climbDistNM;
+      const descB = S.distNM - S.bodTailNM, descA = descB - S.descDistNM;
+      const tol = 1e-6;
+      if (S.climbStartNM < -tol || climbB > S.distNM + tol) bad.push('climb outside the leg on ' + S.i);
+      if (S.descDistNM > tol && (descA < -tol || descB > S.distNM + tol)) bad.push('descent outside the leg on ' + S.i);
+      if (S.climbDistNM > tol && S.descDistNM > tol && descA < climbB - 1e-4)
+        bad.push('climb and descent overlap on ' + S.i);
+      if (S.tocAlongNM != null && Math.abs(S.tocAlongNM - climbB) > 1e-6) bad.push('TOC is not the climb end on ' + S.i);
+      if (S.todStartsHere && Math.abs((S.distNM - S.todBeforeNM) - descA) > 1e-4)
+        bad.push('TOD is not the descent start on ' + S.i);
+      // the phases plus the level pieces must account for the leg exactly
+      const level = Math.max(0, S.climbStartNM) + Math.max(0, descA - climbB)
+                  + Math.max(0, S.distNM - Math.max(descB, climbB));
+      if (Math.abs(S.climbDistNM + S.descDistNM + level - S.distNM) > 1e-3)
+        bad.push('phase distances do not sum to the leg on ' + S.i);
+      const t = L2.computeLegTotals(S.from, S.to, S);
+      if (!t || !(t.timeMin > 0) || !(t.burnGal >= 0) || !isFinite(t.timeMin) || !isFinite(t.burnGal))
+        bad.push('bad totals on ' + S.i);
+      const marks = L2.computeLegMarkers(S.from, S.to, S);
+      const kinds = marks.map((m) => m.kind);
+      if (new Set(kinds).size !== kinds.length) bad.push('duplicate marker on ' + S.i);
+      for (const m of marks) {
+        if (!isFinite(m.lat) || !isFinite(m.lng)) bad.push('marker with no position on ' + S.i);
+        if (m.distNM < -tol || m.distNM > S.distNM + 0.06) bad.push('marker off the leg on ' + S.i);
+      }
+      if (S.climbStartNM > 0.05 && S.climbDistNM > 0.05 && !kinds.includes('BOC')) bad.push('BOC pinned but unmarked on ' + S.i);
+      if (S.bodTailNM > 0.05 && S.descDistNM > 0.05 && !kinds.includes('BOD')) bad.push('BOD pinned but unmarked on ' + S.i);
+    }
+  }
+  assert(withBoc > 500 && withBod > 300, 'the sweep barely exercised the pins: ' + withBoc + '/' + withBod);
+  assert(refused > 0 && missed > 0, 'the sweep never hit a refused BOD or a missed TOC target');
+  assert(bad.length === 0, bad.length + ' violations, first few: ' + [...new Set(bad)].slice(0, 5).join(' | '));
+  console.log('        ' + legs + ' pinned legs: ' + withBoc + ' with a BOC, ' + withBod +
+    ' with a BOD, ' + refused + ' pins refused, ' + missed + ' TOC targets missed, 0 violations');
+});
+
 console.log('\n=== 62b. TOC/TOD marks (the vanishing TOD, v16.28) ===');
 T('a TOD that lands ON a waypoint is still drawn (v16.28 bug fix)', () => {
   const L2 = moduleExports.legs;
@@ -4110,16 +4317,96 @@ TA('cancelling the insert changes nothing', async () => {
   await p;
   assert(ev('JSON.stringify(flights)') === before, 'cancelling the insert still changed the route');
 });
-TA('right-clicking the line inserts a waypoint there', async () => {
+TA('right-clicking the line opens the LEG PANEL, and inserting is still there', async () => {
+  // v16.37 moved this gesture: right-click used to insert a waypoint outright
+  // and now opens the leg's settings panel. The capability is not lost - it is
+  // the first action IN the panel, at the exact point clicked - which is how
+  // the gesture the user asked for was freed without giving anything up.
   ev(SEED);
   ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.45, lng: 18.90 }, originalEvent: { preventDefault: function(){} } })`);
+  const legOpen = () => doc.getElementById('leg-modal').style.display === 'flex';
+  assert(legOpen(), 'the leg panel did not open');
+  assert(/FINNSNES/.test(doc.getElementById('leg-modal-title').textContent) &&
+         /ENTC/.test(doc.getElementById('leg-modal-title').textContent),
+    'the panel named the wrong leg: ' + doc.getElementById('leg-modal-title').textContent);
+  // right-clicking must NOT change the route on its own
+  assert(ev('flights[0].waypoints.length') === 3, 'right-click altered the route by itself');
+
+  const p = ev('insertWaypointFromLegPanel()');
   await tick();
   typeInDialog('BEND');
   answerDialog('Insert waypoint');
-  await tick(); await tick();
+  await p; await tick();
   const names = ev('flights[0].waypoints.map(w => w.name)');
   assert(JSON.stringify(names) === JSON.stringify(['ENDU', 'FINNSNES', 'BEND', 'ENTC']),
-    'right-click inserted in the wrong place: ' + JSON.stringify(names));
+    'the panel inserted in the wrong place: ' + JSON.stringify(names));
+  assert(!legOpen(), 'the panel stayed open');
+});
+T('the leg panel reads the leg, pins from where you clicked, and previews the result', () => {
+  const L2 = moduleExports.legs;
+  ev(SEED);
+  // Right-click part-way along the ENDU -> FINNSNES leg.
+  ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
+  assert(doc.getElementById('leg-modal').style.display === 'flex', 'the panel did not open');
+  assert(/ENDU/.test(doc.getElementById('leg-modal-title').textContent), 'wrong leg');
+  // It shows the leg's own altitude, and no pins on a fresh route.
+  assert(Number(doc.getElementById('leg-alt').value) === ev('flights[0].waypoints[1].alt'),
+    'the altitude box does not show the leg altitude');
+  for (const id of ['leg-boc', 'leg-bod', 'leg-toc'])
+    assert(doc.getElementById(id).value === '', id + ' is pre-filled on an unpinned leg');
+  // The hint states the geometry the gesture landed on.
+  const hint = doc.getElementById('leg-hint').textContent;
+  assert(/NM along the flown path/.test(hint) && /NM after ENDU/.test(hint) && /NM before FINNSNES/.test(hint), hint);
+
+  // "Here" turns the click into the number - that is the point of the gesture.
+  ev("pinLegHere('boc');");
+  const boc = Number(doc.getElementById('leg-boc').value);
+  assert(boc > 0.5 && boc < ev('computeFlightSchedule(flights[0])[0].distNM'),
+    'the BOC "Here" button produced ' + boc);
+  ev("pinLegHere('bod');");
+  assert(Number(doc.getElementById('leg-bod').value) > 0.5, 'the BOD "Here" button produced nothing');
+
+  // The PREVIEW is computed through the real engine on a copy, so it cannot
+  // disagree with what Apply will do.
+  const pv = doc.getElementById('leg-preview').textContent;
+  assert(/Climb/.test(pv) && /starts/.test(pv), 'the preview does not describe the pinned climb: ' + pv);
+  assert(/NM after ENDU/.test(pv), 'the preview does not say where the climb starts: ' + pv);
+
+  // Apply writes the pins onto the leg's TO waypoint and the schedule honours
+  // them - and it is undoable like every other edit.
+  const before = ev('flights[0].waypoints[1].alt');
+  ev('saveLegSettings();');
+  assert(doc.getElementById('leg-modal').style.display !== 'flex', 'the panel stayed open after Apply');
+  assert(Math.abs(ev('flights[0].waypoints[1].bocNM') - boc) < 1e-9,
+    'the BOC did not reach the waypoint: ' + ev('flights[0].waypoints[1].bocNM'));
+  const S = L2.computeFlightSchedule({ id: 1, waypoints: JSON.parse(ev('JSON.stringify(flights[0].waypoints)')) })[0];
+  assert(Math.abs(S.climbStartNM - boc) < 1e-9, 'the schedule ignored the pin: ' + S.climbStartNM);
+  assert(ev('flights[0].waypoints[1].alt') === before, 'Apply changed the altitude it was only showing');
+  ev('undoLast(true);');
+  assert(!ev('flights[0].waypoints[1].bocNM'), 'applying pins was not undoable');
+});
+T('clearing the pins puts the leg back on the derived schedule', () => {
+  ev(SEED);
+  ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
+  ev("pinLegHere('boc'); pinLegHere('bod'); pinLegHere('toc'); saveLegSettings();");
+  assert(ev('flights[0].waypoints[1].bocNM') > 0, 'the pins were not applied');
+  ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
+  ev('clearLegPins(); saveLegSettings();');
+  // Cleared means ABSENT, not zero, so a saved route reads identically to one
+  // made before pins existed.
+  for (const k of ['bocNM', 'bodNM', 'tocNM'])
+    assert(ev('flights[0].waypoints[1].' + k) === null, k + ' is ' + ev('flights[0].waypoints[1].' + k));
+});
+T('a pattern stop has no ground track, so the panel refuses it', () => {
+  ev(SEED);
+  ev(`flights[0].waypoints.splice(1, 0, { name: 'PATTERN', lat: 69.1, lng: 18.3, alt: 1200, oat: 0, wdir: 0, wspd: 0, var: -11, isPattern: true, laps: 3 }); refreshMap();`);
+  const before = ev('flights[0].waypoints.length');
+  ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.08, lng: 18.55 }, originalEvent: { preventDefault: function(){} } })`);
+  // Either it found a real leg elsewhere, or it declined - what it must never
+  // do is open a climb-placement panel for something with no distance.
+  const title = doc.getElementById('leg-modal-title').textContent;
+  assert(!/PATTERN/.test(title), 'the panel opened on a pattern stop: ' + title);
+  assert(ev('flights[0].waypoints.length') === before, 'the route changed');
 });
 T('the OFP row carries only the delete button', () => {
   // v16.28: the per-row "+" was removed at the user's request - clicking the
