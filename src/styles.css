@@ -808,6 +808,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
       background: var(--bg-calc); text-align: left; padding: 1px 8px 3px 28px; border-top: none; }
     .via-dot { width: 9px; height: 9px; transform: rotate(45deg); border: 2px solid #ffffff;
       box-shadow: 0 1px 3px rgba(0,0,0,0.6); position: absolute; left: -6px; top: -6px; cursor: move; }
+    /* The via point being dragged straight out of the line: bigger and ringed,
+       so it is visible under the cursor that is creating it. */
+    .via-dot.dragging { width: 13px; height: 13px; left: -8px; top: -8px;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.55), 0 2px 6px rgba(0,0,0,0.6); }
+    /* The invisible grab line over each route. Wide enough to hit easily; the
+       cursor is the only thing that shows it is there. */
+    .leaflet-interactive.route-hit { cursor: copy; }
     .highlight-cell { background: var(--highlight-bg); font-weight: 700; color: var(--highlight-text); }
     .row-highlight { background: #feebc8 !important; }
     body.dark-mode .row-highlight { background: #744210 !important; }
@@ -834,6 +841,21 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .btn-done { background: #38a169; color: white; font-weight: 700; }
     .btn-edit-mode { background: #d69e2e; color: white; font-weight: 700; }
     .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+    /* The per-row "insert a waypoint into this leg" button. Deliberately quiet
+       next to the red delete: it sits in every row and must not shout. */
+    .btn-insert { background: transparent; border: 1px solid var(--border-color);
+      color: var(--text-muted); font-weight: 700; }
+    /* The OFP row's + / x cell. Deliberately cramped: at a narrow window the
+       table is already compressed to fit, so every pixel this column takes is
+       one the VAR / Alt / OAT inputs lose - and VAR feeds the magnetic
+       heading. Two buttons here cost about the same as one used to. */
+    .row-actions { white-space: nowrap; text-align: center; padding: 1px 2px; }
+    .row-actions .btn { padding: 1px 3px; line-height: 1.15; gap: 0;
+      /* a transparent border on the delete button so both are the same
+         height as the outlined insert button sitting next to it */
+      border: 1px solid transparent; min-width: 15px; justify-content: center; }
+    .row-actions .btn-insert { border-color: var(--border-color); }
+    .btn-insert:hover { background: #38a169; border-color: #38a169; color: #ffffff; opacity: 1; }
     .btn-add-flight { background: #2b6cb0; color: white; width: 100%; justify-content: center; padding: 7px; margin-top: 4px; }
     .btn:hover { opacity: 0.9; }
     .btn-sm { padding: 2px 5px; font-size: 10px; }

@@ -81,6 +81,87 @@ export function pointAlongSegments(segs, dNM) {
 
 // Perpendicular distance (NM, equirectangular approx - fine at leg scale)
 // from a point to a segment, for finding which leg segment was clicked.
+/**
+ * The full drawn path of a flight: every real waypoint in order, with the via
+ * points of the leg ARRIVING at each one placed just before it, so the line
+ * follows the bent path rather than the direct one. PATTERN waypoints are not
+ * places on the ground and contribute nothing.
+ *
+ * refreshMap draws from this, and so does every live drag - which is the
+ * point. Before v16.27 the drag handler rebuilt the line from waypoints
+ * ALONE, so dragging a waypoint on a bent leg made the via points visibly
+ * vanish until the drag ended and the map redrew.
+ *
+ * @param {Flight} fl
+ * @returns {[number, number][]} lat/lng pairs, ready for L.polyline
+ */
+export function flightLineCoords(fl) {
+  /** @type {[number, number][]} */
+  const out = [];
+  const wps = (fl && fl.waypoints) || [];
+  wps.forEach((wp, idx) => {
+    if (wp.isPattern) return;
+    if (idx > 0 && Array.isArray(wp.via)) {
+      wp.via.forEach(v => {
+        if (v && isFinite(v.lat) && isFinite(v.lng)) out.push([v.lat, v.lng]);
+      });
+    }
+    out.push([wp.lat, wp.lng]);
+  });
+  return out;
+}
+
+/**
+ * Which span of which leg a point on the map is nearest to.
+ *
+ * This is the hit-test behind both "bend the line here" and "insert a
+ * waypoint here": the answer identifies the leg (by the index of its END
+ * waypoint) and the position WITHIN that leg's via list, counted the way
+ * legPath lays the path out - `insertAt` spans are [from, v0, ... vn-1, to],
+ * so span k lies between path point k and k+1, and splicing a new via in at
+ * index k puts it exactly there.
+ *
+ * Legs touching a PATTERN waypoint are skipped: a circuit is not a line on
+ * the ground and cannot be bent or split.
+ *
+ * @param {Waypoint[]} waypoints
+ * @param {{lat: number, lng: number}} point
+ * @returns {{legEnd: number, insertAt: number, distNM: number}|null} null when
+ *   the route has no bendable leg at all
+ */
+export function findPathInsertion(waypoints, point) {
+  /** @type {{legEnd: number, insertAt: number, distNM: number}|null} */
+  let best = null;
+  const wps = waypoints || [];
+  for (let i = 0; i < wps.length - 1; i++) {
+    const from = wps[i], to = wps[i + 1];
+    if (from.isPattern || to.isPattern) continue;
+    const pts = legPath(from, to);
+    for (let k = 0; k < pts.length - 1; k++) {
+      const d = distToSegmentNM(point, pts[k], pts[k + 1]);
+      if (!best || d < best.distNM) best = { legEnd: i + 1, insertAt: k, distNM: d };
+    }
+  }
+  return best;
+}
+
+/**
+ * Where the halfway point of a leg falls, measured along the BENT path rather
+ * than the direct line - so on a leg dog-legged around terrain the new point
+ * lands on the route actually flown, not out in the middle of the mountain
+ * the via points were added to avoid.
+ *
+ * @param {Waypoint} from @param {Waypoint} to
+ * @returns {{lat: number, lng: number}|null} null for a zero-length leg
+ */
+export function legMidpoint(from, to) {
+  const segs = pathSegments(from, to);
+  if (!segs.length) return null;
+  const total = segs.reduce((a, s) => a + s.distNM, 0);
+  const p = pointAlongSegments(segs, total / 2);
+  return { lat: p.lat, lng: p.lng };
+}
+
 /** Perpendicular distance from a point to a span, for hit-testing a click.
  *  @param {{lat: number, lng: number}} p @param {{lat: number, lng: number}} a
  *  @param {{lat: number, lng: number}} b @returns {number} nautical miles */

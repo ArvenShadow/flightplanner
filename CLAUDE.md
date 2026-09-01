@@ -421,6 +421,44 @@ errors is the standard.
     same-origin files and Avinor tiles - so that sent a pilot looking for a
     map that was never stored. It now says only what is true: both charts
     are streamed and need internet, and everything else still works.
+- **Route editing gestures (v16.27, QoL)**: bending a leg was two gestures -
+  click the line to drop a via point, let go, hunt for the diamond, drag it.
+  It is now one press-drag-release, and every drag redraws the line live.
+  - THE DRAG CANNOT USE LEAFLET'S OWN MARKER DRAGGING: the via marker does
+    not exist until the press happens, and there is no way to hand an
+    in-progress mouse gesture to a Draggable created mid-press. So the drag
+    runs off map-level `mousemove` with `map.dragging.disable()` for its
+    duration, plus a DOCUMENT-level `mouseup` - releasing outside the map
+    must not leave the route stuck to the cursor.
+  - A press-release with no movement fires a click on the same element, on
+    top of the mousedown that already created the via. A 250 ms window
+    swallows exactly that trailing click. It is short on purpose: the browser
+    synthesises it immediately, and a longer window starts eating a genuine
+    second click further along the line. The click path is KEPT, not replaced
+    - a tap on a touch screen fires `click` with no `mousedown`.
+  - `hitLines[]`: an invisible weight-20 polyline per flight, over the visible
+    weight-4 one, carrying every route gesture. A 4 px line is a 4 px target;
+    verified by grabbing 7 px off the stroke in Chromium. Same coords, same
+    index as `polylines[]`, and both are redrawn by `drawLiveLine`.
+  - LIVE REDRAWS GO THROUGH `flightLineCoords(fl)` (legs.js), which is also
+    what refreshMap draws. The old waypoint-drag handler rebuilt the line from
+    waypoints ALONE, so dragging a waypoint on a bent leg made its via points
+    visibly vanish until the drag ended. One function, one answer.
+  - INSERTING A REAL WAYPOINT MID-ROUTE (right-click the line, or the `+` on
+    the leg's OFP row, which uses `legMidpoint` - halfway along the FLOWN
+    path, so a dog-legged leg does not put it in the terrain the vias were
+    added to avoid). Splitting a leg that already has vias has one right
+    answer: `via.slice(0, insertAt)` stays on the first half, `via.slice(insertAt)`
+    goes to the second. Anything else silently moves the flown track.
+    The new waypoint INHERITS alt/OAT/wind from the waypoint it is inserted
+    before - the leg was already planned to arrive at those, so nothing is
+    invented - and its variation is computed for the new position. All
+    editable in the row. PATTERN legs are not lines on the ground: they are
+    skipped by the hit-test and their rows get no `+`.
+  - jsdom cannot prove a gesture. The suite drives the stubbed handlers
+    (which caught the trailing-click double-insert), but press-drag-release,
+    the 7 px grab, map-pan suppression and the live bend were all measured in
+    real Chromium with `page.mouse`.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
