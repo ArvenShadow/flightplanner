@@ -1,0 +1,939 @@
+/* ==========================================================================
+   C182 Flight Planner - all styling.
+   ==========================================================================
+   Split out of src/index.html (v16.19) so a look-and-feel change is edited
+   HERE and nowhere else. tools/build.mjs inlines this file back into the
+   page's style element in BOTH deliveries, so every rule ships exactly as
+   it did when it lived in the page - no extra request, no flash of
+   unstyled content, nothing new for the service worker to cache.
+   (Deliberately no tag-like text in this comment: it is inlined verbatim.)
+
+   Themes: every colour goes through a CSS variable on :root / [data-theme],
+   so light and dark stay in step. Change a variable, not a rule.
+   ========================================================================== */
+
+/* required styles */
+
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	}
+.leaflet-container {
+	overflow: hidden;
+	}
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+	-webkit-user-select: none;
+	   -moz-user-select: none;
+	        user-select: none;
+	  -webkit-user-drag: none;
+	}
+/* Prevents IE11 from highlighting tiles in blue */
+.leaflet-tile::selection {
+	background: transparent;
+}
+/* Safari renders non-retina tile on retina better with this, but Chrome is worse */
+.leaflet-safari .leaflet-tile {
+	image-rendering: -webkit-optimize-contrast;
+	}
+/* hack that prevents hw layers "stretching" when loading new tiles */
+.leaflet-safari .leaflet-tile-container {
+	width: 1600px;
+	height: 1600px;
+	-webkit-transform-origin: 0 0;
+	}
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+	display: block;
+	}
+/* .leaflet-container svg: reset svg max-width decleration shipped in Joomla! (joomla.org) 3.x */
+/* .leaflet-container img: map is broken in FF if you have max-width: 100% on tiles */
+.leaflet-container .leaflet-overlay-pane svg {
+	max-width: none !important;
+	max-height: none !important;
+	}
+.leaflet-container .leaflet-marker-pane img,
+.leaflet-container .leaflet-shadow-pane img,
+.leaflet-container .leaflet-tile-pane img,
+.leaflet-container img.leaflet-image-layer,
+.leaflet-container .leaflet-tile {
+	max-width: none !important;
+	max-height: none !important;
+	width: auto;
+	padding: 0;
+	}
+
+.leaflet-container img.leaflet-tile {
+	/* See: https://bugs.chromium.org/p/chromium/issues/detail?id=600120 */
+	mix-blend-mode: plus-lighter;
+}
+
+.leaflet-container.leaflet-touch-zoom {
+	-ms-touch-action: pan-x pan-y;
+	touch-action: pan-x pan-y;
+	}
+.leaflet-container.leaflet-touch-drag {
+	-ms-touch-action: pinch-zoom;
+	/* Fallback for FF which doesn't support pinch-zoom */
+	touch-action: none;
+	touch-action: pinch-zoom;
+}
+.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
+	-ms-touch-action: none;
+	touch-action: none;
+}
+.leaflet-container {
+	-webkit-tap-highlight-color: transparent;
+}
+.leaflet-container a {
+	-webkit-tap-highlight-color: rgba(51, 181, 229, 0.4);
+}
+.leaflet-tile {
+	filter: inherit;
+	visibility: hidden;
+	}
+.leaflet-tile-loaded {
+	visibility: inherit;
+	}
+.leaflet-zoom-box {
+	width: 0;
+	height: 0;
+	-moz-box-sizing: border-box;
+	     box-sizing: border-box;
+	z-index: 800;
+	}
+/* workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=888319 */
+.leaflet-overlay-pane svg {
+	-moz-user-select: none;
+	}
+
+.leaflet-pane         { z-index: 400; }
+
+.leaflet-tile-pane    { z-index: 200; }
+.leaflet-overlay-pane { z-index: 400; }
+.leaflet-shadow-pane  { z-index: 500; }
+.leaflet-marker-pane  { z-index: 600; }
+.leaflet-tooltip-pane   { z-index: 650; }
+.leaflet-popup-pane   { z-index: 700; }
+
+.leaflet-map-pane canvas { z-index: 100; }
+.leaflet-map-pane svg    { z-index: 200; }
+
+.leaflet-vml-shape {
+	width: 1px;
+	height: 1px;
+	}
+.lvml {
+	behavior: url(#default#VML);
+	display: inline-block;
+	position: absolute;
+	}
+
+
+/* control positioning */
+
+.leaflet-control {
+	position: relative;
+	z-index: 800;
+	pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+	pointer-events: auto;
+	}
+.leaflet-top,
+.leaflet-bottom {
+	position: absolute;
+	z-index: 1000;
+	pointer-events: none;
+	}
+.leaflet-top {
+	top: 0;
+	}
+.leaflet-right {
+	right: 0;
+	}
+.leaflet-bottom {
+	bottom: 0;
+	}
+.leaflet-left {
+	left: 0;
+	}
+.leaflet-control {
+	float: left;
+	clear: both;
+	}
+.leaflet-right .leaflet-control {
+	float: right;
+	}
+.leaflet-top .leaflet-control {
+	margin-top: 10px;
+	}
+.leaflet-bottom .leaflet-control {
+	margin-bottom: 10px;
+	}
+.leaflet-left .leaflet-control {
+	margin-left: 10px;
+	}
+.leaflet-right .leaflet-control {
+	margin-right: 10px;
+	}
+
+
+/* zoom and fade animations */
+
+.leaflet-fade-anim .leaflet-popup {
+	opacity: 0;
+	-webkit-transition: opacity 0.2s linear;
+	   -moz-transition: opacity 0.2s linear;
+	        transition: opacity 0.2s linear;
+	}
+.leaflet-fade-anim .leaflet-map-pane .leaflet-popup {
+	opacity: 1;
+	}
+.leaflet-zoom-animated {
+	-webkit-transform-origin: 0 0;
+	    -ms-transform-origin: 0 0;
+	        transform-origin: 0 0;
+	}
+svg.leaflet-zoom-animated {
+	will-change: transform;
+}
+
+.leaflet-zoom-anim .leaflet-zoom-animated {
+	-webkit-transition: -webkit-transform 0.25s cubic-bezier(0,0,0.25,1);
+	   -moz-transition:    -moz-transform 0.25s cubic-bezier(0,0,0.25,1);
+	        transition:         transform 0.25s cubic-bezier(0,0,0.25,1);
+	}
+.leaflet-zoom-anim .leaflet-tile,
+.leaflet-pan-anim .leaflet-tile {
+	-webkit-transition: none;
+	   -moz-transition: none;
+	        transition: none;
+	}
+
+.leaflet-zoom-anim .leaflet-zoom-hide {
+	visibility: hidden;
+	}
+
+
+/* cursors */
+
+.leaflet-interactive {
+	cursor: pointer;
+	}
+.leaflet-grab {
+	cursor: -webkit-grab;
+	cursor:    -moz-grab;
+	cursor:         grab;
+	}
+.leaflet-crosshair,
+.leaflet-crosshair .leaflet-interactive {
+	cursor: crosshair;
+	}
+.leaflet-popup-pane,
+.leaflet-control {
+	cursor: auto;
+	}
+.leaflet-dragging .leaflet-grab,
+.leaflet-dragging .leaflet-grab .leaflet-interactive,
+.leaflet-dragging .leaflet-marker-draggable {
+	cursor: move;
+	cursor: -webkit-grabbing;
+	cursor:    -moz-grabbing;
+	cursor:         grabbing;
+	}
+
+/* marker & overlays interactivity */
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-image-layer,
+.leaflet-pane > svg path,
+.leaflet-tile-container {
+	pointer-events: none;
+	}
+
+.leaflet-marker-icon.leaflet-interactive,
+.leaflet-image-layer.leaflet-interactive,
+.leaflet-pane > svg path.leaflet-interactive,
+svg.leaflet-image-layer.leaflet-interactive path {
+	pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+	pointer-events: auto;
+	}
+
+/* visual tweaks */
+
+.leaflet-container {
+	background: #ddd;
+	outline-offset: 1px;
+	}
+.leaflet-container a {
+	color: #0078A8;
+	}
+.leaflet-zoom-box {
+	border: 2px dotted #38f;
+	background: rgba(255,255,255,0.5);
+	}
+
+
+/* general typography */
+.leaflet-container {
+	font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	}
+
+
+/* general toolbar styles */
+
+.leaflet-bar {
+	box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+	border-radius: 4px;
+	}
+.leaflet-bar a {
+	background-color: #fff;
+	border-bottom: 1px solid #ccc;
+	width: 26px;
+	height: 26px;
+	line-height: 26px;
+	display: block;
+	text-align: center;
+	text-decoration: none;
+	color: black;
+	}
+.leaflet-bar a,
+.leaflet-control-layers-toggle {
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	display: block;
+	}
+.leaflet-bar a:hover,
+.leaflet-bar a:focus {
+	background-color: #f4f4f4;
+	}
+.leaflet-bar a:first-child {
+	border-top-left-radius: 4px;
+	border-top-right-radius: 4px;
+	}
+.leaflet-bar a:last-child {
+	border-bottom-left-radius: 4px;
+	border-bottom-right-radius: 4px;
+	border-bottom: none;
+	}
+.leaflet-bar a.leaflet-disabled {
+	cursor: default;
+	background-color: #f4f4f4;
+	color: #bbb;
+	}
+
+.leaflet-touch .leaflet-bar a {
+	width: 30px;
+	height: 30px;
+	line-height: 30px;
+	}
+.leaflet-touch .leaflet-bar a:first-child {
+	border-top-left-radius: 2px;
+	border-top-right-radius: 2px;
+	}
+.leaflet-touch .leaflet-bar a:last-child {
+	border-bottom-left-radius: 2px;
+	border-bottom-right-radius: 2px;
+	}
+
+/* zoom control */
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+	font: bold 18px 'Lucida Console', Monaco, monospace;
+	text-indent: 1px;
+	}
+
+.leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out  {
+	font-size: 22px;
+	}
+
+
+/* layers control */
+
+.leaflet-control-layers {
+	box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+	background: #fff;
+	border-radius: 5px;
+	}
+.leaflet-control-layers-toggle {
+	background-image: url(images/layers.png);
+	width: 36px;
+	height: 36px;
+	}
+.leaflet-retina .leaflet-control-layers-toggle {
+	background-image: url(images/layers-2x.png);
+	background-size: 26px 26px;
+	}
+.leaflet-touch .leaflet-control-layers-toggle {
+	width: 44px;
+	height: 44px;
+	}
+.leaflet-control-layers .leaflet-control-layers-list,
+.leaflet-control-layers-expanded .leaflet-control-layers-toggle {
+	display: none;
+	}
+.leaflet-control-layers-expanded .leaflet-control-layers-list {
+	display: block;
+	position: relative;
+	}
+.leaflet-control-layers-expanded {
+	padding: 6px 10px 6px 6px;
+	color: #333;
+	background: #fff;
+	}
+.leaflet-control-layers-scrollbar {
+	overflow-y: scroll;
+	overflow-x: hidden;
+	padding-right: 5px;
+	}
+.leaflet-control-layers-selector {
+	margin-top: 2px;
+	position: relative;
+	top: 1px;
+	}
+.leaflet-control-layers label {
+	display: block;
+	font-size: 13px;
+	font-size: 1.08333em;
+	}
+.leaflet-control-layers-separator {
+	height: 0;
+	border-top: 1px solid #ddd;
+	margin: 5px -10px 5px -6px;
+	}
+
+/* Default icon URLs */
+.leaflet-default-icon-path { /* used only in path-guessing heuristic, see L.Icon.Default */
+	background-image: url(images/marker-icon.png);
+	}
+
+
+/* attribution and scale controls */
+
+.leaflet-container .leaflet-control-attribution {
+	background: #fff;
+	background: rgba(255, 255, 255, 0.8);
+	margin: 0;
+	}
+.leaflet-control-attribution,
+.leaflet-control-scale-line {
+	padding: 0 5px;
+	color: #333;
+	line-height: 1.4;
+	}
+.leaflet-control-attribution a {
+	text-decoration: none;
+	}
+.leaflet-control-attribution a:hover,
+.leaflet-control-attribution a:focus {
+	text-decoration: underline;
+	}
+.leaflet-attribution-flag {
+	display: inline !important;
+	vertical-align: baseline !important;
+	width: 1em;
+	height: 0.6669em;
+	}
+.leaflet-left .leaflet-control-scale {
+	margin-left: 5px;
+	}
+.leaflet-bottom .leaflet-control-scale {
+	margin-bottom: 5px;
+	}
+.leaflet-control-scale-line {
+	border: 2px solid #777;
+	border-top: none;
+	line-height: 1.1;
+	padding: 2px 5px 1px;
+	white-space: nowrap;
+	-moz-box-sizing: border-box;
+	     box-sizing: border-box;
+	background: rgba(255, 255, 255, 0.8);
+	text-shadow: 1px 1px #fff;
+	}
+.leaflet-control-scale-line:not(:first-child) {
+	border-top: 2px solid #777;
+	border-bottom: none;
+	margin-top: -2px;
+	}
+.leaflet-control-scale-line:not(:first-child):not(:last-child) {
+	border-bottom: 2px solid #777;
+	}
+
+.leaflet-touch .leaflet-control-attribution,
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+	box-shadow: none;
+	}
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+	border: 2px solid rgba(0,0,0,0.2);
+	background-clip: padding-box;
+	}
+
+
+/* popup */
+
+.leaflet-popup {
+	position: absolute;
+	text-align: center;
+	margin-bottom: 20px;
+	}
+.leaflet-popup-content-wrapper {
+	padding: 1px;
+	text-align: left;
+	border-radius: 12px;
+	}
+.leaflet-popup-content {
+	margin: 13px 24px 13px 20px;
+	line-height: 1.3;
+	font-size: 13px;
+	font-size: 1.08333em;
+	min-height: 1px;
+	}
+.leaflet-popup-content p {
+	margin: 17px 0;
+	margin: 1.3em 0;
+	}
+.leaflet-popup-tip-container {
+	width: 40px;
+	height: 20px;
+	position: absolute;
+	left: 50%;
+	margin-top: -1px;
+	margin-left: -20px;
+	overflow: hidden;
+	pointer-events: none;
+	}
+.leaflet-popup-tip {
+	width: 17px;
+	height: 17px;
+	padding: 1px;
+
+	margin: -10px auto 0;
+	pointer-events: auto;
+
+	-webkit-transform: rotate(45deg);
+	   -moz-transform: rotate(45deg);
+	    -ms-transform: rotate(45deg);
+	        transform: rotate(45deg);
+	}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+	background: white;
+	color: #333;
+	box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+	}
+.leaflet-container a.leaflet-popup-close-button {
+	position: absolute;
+	top: 0;
+	right: 0;
+	border: none;
+	text-align: center;
+	width: 24px;
+	height: 24px;
+	font: 16px/24px Tahoma, Verdana, sans-serif;
+	color: #757575;
+	text-decoration: none;
+	background: transparent;
+	}
+.leaflet-container a.leaflet-popup-close-button:hover,
+.leaflet-container a.leaflet-popup-close-button:focus {
+	color: #585858;
+	}
+.leaflet-popup-scrolled {
+	overflow: auto;
+	}
+
+.leaflet-oldie .leaflet-popup-content-wrapper {
+	-ms-zoom: 1;
+	}
+.leaflet-oldie .leaflet-popup-tip {
+	width: 24px;
+	margin: 0 auto;
+
+	-ms-filter: "progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678)";
+	filter: progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678);
+	}
+
+.leaflet-oldie .leaflet-control-zoom,
+.leaflet-oldie .leaflet-control-layers,
+.leaflet-oldie .leaflet-popup-content-wrapper,
+.leaflet-oldie .leaflet-popup-tip {
+	border: 1px solid #999;
+	}
+
+
+/* div icon */
+
+.leaflet-div-icon {
+	background: #fff;
+	border: 1px solid #666;
+	}
+
+
+/* Tooltip */
+/* Base styles for the element that has a tooltip */
+.leaflet-tooltip {
+	position: absolute;
+	padding: 6px;
+	background-color: #fff;
+	border: 1px solid #fff;
+	border-radius: 3px;
+	color: #222;
+	white-space: nowrap;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+	pointer-events: none;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+	}
+.leaflet-tooltip.leaflet-interactive {
+	cursor: pointer;
+	pointer-events: auto;
+	}
+.leaflet-tooltip-top:before,
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+	position: absolute;
+	pointer-events: none;
+	border: 6px solid transparent;
+	background: transparent;
+	content: "";
+	}
+
+/* Directions */
+
+.leaflet-tooltip-bottom {
+	margin-top: 6px;
+}
+.leaflet-tooltip-top {
+	margin-top: -6px;
+}
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-top:before {
+	left: 50%;
+	margin-left: -6px;
+	}
+.leaflet-tooltip-top:before {
+	bottom: 0;
+	margin-bottom: -12px;
+	border-top-color: #fff;
+	}
+.leaflet-tooltip-bottom:before {
+	top: 0;
+	margin-top: -12px;
+	margin-left: -6px;
+	border-bottom-color: #fff;
+	}
+.leaflet-tooltip-left {
+	margin-left: -6px;
+}
+.leaflet-tooltip-right {
+	margin-left: 6px;
+}
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+	top: 50%;
+	margin-top: -6px;
+	}
+.leaflet-tooltip-left:before {
+	right: 0;
+	margin-right: -12px;
+	border-left-color: #fff;
+	}
+.leaflet-tooltip-right:before {
+	left: 0;
+	margin-left: -12px;
+	border-right-color: #fff;
+	}
+
+/* Printing */
+
+@media print {
+	/* Prevent printers from removing background-images of controls. */
+	.leaflet-control {
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+		}
+	}
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { display: flex; flex-direction: column; height: 100vh; background: var(--bg-body); color: var(--text-main); transition: background 0.2s, color 0.2s; }
+    
+    /* Theme Variables */
+    body.light-mode {
+      --bg-body: #f4f6f9;
+      --bg-header: #1a365d;
+      --bg-card: #ffffff;
+      --bg-sidebar: #ffffff;
+      --bg-table-head: #edf2f7;
+      --bg-calc: #f7fafc;
+      --bg-input: #fffdfa;
+      --border-color: #cbd5e0;
+      --text-main: #2d3748;
+      --text-muted: #718096;
+      --highlight-bg: #ebf8ff;
+      --highlight-text: #2b6cb0;
+      --acc-fuel-bg: #f0fff4;
+      --acc-fuel-text: #22543d;
+    }
+    body.dark-mode {
+      --bg-body: #121824;
+      --bg-header: #0f172a;
+      --bg-card: #1e293b;
+      --bg-sidebar: #111827;
+      --bg-table-head: #1f2937;
+      --bg-calc: #1a202c;
+      --bg-input: #1e293b;
+      --border-color: #374151;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --highlight-bg: #1e3a8a;
+      --highlight-text: #93c5fd;
+      --acc-fuel-bg: #052e16;
+      --acc-fuel-text: #86efac;
+    }
+
+    body {
+      --bg-body: #f4f6f9;
+      --bg-header: #1a365d;
+      --bg-card: #ffffff;
+      --bg-sidebar: #ffffff;
+      --bg-table-head: #edf2f7;
+      --bg-calc: #f7fafc;
+      --bg-input: #fffdfa;
+      --border-color: #cbd5e0;
+      --text-main: #2d3748;
+      --text-muted: #718096;
+      --highlight-bg: #ebf8ff;
+      --highlight-text: #2b6cb0;
+      --acc-fuel-bg: #f0fff4;
+      --acc-fuel-text: #22543d;
+    }
+    
+    /* Header */
+    #header { background: var(--bg-header); color: white; padding: 8px 16px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; }
+    #header h1 { font-size: 15px; font-weight: 700; white-space: nowrap; }
+    .route-controls { display: flex; align-items: center; gap: 6px; }
+    .route-select { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); font-size: 12px; font-weight: 600; background: var(--bg-card); color: var(--text-main); cursor: pointer; max-width: 200px; }
+    
+    /* Status Badges */
+    .mag-badge { font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; background: #2f855a; color: white; }
+
+    /* Layout */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* View modes: split (default) / stacked / plan-only / map-only */
+    body.layout-stacked #main { flex-direction: column; }
+    body.layout-stacked #map-container { flex: none; height: 42vh; min-height: 240px; border-right: none; border-bottom: 2px solid var(--border-color); }
+    body.layout-stacked #sidebar { flex: 1; }
+    body.layout-plan #map-container { display: none; }
+    body.layout-map #sidebar { display: none; }
+
+    /* On-map ruler measurement chips */
+    .ruler-seg-label, .ruler-total-label {
+      background: rgba(38, 122, 118, 0.94); color: #ffffff;
+      font-size: 10px; font-weight: 700; padding: 2px 7px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.75);
+      white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+      pointer-events: none; display: inline-block;
+    }
+    .ruler-total-label { background: rgba(26, 54, 93, 0.95); border-color: #ecc94b; }
+
+    /* Compact columns: hide secondary data, keep the flying essentials
+       (From, To, Alt, MT, W/V, MH, GS, Dist, Time, AccT, Burn, Rem) */
+    body.compact-cols .cc { display: none; }
+    #map-container { flex: 1.05; position: relative; border-right: 2px solid var(--border-color); }
+    #declutter-btn { position: absolute; top: 10px; right: 10px; z-index: 1000; font-size: 11px; font-weight: 700;
+      padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
+      color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+    #declutter-btn:hover { background: var(--highlight-bg); }
+    #chart-btn { position: absolute; top: 40px; right: 10px; z-index: 1000; font-size: 11px; font-weight: 700;
+      padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
+      color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+    #chart-btn:hover { background: var(--highlight-bg); }
+    #chart-label { position: absolute; bottom: 2px; left: 6px; z-index: 1000; font-size: 9px;
+      color: #333; background: rgba(255,255,255,0.65); padding: 1px 6px; border-radius: 3px;
+      pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #map { width: 100%; height: 100%; }
+    #sidebar { flex: 1.55; display: flex; flex-direction: column; background: var(--bg-sidebar); overflow-y: auto; padding: 10px; gap: 10px; }
+    
+    /* Cards & Panels */
+    .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card-title { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
+    
+    .global-inputs { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; }
+    .input-group { display: flex; flex-direction: column; flex: 1; min-width: 65px; }
+    .input-group label { font-size: 9px; font-weight: 700; color: var(--text-muted); margin-bottom: 2px; text-transform: uppercase; }
+    .input-group input { padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; text-align: center; background: var(--bg-input); color: var(--text-main); }
+    
+    /* Multi-Flight Plan Section */
+    .flight-section { border: 1.5px solid var(--border-color); border-radius: 6px; margin-bottom: 12px; background: var(--bg-card); overflow: hidden; }
+    .flight-header { background: #2b6cb0; color: white; padding: 6px 10px; font-size: 12px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+    .flight-header-active { background: #1a365d; border-left: 5px solid #ecc94b; }
+    .flight-actions { display: flex; align-items: center; gap: 6px; }
+    .flight-dep-input { width: 70px; padding: 2px 4px; font-size: 11px; font-weight: bold; text-align: center; border-radius: 3px; border: 1px solid var(--border-color); color: #1a202c; background: #ffffff; }
+    
+    /* Table */
+    .table-container { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: var(--text-main); }
+    th { background: var(--bg-table-head); color: var(--text-main); font-weight: 700; padding: 5px 2px; border: 1px solid var(--border-color); font-size: 10px; }
+    td { padding: 3px 2px; border: 1px solid var(--border-color); font-size: 11px; }
+    td input { width: 100%; border: 1px solid transparent; text-align: center; font-size: 11px; padding: 2px 0; background: var(--bg-input); color: var(--text-main); border-radius: 2px; }
+    td input:focus { border-color: #3182ce; outline: none; background: var(--highlight-bg); color: var(--text-main); }
+    .calc-cell { background: var(--bg-calc); font-weight: 600; color: var(--text-main); }
+    .acc-fuel-cell { background: var(--acc-fuel-bg); color: var(--acc-fuel-text); font-weight: 700; }
+    .low-fuel { background: #e53e3e !important; color: #ffffff !important; }
+    .sub-leg-row td { font-size: 9.5px; font-style: italic; color: var(--text-muted);
+      background: var(--bg-calc); text-align: left; padding: 1px 8px 3px 28px; border-top: none; }
+    .via-dot { width: 9px; height: 9px; transform: rotate(45deg); border: 2px solid #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.6); position: absolute; left: -6px; top: -6px; cursor: move; }
+    .highlight-cell { background: var(--highlight-bg); font-weight: 700; color: var(--highlight-text); }
+    .row-highlight { background: #feebc8 !important; }
+    body.dark-mode .row-highlight { background: #744210 !important; }
+    .wv-cell { background: #fffaf0; color: #744210; font-weight: 700; cursor: pointer; transition: 0.1s; }
+    .wv-cell:hover { background: #feebc8; }
+    body.dark-mode .wv-cell { background: #451a03; color: #fed7aa; }
+    
+    /* Badges */
+    .type-climb { color: #22543d; background: #c6f6d5; font-weight: 700; font-size: 9px; padding: 1px 4px; border-radius: 3px; }
+    .type-cruise { color: #2b6cb0; background: #bee3f8; font-weight: 700; font-size: 9px; padding: 1px 4px; border-radius: 3px; }
+    .type-desc { color: #744210; background: #feebc8; font-weight: 700; font-size: 9px; padding: 1px 4px; border-radius: 3px; }
+    .type-pattern { color: #553c9a; background: #e9d8fd; font-weight: 700; font-size: 9px; padding: 1px 4px; border-radius: 3px; }
+    
+    /* Buttons */
+    .btn { padding: 4px 8px; border-radius: 4px; border: none; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.1s; display: inline-flex; align-items: center; gap: 4px; }
+    .btn-primary { background: #3182ce; color: white; }
+    .btn-success { background: #38a169; color: white; }
+    .btn-danger { background: #e53e3e; color: white; }
+    .btn-secondary { background: #4a5568; color: white; }
+    .btn-wind { background: #dd6b20; color: white; }
+    .btn-ruler { background: #319795; color: white; }
+    .btn-sera { background: #2b6cb0; color: white; }
+    .btn-settings { background: #805ad5; color: white; }
+    .btn-done { background: #38a169; color: white; font-weight: 700; }
+    .btn-edit-mode { background: #d69e2e; color: white; font-weight: 700; }
+    .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+    .btn-add-flight { background: #2b6cb0; color: white; width: 100%; justify-content: center; padding: 7px; margin-top: 4px; }
+    .btn:hover { opacity: 0.9; }
+    .btn-sm { padding: 2px 5px; font-size: 10px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .route-controls { flex-wrap: wrap; }
+
+    /* Waypoint & Profile Map Labels */
+    .wp-dot { width: 10px; height: 10px; background: #e53e3e; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.6); }
+    .wp-label { width: max-content; background: #ffffff; color: #000000; font-weight: 800; font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #1a202c; box-shadow: 0 2px 5px rgba(0,0,0,0.4); white-space: nowrap; margin-top: 3px; }
+    
+    /* Leaflet gives divIcons a fixed 12x12 inline size unless told otherwise;
+       force our marker containers to grow to their content so label chips
+       paint their full background instead of 12px of it. */
+    .toc-custom-icon, .tod-custom-icon, .wp-custom-icon,
+    .ruler-icon, .ruler-seg-icon, .ruler-total-icon {
+      width: max-content !important;
+      height: max-content !important;
+      background: transparent !important;
+      border: none !important;
+    }
+    /* The precise TOC/TOD point on the track line; the text chip floats
+       beside it, offset perpendicular to the track. */
+    .prof-point { position: absolute; left: -5px; top: -5px; width: 10px; height: 10px;
+      border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.6); }
+    .prof-point.toc { background: #276749; }
+    .prof-point.tod { background: #c05621; }
+    .toc-label { display: inline-block; background: #22543d; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
+    .tod-label { display: inline-block; background: #c05621; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
+    .pattern-label { display: inline-block; background: #553c9a; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.55); white-space: nowrap; }
+    .ruler-label { display: inline-block; background: #319795; color: #ffffff; font-weight: 700; font-size: 10px; padding: 2px 5px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.7); box-shadow: 0 1px 4px rgba(0,0,0,0.45); white-space: nowrap; }
+    /* Zoom declutter (see applyZoomDeclutter). Mid zoom: compact waypoint
+       labels, the big TOC/TOD and ruler chips disappear (their exact-position
+       dots stay). Far zoom: dots and route lines only. */
+    #map.zoom-mid .wp-label { font-size: 9px; padding: 1px 4px; border-width: 1px; border-left-width: 3px; box-shadow: none; }
+    #map.zoom-mid .pattern-label { font-size: 8px; padding: 1px 4px; }
+    #map.zoom-mid .toc-label, #map.zoom-mid .tod-label,
+    #map.zoom-mid .ruler-seg-label { display: none; }
+    #map.zoom-far .wp-label, #map.zoom-far .pattern-label,
+    #map.zoom-far .toc-label, #map.zoom-far .tod-label,
+    #map.zoom-far .prof-point, #map.zoom-far .via-dot,
+    #map.zoom-far .ruler-seg-label, #map.zoom-far .ruler-label { display: none; }
+
+    /* Modals */
+    /* In-app dialogs & toasts (replace alert/confirm/prompt) */
+    .dlg-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10001;
+      display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .dlg { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color);
+      border-radius: 10px; width: 460px; max-width: 100%; padding: 16px 18px 14px;
+      box-shadow: 0 18px 48px rgba(0,0,0,0.45); }
+    .dlg-title { font-size: 14px; font-weight: 800; margin-bottom: 6px; }
+    .dlg-msg { font-size: 12px; line-height: 1.6; margin-bottom: 12px; }
+    .dlg-field { margin: 4px 0 12px; }
+    .dlg-field label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 3px; }
+    .dlg-input { width: 100%; padding: 6px 8px; font-size: 13px; border-radius: 5px;
+      border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); }
+    .dlg-buttons { display: flex; flex-direction: column; gap: 6px; }
+    .dlg-btn { display: flex; align-items: center; gap: 8px; text-align: left; width: 100%;
+      padding: 8px 10px; font-size: 12px; font-weight: 700; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); }
+    .dlg-btn:hover, .dlg-btn:focus { outline: none; border-color: #3182ce; background: var(--highlight-bg); }
+    .dlg-key { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px;
+      border-radius: 4px; background: rgba(127,127,127,0.22); font-size: 10px; font-weight: 700; }
+    .dlg-hint { display: block; font-weight: 500; font-size: 10px; color: var(--text-muted); margin-left: auto; }
+    .dlg-primary { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+    .dlg-primary:hover, .dlg-primary:focus { background: #2c5282; }
+    .dlg-danger { background: #c53030; color: #fff; border-color: #c53030; }
+    .dlg-danger:hover, .dlg-danger:focus { background: #9b2c2c; }
+    #app-toasts { position: fixed; bottom: 14px; right: 14px; z-index: 10002; display: flex;
+      flex-direction: column; gap: 6px; align-items: flex-end; }
+    .toast { font-size: 11.5px; font-weight: 600; padding: 8px 12px; border-radius: 6px; cursor: pointer;
+      max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); background: #2d3748; color: #fff; }
+    .toast-good { background: #276749; } .toast-warn { background: #c05621; } .toast-bad { background: #c53030; }
+    .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
+    .modal { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 8px; width: 520px; max-width: 95vw; padding: 18px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); max-height: 90vh; display: flex; flex-direction: column; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+    .modal-header h2 { font-size: 14px; font-weight: 700; color: var(--text-main); }
+    .modal-body { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 4px; font-size: 11px; }
+    .setting-section { background: var(--bg-calc); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; }
+    .setting-section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+    .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; }
+    .setting-row input, .setting-row select { width: 110px; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 4px; text-align: center; background: var(--bg-input); color: var(--text-main); }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 10px; }
+
+    /* Wind Entry Matrix Table */
+    .wind-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    .wind-table th { background: var(--bg-table-head); color: var(--text-main); font-size: 10px; padding: 5px; border: 1px solid var(--border-color); }
+    .wind-table td { padding: 4px; border: 1px solid var(--border-color); }
+    .wind-input { width: 100%; padding: 4px; border: 1px solid var(--border-color); border-radius: 3px; font-size: 11px; font-weight: bold; text-align: center; background: var(--bg-input); color: var(--text-main); }
+    .wind-input:focus { border-color: #dd6b20; background: #fffaf0; outline: none; }
+
+    /* SERA Table */
+    .sera-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 10px; color: var(--text-main); }
+    .sera-table th { background: #2c5282; color: white; padding: 5px; border: 1px solid #2b6cb0; }
+    .sera-table td { padding: 5px; border: 1px solid var(--border-color); text-align: left; background: var(--bg-card); }
+
+    /* 3-Min Plotting Ref Box */
+    .tick-box { display: flex; gap: 8px; align-items: center; background: var(--highlight-bg); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 10px; color: var(--highlight-text); font-weight: 600; }
+
+    @media print {
+      #header, #map-container, .toolbar, .no-print, .btn, .card-title span, .tick-box, .flight-actions, .mag-badge { display: none !important; }
+      #sidebar { display: flex !important; flex: 1; overflow: visible; padding: 0; }
+      body { height: auto; background: white !important; color: black !important; }
+      .flight-section { border: 1px solid #000 !important; break-inside: avoid; margin-bottom: 16px; background: white !important; }
+      .flight-header { background: #edf2f7 !important; color: #000 !important; border-bottom: 1px solid #000; }
+      table { font-size: 9px; color: black !important; }
+      th, td { border: 1px solid #4a5568 !important; background: white !important; color: black !important; }
+    }

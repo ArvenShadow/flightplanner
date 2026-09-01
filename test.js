@@ -436,7 +436,7 @@ T('plotting list renders with coordinates and MT legs', () => {
   assert(det.querySelectorAll('input[type=text]').length === 3, 'name inputs missing');
 });
 T('buildPlottingText produces clean copyable text', () => {
-  const t = w.buildPlottingText(0);
+  const t = w.plottingTextFor(0);
   console.log('        ' + t.split('\n')[1]);
   assert(t.includes('WAYPOINTS') && t.includes('MT '), 'sections missing');
   assert(!t.includes('NaN'), 'NaN in plotting text');
@@ -529,7 +529,7 @@ T('plotting list shows TOC marking distance', () => {
   assert(det.innerHTML.includes('after ENDU'), 'TOC ref missing');
 });
 T('copy text includes TOC marking info', () => {
-  const t = w.buildPlottingText(0);
+  const t = w.plottingTextFor(0);
   assert(t.includes('TOC') && t.includes('after ENDU'), 'no TOC in copy text');
 });
 
@@ -1227,7 +1227,7 @@ T('plotting list expands via legs into drawable segments', () => {
   const det = doc.querySelector('details.plotting-details');
   const t = det.textContent;
   assert(t.includes('·1'), 'via segment naming missing');
-  const copy = w.buildPlottingText(0);
+  const copy = w.plottingTextFor(0);
   assert(copy.includes('v1'), 'copy text missing via segment: ' + copy.split('\n').slice(-4).join(' / '));
 });
 T('removing the via restores the direct leg', () => {
@@ -2173,9 +2173,10 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const windsModule = require('./src/lib/winds.js');
   const integrityModule = require('./src/lib/integrity.js');
   const exchModule = require('./src/lib/exchange.js');
+  const plotModule = require('./src/lib/plotting.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
-                    exch: exchModule };
+                    exch: exchModule, plot: plotModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2307,7 +2308,8 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                            M.integrity.integrityBannerHTML(['x'])],
     'exchange.js': () => [M.exch.buildExportPayload({ flights: [], profile: { mode: 'C182T' } }),
                           M.exch.sanitiseFlights([{ waypoints: [wp(69, 18, 0)] }]),
-                          M.exch.defaultFlights(), M.exch.pickProfileKeys({ theme: 'dark' })]
+                          M.exch.defaultFlights(), M.exch.pickProfileKeys({ theme: 'dark' })],
+    'plotting.js': () => M.plot.buildPlottingText({ id: 1, waypoints: [wp(69.055, 18.545, 254), wp(69.679, 18.911, 2500)] }, 'NM')
   };
   for (const [name, run] of Object.entries(exercises)) {
     let out;
@@ -2374,6 +2376,40 @@ T('an export carries aircraft settings and NOTHING else off the profile', () => 
   assert(out.profile.mode === 'C182T' && out.profile.cruiseRpm === 2300 && out.profile.theme === 'dark',
     'aircraft settings were dropped - the same route would compute differently elsewhere');
   assert(out.formatVersion === 2, 'format version changed silently');
+});
+T('the plotting text is pure content, and honours the distance unit', () => {
+  const P = moduleExports.plot, W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 0, wspd: 0, var: -11 });
+  const fl = { id: 1, waypoints: [W('ENDU', 69.05505349, 18.54466865, 254), W('ENTC', 69.67895054, 18.91143033, 2500)] };
+  const nm = P.buildPlottingText(fl, 'NM');
+  assert(nm.includes('ENDU-ENTC - WAYPOINTS'), 'header missing: ' + nm.split('\n')[0]);
+  // degrees + decimal minutes, the format printed on the chart margin
+  assert(/69\u00b003\.30'N/.test(nm), 'coordinates are not in chart DMM format:\n' + nm);
+  assert(nm.includes('TT ') && nm.includes('MT '), 'the whole-leg tracks are missing');
+  // changing the unit must change only the DISPLAY, never the underlying leg
+  const km = P.buildPlottingText(fl, 'KM');
+  assert(km.includes('km') && !km.includes(' NM'), 'KM was requested but NM shipped');
+  const nmDist = parseFloat(nm.match(/([\d.]+) NM/)[1]);
+  const kmDist = parseFloat(km.match(/([\d.]+) km/)[1]);
+  assert(Math.abs(kmDist / nmDist - 1.852) < 0.01, `unit conversion is wrong: ${nmDist} NM vs ${kmDist} km`);
+});
+T('the source is navigable: styling and each calculation have ONE home', () => {
+  // A UI edit should not require reading 4000 lines to find the right place.
+  assert(fs.existsSync('src/styles.css'), 'styling is not in its own file');
+  const page = fs.readFileSync('src/index.html', 'utf8');
+  assert(/<!-- @STYLES:/.test(page), 'the page has no @STYLES marker for the build to fill');
+  assert(!/<style>[\s\S]*\{[\s\S]*\}[\s\S]*<\/style>/.test(page), 'CSS rules crept back into the page');
+  assert(page.includes('WHERE TO EDIT WHAT'), 'the navigation index is gone from the page script');
+  for (const lib of ['performance.js', 'legs.js', 'daylight.js', 'winds.js', 'integrity.js',
+                     'exchange.js', 'plotting.js', 'format.js', 'geodesy.js', 'magvar.js', 'dialog.js']) {
+    assert(page.includes('src/lib/' + lib), 'the index does not point at ' + lib);
+    assert(fs.existsSync('src/lib/' + lib), 'missing module: ' + lib);
+  }
+  // and the built artifact must still carry the styling inline
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(/<style>[\s\S]{500,}<\/style>/.test(built), 'the built file lost its inlined CSS');
+  assert(!/<!-- @STYLES:/.test(built), 'the style marker comment survived into the artifact');
+  // exactly one <style> element: two would invite cascade surprises
+  assert((built.match(/<style>/g) || []).length === 1, 'the artifact has more than one <style> block');
 });
 T('an untrusted import cannot poison the plan', () => {
   const X = moduleExports.exch;

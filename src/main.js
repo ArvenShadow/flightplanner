@@ -22,8 +22,10 @@ import * as daylight from './lib/daylight.js';
 import * as winds from './lib/winds.js';
 import * as integrity from './lib/integrity.js';
 import * as exchange from './lib/exchange.js';
+import * as plotting from './lib/plotting.js';
 
-const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs, ...daylight, ...winds, ...integrity, ...exchange };
+const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs,
+              ...daylight, ...winds, ...integrity, ...exchange, ...plotting };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {

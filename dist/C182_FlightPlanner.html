@@ -10,6 +10,20 @@
   <meta name="theme-color" content="#1a365d">
   <!-- Leaflet 1.9.4 CSS embedded for offline use -->
   <style>
+/* ==========================================================================
+   C182 Flight Planner - all styling.
+   ==========================================================================
+   Split out of src/index.html (v16.19) so a look-and-feel change is edited
+   HERE and nowhere else. tools/build.mjs inlines this file back into the
+   page's style element in BOTH deliveries, so every rule ships exactly as
+   it did when it lived in the page - no extra request, no flash of
+   unstyled content, nothing new for the service worker to cache.
+   (Deliberately no tag-like text in this comment: it is inlined verbatim.)
+
+   Themes: every colour goes through a CSS variable on :root / [data-theme],
+   so light and dark stay in step. Change a variable, not a rule.
+   ========================================================================== */
+
 /* required styles */
 
 .leaflet-pane,
@@ -671,9 +685,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
 		print-color-adjust: exact;
 		}
 	}
-
-  </style>
-  <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { display: flex; flex-direction: column; height: 100vh; background: var(--bg-body); color: var(--text-main); transition: background 0.2s, color 0.2s; }
     
@@ -3555,7 +3566,12 @@ svg.leaflet-image-layer.leaflet-interactive path {
   var format_exports = {};
   __export(format_exports, {
     clockFromMinutes: () => clockFromMinutes,
+    convertDist: () => convertDist,
+    convertFuel: () => convertFuel,
+    distLabel: () => distLabel,
     formatTimeHHMM: () => formatTimeHHMM,
+    fuelLabel: () => fuelLabel,
+    fuelRateLabel: () => fuelRateLabel,
     toDMM: () => toDMM
   });
   function formatTimeHHMM(mins) {
@@ -3583,6 +3599,25 @@ svg.leaflet-image-layer.leaflet-interactive path {
     const total = (raw % 1440 + 1440) % 1440;
     const days = Math.floor(raw / 1440);
     return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}` + (days > 0 ? `+${days}` : "");
+  }
+  function distLabel(u) {
+    return u === "KM" ? "km" : u === "SM" ? "SM" : "NM";
+  }
+  function fuelLabel(u) {
+    return u === "LITERS" ? "L" : u === "KG" ? "kg" : "gal";
+  }
+  function fuelRateLabel(u) {
+    return fuelLabel(u) + "/h";
+  }
+  function convertDist(nm, targetUnit) {
+    if (targetUnit === "KM") return nm * 1.852;
+    if (targetUnit === "SM") return nm * 1.15078;
+    return nm;
+  }
+  function convertFuel(gal, targetUnit) {
+    if (targetUnit === "LITERS") return gal * 3.78541;
+    if (targetUnit === "KG") return gal * 2.72;
+    return gal;
   }
 
   // src/lib/legs.js
@@ -4354,8 +4389,58 @@ svg.leaflet-image-layer.leaflet-interactive path {
     };
   }
 
+  // src/lib/plotting.js
+  var plotting_exports = {};
+  __export(plotting_exports, {
+    buildPlottingText: () => buildPlottingText
+  });
+  function buildPlottingText(fl, distUnit) {
+    distUnit = distUnit || "NM";
+    const lines = [];
+    lines.push(`${flightTitle(fl).toUpperCase()} - WAYPOINTS`);
+    fl.waypoints.forEach((wp, i) => {
+      const tag = wp.isPattern ? ` (PATTERN x${wp.laps})` : "";
+      lines.push(`${String(i + 1).padEnd(3)} ${(wp.name + tag).padEnd(18)} ${toDMM(wp.lat, true)}  ${toDMM(wp.lng, false)}  ${wp.alt}'`);
+    });
+    lines.push("");
+    lines.push(`LEGS (whole-leg, as drawn on chart)`);
+    const schedT = computeFlightSchedule(fl);
+    for (let i = 0; i < fl.waypoints.length - 1; i++) {
+      const from = fl.waypoints[i], to = fl.waypoints[i + 1];
+      if (from.isPattern || to.isPattern) continue;
+      const res = computeLegTotals(from, to, schedT[i]);
+      if (!res) continue;
+      const profs = computeLegMarkers(from, to, schedT[i]);
+      let acc = 0;
+      res.segs.forEach((sg, k) => {
+        const nameA = k === 0 ? from.name : "v" + k;
+        const nameB = k === res.segs.length - 1 ? to.name : "v" + (k + 1);
+        const smt = Math.round((sg.tt + to.var + 360) % 360);
+        const profTxt = profs.filter((p) => {
+          const along = p.kind === "TOC" ? p.distNM : res.distNM - p.distNM;
+          return along > acc - 1e-3 && along <= acc + sg.distNM + 1e-3;
+        }).map((p) => `  | ${p.kind} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`).join("");
+        lines.push(`${(nameA + " - " + nameB).padEnd(28)} TT ${String(sg.tt).padStart(3, "0")}  MT ${String(smt).padStart(3, "0")}  ${convertDist(sg.distNM, distUnit).toFixed(1).padStart(5)} ${distLabel(distUnit)}${profTxt}`);
+        acc += sg.distNM;
+      });
+    }
+    return lines.join("\n");
+  }
+
   // src/main.js
-  var api = { ...magvar_exports, ...geodesy_exports, ...dialog_exports, ...performance_exports, ...format_exports, ...legs_exports, ...daylight_exports, ...winds_exports, ...integrity_exports, ...exchange_exports };
+  var api = {
+    ...magvar_exports,
+    ...geodesy_exports,
+    ...dialog_exports,
+    ...performance_exports,
+    ...format_exports,
+    ...legs_exports,
+    ...daylight_exports,
+    ...winds_exports,
+    ...integrity_exports,
+    ...exchange_exports,
+    ...plotting_exports
+  };
   for (const [name, value] of Object.entries(api)) {
     window[name] = value;
   }
@@ -4363,6 +4448,41 @@ svg.leaflet-image-layer.leaflet-interactive path {
 })();
   </script>
   <script>
+    // =========================================================================
+    // WHERE TO EDIT WHAT
+    // =========================================================================
+    // Styling of ANYTHING          -> src/styles.css (one file, all of it)
+    // Page layout / markup / ids   -> the HTML above this script
+    //
+    // Calculations (no DOM, unit-tested in bare Node, run `npm test`):
+    //   aircraft performance, POH   -> src/lib/performance.js
+    //   distance & track            -> src/lib/geodesy.js
+    //   magnetic variation          -> src/lib/magvar.js
+    //   legs, via points, TOC/TOD   -> src/lib/legs.js
+    //   sunrise / SERA day-VFR      -> src/lib/daylight.js
+    //   winds aloft maths + API     -> src/lib/winds.js
+    //   the red banner's rules      -> src/lib/integrity.js
+    //   export / import safety      -> src/lib/exchange.js
+    //   the copyable plotting text  -> src/lib/plotting.js
+    //   number & unit formatting    -> src/lib/format.js
+    //   popups and toasts           -> src/lib/dialog.js
+    //
+    // What is left in THIS script is the part that talks to the browser -
+    // the map, the tables, the modals and localStorage. It stays here on
+    // purpose: it is one web of shared state (flights, activeFlightIndex,
+    // map, markers, undoStack...) plus 61 inline on*= handlers that need
+    // these functions as globals. Splitting it across files would make an
+    // edit span MORE files, not fewer.
+    //
+    // Sections below, in order:
+    //   1   helpers                    6b  wind fetch (Open-Meteo)
+    //   1b  version badge & update     7   the OFP tables
+    //   2   map setup & ruler          7b  settings / SERA modals
+    //   2b  base chart (topo <-> VFR)  7b2 integrity banner (thin wrapper)
+    //   4   map interactions, undo     7c  plotting list UI
+    //   6   wind entry modal           8   saved routes & localStorage
+    // =========================================================================
+
     // =========================================================================
     // 1. HELPERS
     // =========================================================================
@@ -4559,7 +4679,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.18';
+    const APP_VERSION = '16.19';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4999,21 +5119,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
     }
 
     // Pretty display labels. Internally the codes stay NM/KM/SM and GAL/LITERS/KG.
-    function distLabel(u) { return u === 'KM' ? 'km' : (u === 'SM' ? 'SM' : 'NM'); }
-    function fuelLabel(u) { return u === 'LITERS' ? 'L' : (u === 'KG' ? 'kg' : 'gal'); }
-    function fuelRateLabel(u) { return fuelLabel(u) + '/h'; }
+    // distLabel / fuelLabel / fuelRateLabel / convertDist / convertFuel
+    // -> src/lib/format.js
 
-    function convertDist(nm, targetUnit) {
-      if (targetUnit === 'KM') return nm * 1.852;
-      if (targetUnit === 'SM') return nm * 1.15078;
-      return nm;
-    }
-
-    function convertFuel(gal, targetUnit) {
-      if (targetUnit === 'LITERS') return gal * 3.78541;
-      if (targetUnit === 'KG') return gal * 2.72; // AvGas 100LL density approx
-      return gal;
-    }
 
     function minuteMark() {
       const m = Number(aircraftProfile.minuteMark);
@@ -6557,43 +6665,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
       saveActiveState();
     }
 
-    function buildPlottingText(fIdx) {
-      const fl = flights[fIdx];
-      const distUnit = aircraftProfile.distUnit || 'NM';
-      const lines = [];
-      lines.push(`${flightTitle(fl).toUpperCase()} - WAYPOINTS`);
-      fl.waypoints.forEach((wp, i) => {
-        const tag = wp.isPattern ? ` (PATTERN x${wp.laps})` : '';
-        lines.push(`${String(i + 1).padEnd(3)} ${(wp.name + tag).padEnd(18)} ${toDMM(wp.lat, true)}  ${toDMM(wp.lng, false)}  ${wp.alt}'`);
-      });
-      lines.push('');
-      lines.push(`LEGS (whole-leg, as drawn on chart)`);
-      const schedT = computeFlightSchedule(fl);
-      for (let i = 0; i < fl.waypoints.length - 1; i++) {
-        const from = fl.waypoints[i], to = fl.waypoints[i + 1];
-        if (from.isPattern || to.isPattern) continue;
-        const res = computeLegTotals(from, to, schedT[i]);
-        if (!res) continue;
-        const profs = computeLegMarkers(from, to, schedT[i]);
-        let acc = 0;
-        res.segs.forEach((sg, k) => {
-          const nameA = k === 0 ? from.name : 'v' + k;
-          const nameB = k === res.segs.length - 1 ? to.name : 'v' + (k + 1);
-          const smt = Math.round((sg.tt + to.var + 360) % 360);
-          const profTxt = profs
-            .filter(p => { const along = p.kind === 'TOC' ? p.distNM : res.distNM - p.distNM;
-                           return along > acc - 0.001 && along <= acc + sg.distNM + 0.001; })
-            .map(p => `  | ${p.kind} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`)
-            .join('');
-          lines.push(`${(nameA + ' - ' + nameB).padEnd(28)} TT ${String(sg.tt).padStart(3, '0')}  MT ${String(smt).padStart(3, '0')}  ${convertDist(sg.distNM, distUnit).toFixed(1).padStart(5)} ${distLabel(distUnit)}${profTxt}`);
-          acc += sg.distNM;
-        });
-      }
-      return lines.join('\n');
+    // The copyable text -> src/lib/plotting.js (pure: a flight in, the
+    // string out). This wrapper just supplies the app's current state.
+    function plottingTextFor(fIdx) {
+      return buildPlottingText(flights[fIdx], aircraftProfile.distUnit || 'NM');
     }
 
+
     function copyPlottingList(fIdx) {
-      const text = buildPlottingText(fIdx);
+      const text = plottingTextFor(fIdx);
       const done = () => {
         const btn = document.getElementById(`copy-plot-btn-${fIdx}`);
         if (btn) { btn.innerText = '✔ Copied'; setTimeout(() => { if (btn) btn.innerText = '📋 Copy List'; }, 1500); }
