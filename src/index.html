@@ -138,6 +138,18 @@
         <div class="card-title">🌅 Daylight &amp; VFR Day (SERA)</div>
         <div id="daylight-body" style="font-size:11px; line-height:1.7;"></div>
       </div>
+
+      <div class="card" style="margin-top:4px;" id="metar-card">
+        <div class="card-title">
+          📡 METAR &amp; TAF
+          <span style="float:right;">
+            <button class="btn" id="metar-fetch-btn" onclick="fetchMetarTaf()"
+                    style="font-size:10px; padding:2px 8px;">Fetch</button>
+          </span>
+        </div>
+        <div id="metar-status" style="font-size:10px; color:var(--text-muted); margin-bottom:4px;"></div>
+        <div id="metar-body" style="font-size:11px; line-height:1.6;"></div>
+      </div>
     </div>
   </div>
 
@@ -828,7 +840,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.20';
+    const APP_VERSION = '16.21';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2265,6 +2277,97 @@
         const hr = Math.round(forecastHourFor(pts[0].offsetMin, dateStr));
         windFetchStatus(`\u2705 Filled ${filled} leg${filled > 1 ? 's' : ''} \u00b7 leg-average winds at planned altitude \u00b7 ${dateStr} from ~${String(hr).padStart(2, '0')}:00 local \u00b7 model: <b>${WIND_MODEL_LABELS[modelSel] || modelSel}</b>. <b>Review, then Save &amp; Apply.</b>`, false);
       }
+    }
+
+    // =========================================================================
+    // 6c. METAR & TAF (MET Norway) - the fetch and the rendering
+    //
+    // Parsing, the URL and the age arithmetic -> src/lib/metar.js. This part
+    // does the network call and paints the card.
+    //
+    // NEVER CACHED, by the same rule as the winds: a cached observation is a
+    // wrong observation. The service worker only caches same-origin files and
+    // Avinor chart tiles, so api.met.no passes straight through - and a test
+    // guards that it stays that way.
+    // =========================================================================
+
+    function metarStatus(msg, isError) {
+      const el = document.getElementById('metar-status');
+      if (!el) return;
+      el.innerHTML = msg;
+      el.style.color = isError ? '#e53e3e' : 'var(--text-muted)';
+    }
+
+    async function fetchMetarTaf() {
+      const icaos = routeAerodromes(flights);
+      const body = document.getElementById('metar-body');
+      if (!icaos.length) {
+        body.innerHTML = '';
+        metarStatus('No ICAO aerodromes on the route. Name a waypoint with its ' +
+                    'four-letter code (e.g. ENDU) to get its reports.', false);
+        return;
+      }
+      const btn = document.getElementById('metar-fetch-btn');
+      if (btn) btn.disabled = true;
+      metarStatus('Fetching ' + icaos.join(', ') + ' \u2026', false);
+      try {
+        const grab = async (kind) => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 15000);
+          try {
+            const r = await fetch(buildTafMetarUrl(icaos, kind), { signal: controller.signal, cache: 'no-store' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return latestPerStation(await r.text());
+          } finally { clearTimeout(timer); }
+        };
+        const [metars, tafs] = await Promise.all([grab('metar'), grab('taf')]);
+        renderMetarCard(icaos, metars, tafs);
+        metarStatus('Retrieved ' + new Date().toISOString().slice(11, 16) + 'Z \u00b7 ' +
+                    METAR_ATTRIBUTION, false);
+      } catch (e) {
+        metarStatus('\u274c Could not fetch: ' + (e && e.message ? e.message : 'network error') +
+                    '. Check the official source before flight.', true);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function renderMetarCard(icaos, metars, tafs) {
+      const body = document.getElementById('metar-body');
+      const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const parts = [];
+      for (const icao of icaos) {
+        const rawM = metars[icao], rawT = tafs[icao];
+        parts.push('<div style="margin-bottom:8px;">');
+        parts.push('<b>' + esc(icao) + '</b>');
+        if (!rawM && !rawT) {
+          parts.push(' <span style="color:var(--text-muted);">- no reports published for this aerodrome</span>');
+        }
+        if (rawM) {
+          const p = parseReport(rawM);
+          const age = reportAgeMinutes(p.timeUTC);
+          const ageTxt = formatAge(age);
+          const stale = isStale(age);
+          parts.push(' <span style="font-size:10px; color:' + (stale ? '#c05621' : 'var(--text-muted)') + ';">' +
+                     'METAR' + (ageTxt ? ' \u00b7 ' + esc(ageTxt) : '') +
+                     (stale ? ' \u26a0 not current' : '') + '</span>');
+          const sum = summariseReport(p);
+          if (sum) parts.push('<div style="font-size:10px; color:var(--highlight-text);">' + esc(sum) + '</div>');
+          parts.push('<div style="font-family:monospace; font-size:10px; word-break:break-word;">' + esc(p.raw) + '</div>');
+        }
+        if (rawT) {
+          parts.push('<div style="font-size:10px; color:var(--text-muted); margin-top:3px;">TAF</div>');
+          parts.push('<div style="font-family:monospace; font-size:10px; word-break:break-word;">' + esc(parseReport(rawT).raw) + '</div>');
+        }
+        parts.push('</div>');
+      }
+      // The same posture as the rest of the tool: this is planning material,
+      // and the pilot checks the official briefing before flight.
+      parts.push('<div style="font-size:9px; color:var(--text-muted); border-top:1px solid var(--border-soft, #ccc); padding-top:4px;">' +
+        'All times UTC (Z). Raw reports are shown in full - only wind, temperature and QNH are read out, ' +
+        'and nothing else is decoded. For planning; obtain an official briefing before flight. ' +
+        'Data: ' + METAR_ATTRIBUTION + '.</div>');
+      body.innerHTML = parts.join('');
     }
 
     // =========================================================================

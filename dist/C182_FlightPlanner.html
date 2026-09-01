@@ -1078,6 +1078,18 @@ svg.leaflet-image-layer.leaflet-interactive path {
         <div class="card-title">🌅 Daylight &amp; VFR Day (SERA)</div>
         <div id="daylight-body" style="font-size:11px; line-height:1.7;"></div>
       </div>
+
+      <div class="card" style="margin-top:4px;" id="metar-card">
+        <div class="card-title">
+          📡 METAR &amp; TAF
+          <span style="float:right;">
+            <button class="btn" id="metar-fetch-btn" onclick="fetchMetarTaf()"
+                    style="font-size:10px; padding:2px 8px;">Fetch</button>
+          </span>
+        </div>
+        <div id="metar-status" style="font-size:10px; color:var(--text-muted); margin-bottom:4px;"></div>
+        <div id="metar-body" style="font-size:11px; line-height:1.6;"></div>
+      </div>
     </div>
   </div>
 
@@ -4457,6 +4469,138 @@ svg.leaflet-image-layer.leaflet-interactive path {
     return lines.join("\n");
   }
 
+  // src/lib/metar.js
+  var metar_exports = {};
+  __export(metar_exports, {
+    METAR_ATTRIBUTION: () => METAR_ATTRIBUTION,
+    METAR_BASE: () => METAR_BASE,
+    STALE_AFTER_MIN: () => STALE_AFTER_MIN,
+    buildTafMetarUrl: () => buildTafMetarUrl,
+    formatAge: () => formatAge,
+    isIcao: () => isIcao,
+    isStale: () => isStale,
+    latestPerStation: () => latestPerStation,
+    parseReport: () => parseReport,
+    reportAgeMinutes: () => reportAgeMinutes,
+    routeAerodromes: () => routeAerodromes,
+    summariseReport: () => summariseReport
+  });
+  var METAR_BASE = "https://api.met.no/weatherapi/tafmetar/1.0/";
+  var METAR_ATTRIBUTION = "MET Norway (Norwegian Meteorological Institute), NLOD 2.0";
+  function buildTafMetarUrl(icaos, kind) {
+    const list = (icaos || []).filter(isIcao);
+    if (!list.length) return "";
+    return METAR_BASE + (kind === "taf" ? "taf" : "metar") + "?icao=" + list.join(",");
+  }
+  function isIcao(name) {
+    return typeof name === "string" && /^[A-Z]{4}$/.test(name.trim().toUpperCase());
+  }
+  function routeAerodromes(flights) {
+    const out = [];
+    for (const fl of flights || []) {
+      const real = (fl.waypoints || []).filter((w) => !w.isPattern && w.name);
+      if (!real.length) continue;
+      for (const w of [real[0], real[real.length - 1]]) {
+        const id = String(w.name).trim().toUpperCase();
+        if (isIcao(id) && !out.includes(id)) out.push(id);
+      }
+    }
+    return out;
+  }
+  function latestPerStation(text) {
+    const out = {};
+    for (const line of String(text || "").split("\n")) {
+      const raw = line.trim().replace(/=$/, "").trim();
+      if (!raw) continue;
+      const m = raw.match(/^([A-Z]{4})\b/);
+      if (!m) continue;
+      if (/\bNIL\b/.test(raw)) continue;
+      out[m[1]] = raw;
+    }
+    return out;
+  }
+  function parseReport(raw) {
+    const text = String(raw || "").trim();
+    const out = {
+      raw: text,
+      icao: null,
+      timeUTC: null,
+      wind: null,
+      tempC: null,
+      dewC: null,
+      qnhHpa: null,
+      isTaf: false
+    };
+    if (!text) return out;
+    const icao = text.match(/^([A-Z]{4})\b/);
+    if (icao) out.icao = icao[1];
+    const t = text.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+    if (t) out.timeUTC = { day: +t[1], hour: +t[2], minute: +t[3] };
+    out.isTaf = /\b\d{4}\/\d{4}\b/.test(text);
+    const w = text.match(/\b(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT\b/);
+    if (w) {
+      const speedKt = +w[2];
+      out.wind = {
+        dir: w[1] === "VRB" ? null : +w[1],
+        variable: w[1] === "VRB",
+        calm: w[1] === "000" && speedKt === 0,
+        speedKt,
+        gustKt: w[3] ? +w[3] : null
+      };
+    }
+    const td = text.match(/\s(M?\d{2})\/(M?\d{2})\b/);
+    if (td && !out.isTaf) {
+      const num = (v) => v[0] === "M" ? -Number(v.slice(1)) : Number(v);
+      out.tempC = num(td[1]);
+      out.dewC = num(td[2]);
+    }
+    const q = text.match(/\bQ(\d{4})\b/);
+    if (q) out.qnhHpa = +q[1];
+    return out;
+  }
+  function reportAgeMinutes(timeUTC, nowMs) {
+    if (!timeUTC) return null;
+    const now = typeof nowMs === "number" ? nowMs : Date.now();
+    const d = new Date(now);
+    const SKEW_MIN = 10;
+    for (let back = 0; back < 3; back++) {
+      const t = Date.UTC(
+        d.getUTCFullYear(),
+        d.getUTCMonth() - back,
+        timeUTC.day,
+        timeUTC.hour,
+        timeUTC.minute
+      );
+      const ageMin = (now - t) / 6e4;
+      if (ageMin >= -SKEW_MIN) return Math.round(ageMin);
+    }
+    return null;
+  }
+  function formatAge(ageMin) {
+    if (ageMin === null || !isFinite(ageMin)) return null;
+    if (ageMin < 0) return "just issued";
+    if (ageMin < 60) return ageMin + " min ago";
+    const h = Math.floor(ageMin / 60), m = ageMin % 60;
+    return h + " h " + String(m).padStart(2, "0") + " min ago";
+  }
+  var STALE_AFTER_MIN = 90;
+  function isStale(ageMin) {
+    return ageMin !== null && isFinite(ageMin) && ageMin > STALE_AFTER_MIN;
+  }
+  function summariseReport(p) {
+    const bits = [];
+    if (p.wind) {
+      if (p.wind.calm) bits.push("wind calm");
+      else {
+        const dir = p.wind.variable ? "VRB" : String(p.wind.dir).padStart(3, "0") + "°";
+        bits.push("wind " + dir + " " + p.wind.speedKt + " kt" + (p.wind.gustKt ? " gusting " + p.wind.gustKt : ""));
+      }
+    }
+    if (p.tempC !== null) bits.push(p.tempC + "°C" + (p.dewC !== null ? "/" + p.dewC + "°C dew" : ""));
+    if (p.qnhHpa !== null) bits.push("QNH " + p.qnhHpa);
+    return bits.join(" · ");
+  }
+
   // src/main.js
   var api = {
     ...magvar_exports,
@@ -4469,7 +4613,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
     ...winds_exports,
     ...integrity_exports,
     ...exchange_exports,
-    ...plotting_exports
+    ...plotting_exports,
+    ...metar_exports
   };
   for (const [name, value] of Object.entries(api)) {
     window[name] = value;
@@ -4709,7 +4854,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.20';
+    const APP_VERSION = '16.21';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6146,6 +6291,97 @@ svg.leaflet-image-layer.leaflet-interactive path {
         const hr = Math.round(forecastHourFor(pts[0].offsetMin, dateStr));
         windFetchStatus(`\u2705 Filled ${filled} leg${filled > 1 ? 's' : ''} \u00b7 leg-average winds at planned altitude \u00b7 ${dateStr} from ~${String(hr).padStart(2, '0')}:00 local \u00b7 model: <b>${WIND_MODEL_LABELS[modelSel] || modelSel}</b>. <b>Review, then Save &amp; Apply.</b>`, false);
       }
+    }
+
+    // =========================================================================
+    // 6c. METAR & TAF (MET Norway) - the fetch and the rendering
+    //
+    // Parsing, the URL and the age arithmetic -> src/lib/metar.js. This part
+    // does the network call and paints the card.
+    //
+    // NEVER CACHED, by the same rule as the winds: a cached observation is a
+    // wrong observation. The service worker only caches same-origin files and
+    // Avinor chart tiles, so api.met.no passes straight through - and a test
+    // guards that it stays that way.
+    // =========================================================================
+
+    function metarStatus(msg, isError) {
+      const el = document.getElementById('metar-status');
+      if (!el) return;
+      el.innerHTML = msg;
+      el.style.color = isError ? '#e53e3e' : 'var(--text-muted)';
+    }
+
+    async function fetchMetarTaf() {
+      const icaos = routeAerodromes(flights);
+      const body = document.getElementById('metar-body');
+      if (!icaos.length) {
+        body.innerHTML = '';
+        metarStatus('No ICAO aerodromes on the route. Name a waypoint with its ' +
+                    'four-letter code (e.g. ENDU) to get its reports.', false);
+        return;
+      }
+      const btn = document.getElementById('metar-fetch-btn');
+      if (btn) btn.disabled = true;
+      metarStatus('Fetching ' + icaos.join(', ') + ' \u2026', false);
+      try {
+        const grab = async (kind) => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 15000);
+          try {
+            const r = await fetch(buildTafMetarUrl(icaos, kind), { signal: controller.signal, cache: 'no-store' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return latestPerStation(await r.text());
+          } finally { clearTimeout(timer); }
+        };
+        const [metars, tafs] = await Promise.all([grab('metar'), grab('taf')]);
+        renderMetarCard(icaos, metars, tafs);
+        metarStatus('Retrieved ' + new Date().toISOString().slice(11, 16) + 'Z \u00b7 ' +
+                    METAR_ATTRIBUTION, false);
+      } catch (e) {
+        metarStatus('\u274c Could not fetch: ' + (e && e.message ? e.message : 'network error') +
+                    '. Check the official source before flight.', true);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function renderMetarCard(icaos, metars, tafs) {
+      const body = document.getElementById('metar-body');
+      const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const parts = [];
+      for (const icao of icaos) {
+        const rawM = metars[icao], rawT = tafs[icao];
+        parts.push('<div style="margin-bottom:8px;">');
+        parts.push('<b>' + esc(icao) + '</b>');
+        if (!rawM && !rawT) {
+          parts.push(' <span style="color:var(--text-muted);">- no reports published for this aerodrome</span>');
+        }
+        if (rawM) {
+          const p = parseReport(rawM);
+          const age = reportAgeMinutes(p.timeUTC);
+          const ageTxt = formatAge(age);
+          const stale = isStale(age);
+          parts.push(' <span style="font-size:10px; color:' + (stale ? '#c05621' : 'var(--text-muted)') + ';">' +
+                     'METAR' + (ageTxt ? ' \u00b7 ' + esc(ageTxt) : '') +
+                     (stale ? ' \u26a0 not current' : '') + '</span>');
+          const sum = summariseReport(p);
+          if (sum) parts.push('<div style="font-size:10px; color:var(--highlight-text);">' + esc(sum) + '</div>');
+          parts.push('<div style="font-family:monospace; font-size:10px; word-break:break-word;">' + esc(p.raw) + '</div>');
+        }
+        if (rawT) {
+          parts.push('<div style="font-size:10px; color:var(--text-muted); margin-top:3px;">TAF</div>');
+          parts.push('<div style="font-family:monospace; font-size:10px; word-break:break-word;">' + esc(parseReport(rawT).raw) + '</div>');
+        }
+        parts.push('</div>');
+      }
+      // The same posture as the rest of the tool: this is planning material,
+      // and the pilot checks the official briefing before flight.
+      parts.push('<div style="font-size:9px; color:var(--text-muted); border-top:1px solid var(--border-soft, #ccc); padding-top:4px;">' +
+        'All times UTC (Z). Raw reports are shown in full - only wind, temperature and QNH are read out, ' +
+        'and nothing else is decoded. For planning; obtain an official briefing before flight. ' +
+        'Data: ' + METAR_ATTRIBUTION + '.</div>');
+      body.innerHTML = parts.join('');
     }
 
     // =========================================================================
