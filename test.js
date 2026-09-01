@@ -2637,6 +2637,31 @@ T('a downloaded route is not evicted by ordinary panning', () => {
   assert(/must-revalidate/.test(vfr), 'the reason the buffer matters is undocumented');
 });
 
+T('every map control is in the stack, so none can be invisible', () => {
+  // Two buttons shipped invisible: the map controls were positioned one by
+  // one by id with hardcoded top offsets, so a new button with no rule of
+  // its own fell into normal flow at the bottom of the page. They are now
+  // one container with one shared class, and this asserts nobody goes back.
+  const page = fs.readFileSync('src/index.html', 'utf8');
+  const css = fs.readFileSync('src/styles.css', 'utf8');
+  const holder = doc.getElementById('map-controls');
+  assert(holder, 'the map controls container is gone');
+  const btns = [...holder.querySelectorAll('button')];
+  assert(btns.length >= 4, 'expected every map control inside the stack, found ' + btns.length);
+  for (const id of ['declutter-btn', 'chart-btn', 'chart-detail-btn', 'chart-dl-btn']) {
+    const el = doc.getElementById(id);
+    assert(el, 'missing map control: ' + id);
+    assert(el.parentElement === holder, id + ' is outside the control stack - it will not be positioned');
+    assert(el.classList.contains('map-ctl'), id + ' does not carry the shared class');
+  }
+  // and no control may go back to being positioned by its own id
+  for (const id of ['#declutter-btn', '#chart-btn', '#chart-detail-btn', '#chart-dl-btn']) {
+    assert(!new RegExp('\\' + id + '\\s*\\{[^}]*position:\\s*absolute').test(css),
+      id + ' is positioned individually again - the next button added will be invisible');
+  }
+  assert(/#map-controls\s*\{[^}]*position:\s*absolute/.test(css), 'the stack is not positioned over the map');
+  assert(/#map-controls\s*\{[^}]*flex-direction:\s*column/.test(css), 'the controls no longer stack');
+});
 T('the whole source type-checks, and the checker cannot be quietly dropped', () => {
   // Phase 2: the real TypeScript compiler checks these files; the types live
   // in JSDoc so the modules stay plain .js that Node can require directly -
