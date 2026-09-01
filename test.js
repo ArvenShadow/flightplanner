@@ -4468,6 +4468,39 @@ TA('the page prints one OFP per flight plan, each with its own DEP and DEST', as
   assert(!/\bMID\b/.test(sheets[1].querySelector('.ofp-grid').textContent),
     'sector 1 fixes leaked onto sector 2\'s sheet');
 });
+TA('line 1 is DEP -> first waypoint, the last leg arrives at DEST, and a circuit hangs off DEST', async () => {
+  // The user's rule for how a sector reads down the sheet.
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+    { lat: 69.055, lng: 18.545, name: 'ENDU', alt: 254, oat: 5, wdir: 250, wspd: 15, var: -11 },
+    { lat: 69.230, lng: 17.980, name: 'FINNSNES', alt: 2500, oat: 2, wdir: 250, wspd: 18, var: -11 },
+    { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 31, oat: 4, wdir: 260, wspd: 12, var: -12 },
+    { lat: 69.685, lng: 18.915, name: 'PATTERN', alt: 1000, oat: 4, wdir: 260, wspd: 12, var: -12,
+      isPattern: true, laps: 3 }] }];
+    activeFlightIndex = 0; renderAllFlightTables();`);
+  const sheet = doc.querySelector('#ofp-print .ofp-sheet');
+  const rows = [...sheet.querySelectorAll('.ofp-grid tbody tr')]
+    .map((r) => [...r.children].map((c) => c.textContent.trim()))
+    .filter((c) => c[0].replace(/^\d+/, '').trim());
+  const from = (r) => r[0].replace(/^\d+/, '').trim(), to = (r) => r[12];
+  assert(rows.length === 3, 'expected three filled lines, got ' + rows.length);
+  // Line 1 leaves the DEPARTURE aerodrome for the first waypoint.
+  const dd = sheet.querySelectorAll('.ofp-depdest td');
+  assert(dd[0].textContent.trim() === 'ENDU' && from(rows[0]) === 'ENDU',
+    'line 1 does not start at the departure aerodrome: ' + from(rows[0]));
+  assert(to(rows[0]) === 'FINNSNES', 'line 1 does not run to the first waypoint: ' + to(rows[0]));
+  // ...and the last flown leg ARRIVES at the destination aerodrome.
+  assert(to(rows[1]) === 'ENTC' && dd[3].textContent.trim() === 'ENTC',
+    'the last leg does not arrive at the destination: ' + to(rows[1]));
+  // A circuit hangs off the ARRIVAL aerodrome and carries its time and fuel,
+  // but no track, distance or speed - it is not a line on the ground.
+  assert(from(rows[2]) === 'ENTC' && /PATTERN/.test(to(rows[2])) && /×3/.test(to(rows[2])),
+    'the circuit line is wrong: ' + from(rows[2]) + ' -> ' + to(rows[2]));
+  assert(rows[2][18] === '00:15', 'the circuit has no time: ' + JSON.stringify(rows[2][18]));
+  assert(Number(rows[2][10]) > 0, 'the circuit has no fuel: ' + JSON.stringify(rows[2][10]));
+  for (const i of [1, 2, 3, 4, 5, 6, 16, 17])
+    assert(rows[2][i] === '', 'the circuit line printed a leg figure in column ' + i +
+      ': ' + JSON.stringify(rows[2][i]));
+});
 T('a circuit stop prints as a circuit, not as a leg', () => {
   const F = moduleExports.ofp;
   const c = F.ofpRowCells({ pattern: true, from: 'ENDU', to: 'PATTERN', laps: 3, accDist: '20.6',
