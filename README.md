@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.21)
+# C182 Flight Planner (v16.22)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -51,6 +51,7 @@ module, with no DOM, and is tested in plain Node:
 | `exchange.js` | export/import, and the whitelist that keeps personal data out |
 | `plotting.js` | the copyable chart plotting text |
 | `metar.js` | METAR/TAF from MET Norway, and the little of it that is decoded |
+| `tiles.js` | which chart tiles cover a route, and what storing them really costs |
 | `format.js` | times, coordinates, unit conversion |
 | `dialog.js` | in-app popups and toasts |
 
@@ -74,7 +75,7 @@ npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
 npm run typecheck  # TypeScript checks every module (0 errors required)
-npm test           # typecheck, build, then the suite against dist (279 tests)
+npm test           # typecheck, build, then the suite against dist (284 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
 node tools/verify-hosted.mjs   # Chromium check of the service-worker rules
                                # (needs `npm install --no-save playwright`)

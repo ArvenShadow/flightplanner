@@ -53,6 +53,7 @@
     <div id="map-container">
       <div id="map"></div>
       <button id="chart-btn" class="no-print" title="Switch the base chart: Kartverket topo (offline-cached) or the official ICAO VFR 1:500 000 from Avinor (needs internet). Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
+      <button id="chart-dl-btn" class="no-print" title="Download the ICAO VFR chart for this whole route so it works with no internet, and stops reloading as you pan. Needs the hosted version or localhost - a page opened straight from a file cannot store charts." onclick="downloadRouteChart()">⬇ Chart</button>
       <div id="chart-label"></div>
       <button id="declutter-btn" class="no-print" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
     </div>
@@ -840,7 +841,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.21';
+    const APP_VERSION = '16.22';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1092,6 +1093,10 @@
       // runs out at z11; beyond that Leaflet upscales. Tiles stay 256 CSS px
       // - vfrPixelRatio only raises the RASTER density inside them.
       maxZoom: 18, maxNativeZoom: 11, minZoom: 4, noWrap: true,
+      // Same wider ring as the topo layer. It matters MORE here: Avinor
+      // sends must-revalidate/max-age=0, so a discarded tile costs a
+      // network round trip to get back even though the bytes are on disk.
+      keepBuffer: 4,
       attribution: '&copy; Avinor · ICAO 1:500 000 &copy; Kartverket'
     });
     vfrTiles.getTileUrl = function(coords) { return vfrTileUrl(coords.z, coords.x, coords.y); };
@@ -2290,6 +2295,167 @@
     // Avinor chart tiles, so api.met.no passes straight through - and a test
     // guards that it stays that way.
     // =========================================================================
+
+    // =========================================================================
+    // 2c. DOWNLOAD THE CHART FOR THIS ROUTE
+    //
+    // Avinor serves tiles with `must-revalidate, max-age=0`, so the browser
+    // may never reuse one without asking the server first - which is why
+    // panning the VFR chart feels like it reloads constantly. A service
+    // worker is not bound by that: once a tile is in its cache we serve it
+    // outright. Panning already fills that cache tile by tile; this fetches
+    // the whole route corridor in one go, so the chart then works with no
+    // network at all.
+    //
+    // Only possible on a secure context (the hosted URL, or localhost) -
+    // a file:// page cannot register a worker, and the button says so.
+    // =========================================================================
+
+    /**
+     * Measure what one opaque cache entry costs in quota, by storing a
+     * throwaway one and watching the number move. Returns 0 when it cannot
+     * be measured, in which case the caller falls back to a constant.
+     */
+    async function measureOpaqueTileCost() {
+      try {
+        if (!navigator.storage || !navigator.storage.estimate) return 0;
+        const probe = vfrTileUrl(11, 1129, 462) + '&__probe=1';
+        const resp = await fetch(probe, { mode: 'no-cors' });
+        const before = (await navigator.storage.estimate()).usage || 0;
+        const c = await caches.open('c182-probe');
+        await c.put(probe, resp.clone());
+        const after = (await navigator.storage.estimate()).usage || 0;
+        await caches.delete('c182-probe');
+        return Math.max(0, after - before);
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    function chartCacheAvailable() {
+      return typeof navigator !== 'undefined' && 'serviceWorker' in navigator &&
+             !!navigator.serviceWorker.controller && typeof caches !== 'undefined';
+    }
+
+    async function downloadRouteChart() {
+      const btn = document.getElementById('chart-dl-btn');
+      if (!chartCacheAvailable()) {
+        await ask({
+          title: 'Offline charts need the hosted version',
+          message: 'A page opened straight from a file cannot store charts - the browser only ' +
+                   'allows that on a secure address.\n\nOpen the planner from your GitHub Pages ' +
+                   'URL, or run serve.cmd and use http://localhost:8182, and this button will ' +
+                   'download the chart for the whole route.',
+          buttons: [{ id: 'ok', label: 'OK', variant: 'primary' }]
+        });
+        return;
+      }
+      if (!vfrEdition) {
+        await ask({
+          title: 'Chart edition not known yet',
+          message: 'The planner has not yet read which AIRAC cycle Avinor is publishing, and it ' +
+                   'will not store chart tiles until it has - a cached chart of unknown vintage ' +
+                   'is worse than none.\n\nSwitch to the ICAO VFR chart, wait a moment, and try again.',
+          buttons: [{ id: 'ok', label: 'OK', variant: 'primary' }]
+        });
+        return;
+      }
+
+      const bounds = routeBounds(flights);
+      if (!bounds) { say('Add some waypoints first.', 'warn'); return; }
+
+      // How much quota ONE cached tile really costs. Avinor sends no CORS
+      // header, so a tile is an opaque response, and browsers pad the
+      // storage cost of those heavily (8.5 MB for a 68-byte tile, measured
+      // in Chromium) so a page cannot measure cross-origin resources by
+      // watching its own quota. That padding - not the download size - is
+      // what decides whether a route fits, so it is measured rather than
+      // assumed, because it is an implementation detail that will change.
+      const pad = await measureOpaqueTileCost();
+      let free = 0;
+      try {
+        const est = await navigator.storage.estimate();
+        free = Math.max(0, (est.quota || 0) - (est.usage || 0));
+      } catch (e) { /* quota reporting is optional */ }
+      const fits = tilesThatFit(free, pad);
+
+      // Highest zoom first: if not everything fits, the detail you actually
+      // read the chart at is worth more than the overview.
+      let zMin = 8, zMax = 11;
+      let picked = tilesForBounds(bounds, zMin, zMax);
+      while (fits > 0 && picked.tiles.length > fits && zMin < zMax) {
+        zMin++;
+        picked = tilesForBounds(bounds, zMin, zMax);
+      }
+      const { tiles, capped } = picked;
+      const cost = paddedCostBytes(tiles.length, pad);
+      const wire = estimateBytes(tiles, (z, y) => vfrTilePx(z, y, window.devicePixelRatio));
+
+      if (fits > 0 && tiles.length > fits) {
+        await ask({
+          title: 'Not enough browser storage',
+          message: 'This route needs about ' + formatBytes(cost) + ' of browser storage. There is ' +
+                   formatBytes(free) + ' free, of which the planner will use at most ' +
+                   formatBytes(free * 0.7) + ' - filling the quota completely makes the browser ' +
+                   'discard everything it has stored for this site, including the app itself.' +
+                   '\n\nThe chart itself is only ' + formatBytes(wire) +
+                   ' to download - but Avinor does not send the header that would let the browser ' +
+                   'read the tiles, so each one is stored as an opaque response and charged about ' +
+                   formatBytes(pad) + ' whatever its real size. That is a browser privacy rule, not ' +
+                   'something the planner can work around.\n\nFree up disk space, or plan a shorter ' +
+                   'route and download it in sections.',
+          buttons: [{ id: 'ok', label: 'OK', variant: 'primary' }]
+        });
+        return;
+      }
+
+      const r = await ask({
+        title: 'Download the chart for this route?',
+        message: tiles.length + ' tiles, zoom ' + zMin + '-' + zMax + ' over the whole route corridor. ' +
+                 'About ' + formatBytes(wire) + ' to download, but it will occupy roughly ' +
+                 formatBytes(cost) + ' of browser storage - Avinor sends no CORS header, so each tile ' +
+                 'is stored opaque and padded.' +
+                 (zMin > 8 ? '\n\nThe overview zooms were dropped to make it fit; the detail you ' +
+                             'read the chart at is kept.' : '') +
+                 (capped ? '\n\nThe area is large and the list was capped - only part will be stored.' : '') +
+                 '\n\nAfter this the chart works with no internet, and stops reloading as you pan. ' +
+                 'It is tied to ' + vfrEdition + ' and is discarded automatically when a new cycle ' +
+                 'is published.' +
+                 (free ? '\n\nBrowser storage free: about ' + formatBytes(free) + '.' : ''),
+        buttons: [
+          { id: 'go', label: 'Download', variant: 'primary' },
+          { id: 'cancel', label: 'Cancel', variant: 'ghost' }
+        ]
+      });
+      if (r.id !== 'go') return;
+
+      if (btn) btn.disabled = true;
+      let done = 0, failed = 0;
+      const report = () => { if (btn) btn.textContent = '⬇ ' + Math.round(100 * done / tiles.length) + '%'; };
+      report();
+      // A few at a time: enough to be quick, not so many that the planner
+      // stops responding or Avinor is hammered.
+      const QUEUE = 6;
+      let next = 0;
+      async function worker() {
+        while (next < tiles.length) {
+          const t = tiles[next++];
+          try {
+            const resp = await fetch(vfrTileUrl(t.z, t.x, t.y), { mode: 'no-cors' });
+            if (!resp || (resp.status && resp.status >= 400)) failed++;
+          } catch (e) { failed++; }
+          done++;
+          if (done % 5 === 0 || done === tiles.length) report();
+        }
+      }
+      await Promise.all(Array.from({ length: QUEUE }, worker));
+      if (btn) { btn.disabled = false; btn.textContent = '⬇ Chart'; }
+      say(failed
+        ? 'Stored ' + (tiles.length - failed) + ' of ' + tiles.length + ' tiles - ' + failed +
+          ' could not be fetched. Try again on a better connection.'
+        : 'Chart downloaded for this route (' + tiles.length + ' tiles). It now works offline.',
+        failed ? 'warn' : 'good', 7000);
+    }
 
     function metarStatus(msg, isError) {
       const el = document.getElementById('metar-status');
