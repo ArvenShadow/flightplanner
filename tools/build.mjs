@@ -49,6 +49,11 @@ const OUT_DIR = join(ROOT, 'dist');
 const OUT_HTML = join(OUT_DIR, 'C182_FlightPlanner.html');
 const SITE_DIR = join(ROOT, 'site');
 const SW_SRC = join(ROOT, 'src', 'sw.js');
+const CSS_SRC = join(ROOT, 'src', 'styles.css');
+// Styling lives in src/styles.css so it can be edited on its own; it is
+// inlined back into <style> for BOTH deliveries, so what ships is exactly
+// what shipped when the CSS sat in the page - no extra request, no FOUC.
+const STYLE_MARKER = /^([ \t]*)<!-- @STYLES:.*?-->[ \t]*\r?\n/m;
 // \r? because a Windows clone checks the source out with CRLF endings
 // (git's core.autocrlf). A ZIP download does not, which is why this only
 // ever failed on a cloned repo.
@@ -111,8 +116,15 @@ function checkVersion(html) {
 }
 
 export async function runBuild({ quiet = false } = {}) {
-  const srcHtml = readFileSync(SRC_HTML, 'utf8');
+  let srcHtml = readFileSync(SRC_HTML, 'utf8');
   if (!MARKER.test(srcHtml)) fail('src/index.html has no @BUNDLE marker');
+  if (!STYLE_MARKER.test(srcHtml)) fail('src/index.html has no @STYLES marker');
+
+  const css = readFileSync(CSS_SRC, 'utf8');
+  if (/<\/style/i.test(css)) fail('styles.css contains a literal </style sequence');
+  const styleIndent = srcHtml.match(STYLE_MARKER)[1];
+  srcHtml = srcHtml.replace(STYLE_MARKER, styleIndent + '<style>\n' + css + styleIndent + '</style>\n');
+  if (STYLE_MARKER.test(srcHtml)) fail('the @STYLES marker was not replaced');
 
   const code = await bundle();
   checkSyntax(code, 'bundle (src/main.js)');

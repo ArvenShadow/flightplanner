@@ -4,3 +4,6 @@ node_modules/
 # .github/workflows/pages.yml. dist/ IS committed (a plain download must
 # stay runnable); site/ is not, because it only exists to be served.
 site/
+
+# Screenshots written by tools/verify-visual.mjs when it finds a difference
+vis_*.png

@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.18)
+# C182 Flight Planner (v16.19)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -27,11 +27,41 @@ Cached chart tiles are keyed to the **AIRAC edition**, and the worker refuses
 to serve a tile from cache until the page has told it which cycle is live — a
 chart from a superseded cycle is a safety problem, not a stale asset.
 
-**To work on it:** edit `src/`, then rebuild. `src/index.html` holds the page
-(markup, CSS and the not-yet-extracted script); `src/lib/*.js` holds extracted
-modules; `tools/build.mjs` bundles them as a classic script, inlines it, and
-enforces the ship checklist (both scripts parse, no duplicate DOM ids,
-APP_VERSION matches package.json) before anything reaches `dist/`.
+**To work on it:** edit `src/`, then rebuild.
+
+| want to change... | edit |
+|---|---|
+| how anything **looks** | `src/styles.css` — all 938 lines of it, one file |
+| page layout, buttons, ids | the markup in `src/index.html` |
+| a **calculation** | the matching `src/lib/*.js` — see the table below |
+| map, tables, modals, storage | the script in `src/index.html` |
+
+Every calculation that decides a number you would fly with lives in its own
+module, with no DOM, and is tested in plain Node:
+
+| module | owns |
+|---|---|
+| `performance.js` | POH climb & cruise tables, TAS, fuel flow, WCA |
+| `geodesy.js` | WGS-84 distance and true track |
+| `magvar.js` | magnetic variation (WMM2025) |
+| `legs.js` | legs, via points, the climb/descent schedule, TOC/TOD |
+| `daylight.js` | sunrise/sunset and the SERA day-VFR window |
+| `winds.js` | winds-aloft vector maths and the Open-Meteo API shapes |
+| `integrity.js` | the rules behind the red DO-NOT-USE banner |
+| `exchange.js` | export/import, and the whitelist that keeps personal data out |
+| `plotting.js` | the copyable chart plotting text |
+| `format.js` | times, coordinates, unit conversion |
+| `dialog.js` | in-app popups and toasts |
+
+The script left in `src/index.html` is the part that talks to the browser —
+map, tables, modals, localStorage. It opens with a **WHERE TO EDIT WHAT**
+index. It stays in one file on purpose: it is a single web of shared state
+plus 61 inline `on*=` handlers that need those functions as globals, so
+splitting it would make an edit span more files, not fewer.
+
+`tools/build.mjs` inlines the CSS and the bundled modules, and enforces the
+ship checklist (both scripts parse, no duplicate DOM ids, APP_VERSION matches
+package.json) before anything reaches `dist/`.
 
 On Windows you can skip the command line entirely: `build.cmd` rebuilds the
 double-click file, `serve.cmd` builds and serves the hosted version locally.
@@ -42,7 +72,7 @@ from the repo's Code button gets you the same files.
 npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
-npm test           # builds, then runs the suite against dist (267 tests)
+npm test           # builds, then runs the suite against dist (269 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
 node tools/verify-hosted.mjs   # Chromium check of the service-worker rules
                                # (needs `npm install --no-save playwright`)

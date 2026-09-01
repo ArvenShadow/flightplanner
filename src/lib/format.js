@@ -9,6 +9,11 @@
  * across midnight without a browser.
  */
 
+// ---- units -------------------------------------------------------------
+// The pilot picks NM/SM/KM and gal/L/kg; everything is COMPUTED in NM and
+// US gallons (the POH's units) and converted only for display, so a unit
+// change can never move a number.
+
 export function formatTimeHHMM(mins) {
   if (mins === undefined || mins === null || isNaN(mins) || mins === '') return '-';
   const total = Math.max(0, Math.round(mins));
@@ -40,4 +45,20 @@ export function clockFromMinutes(etd, accMins) {
   const total = ((raw % 1440) + 1440) % 1440;
   const days = Math.floor(raw / 1440);
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` + (days > 0 ? `+${days}` : '');
+}
+
+export function distLabel(u) { return u === 'KM' ? 'km' : (u === 'SM' ? 'SM' : 'NM'); }
+export function fuelLabel(u) { return u === 'LITERS' ? 'L' : (u === 'KG' ? 'kg' : 'gal'); }
+export function fuelRateLabel(u) { return fuelLabel(u) + '/h'; }
+
+export function convertDist(nm, targetUnit) {
+  if (targetUnit === 'KM') return nm * 1.852;
+  if (targetUnit === 'SM') return nm * 1.15078;
+  return nm;
+}
+
+export function convertFuel(gal, targetUnit) {
+  if (targetUnit === 'LITERS') return gal * 3.78541;
+  if (targetUnit === 'KG') return gal * 2.72; // AvGas 100LL density approx
+  return gal;
 }

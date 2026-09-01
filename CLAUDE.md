@@ -91,9 +91,23 @@ claude.ai; this repo is the continuation point for Claude Code.
     hands them in as a `signals` object. v16.18 added `exchange.js`
     (buildExportPayload, pickProfileKeys, sanitiseFlights,
     defaultFlights), taking the page to 4260 and completing the pure
-    slices. Still inline, and all genuinely DOM: map setup, base chart,
-    map interactions, the wind fetch and matrix fill, table rendering,
-    modals, plotting list, the localStorage layer.
+    slices.
+  - Phase 1 CLOSED at v16.19, deliberately short of a full module graph.
+    ALL 938 lines of CSS moved to `src/styles.css`, inlined at a @STYLES
+    marker into both deliveries (there were TWO style blocks; they are
+    merged in cascade order, and the build asserts exactly one remains).
+    `plotting.js` took the copyable text; the unit conversions joined
+    `format.js`. Page: 4260 -> 3326 lines.
+    The remaining script is NOT being force-modularised, and this is a
+    decision, not unfinished work: it is one web of 24 shared mutable
+    globals (flights, activeFlightIndex, map, markers, undoStack...) plus
+    61 inline on*= handlers that need its functions as globals. Threading
+    that state through module boundaries would make a UI edit span MORE
+    files. Instead the script opens with a WHERE TO EDIT WHAT index, and a
+    test asserts the index still points at every module that exists.
+    A CSS move is verified by PIXELS, not tests: tools compare full-page
+    screenshots and computed styles of nine key selectors, light and dark,
+    against the previous build.
   - HIDDEN GLOBALS ARE THE TRAP when extracting. `performance.js` read
     `aircraftProfile`, which is declared `let` at the top level of the
     page script: that is a global LEXICAL binding, shared with the
