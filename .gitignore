@@ -7,3 +7,7 @@ site/
 
 # Screenshots written by tools/verify-visual.mjs when it finds a difference
 vis_*.png
+
+# eAIP pages cached by tools/build-aip.mjs so a re-run needs no network.
+# The generated data/aip.js IS committed - both deliveries need it on disk.
+.aip-cache/

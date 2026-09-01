@@ -17,17 +17,37 @@ html = html.replace(/<!-- Leaflet 1\.9\.4 JS embedded for offline use -->\s*<scr
 
 const leafletStub = `
   window.__mapHandlers = {};
+  window.__mapHandlerList = {};
+  window.__panes = {};
+  /** Fire EVERY handler registered for an event, like the real map does. */
+  window.__fireMap = function(ev, arg){ (window.__mapHandlerList[ev] || []).forEach(function(fn){ fn(arg); }); };
   function Layer(){}
   Layer.prototype.addTo = function(){ return this; };
   Layer.prototype.setLatLngs = function(v){ this._ll = v; return this; };
   Layer.prototype.on = function(ev, fn){ (this._h=this._h||{})[ev]=fn; return this; };
   Layer.prototype.getLatLng = function(){ return this._latlng; };
   Layer.prototype.setLatLng = function(ll){ this._latlng = ll; return this; };
+  Layer.prototype.bindTooltip = function(html, o){ this._tip = html; this._tipOpts = o || {}; return this; };
+  Layer.prototype.setStyle = function(o){ this._opts = Object.assign({}, this._opts, o); return this; };
   window.L = {
     map: function(){ return {
       setView: function(){ return this; },
-      on: function(ev, fn){ window.__mapHandlers[ev] = fn; },
-      off: function(ev, fn){ if (window.__mapHandlers[ev] === fn) delete window.__mapHandlers[ev]; },
+      on: function(ev, fn){
+        (window.__mapHandlerList[ev] = window.__mapHandlerList[ev] || []).push(fn);
+        window.__mapHandlers[ev] = fn;      // last registered, for old tests
+      },
+      off: function(ev, fn){
+        const l = window.__mapHandlerList[ev] || [];
+        const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1);
+        window.__mapHandlers[ev] = l[l.length - 1];
+      },
+      createPane: function(name){ var p = window.__panes[name] = { style: {} }; return p; },
+      getPane: function(name){ return window.__panes[name] || (window.__panes[name] = { style: {} }); },
+      getBounds: function(){
+        var b = window.__stubBounds || { south: 68.5, west: 17.0, north: 70.0, east: 20.0 };
+        return { getSouth: function(){ return b.south; }, getWest: function(){ return b.west; },
+                 getNorth: function(){ return b.north; }, getEast: function(){ return b.east; } };
+      },
       dragging: { enable: function(){}, disable: function(){} },
       removeLayer: function(){},
       addLayer: function(){},
@@ -36,6 +56,7 @@ const leafletStub = `
     };},
     tileLayer: function(u, o){ var l = new Layer(); l._url = u; l._opts = o || {}; return l; },
     polyline: function(c, o){ var l = new Layer(); l._ll = c; l._opts = o || {}; return l; },
+    polygon: function(c, o){ var l = new Layer(); l._ll = c; l._opts = o || {}; l._isPolygon = true; return l; },
     marker: function(ll, o){ var l = new Layer(); l._latlng = ll; l._opts = o || {}; return l; },
     divIcon: function(o){ return o; }
   };
@@ -1408,15 +1429,25 @@ T('map is bounded at the antimeridian with solid viscosity; tiles do not wrap', 
   const base = raw.split("cache.kartverket.no")[1].split('}).addTo(map)')[0];
   assert(base.includes('noWrap: true'), 'base tiles still wrap');
 });
-T('airspace overlay is fully removed, stored keys purged', () => {
+T('the openAIP airspace overlay stays removed, stored keys purged', () => {
+  // The COMMUNITY-sourced overlay (openAIP) was removed because its data
+  // lagged the current VFR chart. v16.31 added an overlay again, but from the
+  // OFFICIAL AIP Norge with a stated edition - so what must stay gone is
+  // openAIP specifically, not the idea of drawing airspace.
   const raw = fs.readFileSync(APP_HTML, 'utf8');
-  assert(!raw.includes('airspace-btn') && !raw.includes('qol-openaip-key'), 'UI remnants remain');
-  assert(!raw.includes('api.tiles.openaip.net'), 'endpoint remnant remains');
-  assert(ev('typeof toggleAirspace') === 'undefined', 'toggleAirspace still defined');
-  assert(doc.getElementById('airspace-btn') === null, 'button still in DOM');
-  // init purges any previously stored key/state
+  assert(!raw.includes('api.tiles.openaip.net'), 'the openAIP tile endpoint is back');
+  assert(!raw.includes('qol-openaip-key'), 'the openAIP key field is back');
+  // ...but the PURGE of the old stored key must still be there, so an upgrade
+  // from a version that had the feature cleans up after itself.
+  assert(raw.includes("removeItem('c182_openaip_key')"), 'the stored-key purge was dropped');
+  // init still purges anything a previous version stored
   assert(w.localStorage.getItem('c182_openaip_key') === null, 'stored key not purged');
   assert(w.localStorage.getItem('c182_airspace_on') === null, 'stored state not purged');
+  // and the replacement must name its source and its edition, or it is no
+  // better than the thing that was deleted
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  assert(set.provider === 'Avinor' && set.editionLabel, 'the new overlay does not name its edition');
 });
 
 console.log('\n=== 43. Smooth waypoint dragging; wider tile buffer ===');
@@ -1883,7 +1914,10 @@ T('integrity guards wind against the SLOWEST phase, not the displayed cruise TAS
 });
 
 console.log('\n=== 54. Zoom declutter: labels thin out when zooming out ===');
-const setZoom = z => { ev('window.__stubZoom = ' + z); ev("window.__mapHandlers['zoomend']()"); };
+// The real map fires every registered zoomend handler; the airspace overlay
+// added a second one. Firing only the last would silently stop testing
+// declutter, which is how this helper broke.
+const setZoom = z => { ev('window.__stubZoom = ' + z); ev("window.__fireMap('zoomend')"); };
 T('working zoom (>=8) shows full detail — no declutter class', () => {
   setZoom(8);
   const cl = doc.getElementById('map').classList;
@@ -2224,9 +2258,11 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const exchModule = require('./src/lib/exchange.js');
   const plotModule = require('./src/lib/plotting.js');
   const metarModule = require('./src/lib/metar.js');
+  const airspaceModule = require('./src/lib/airspace.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
-                    exch: exchModule, plot: plotModule, metar: metarModule };
+                    exch: exchModule, plot: plotModule, metar: metarModule,
+                    airspace: airspaceModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2363,6 +2399,10 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                           M.exch.sanitiseFlights([{ waypoints: [wp(69, 18, 0)] }]),
                           M.exch.defaultFlights(), M.exch.pickProfileKeys({ theme: 'dark' })],
     'plotting.js': () => M.plot.buildPlottingText({ id: 1, waypoints: [wp(69.055, 18.545, 254), wp(69.679, 18.911, 2500)] }, 'NM'),
+    'airspace.js': () => [M.airspace.visibleAirspaces([], { south: 0, west: 0, north: 1, east: 1 }, 9),
+                          M.airspace.airspaceStyle('CTR'),
+                          M.airspace.airspaceAttribution({ editionLabel: 'x' }),
+                          M.airspace.airspaceKinds([])],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -2581,6 +2621,421 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
     'MET Norway attribution is missing');
   assert(/obtain an official briefing before flight/i.test(built),
     'the card does not tell the pilot to get a real briefing');
+});
+
+console.log('\n=== 64. AIP airspace import (Avinor eAIP, v16.29) ===');
+T('the eAIP field extractor survives the source structure', () => {
+  const aip = require('./tools/aip-fields.mjs');
+  const html = fs.readFileSync('test-fixtures/eaip-snippet.html', 'utf8');
+  const fields = aip.extractFields(html);
+  assert(fields.length === 15, 'expected 15 tagged fields, got ' + fields.length);
+
+  // The airspace TYPE is untagged text after the name in ENR 2.1. Without
+  // reading it, every ENR 2.1 entry is an unclassified blob.
+  const name = fields.find(f => f.field === 'CUSTOM_ATT24');
+  assert(name.value === 'Alta' && name.after === 'TMA',
+    'name/type: ' + JSON.stringify([name.value, name.after]));
+
+  const rec = aip.groupRecords(fields);
+  const vol = rec.get('TAIRSPACE_VOLUME').get('1058').fields;
+  // AN EMPTY VALUE IS A SELF-CLOSING SPAN. A greedy regex runs past it and
+  // steals the next field's marker, which is how GND acquired a bogus unit.
+  assert(vol.UOM_DIST_VER_LOWER === '' && vol.CODE_DIST_VER_LOWER === '',
+    'the self-closing empty span was mis-read: ' + JSON.stringify(vol));
+  assert(vol.VAL_DIST_VER_UPPER === '4500' && vol.UOM_DIST_VER_UPPER === 'FT'
+    && vol.CODE_DIST_VER_UPPER === 'AMSL', 'upper limit fields: ' + JSON.stringify(vol));
+
+  // A sdParams span is SOMETIMES NESTED INSIDE its SD span (12 times in
+  // ENR 2.1). It describes the enclosing value, not the preceding one.
+  assert(rec.get('TAIRSPACE_VOLUME').get('1300').fields.UOM_DIST_VER_UPPER === '105',
+    'a nested marker was attributed to the wrong value');
+});
+T('a vertical limit is never collapsed into a bare number', () => {
+  const aip = require('./tools/aip-fields.mjs');
+  // GND / SFC / UNL are codes, not altitudes.
+  const gnd = aip.verticalLimit('GND', '', '');
+  assert(gnd.text === 'GND' && gnd.ft === null && gnd.kind === 'code', JSON.stringify(gnd));
+  // A flight level is published VAL=105 UOM=FL. It reads "FL 105", and it is
+  // NOT comparable with an AMSL altitude without a QNH, so ft stays null.
+  const fl = aip.verticalLimit('105', 'FL', '');
+  assert(fl.text === 'FL 105' && fl.ft === null && fl.kind === 'flight-level', JSON.stringify(fl));
+  // Only a real measured altitude gets a number, and it keeps its datum.
+  const alt = aip.verticalLimit('4500', 'FT', 'AMSL');
+  assert(alt.ft === 4500 && alt.datum === 'AMSL' && alt.kind === 'altitude', JSON.stringify(alt));
+  // Metres are NOT silently converted - the published text stands and the
+  // number is left unresolved.
+  const m = aip.verticalLimit('300', 'M', 'AMSL');
+  assert(m.ft === null && /300 M AMSL/.test(m.text), JSON.stringify(m));
+});
+T('a malformed coordinate yields null, never a plausible position', () => {
+  const aip = require('./tools/aip-fields.mjs');
+  assert(Math.abs(aip.parseDms('691500N') - 69.25) < 1e-9, 'lat');
+  assert(Math.abs(aip.parseDms('0175300E') - 17.8833333333) < 1e-6, 'lng');
+  assert(aip.parseDms('0175300W') < 0, 'west must be negative');
+  for (const bad of ['nonsense', '696500N', '691575N', '', '9999999E', '691500X']) {
+    assert(aip.parseDms(bad) === null, 'accepted a malformed coordinate: ' + bad);
+  }
+});
+T('the generated dataset is present, current, and states its permission', () => {
+  assert(fs.existsSync('data/aip.js'), 'data/aip.js is missing - run npm run build:aip');
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  assert(set.provider === 'Avinor' && set.source === 'eAIP', 'provenance lost');
+  assert(/permission/i.test(set.attribution) && /non-commercial/i.test(set.attribution),
+    'the dataset does not carry the permission it depends on: ' + set.attribution);
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(set.effectiveFrom), 'no effective date: ' + set.effectiveFrom);
+
+  // Every feature must carry a published class or an explicit null, published
+  // limits as TEXT, a ring of at least three points, and its AIP section.
+  assert(set.features.length > 100, 'only ' + set.features.length + ' airspaces');
+  for (const f of set.features) {
+    assert(f.ring.length >= 3, f.name + ' has ' + f.ring.length + ' points');
+    assert(f.ring.every(p => Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180), f.name + ' has an off-globe point');
+    assert(typeof f.lower.text === 'string' && typeof f.upper.text === 'string', f.name + ' lost its limit text');
+    assert(f.source && f.source.section && /aim-prod\.avinor\.no/.test(f.source.url), f.name + ' has no traceable source');
+    assert('class' in f, f.name + ' has no class field');
+  }
+  // Spot-check against the printed chart: Bardufoss CTR is class D, GND to
+  // 4500 ft AMSL, and Tromso CTR likewise to 4500 ft.
+  const byName = (n) => set.features.find(f => f.name === n);
+  const endu = byName('Bardufoss CTR');
+  assert(endu && endu.class === 'D' && endu.lower.text === 'GND' && endu.upper.text === '4500 FT AMSL',
+    'Bardufoss CTR: ' + JSON.stringify(endu && [endu.class, endu.lower.text, endu.upper.text]));
+  assert(endu.freqs.some(f => f.mhz === '118.105'), 'Bardufoss TWR 118.105 missing');
+  assert(endu.callsigns.includes('Bardufoss Tower'), 'callsign missing: ' + endu.callsigns);
+  const tma = set.features.filter(f => /^Bardufoss TMA/.test(f.name));
+  assert(tma.length === 3, 'expected 3 Bardufoss TMA volumes, got ' + tma.length);
+  assert(tma.every(f => f.class === 'C'), 'Bardufoss TMA class: ' + tma.map(f => f.class));
+  assert(new Set(tma.map(f => f.lower.text)).size === 3, 'the three TMA floors collapsed');
+});
+T('nothing is approximated: every omission is reported with a reason', () => {
+  const report = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  assert(report.skipped.length > 0, 'no omissions recorded at all - suspicious');
+  for (const s of report.skipped) {
+    assert(s.reason && s.name, 'an omission has no reason: ' + JSON.stringify(s));
+  }
+  // A boundary that references the national border must either be RESOLVED
+  // from Kartverket's authoritative line or refused with a stated reason.
+  // What it must never be is joined with straight lines between the published
+  // points, which would invent a boundary.
+  const borderReasons = ['national-border-reference', 'foreign-border-reference',
+    'fix-not-on-border', 'implausible-border-path', 'border-reference-without-two-fixes'];
+  const refusedForBorder = borderReasons.reduce((n, r) => n + (report.skippedByReason[r] || 0), 0);
+  assert(report.borderResolved.length + refusedForBorder > 0,
+    'no border reference was either resolved or refused - are they being approximated?');
+  const build = fs.readFileSync('tools/build-aip.mjs', 'utf8');
+  assert(/never joined with a straight line to stand in for\s*\n?\s*\* a border|Nothing is ever joined with a straight line/.test(build),
+    'the no-straight-line-for-a-border rule is undocumented');
+  const src = fs.readFileSync('tools/build-aip.mjs', 'utf8');
+  assert(/never approximated/i.test(src), 'the reason for skipping is undocumented');
+  // and no two drawn features may be the same polygon twice
+  const set = JSON.parse((() => { const s = fs.readFileSync('data/aip.js', 'utf8'); return s.slice(s.indexOf('{'), s.lastIndexOf(';')); })());
+  const keys = set.features.map(f => f.name + '|' + f.lower.text + '|' + f.upper.text + '|' + JSON.stringify(f.ring));
+  assert(new Set(keys).size === keys.length, 'the dataset draws the same airspace twice');
+});
+
+console.log('\n=== 66. AIP airspace overlay (v16.31) ===');
+T('culling: nothing below the min zoom, only what overlaps the viewport', () => {
+  const A = moduleExports.airspace;
+  const mk = (name, kind, s, w, n, e) => ({
+    name, kind, class: 'D', lower: { text: 'GND' }, upper: { text: '4500 FT AMSL' },
+    ring: [[s, w], [s, e], [n, e], [n, w]], callsigns: [], freqs: [], borderSegments: 0
+  });
+  const near = mk('Near CTR', 'CTR', 69.0, 18.0, 69.5, 18.9);
+  const far = mk('Far CTR', 'CTR', 59.0, 10.0, 59.5, 10.9);
+  const huge = mk('Big TMA', 'TMA', 60.0, 5.0, 71.0, 30.0);
+  const view = { south: 68.8, west: 17.5, north: 69.7, east: 19.5 };
+
+  assert(A.visibleAirspaces([near, far, huge], view, 6).length === 0,
+    'airspace drawn below the min zoom - 228 polygons at country zoom is a wash');
+  const shown = A.visibleAirspaces([near, far, huge], view, 9);
+  const names = shown.map((f) => f.name);
+  assert(names.includes('Near CTR'), 'an overlapping airspace was culled');
+  assert(!names.includes('Far CTR'), 'an airspace 600 NM away was drawn');
+  assert(names.includes('Big TMA'), 'an airspace LARGER than the viewport was culled');
+  // biggest first, so a CTR inside a TMA is not buried under it
+  assert(names[0] === 'Big TMA', 'draw order is not largest-first: ' + JSON.stringify(names));
+  // a hidden kind stays hidden
+  assert(A.visibleAirspaces([near], view, 9, { kinds: { CTR: false } }).length === 0,
+    'a disabled kind was drawn anyway');
+});
+T('the hover card states class, limits, callsign and frequency', () => {
+  const A = moduleExports.airspace;
+  const f = {
+    name: 'Bardufoss CTR', kind: 'CTR', class: 'D',
+    lower: { text: 'GND' }, upper: { text: '4500 FT AMSL' },
+    ring: [[69, 18], [69, 19], [70, 19]],
+    callsigns: ['Bardufoss Tower'], freqs: [{ mhz: '118.105', unit: 'MHz' }], borderSegments: 0
+  };
+  const info = A.airspaceInfo(f);
+  assert(info.title === 'Bardufoss CTR', 'title: ' + info.title);
+  const body = info.lines.join(' | ');
+  assert(/Class D/.test(body), 'class missing: ' + body);
+  assert(/GND . 4500 FT AMSL/.test(body), 'limits missing or reformatted: ' + body);
+  assert(/Bardufoss Tower/.test(body), 'callsign missing: ' + body);
+  assert(/118\.105/.test(body), 'frequency missing: ' + body);
+
+  // A missing class must SAY it is not published, never be blank or invented.
+  const noClass = A.airspaceInfo(Object.assign({}, f, { class: null }));
+  assert(/not published/.test(noClass.lines.join(' ')), 'a missing class was hidden');
+  // A missing limit shows as ? rather than a plausible altitude.
+  const noLimit = A.airspaceInfo(Object.assign({}, f, { upper: { text: '' } }));
+  assert(/\?/.test(A.limitsText(Object.assign({}, f, { upper: { text: '' } }))),
+    'a missing limit was filled in: ' + noLimit.lines.join(' '));
+  // a border-derived boundary says so
+  const bordered = A.airspaceInfo(Object.assign({}, f, { borderSegments: 1 }));
+  assert(/national border/i.test(bordered.lines.join(' ')), 'a border-derived shape does not say so');
+});
+T('the hover card shows VHF frequencies and COUNTS the rest, never drops them', () => {
+  const A = moduleExports.airspace;
+  // Bardufoss CTR publishes twelve, five of them military UHF including
+  // 243.000 (guard). Reciting all twelve buries the one a C182 would call.
+  const freqs = ['129.730', '122.100', '257.800', '118.105', '121.500', '243.000',
+                 '280.700', '118.805', '125.855', '121.500', '275.300', '397.375']
+    .map((mhz) => ({ mhz, unit: 'MHz' }));
+  const { vhf, others } = A.splitFrequencies(freqs);
+  assert(vhf.length === 7 && others === 5, JSON.stringify({ vhf, others }));
+  assert(vhf.every((f) => Number(f) >= 118 && Number(f) < 137), 'a non-VHF frequency got through');
+  assert(!vhf.includes('243.000'), 'guard was offered as a working frequency');
+  // the card must SAY how many it is not showing, not silently drop them
+  const info = A.airspaceInfo({
+    name: 'X', kind: 'CTR', class: 'D', lower: { text: 'GND' }, upper: { text: '4500 FT AMSL' },
+    ring: [[69, 18], [69, 19], [70, 19]], callsigns: [], freqs, borderSegments: 0
+  });
+  assert(/\+5 non-VHF/.test(info.lines.join(' ')), 'the omitted frequencies are not counted');
+  // ...and the DATA keeps every one of them
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  const endu = set.features.find((f) => f.name === 'Bardufoss CTR');
+  assert(endu.freqs.length > 7, 'the dataset itself dropped the non-VHF frequencies: ' + endu.freqs.length);
+  assert(endu.freqs.some((q) => Number(q.mhz) > 200), 'a UHF frequency is missing from the data');
+  // an airspace with only non-VHF frequencies must still say something useful
+  const uhfOnly = A.airspaceInfo({
+    name: 'Y', kind: 'CTR', class: null, lower: { text: 'GND' }, upper: { text: 'UNL' },
+    ring: [[69, 18], [69, 19], [70, 19]], callsigns: [], freqs: [{ mhz: '243.000' }], borderSegments: 0
+  });
+  assert(/none in the VHF band/.test(uhfOnly.lines.join(' ')), 'a UHF-only airspace said nothing: ' + uhfOnly.lines.join(' '));
+});
+T('the hover card is content-sized, not collapsed to its minimum width', () => {
+  // Leaflet tooltips are white-space:nowrap; overriding to `normal` alone
+  // collapsed the card to 64px wide and 392 tall. `width: max-content` with a
+  // max-width is the pattern .wp-label already uses, and the one that works.
+  const css = fs.readFileSync(APP_HTML, 'utf8');
+  const rule = css.split('.airspace-tip {')[1].split('}')[0];
+  assert(/white-space:\s*normal/.test(rule), 'the card would not wrap');
+  assert(/width:\s*max-content/.test(rule), 'the card will collapse to its minimum width');
+  assert(/max-width:\s*\d+px/.test(rule), 'the card has no maximum width');
+});
+T('the attribution names BOTH grants and warns it is not for navigation', () => {
+  const A = moduleExports.airspace;
+  const txt = A.airspaceAttribution({ attribution: 'x', editionLabel: '2026-06-11-AIRAC', effectiveFrom: '2026-06-11' });
+  assert(/Avinor/.test(txt) && /permission/i.test(txt) && /non-commercial/i.test(txt),
+    'the Avinor permission is not stated: ' + txt);
+  assert(/Kartverket/.test(txt) && /NLOD/.test(txt), 'the Kartverket NLOD grant is not stated: ' + txt);
+  assert(/2026-06-11-AIRAC/.test(txt), 'the edition is not stated: ' + txt);
+  assert(/[Nn]ot for navigation/.test(txt) && /NOTAM/.test(txt), 'no verify-the-AIP caution: ' + txt);
+  assert(A.airspaceAttribution(null) === '', 'a missing dataset produced an attribution anyway');
+});
+T('the overlay is off by default, persists, and is in the export whitelist', () => {
+  const E = moduleExports.exch;
+  assert(E.PROFILE_KEYS.includes('airspaceOn'), 'airspaceOn is not persisted with the profile');
+  // ...and the whitelist must still not carry anything identifying
+  const payload = E.buildExportPayload({
+    flights: [], profile: { airspaceOn: true, pilotName: 'Benjamin', email: 'x@y.z' }
+  });
+  const json = JSON.stringify(payload);
+  assert(/airspaceOn/.test(json), 'airspaceOn did not survive export');
+  assert(!/Benjamin/.test(json) && !/x@y\.z/.test(json), 'personal data leaked into the export');
+});
+T('airspace draws in its own pane, BELOW the route line', () => {
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  assert(/createPane\('airspacePane'\)/.test(raw), 'no dedicated airspace pane');
+  const m = raw.match(/getPane\('airspacePane'\)\.style\.zIndex = '(\d+)'/);
+  assert(m, 'the airspace pane has no explicit z-index');
+  // Leaflet's overlayPane (the route line) is 400. Airspace must be under it,
+  // or a click meant for a leg hits an airspace polygon first and bubbles to
+  // the map as "add a waypoint".
+  assert(Number(m[1]) < 400, 'airspace sits ABOVE the route line: z-index ' + m[1]);
+  assert(/pane: 'airspacePane'/.test(raw), 'polygons are not put in that pane');
+});
+T('airspace takes hover but NOT clicks - the map click still adds a waypoint', () => {
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const seg = raw.slice(raw.indexOf('function drawAirspace'), raw.indexOf('function metarStatus'));
+  assert(/bindTooltip/.test(seg), 'the airspace polygons carry no hover information');
+  assert(/mouseover/.test(seg) && /mouseout/.test(seg), 'no hover emphasis');
+  // The whole point: no click handler, and bubblingMouseEvents left default,
+  // so a click inside a TMA still reaches the map and adds a waypoint.
+  assert(!/\.on\('click'/.test(seg), 'a click handler on airspace would break route building inside a TMA');
+  assert(!/bubblingMouseEvents/.test(seg), 'event bubbling was disabled - map clicks would be swallowed');
+});
+T('the overlay renders the real dataset, culled, with an attribution', () => {
+  ev(SEED);
+  ev("window.__stubZoom = 9; window.__stubBounds = { south: 68.8, west: 17.2, north: 69.9, east: 19.6 };");
+  ev('aircraftProfile.airspaceOn = true; drawAirspace();');
+  const n = ev('airspaceLayers.length');
+  assert(n > 0, 'nothing drawn over Troms at zoom 9');
+  assert(n < 60, n + ' polygons drawn for one viewport - culling is not working');
+  // every drawn layer is a polygon in the airspace pane with a tooltip
+  assert(ev("airspaceLayers.every(l => l._isPolygon && l._opts.pane === 'airspacePane' && !!l._tip)"),
+    'a drawn layer is not a tooltipped polygon in the airspace pane');
+  assert(ev("airspaceLayers.every(l => l._opts.fillOpacity <= 0.12)"),
+    'the fill is too heavy - it would hide the chart underneath');
+  const attr = doc.getElementById('airspace-attribution');
+  assert(attr && attr.style.display !== 'none' && /Avinor/.test(attr.textContent),
+    'no attribution shown while the overlay is on');
+  // below the min zoom nothing is drawn, and the attribution goes away
+  ev("window.__stubZoom = 5; drawAirspace();");
+  assert(ev('airspaceLayers.length') === 0, 'airspace drawn at zoom 5');
+  assert(doc.getElementById('airspace-attribution').style.display === 'none',
+    'the attribution stayed up with nothing drawn');
+  // and turning it off clears everything
+  ev("window.__stubZoom = 9; aircraftProfile.airspaceOn = true; drawAirspace();");
+  assert(ev('airspaceLayers.length') > 0, 'redraw failed');
+  ev('aircraftProfile.airspaceOn = false; drawAirspace();');
+  assert(ev('airspaceLayers.length') === 0, 'turning the overlay off left layers on the map');
+});
+T('the map control is in the stack and reports its state', () => {
+  const btn = doc.getElementById('airspace-btn');
+  assert(btn, 'no airspace button');
+  assert(btn.parentElement === doc.getElementById('map-controls'),
+    'the airspace button is outside the control stack - it will be invisible');
+  assert(btn.classList.contains('map-ctl'), 'the airspace button lacks the shared class');
+  ev('aircraftProfile.airspaceOn = false; updateAirspaceBtn();');
+  assert(/Off/.test(btn.textContent), 'button does not report Off: ' + btn.textContent);
+  ev('aircraftProfile.airspaceOn = true; updateAirspaceBtn();');
+  assert(/On/.test(btn.textContent), 'button does not report On: ' + btn.textContent);
+});
+
+console.log('\n=== 65. AIP national-border resolution (v16.30) ===');
+T('border fragments stitch into one continuous chain', () => {
+  const b = require('./tools/aip-border.mjs');
+  // Kartverket serves the border in arbitrary order and arbitrary direction,
+  // so a fragment's end may join another's start OR its end.
+  const forward = [[[0, 0], [1, 1]], [[2, 2], [3, 3]], [[1, 1], [2, 2]]];
+  let chains = b.stitchFragments(forward);
+  assert(chains.length === 1 && chains[0].length === 4, 'forward: ' + JSON.stringify(chains));
+  const reversed = [[[0, 0], [1, 1]], [[3, 3], [2, 2]], [[2, 2], [1, 1]]];
+  chains = b.stitchFragments(reversed);
+  assert(chains.length === 1 && chains[0].length === 4, 'reversed: ' + JSON.stringify(chains));
+  // two genuinely separate stretches must stay separate, not be joined
+  chains = b.stitchFragments([[[0, 0], [1, 1]], [[50, 50], [51, 51]]]);
+  assert(chains.length === 2, 'unrelated fragments were joined: ' + JSON.stringify(chains));
+});
+T('the border walk has no free choices, and refuses what it cannot resolve', () => {
+  const b = require('./tools/aip-border.mjs');
+  // a straight north-south "border" at lng 10
+  const chain = [];
+  for (let i = 0; i <= 100; i++) chain.push([60 + i * 0.01, 10]);
+
+  const ok = b.borderPath(chain, [60.1, 10], [60.5, 10]);
+  assert(!('refuse' in ok), 'a clean case was refused: ' + JSON.stringify(ok));
+  assert(ok.points[0][0] === 60.1 && ok.points[ok.points.length - 1][0] === 60.5,
+    'the PUBLISHED fixes must be the path endpoints, not the snapped ones');
+  assert(ok.snapFromNM < 0.01 && ok.snapToNM < 0.01, 'snap distances: ' + JSON.stringify(ok));
+
+  // walking the other way must also work and must come back in that order
+  const back = b.borderPath(chain, [60.5, 10], [60.1, 10]);
+  assert(back.points[0][0] === 60.5, 'the reverse walk did not start at the first fix');
+
+  // a fix nowhere near the border is REFUSED, not snapped
+  const far = b.borderPath(chain, [60.1, 10], [60.5, 14]);
+  assert('refuse' in far && far.refuse === 'fix-not-on-border', JSON.stringify(far));
+  // ...and an empty border is refused rather than treated as a straight line
+  assert('refuse' in b.borderPath([], [60, 10], [61, 10]), 'an empty border resolved anyway');
+});
+T('a foreign border is refused rather than snapped to a Norwegian one', () => {
+  const b = require('./tools/aip-border.mjs');
+  // Halti references the Finland-Sweden border, which is not in Kartverket's
+  // Riksgrense. Snapping it to the nearest Norwegian border instead would be
+  // a silent, confident error.
+  assert(b.isForeignBorder('Finland and Sweden'), 'Finland-Sweden was treated as Norwegian');
+  assert(!b.isForeignBorder('Norway and Sweden'), 'Norway-Sweden was treated as foreign');
+  assert(!b.isForeignBorder('Finland and Norway'), 'Finland-Norway was treated as foreign');
+  assert(b.isForeignBorder(''), 'an unnamed border was treated as Norwegian');
+});
+T('simplification cannot move a boundary anywhere visible', () => {
+  const b = require('./tools/aip-border.mjs');
+  const pts = [];
+  for (let i = 0; i <= 200; i++) pts.push([60 + i * 0.001, 10 + Math.sin(i / 7) * 0.0002]);
+  const thin = b.simplify(pts, 0.02);
+  assert(thin.length < pts.length, 'nothing was simplified');
+  assert(thin[0][0] === pts[0][0] && thin[thin.length - 1][0] === pts[pts.length - 1][0],
+    'simplification moved an endpoint');
+  // every dropped point must lie within the tolerance of the kept line
+  const kept = new Set(thin.map((p) => p.join(',')));
+  for (const p of pts) {
+    if (kept.has(p.join(','))) continue;
+    let best = Infinity;
+    for (let i = 1; i < thin.length; i++) {
+      const [ax, ay] = [thin[i - 1][1] * 30, thin[i - 1][0] * 60.04];
+      const [bx, by] = [thin[i][1] * 30, thin[i][0] * 60.04];
+      const [px, py] = [p[1] * 30, p[0] * 60.04];
+      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+      best = Math.min(best, Math.hypot(px - (ax + t * dx), py - (ay + t * dy)));
+    }
+    assert(best <= 0.021, 'simplification moved a point ' + best.toFixed(4) + ' NM off the line');
+  }
+});
+T('NO airspace polygon crosses itself', () => {
+  // THE BUG THIS EXISTS FOR: a stepped TMA publishes a separate lateral ring
+  // per vertical band. Concatenating a block's vertices into one ring merged
+  // them into a bow tie - 71 of 164 polygons, each drawing an airspace that
+  // does not exist. Rings are now split by the source's own delimiter (a ring
+  // closes by repeating its first vertex) and paired with their volume.
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  const side = (a, b, c) => {
+    const v = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]);
+    return Math.abs(v) < 1e-12 ? 0 : (v > 0 ? 1 : -1);
+  };
+  const offenders = [];
+  for (const f of set.features) {
+    const r = f.ring, n = r.length;
+    let hits = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (j === i || (j + 1) % n === i || j === (i + 1) % n) continue;
+        const a = r[i], b2 = r[(i + 1) % n], c = r[j], d = r[(j + 1) % n];
+        if (side(a, b2, c) !== side(a, b2, d) && side(c, d, a) !== side(c, d, b2)) hits++;
+      }
+    }
+    if (hits) offenders.push(f.name + ' (' + hits + ')');
+  }
+  assert(offenders.length === 0, offenders.length + ' self-crossing polygons: ' + offenders.slice(0, 5).join(', '));
+});
+T('a stepped TMA gets one ring per band, not one ring shared', () => {
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  for (const stem of ['Bardufoss TMA', 'Evenes TMA', 'Notodden TIZ']) {
+    const vols = set.features.filter((f) => f.name.startsWith(stem));
+    assert(vols.length > 1, stem + ' has only ' + vols.length + ' volume(s)');
+    const rings = new Set(vols.map((f) => JSON.stringify(f.ring)));
+    assert(rings.size === vols.length,
+      stem + ': ' + vols.length + ' bands but only ' + rings.size + ' distinct ring(s)');
+    const bands = new Set(vols.map((f) => f.lower.text + '-' + f.upper.text));
+    assert(bands.size === vols.length, stem + ': the bands collapsed to ' + bands.size);
+  }
+});
+T('border-resolved airspaces record how far the published corner sat off', () => {
+  const report = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  assert(report.border && report.border.provider === 'Kartverket', 'the border source is not recorded');
+  assert(/NLOD/i.test(report.border.attribution), 'Kartverket NLOD attribution missing');
+  assert(report.borderResolved.length > 10,
+    'only ' + report.borderResolved.length + ' airspaces resolved against the border');
+  for (const r of report.borderResolved) {
+    assert(r.maxSnapNM <= report.border.snapToleranceNM,
+      r.name + ' resolved with a ' + r.maxSnapNM + ' NM snap, beyond the tolerance');
+    assert(r.segments.length > 0 && r.segments.every((sg) => sg.lengthNM > 0), r.name + ' has an empty border segment');
+  }
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  assert(/Kartverket/.test(set.attribution), 'the dataset does not credit Kartverket for the border');
+  // Evenes TMA is border-resolved and in the user's own region: it must exist
+  // and it must carry its snap distance.
+  const evenes = set.features.filter((f) => f.name.startsWith('Evenes TMA'));
+  assert(evenes.length >= 3, 'Evenes TMA is missing: ' + evenes.length + ' volumes');
+  assert(evenes.some((f) => f.borderSegments > 0), 'Evenes TMA lost its border stretch');
 });
 
 console.log('\n=== 62b. TOC/TOD marks (the vanishing TOD, v16.28) ===');

@@ -29,6 +29,6 @@
     "skipLibCheck": true,
     "lib": ["ES2019", "DOM"]
   },
-  "include": ["src/**/*.js", "src/**/*.d.ts"],
+  "include": ["src/**/*.js", "src/**/*.d.ts", "tools/aip-fields.mjs", "tools/aip-border.mjs"],
   "exclude": ["node_modules", "dist", "site"]
 }
