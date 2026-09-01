@@ -2694,6 +2694,11 @@ T('the generated dataset is present, current, and states its permission', () => 
     assert(typeof f.lower.text === 'string' && typeof f.upper.text === 'string', f.name + ' lost its limit text');
     assert(f.source && f.source.section && /aim-prod\.avinor\.no/.test(f.source.url), f.name + ' has no traceable source');
     assert('class' in f, f.name + ' has no class field');
+    assert(Array.isArray(f.services), f.name + ' has no services array');
+    for (const sv of f.services) {
+      assert(Array.isArray(sv.freqs), f.name + ': a service has no frequency list');
+      for (const q of sv.freqs) assert(typeof q.mhz === 'string' && q.mhz, f.name + ': a frequency has no value');
+    }
   }
   // Spot-check against the printed chart: Bardufoss CTR is class D, GND to
   // 4500 ft AMSL, and Tromso CTR likewise to 4500 ft.
@@ -2701,8 +2706,9 @@ T('the generated dataset is present, current, and states its permission', () => 
   const endu = byName('Bardufoss CTR');
   assert(endu && endu.class === 'D' && endu.lower.text === 'GND' && endu.upper.text === '4500 FT AMSL',
     'Bardufoss CTR: ' + JSON.stringify(endu && [endu.class, endu.lower.text, endu.upper.text]));
-  assert(endu.freqs.some(f => f.mhz === '118.105'), 'Bardufoss TWR 118.105 missing');
-  assert(endu.callsigns.includes('Bardufoss Tower'), 'callsign missing: ' + endu.callsigns);
+  const enduTwr = endu.services.find(sv => sv.code === 'TWR' && sv.freqs.length);
+  assert(enduTwr && enduTwr.freqs.some(q => q.mhz === '118.105'), 'Bardufoss TWR 118.105 missing');
+  assert(enduTwr.callsign === 'Bardufoss Tower', 'callsign: ' + (enduTwr && enduTwr.callsign));
   const tma = set.features.filter(f => /^Bardufoss TMA/.test(f.name));
   assert(tma.length === 3, 'expected 3 Bardufoss TMA volumes, got ' + tma.length);
   assert(tma.every(f => f.class === 'C'), 'Bardufoss TMA class: ' + tma.map(f => f.class));
@@ -2759,62 +2765,127 @@ T('culling: nothing below the min zoom, only what overlaps the viewport', () => 
   assert(A.visibleAirspaces([near], view, 9, { kinds: { CTR: false } }).length === 0,
     'a disabled kind was drawn anyway');
 });
-T('the hover card states class, limits, callsign and frequency', () => {
+T('the hover card is structured, and states class, limits and services', () => {
   const A = moduleExports.airspace;
   const f = {
-    name: 'Bardufoss CTR', kind: 'CTR', class: 'D',
+    name: 'Bardufoss CTR', kind: 'CTR', class: 'D', icao: 'ENDU',
     lower: { text: 'GND' }, upper: { text: '4500 FT AMSL' },
-    ring: [[69, 18], [69, 19], [70, 19]],
-    callsigns: ['Bardufoss Tower'], freqs: [{ mhz: '118.105', unit: 'MHz' }], borderSegments: 0
+    ring: [[69, 18], [69, 19], [70, 19]], borderSegments: 0,
+    services: [
+      { code: 'ATIS', callsign: 'Bardufoss Information', freqs: [{ mhz: '129.730', remarks: '' }] },
+      { code: 'TWR', callsign: 'Bardufoss Tower', freqs: [{ mhz: '118.105', remarks: '' }] },
+      { code: 'APP', callsign: 'Bardufoss Approach/ Radar',
+        freqs: [{ mhz: '118.805', remarks: '' }, { mhz: '125.855', remarks: '' }] }
+    ]
   };
-  const info = A.airspaceInfo(f);
-  assert(info.title === 'Bardufoss CTR', 'title: ' + info.title);
-  const body = info.lines.join(' | ');
-  assert(/Class D/.test(body), 'class missing: ' + body);
-  assert(/GND . 4500 FT AMSL/.test(body), 'limits missing or reformatted: ' + body);
-  assert(/Bardufoss Tower/.test(body), 'callsign missing: ' + body);
-  assert(/118\.105/.test(body), 'frequency missing: ' + body);
+  const i = A.airspaceInfo(f);
+  assert(i.name === 'Bardufoss CTR', 'name: ' + i.name);
+  assert(i.cls === 'D' && i.kindLabel === 'Control zone', JSON.stringify([i.cls, i.kindLabel]));
+  assert(i.band === 'GND – 4500 FT AMSL', 'band: ' + i.band);
+  assert(i.color, 'no accent colour for the card');
+  // ATIS first (you get it before calling anyone), then APP, then TWR.
+  assert(i.services.map((r) => r.tag).join(',') === 'ATIS,APP,TWR',
+    'service order: ' + i.services.map((r) => r.tag).join(','));
+  assert(i.services[1].freqs.join(',') === '118.805,125.855', 'APP frequencies: ' + i.services[1].freqs);
+  assert(i.services[2].callsign === 'Bardufoss Tower', 'TWR callsign: ' + i.services[2].callsign);
 
-  // A missing class must SAY it is not published, never be blank or invented.
-  const noClass = A.airspaceInfo(Object.assign({}, f, { class: null }));
-  assert(/not published/.test(noClass.lines.join(' ')), 'a missing class was hidden');
+  // A missing class is reported as absent, never blank or invented.
+  assert(A.airspaceInfo(Object.assign({}, f, { class: null })).cls === null, 'a missing class became a value');
   // A missing limit shows as ? rather than a plausible altitude.
-  const noLimit = A.airspaceInfo(Object.assign({}, f, { upper: { text: '' } }));
   assert(/\?/.test(A.limitsText(Object.assign({}, f, { upper: { text: '' } }))),
-    'a missing limit was filled in: ' + noLimit.lines.join(' '));
-  // a border-derived boundary says so
-  const bordered = A.airspaceInfo(Object.assign({}, f, { borderSegments: 1 }));
-  assert(/national border/i.test(bordered.lines.join(' ')), 'a border-derived shape does not say so');
+    'a missing limit was filled in');
+  // a border-derived boundary says so; a normal one gains no note
+  assert(/national border/i.test(A.airspaceInfo(Object.assign({}, f, { borderSegments: 1 })).notes.join(' ')),
+    'a border-derived shape does not say so');
+  assert(A.airspaceInfo(f).notes.length === 0, 'a normal airspace gained a note');
 });
-T('the hover card shows VHF frequencies and COUNTS the rest, never drops them', () => {
+T('ATIS is labelled by ICAO; "Information" is reserved for AFIS', () => {
   const A = moduleExports.airspace;
-  // Bardufoss CTR publishes twelve, five of them military UHF including
-  // 243.000 (guard). Reciting all twelve buries the one a C182 would call.
-  const freqs = ['129.730', '122.100', '257.800', '118.105', '121.500', '243.000',
-                 '280.700', '118.805', '125.855', '121.500', '275.300', '397.375']
-    .map((mhz) => ({ mhz, unit: 'MHz' }));
-  const { vhf, others } = A.splitFrequencies(freqs);
-  assert(vhf.length === 7 && others === 5, JSON.stringify({ vhf, others }));
-  assert(vhf.every((f) => Number(f) >= 118 && Number(f) < 137), 'a non-VHF frequency got through');
-  assert(!vhf.includes('243.000'), 'guard was offered as a working frequency');
-  // the card must SAY how many it is not showing, not silently drop them
-  const info = A.airspaceInfo({
-    name: 'X', kind: 'CTR', class: 'D', lower: { text: 'GND' }, upper: { text: '4500 FT AMSL' },
-    ring: [[69, 18], [69, 19], [70, 19]], callsigns: [], freqs, borderSegments: 0
+  const base = {
+    name: 'X', kind: 'CTR', class: 'D', lower: { text: 'GND' }, upper: { text: '2500 FT AMSL' },
+    ring: [[69, 18], [69, 19], [70, 19]], borderSegments: 0
+  };
+  // Norway publishes ENDU's ATIS callsign as "Bardufoss Information", which
+  // reads like the AFIS service you would actually talk to. You do not call an
+  // ATIS, so the row is labelled by ICAO instead.
+  const atis = A.serviceRows(Object.assign({}, base, {
+    icao: 'ENDU',
+    services: [{ code: 'ATIS', callsign: 'Bardufoss Information', freqs: [{ mhz: '129.730', remarks: '' }] }]
+  }));
+  assert(atis[0].callsign === 'ENDU ATIS', 'ATIS label: ' + atis[0].callsign);
+  assert(!/Information/.test(atis[0].callsign), 'ATIS is still labelled Information');
+  const noIcao = A.serviceRows(Object.assign({}, base, {
+    icao: null,
+    services: [{ code: 'ATIS', callsign: 'Somewhere Information', freqs: [{ mhz: '129.730', remarks: '' }] }]
+  }));
+  assert(noIcao[0].callsign === 'ATIS', 'ATIS without an ICAO: ' + noIcao[0].callsign);
+  // AFIS keeps its published Information callsign - there it means a station
+  // that answers you.
+  const afis = A.serviceRows(Object.assign({}, base, {
+    icao: 'ENSB',
+    services: [{ code: 'AFIS', callsign: 'Longyear Information', freqs: [{ mhz: '118.100', remarks: '' }] }]
+  }));
+  assert(afis[0].tag === 'AFIS' && afis[0].callsign === 'Longyear Information',
+    'AFIS row: ' + JSON.stringify(afis[0]));
+});
+T('military, guard and irrelevant services never reach the card', () => {
+  const A = moduleExports.airspace;
+  // The source marks SOME military frequencies with a MIL remark - only six in
+  // the whole edition - so the VHF band is the real filter and MIL is applied
+  // on top. 121.500 and 243.000 are emergency, not working, frequencies.
+  assert(A.isUsableFrequency({ mhz: '118.105', remarks: '' }), 'a normal VHF frequency was rejected');
+  assert(!A.isUsableFrequency({ mhz: '280.700', remarks: 'MIL' }), 'a MIL-flagged UHF passed');
+  assert(!A.isUsableFrequency({ mhz: '243.000', remarks: '' }), 'UHF guard passed');
+  assert(!A.isUsableFrequency({ mhz: '121.500', remarks: '' }), 'VHF guard passed');
+  assert(!A.isUsableFrequency({ mhz: '397.375', remarks: '' }), 'an unmarked UHF military passed');
+  assert(!A.isUsableFrequency({ mhz: '125.855', remarks: 'MIL' }), 'a MIL-flagged VHF passed');
+  assert(!A.isUsableFrequency({ mhz: '', remarks: '' }), 'an empty frequency passed');
+
+  // Clearance delivery and surface movement are not shown at all.
+  const rows = A.serviceRows({
+    icao: 'ENDU', services: [
+      { code: 'CLR', callsign: 'Bardufoss Delivery', freqs: [{ mhz: '122.100', remarks: '' }] },
+      { code: 'SMC', callsign: 'Bardufoss Ground', freqs: [{ mhz: '121.900', remarks: '' }] },
+      { code: 'TWR', callsign: 'Bardufoss Tower',
+        freqs: [{ mhz: '118.105', remarks: '' }, { mhz: '121.500', remarks: '' },
+                { mhz: '243.000', remarks: '' }, { mhz: '280.700', remarks: 'MIL' }] }
+    ]
   });
-  assert(/\+5 non-VHF/.test(info.lines.join(' ')), 'the omitted frequencies are not counted');
-  // ...and the DATA keeps every one of them
+  assert(rows.length === 1 && rows[0].tag === 'TWR', 'shown: ' + JSON.stringify(rows.map((r) => r.tag)));
+  assert(rows[0].freqs.join(',') === '118.105', 'TWR frequencies: ' + rows[0].freqs.join(','));
+
+  // ...but the DATA keeps every published service and frequency.
   const src = fs.readFileSync('data/aip.js', 'utf8');
   const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
   const endu = set.features.find((f) => f.name === 'Bardufoss CTR');
-  assert(endu.freqs.length > 7, 'the dataset itself dropped the non-VHF frequencies: ' + endu.freqs.length);
-  assert(endu.freqs.some((q) => Number(q.mhz) > 200), 'a UHF frequency is missing from the data');
-  // an airspace with only non-VHF frequencies must still say something useful
-  const uhfOnly = A.airspaceInfo({
-    name: 'Y', kind: 'CTR', class: null, lower: { text: 'GND' }, upper: { text: 'UNL' },
-    ring: [[69, 18], [69, 19], [70, 19]], callsigns: [], freqs: [{ mhz: '243.000' }], borderSegments: 0
-  });
-  assert(/none in the VHF band/.test(uhfOnly.lines.join(' ')), 'a UHF-only airspace said nothing: ' + uhfOnly.lines.join(' '));
+  assert(endu.services.some((sv) => sv.code === 'CLR'), 'clearance delivery was dropped from the data');
+  assert(endu.services.flatMap((sv) => sv.freqs).some((q) => q.mhz === '243.000'),
+    'guard was dropped from the data');
+  const card = A.serviceRows(endu);
+  assert(card.map((r) => r.tag).join(',') === 'ATIS,APP,TWR', 'ENDU card: ' + JSON.stringify(card));
+  assert(!JSON.stringify(card).includes('121.500'), 'guard reached the card');
+  assert(!JSON.stringify(card).includes('MIL'), 'a military remark reached the card');
+});
+T('an airspace worked only by an ACC still names someone to call', () => {
+  const A = moduleExports.airspace;
+  // Hammerfest, Helgeland and Lofoten TMA have no local approach - Polaris
+  // Control works them. Hiding ACC would leave controlled airspace with no
+  // contact at all. A CTR that has TWR and APP must NOT gain a Polaris row.
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  const lofoten = set.features.find((f) => f.name === 'Lofoten TMA');
+  assert(lofoten, 'Lofoten TMA is missing from the dataset');
+  const rows = A.serviceRows(lofoten);
+  assert(rows.length === 1 && rows[0].tag === 'ACC', 'Lofoten TMA: ' + JSON.stringify(rows));
+  assert(/Polaris Control/.test(rows[0].callsign), 'callsign: ' + rows[0].callsign);
+  const endu = set.features.find((f) => f.name === 'Bardufoss CTR');
+  assert(!A.serviceRows(endu).some((r) => r.tag === 'ACC'),
+    'a CTR with TWR and APP was given an ACC row as well');
+  // No card may carry a "+N hidden" remark - it was noise and is gone.
+  for (const f of set.features.slice(0, 60)) {
+    const json = JSON.stringify(A.airspaceInfo(f));
+    assert(!/non-VHF/.test(json) && !/see AIP/.test(json), f.name + ' still carries a hidden-count remark');
+  }
 });
 T('the hover card is content-sized, not collapsed to its minimum width', () => {
   // Leaflet tooltips are white-space:nowrap; overriding to `normal` alone

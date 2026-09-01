@@ -5,7 +5,7 @@
   "effectiveFrom": "2026-06-11",
   "revision": null,
   "indexUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-1.3-en-GB.html",
-  "retrievedAtUtc": "2026-09-01T10:58:53.137Z",
+  "retrievedAtUtc": "2026-09-01T11:35:34.106Z",
   "permission": "Used with permission from Avinor AS. Non-commercial use only.",
   "border": {
     "provider": "Kartverket",
@@ -37,7 +37,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.1",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -47,7 +48,8 @@
       "detail": "Norway and Sweden: published fixes lie 19.44 and 25.34 NM from the border (tolerance 2 NM)",
       "source": {
         "section": "ENR 2.1",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -57,7 +59,8 @@
       "detail": "Norway and Sweden: published fixes lie 19.44 and 25.34 NM from the border (tolerance 2 NM)",
       "source": {
         "section": "ENR 2.1",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -67,7 +70,8 @@
       "detail": "Norway and Sweden: published fixes lie 8.44 and 19.44 NM from the border (tolerance 2 NM)",
       "source": {
         "section": "ENR 2.1",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -77,7 +81,8 @@
       "detail": "Norway and Sweden: published fixes lie 0.01 and 8.44 NM from the border (tolerance 2 NM)",
       "source": {
         "section": "ENR 2.1",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -86,7 +91,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.1",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -95,7 +101,8 @@
       "reason": "no-published-vertical-limits",
       "source": {
         "section": "ENR 2.1",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -104,7 +111,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.1",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.1-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -114,7 +122,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -124,7 +133,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -134,7 +144,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -144,7 +155,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -154,7 +166,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -164,7 +177,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -174,7 +188,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -184,7 +199,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -194,7 +210,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -204,7 +221,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -214,7 +232,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -224,7 +243,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -234,7 +254,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -244,7 +265,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -254,7 +276,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -264,7 +287,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -274,7 +298,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -284,7 +309,8 @@
       "detail": "0 points",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -294,7 +320,8 @@
       "detail": "Norway and Sweden: published fixes lie 19.44 and 0.04 NM from the border (tolerance 2 NM)",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -304,7 +331,8 @@
       "detail": "Finland and Sweden is not in Norway's national-border dataset",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -314,7 +342,8 @@
       "detail": "Norway and Sweden: published fixes lie 25.34 and 0.04 NM from the border (tolerance 2 NM)",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -323,7 +352,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -332,7 +362,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -341,7 +372,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -350,7 +382,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -359,7 +392,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -368,7 +402,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -377,7 +412,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -386,7 +422,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -395,7 +432,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -404,7 +442,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -413,7 +452,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -422,7 +462,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -431,7 +472,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -440,7 +482,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -449,7 +492,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -458,7 +502,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -467,7 +512,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -476,7 +522,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -485,7 +532,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -494,7 +542,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -503,7 +552,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -512,7 +562,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -521,7 +572,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -530,7 +582,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -539,7 +592,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -548,7 +602,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -557,7 +612,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -566,7 +622,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -575,7 +632,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     },
     {
@@ -584,7 +642,8 @@
       "reason": "not-a-vfr-planning-airspace",
       "source": {
         "section": "ENR 2.2",
-        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html"
+        "url": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-ENR-2.2-en-GB.html",
+        "icao": null
       }
     }
   ],

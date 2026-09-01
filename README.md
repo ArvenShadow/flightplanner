@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.31)
+# C182 Flight Planner (v16.32)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -39,10 +39,18 @@ chart from a superseded cycle is a safety problem, not a stale asset.
 ## Airspace overlay
 
 The **⬢ Airspace** button on the map draws the published airspace — CTR, TIZ,
-TMA, TIA, CTA and the mandatory zones. Hover any of them for its ICAO class,
-published vertical limits, station callsigns and VHF frequencies. Nothing draws
-below zoom 7, because at country zoom 228 polygons bury the chart. Clicking
-still adds a waypoint, so route building inside a TMA is unaffected.
+TMA, TIA, CTA and the mandatory zones. Hover any of them for a card with its
+ICAO class, published vertical limits, and one row per service you would
+actually use: **ATIS, Approach, Tower**, or **Information** at an AFIS field.
+Nothing draws below zoom 7, because at country zoom 228 polygons bury the
+chart. Clicking still adds a waypoint, so route building inside a TMA is
+unaffected.
+
+The card lists only dialable frequencies: no clearance delivery or ground, no
+military channels (both the flagged ones and everything outside 118–137 MHz),
+and never 121.500. An airspace worked only by an area control centre still
+shows that frequency, or there would be nobody to call. Every published
+service and frequency stays in the data regardless.
 
 Limits are shown exactly as published: GND, UNL and flight levels stay as they
 are, and a flight level is never converted to an altitude. **A planning aid —

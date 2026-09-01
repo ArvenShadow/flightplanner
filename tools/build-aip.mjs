@@ -139,7 +139,7 @@ function airspaceBlocks(fields) {
 
   for (const f of fields) {
     if (f.record === 'TAIRSPACE' && f.field === 'CUSTOM_ATT24') {
-      cur = { name: f.value, type: (f.after || '').trim(), volumes: [], outline: [], freqs: new Map(), units: [] };
+      cur = { name: f.value, type: (f.after || '').trim(), volumes: [], outline: [], services: [] };
       blocks.push(cur);
       pending = []; volume = null;
       continue;
@@ -178,11 +178,41 @@ function airspaceBlocks(fields) {
       if (volume && volume.class === null) volume.class = f.value;
       continue;
     }
-    if (f.record === 'TUNIT' && f.field === 'TXT_NAME') { cur.units.push(f.value); continue; }
-    if (f.record === 'TCALLSIGN_DETAIL' && f.field === 'CUSTOM_ATT7') { cur.units.push(f.value); continue; }
+
+    // ---- ATS communication, kept AS SERVICES rather than a flat list ----
+    //
+    // The source publishes service, then callsign, then that service's
+    // frequencies, then the next service. AD 2.18 tags the service explicitly
+    // (TSERVICE;CODE_TYPE = APP / TWR / ATIS / AFIS / SMC / CLR / RADIO);
+    // ENR 2.1 and 2.2 do NOT - they give only a callsign, which is
+    // self-describing ("Banak Approach", "Longyear Information"), so the code
+    // is derived from it there and left null if it does not match.
+    //
+    // Flattening these into one frequency list, as v16.31 did, loses the one
+    // thing that makes them usable: which frequency is the tower and which is
+    // a military UHF channel.
+    if (f.record === 'TSERVICE' && f.field === 'CODE_TYPE') {
+      cur.services.push({ code: f.value.toUpperCase(), callsign: null, freqs: [] });
+      continue;
+    }
+    if (f.record === 'TCALLSIGN_DETAIL' && f.field === 'CUSTOM_ATT7') {
+      const open = cur.services[cur.services.length - 1];
+      if (open && open.callsign === null && !open.freqs.length) open.callsign = f.value;
+      else cur.services.push({ code: null, callsign: f.value, freqs: [] });
+      continue;
+    }
     if (f.record === 'TFREQUENCY') {
-      if (!cur.freqs.has(f.id)) cur.freqs.set(f.id, {});
-      cur.freqs.get(f.id)[f.field] = f.value;
+      let svc = cur.services[cur.services.length - 1];
+      if (!svc) { svc = { code: null, callsign: null, freqs: [] }; cur.services.push(svc); }
+      if (f.field === 'VAL_FREQ_TRANS') { svc.freqs.push({ id: f.id, mhz: f.value, unit: '', remarks: '' }); continue; }
+      // UOM and the remark arrive after the value, keyed by the same id.
+      const q = svc.freqs.find((x) => x.id === f.id);
+      if (!q) continue;
+      if (f.field === 'UOM_FREQ') q.unit = f.value;
+      // CUSTOM_ATT27 is the published remark. It carries 'MIL' on a military
+      // channel - though NOT on every one of them, so the VHF band is what
+      // actually keeps military UHF out; see src/lib/airspace.js.
+      else if (f.field === 'CUSTOM_ATT27') q.remarks = f.value;
       continue;
     }
   }
@@ -259,6 +289,27 @@ function ringOf(outline, label, border, report) {
     report.borderResolved.push({ name: label, maxSnapNM: Number(maxSnap.toFixed(3)), segments: resolved });
   }
   return { ring: pts, borderSegments: resolved.length, maxSnapNM: Number(maxSnap.toFixed(3)) };
+}
+
+/**
+ * The service code implied by a published callsign, for the sections that do
+ * not tag one (ENR 2.1 and 2.2).
+ *
+ * This reads a published NAME to pick a LABEL - it never invents a value. An
+ * unrecognised callsign yields null and the card then shows the callsign
+ * alone rather than guessing at a service.
+ *
+ * @param {string|null} callsign @returns {string|null}
+ */
+function codeFromCallsign(callsign) {
+  const t = String(callsign || '');
+  if (/\bApproach\b|\bRadar\b|\bDirector\b/i.test(t)) return 'APP';
+  if (/\bTower\b/i.test(t)) return 'TWR';
+  if (/\bInformation\b/i.test(t)) return 'AFIS';
+  if (/\bControl\b/i.test(t)) return 'ACC';
+  if (/\bRadio\b/i.test(t)) return 'RADIO';
+  if (/\bTraffic\b/i.test(t)) return 'TFC';
+  return null;
 }
 
 const KINDS = [
@@ -353,10 +404,18 @@ function buildFeatures(blocks, source, report, border) {
       }
     }
 
-    const freqs = [...b.freqs.values()]
-      .map((f) => ({ mhz: (f.VAL_FREQ_TRANS || '').trim(), unit: (f.UOM_FREQ || '').trim() }))
-      .filter((f) => f.mhz);
-    const callsigns = [...new Set(b.units.filter(Boolean))];
+    const services = b.services
+      .map((sv) => ({
+        code: sv.code || codeFromCallsign(sv.callsign),
+        callsign: sv.callsign || null,
+        freqs: sv.freqs.map((q) => ({
+          mhz: String(q.mhz || '').trim(),
+          unit: String(q.unit || '').trim(),
+          remarks: String(q.remarks || '').trim()
+        })).filter((q) => q.mhz)
+      }))
+      .filter((sv) => sv.freqs.length || sv.callsign);
+
     const multi = b.volumes.length > 1;
 
     for (const v of b.volumes) {
@@ -387,8 +446,10 @@ function buildFeatures(blocks, source, report, border) {
         // How far the published corner sat from Kartverket's surveyed border.
         // Recorded so the shape can be audited instead of trusted.
         borderMaxSnapNM: geom.maxSnapNM || 0,
-        callsigns,
-        freqs,
+        services,
+        // The ICAO of the AD 2 page this came from, where there is one. ENR 2.1
+        // airspace spans aerodromes and has none.
+        icao: source.icao || null,
         source
       });
     }
@@ -433,16 +494,16 @@ async function main() {
   // AD 2.17 carries each aerodrome's own CTR / TIZ.
   const ad13 = await page(edition, 'EN-AD-1.3');
   const icaos = [...new Set((ad13.match(/\bEN[A-Z]{2}\b/g) || []))].sort();
-  for (const icao of icaos) pages.push([`EN-AD-2.${icao}`, `AD 2.17 ${icao}`]);
+  for (const icao of icaos) pages.push([`EN-AD-2.${icao}`, `AD 2.17 ${icao}`, icao]);
 
-  for (const [file, label] of pages) {
+  for (const [file, label, icao] of pages) {
     let html;
     try { html = await page(edition, file); }
     catch (err) { report.pages.push({ page: label, error: String(err.message || err) }); continue; }
     const fields = extractFields(html);
     const blocks = airspaceBlocks(fields);
     const url = `${edition.base}/${file}-en-GB.html`;
-    const built = buildFeatures(blocks, { section: label, url }, report, border);
+    const built = buildFeatures(blocks, { section: label, url, icao: icao || null }, report, border);
     features.push(...built);
     report.pages.push({ page: label, blocks: blocks.length, features: built.length });
     process.stdout.write(`  ${label}: ${built.length} volume(s) from ${blocks.length} block(s)\n`);

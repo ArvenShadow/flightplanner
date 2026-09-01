@@ -182,8 +182,17 @@ interface AirspaceFeature {
   borderSegments: number;
   /** Largest distance a published corner sat from the surveyed border, NM. */
   borderMaxSnapNM: number;
-  callsigns: string[];
-  freqs: { mhz: string, unit: string }[];
+  /** ATS services, each with the frequencies published for it. This is the
+   *  only frequency store - there is no flat copy. */
+  services: {
+    /** APP / TWR / ATIS / AFIS / ACC / RADIO / TFC, or null when neither the
+     *  source nor the callsign states one. */
+    code: string | null;
+    callsign: string | null;
+    freqs: { mhz: string, unit: string, remarks: string }[];
+  }[];
+  /** ICAO of the AD 2 page this came from; null for ENR 2.1 airspace. */
+  icao: string | null;
   source: { section: string, url: string };
   /** Cached bounding box (airspaceBounds); not part of the dataset. */
   _bbox?: { south: number, west: number, north: number, east: number };
