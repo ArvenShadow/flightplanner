@@ -1286,8 +1286,9 @@ scoped. In the user's order:
    records M&B as explicitly OUT OF SCOPE at the user's own decision. That
    entry is now superseded by this roadmap item, but the work needs the
    real sheet and the POH arms/limits in hand before a line is written.
-6. **A print page that pixel-matches the real OFP / M&B form**, so the PDF
-   can be copied straight onto the company paperwork.
+6. **PARTLY DONE at v16.41** - the OFP half. Print OFP now outputs the
+   company "Operational flightplan" form filled from the plan; see the section
+   above. The M&B half waits on item 5.
 7. More to come.
 
 ## Circuit altitude, and editing a waypoint from the map (v16.40)
@@ -1325,6 +1326,82 @@ scoped. In the user's order:
   - `toDMM(value, isLat)` TAKES A FLAG, NOT THE OTHER COORDINATE. Calling it
     `toDMM(wp.lat, wp.lng)` printed the latitude alone and silently dropped the
     longitude; only reading the real dialog text in Chromium showed it.
+
+## The company OFP form as the print output (v16.41, roadmap item 6 - the OFP half)
+
+`C182OFPMBv4.2.pdf` (committed to the repo by the user) is the flight school's
+two-page form: page 1 the "Operational flightplan", page 2 Mass & Balance.
+**Print OFP now prints page 1, filled from the plan.** The M&B side is NOT
+reproduced - it is roadmap item 5 and needs the real sheet and the POH arms and
+limits first. Half-building it would be worse than not building it, and a test
+asserts nothing M&B appears on the sheet.
+
+- **THE GEOMETRY IS MEASURED, NOT EYEBALLED.** The PDF's table body is a RASTER
+  image with the text drawn over it - `getOperatorList` yields 118 vector boxes
+  for the header blocks and nothing at all for the 16 numbered lines - so the
+  column boundaries cannot be read out of the content stream. They were measured
+  off a 200 dpi `pdftoppm` render by finding runs of dark pixels spanning >=30%
+  of the sheet: 26 vertical rules, i.e. 25 columns. `COLUMN_EDGES_PCT` in
+  `src/lib/ofpform.js` IS that measurement. Do not "tidy" those numbers.
+- **THE GROUP HEADERS SETTLED THE ONE REAL AMBIGUITY, and the form settled it
+  itself.** "ACC" spans Dist+Time and "Intermediate" spans GS+Dist+Time, which
+  alone could be read either way round - and putting accumulated figures in the
+  per-leg cells would put wrong numbers on company paperwork. The Fuel group
+  spells the vocabulary out by carrying BOTH "Int" and "Acc" over its three
+  columns, so Int(ermediate) is this leg and ACC is the running total. Measured
+  the same way: the group row's own rules, at 26.07 / 34.16 / 41.34 / 51.57 /
+  59.39 / 65.57 / 68.70 / 77.98 / 87.20 / 93.30 %.
+- **WHICH CELLS THE TOTAL LINE WANTS WAS ALSO MEASURED**, by averaging each
+  cell's darkness: the form HATCHES what it does not want filled (95% dark)
+  and leaves six cells open - ACC Dist, ACC Time, Fuel Acc, Intermediate Time,
+  EST and ACT. `totalKey` in OFP_COLUMNS records exactly that.
+- **ONE COMPUTATION, TWO OUTPUTS.** The rows are captured while
+  `renderAllFlightTables` renders the on-screen table, not recomputed, so the
+  printed sheet cannot disagree with the table the pilot checked. A test
+  compares the screen's sector total against the form's Total line.
+- **WHAT IS BLANK IS BLANK ON PURPOSE**, and the guide says so: MSA (this tool
+  has no terrain data by an explicit decision - the chart's contours and MEF are
+  the reference); ATO / Diff / ACT and the block/take-off/landing times
+  (actuals, and this is a ground-planning tool); Freq (AIP frequencies belong to
+  an airspace, not to a leg); the alternate line. An empty box for the pilot's
+  pen, never a 0 or a dash that could read as a planned figure.
+- **Reg, CREW, PASSENGERS and PIC STAY EMPTY, and that is the privacy rule, not
+  laziness.** Crew are people; a tail number identifies a MACHINE. PROFILE_KEYS
+  must never carry either, so there is nothing to read - which is why adding a
+  registration setting to fill the Reg box was rejected. A test asserts the crew
+  block prints empty and that PROFILE_KEYS has not grown a reg/pic/crew key.
+- **THE PRINT RULE HIDES EVERYTHING AND THEN SHOWS THE FORM** (`body > *` then
+  `body > #ofp-print`). The first attempt listed what to hide, and the first-run
+  Feature Guide printed straight over the sheet with its backdrop tinting the
+  whole page: dialogs, toasts and modals are appended to `<body>` at RUNTIME, so
+  no fixed list can cover them. Only rendering the PDF and LOOKING at it caught
+  it - every measurement had passed.
+- **`table-layout: fixed` IS LOAD-BEARING.** Without it the browser re-apportions
+  the measured column widths to fit content and the sheet stops matching the
+  paper. Nothing in the CSS sets a column width; they all come from the module.
+- THE LINE NUMBER RIDES INSIDE THE "From" CELL, as it does on the form. Giving
+  it a column of its own added a 26th column and squeezed all 25 measured
+  widths.
+- **ONE SECTOR PER OFP, and this is a rule the user stated explicitly**: a sheet
+  carries ONE departure and ONE arrival, because that is what the form's DEP/DEST
+  block means. Each flight plan gets its own sheet - ENDU-ENTC and ENTC-ENSR are
+  two OFPs, never two halves of one - and its own printed page. The ONLY reason a
+  sector spans more than one sheet is running out of the form's 16 lines, and
+  then the continuation sheet repeats that sector's OWN aerodromes and says
+  "sheet 2 of 2". Asserted twice: in the module (the 16/17-leg boundary) and in
+  Chromium (three sectors, one of them long -> four sheets, four pages, no
+  sheet showing another sector's fixes).
+- The Total line is printed on the LAST sheet of a sector only - a running total
+  printed half way through would read as the flight's total.
+- jsdom has no layout, so it cannot tell whether a value fits its cell - and
+  "make sure the text is sized properly to fit into the cells" is the whole
+  requirement. `tools/verify-ofp-print.mjs` drives Chromium with print media
+  emulated over a deliberately worst-case plan (19 legs, the longest published
+  reporting-point names, 45 kt winds, five-digit altitudes) and asserts
+  `scrollWidth <= clientWidth` on EVERY filled cell - 413 of them, 0 overflowing
+  - then renders a real PDF and counts the pages.
+- NOT REPRODUCED: the school's UiT logo. Embedding someone's letterhead into
+  generated output is their call, not ours; ask before adding it.
 
 ## Dialogs (v16.11)
 
