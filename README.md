@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.34)
+# C182 Flight Planner (v16.36)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -82,6 +82,16 @@ Reporting points come from the **coordinate table printed on each aerodrome's
 Visual Approach Chart**, read from the PDF's text layer at build time
 (`npm run build:vac`). 243 points at 24 aerodromes.
 
+**Settings → Map** sets how they are drawn: shape, colour, size, filled or
+outline, and whether names are shown, with a live preview. Reporting points
+default to **orange** — nothing on either base chart is orange except the
+mandatory zones, so the symbol you are hunting for cannot be mistaken for
+published chart ink.
+
+The settings modal is two pages: **Aircraft & Units**, which you set up once
+per machine, and **Map**, which is pure display preference. The layer toggles,
+base chart and chart detail stay on the map itself, beside what they change.
+
 **29 of the 53 aerodromes publish their points on the chart face only**, with
 no table to read. Those aerodromes still anchor on their ARP but carry **no
 points**, and the coverage is reported rather than quietly implied — nothing is
@@ -92,7 +102,7 @@ so there is no VAC overlay.
 
 ## Airspace data
 
-`data/aip.js` holds 227 Norwegian airspace volumes — CTR, TMA, TIZ, TIA, CTA
+`data/aip.js` holds 212 Norwegian airspace volumes — CTR, TMA, TIZ, TIA, CTA
 and the offshore zones — plus the 28 Polaris ACC sectors and 53 aerodromes with
 their 243 VFR reporting points, all with their published class, vertical
 limits, callsigns and frequencies, imported from the **official Avinor eAIP**
@@ -111,6 +121,19 @@ administrative-units WFS (`Riksgrense`, under **NLOD**) and
 reproducible. Each resolved airspace records how far its published corner sat
 from Kartverket's surveyed line, so the shape can be audited rather than
 trusted.
+
+Where the AIP says a boundary **follows the national border** it is drawn from
+Kartverket's line — 51 stretches on 41 airspaces in this edition. The eAIP
+states such a reference in two different ways (a typed `TGEO_BORDER` field, and
+the same sentence carried as a remark on the preceding vertex); a build-time
+invariant requires every published reference to end up resolved, refused for a
+stated reason, or inside airspace that is deliberately never drawn, and **fails
+the build** otherwise.
+
+**ATS delegation areas are not drawn.** ENR 2.2 section 5 publishes areas where
+two states have agreed to transfer *who provides the service* — not airspace.
+Silver 1 and Silver 2 are inside SWEDEN FIR; 13 of the 17 lie in a foreign FIR.
+They stay in the report with the FIR they sit within and the responsible state.
 
 What still cannot be resolved is **absent rather than approximated**, and
 `data/aip-report.json` names every one with the reason: offshore zones
@@ -169,7 +192,7 @@ npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
 npm run typecheck  # TypeScript checks every module (0 errors required)
-npm test           # typecheck, build, then the suite against dist (342 tests)
+npm test           # typecheck, build, then the suite against dist (351 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
 npm run verify:hover           # Chromium check of the position-dependent
                                # Polaris sector frequency on the hover card

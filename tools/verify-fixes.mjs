@@ -62,13 +62,16 @@ const drawn = await page.evaluate(() => fixLayers.length);
 check(drawn > 0, drawn + ' fixes drawn over Bardufoss at zoom 10');
 
 // The symbols and their labels must actually be PAINTED, and inside the map.
+// Every symbol is now inline SVG with a real box at every size - the old CSS
+// border-triangle had a zero-sized box and could not be measured at all.
 const shapes = await page.evaluate(() => {
-  const out = { dots: 0, labels: 0, offscreen: 0, zeroSized: 0, labelClickable: 0 };
+  const out = { svgs: 0, labels: 0, offscreen: 0, zeroSized: 0, labelClickable: 0, sizes: {} };
   const mr = document.getElementById('map').getBoundingClientRect();
-  for (const el of document.querySelectorAll('.fix-dot')) {
+  for (const el of document.querySelectorAll('.fix-svg')) {
     const r = el.getBoundingClientRect();
-    out.dots++;
-    if (r.width === 0 && r.height === 0) out.zeroSized++;
+    out.svgs++;
+    out.sizes[Math.round(r.width) + 'x' + Math.round(r.height)] = 1;
+    if (r.width < 4 || r.height < 4) out.zeroSized++;
     if (r.bottom < mr.top || r.top > mr.bottom || r.right < mr.left || r.left > mr.right) out.offscreen++;
   }
   for (const el of document.querySelectorAll('.fix-label')) {
@@ -77,11 +80,10 @@ const shapes = await page.evaluate(() => {
   }
   return out;
 });
-check(shapes.dots > 0 && shapes.labels === shapes.dots,
-  `${shapes.dots} symbols and ${shapes.labels} labels painted`);
-// The reporting-point symbol is a CSS triangle: it has zero width and height
-// by construction (it is drawn entirely from borders), so only the aerodrome
-// squares are size-checked - but every one of them must be on the map.
+check(shapes.svgs > 0 && shapes.labels === shapes.svgs,
+  `${shapes.svgs} symbols and ${shapes.labels} labels painted`);
+check(shapes.zeroSized === 0,
+  'every symbol has a measurable box (' + Object.keys(shapes.sizes).join(', ') + ')');
 check(shapes.offscreen === 0, 'no fix symbol is drawn outside the map');
 check(shapes.labelClickable === 0,
   'every label is click-through - a wide label would swallow clicks meant for the map');
@@ -91,8 +93,8 @@ async function clickFix(name) {
   const at = await page.evaluate((name) => {
     const l = fixLayers.find((x) => x._icon && x._icon.textContent.trim() === name);
     if (!l) return null;
-    const r = l._icon.querySelector('.fix-dot').getBoundingClientRect();
-    return [r.left + r.width / 2 || r.left, r.top + r.height / 2 || r.top];
+    const r = l._icon.querySelector('.fix-svg').getBoundingClientRect();
+    return [r.left + r.width / 2, r.top + r.height / 2];
   }, name);
   if (!at) return null;
   await page.mouse.click(at[0], at[1]);
@@ -126,7 +128,7 @@ check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point
 // Whichever reporting point is actually DRAWN here - naming one by hand ties
 // this check to a viewport, and the point of the layer is that it culls.
 const card = await page.evaluate(async () => {
-  const l = fixLayers.find((x) => x._icon && /fix-dot rp/.test(x._icon.innerHTML));
+  const l = fixLayers.find((x) => x._icon && x._icon.classList.contains('fix-rp'));
   if (!l) return null;
   l.openTooltip();
   await new Promise((r) => setTimeout(r, 250));
@@ -165,7 +167,7 @@ const byZoom = await page.evaluate(async () => {
     drawFixes();
     await new Promise((r) => setTimeout(r, 150));
     out[z] = { zoom: map.getZoom(), total: fixLayers.length,
-               rp: document.querySelectorAll('.fix-dot.rp').length };
+               rp: document.querySelectorAll('.fix-icon.fix-rp').length };
   }
   return out;
 });
@@ -193,6 +195,116 @@ await page.evaluate(() => {
 await page.waitForTimeout(200);
 check(await page.evaluate(() => flights[activeFlightIndex].waypoints.length) === n0,
   'cancelling that dialog changed nothing');
+
+// =====================================================================
+// MAP SETTINGS. The point of the page is that it changes what is DRAWN, and
+// only a browser can confirm the marker really came out orange at 16 px.
+// =====================================================================
+await page.evaluate(async () => {
+  map.setView([69.05583, 18.54028], 10, { animate: false });
+  await new Promise((r) => setTimeout(r, 300));
+  drawFixes();
+});
+await page.waitForTimeout(200);
+
+await page.evaluate(() => openSettingsModal());
+await page.waitForTimeout(250);
+const tabs = await page.evaluate(() => {
+  const t = [...document.querySelectorAll('.settings-tab')].map((b) => {
+    const r = b.getBoundingClientRect();
+    return { id: b.id, text: b.textContent.trim(), y: Math.round(r.y), w: Math.round(r.width),
+             active: b.classList.contains('is-active') };
+  });
+  return { tabs: t, aircraftShown: !document.getElementById('settings-page-aircraft').hidden,
+           mapShown: !document.getElementById('settings-page-map').hidden };
+});
+check(tabs.tabs.length === 2 && tabs.tabs.every((t) => t.w > 0 && t.y > 0 && t.y < 900),
+  'both settings tabs are on screen: ' + JSON.stringify(tabs.tabs.map((t) => t.text + '@' + t.y)));
+check(tabs.aircraftShown && !tabs.mapShown, 'the modal opens on the aircraft page');
+
+await page.click('#settings-tab-map');
+await page.waitForTimeout(200);
+const onMap = await page.evaluate(() => ({
+  mapShown: !document.getElementById('settings-page-map').hidden,
+  aircraftShown: !document.getElementById('settings-page-aircraft').hidden,
+  active: document.getElementById('settings-tab-map').classList.contains('is-active'),
+  // the preview must render through the same code the map uses
+  previewSvgs: document.querySelectorAll('#map-fix-preview .fix-svg').length,
+  previewBox: (() => { const r = document.getElementById('map-fix-preview').getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height) }; })(),
+  sizeLabel: document.getElementById('map-fix-size-val').textContent
+}));
+check(onMap.mapShown && !onMap.aircraftShown && onMap.active, 'the Map tab switches pages');
+check(onMap.previewSvgs === 2, 'the preview shows both symbols (' + onMap.previewSvgs + ')');
+check(onMap.previewBox.w > 100 && onMap.previewBox.h > 20,
+  'the preview has a real box: ' + JSON.stringify(onMap.previewBox));
+check(/px/.test(onMap.sizeLabel), 'the size readout says a value: ' + JSON.stringify(onMap.sizeLabel));
+
+// The default reporting-point colour must be the orange, not the old green.
+const defaults = await page.evaluate(() => ({
+  rp: document.getElementById('map-fix-rp-color').value,
+  ad: document.getElementById('map-fix-ad-color').value,
+  rpShape: document.getElementById('map-fix-rp-shape').value
+}));
+check(defaults.rp === '#dd6b20', 'the reporting-point default is orange: ' + defaults.rp);
+check(defaults.rpShape === 'triangle', 'the reporting-point default shape is a triangle');
+
+// Change every field, save, and MEASURE the drawn marker.
+await page.evaluate(() => {
+  document.getElementById('map-fix-rp-color').value = '#ff2d95';
+  document.getElementById('map-fix-rp-shape').value = 'diamond';
+  document.getElementById('map-fix-style').value = 'outline';
+  document.getElementById('map-fix-size').value = '16';
+  document.getElementById('map-fix-labels').value = 'no';
+  updateFixPreview();
+});
+const preview = await page.evaluate(() =>
+  document.querySelector('#map-fix-preview').innerHTML);
+check(/#ff2d95/.test(preview) && /polygon points="50,7/.test(preview) && /width="16"/.test(preview),
+  'the preview followed every change');
+check(!/pv-name/.test(preview), 'the preview dropped the names when they were turned off');
+
+await page.evaluate(() => saveSettings());
+await page.waitForTimeout(500);
+const drawnNow = await page.evaluate(() => {
+  // A REPORTING POINT specifically - the first marker over Bardufoss is the
+  // aerodrome, which keeps its own blue, and reading that one made this check
+  // pass or fail for the wrong reason.
+  const l = fixLayers.find((x) => x._icon && x._icon.classList.contains('fix-rp'));
+  if (!l) return null;
+  const svg = l._icon.querySelector('.fix-svg');
+  const r = svg.getBoundingClientRect();
+  return { w: Math.round(r.width), h: Math.round(r.height), html: l._icon.innerHTML,
+           labels: document.querySelectorAll('.fix-label').length,
+           stored: JSON.parse(localStorage.getItem('c182_perf_profile') || '{}') };
+});
+check(!!drawnNow && drawnNow.w === 16 && drawnNow.h === 16,
+  'the drawn symbol is 16 px: ' + JSON.stringify(drawnNow && { w: drawnNow.w, h: drawnNow.h }));
+check(!!drawnNow && /#ff2d95/.test(drawnNow.html), 'the drawn symbol took the new colour');
+check(!!drawnNow && /stroke="#ff2d95"/.test(drawnNow.html), 'the outline style stroked rather than filled');
+check(!!drawnNow && drawnNow.labels === 0, 'the labels are gone (' + (drawnNow && drawnNow.labels) + ')');
+check(!!drawnNow && drawnNow.stored.fixSize === 16 && drawnNow.stored.fixRpColor === '#ff2d95',
+  'the choice persisted to localStorage: ' + JSON.stringify(drawnNow && {
+    size: drawnNow.stored.fixSize, rp: drawnNow.stored.fixRpColor, style: drawnNow.stored.fixStyle }));
+
+// A garbage colour in storage must degrade to the DEFAULT, never to invisible
+// markup - the value reaches innerHTML, and it can arrive from a route file.
+const hostile = await page.evaluate(async () => {
+  const p = JSON.parse(localStorage.getItem('c182_perf_profile'));
+  p.fixRpColor = '#fff" onload="window.__pwned=1';
+  p.fixSize = 9999;
+  aircraftProfile.fixRpColor = p.fixRpColor;
+  aircraftProfile.fixSize = p.fixSize;
+  localStorage.setItem('c182_perf_profile', JSON.stringify(p));
+  drawFixes();
+  await new Promise((r) => setTimeout(r, 200));
+  const l = fixLayers.find((x) => x._icon && x._icon.classList.contains('fix-rp'));
+  const r = l ? l._icon.querySelector('.fix-svg').getBoundingClientRect() : null;
+  return { pwned: !!window.__pwned, html: l ? l._icon.innerHTML : '', w: r ? Math.round(r.width) : 0 };
+});
+check(!hostile.pwned, 'a hostile colour did not execute');
+check(/#dd6b20/.test(hostile.html), 'a malformed colour fell back to the default orange');
+check(hostile.w === 18, 'an absurd size clamped to the 18 px maximum (got ' + hostile.w + ')');
 
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
 await b.close();

@@ -792,26 +792,53 @@ svg.leaflet-image-layer.leaflet-interactive path {
       max-width: 74%; line-height: 1.35; pointer-events: none; }
     body.dark-mode #fixes-attribution { color: #e2e8f0; background: rgba(26,32,44,0.78); }
 
-    /* AIP FIXES. Deliberately quieter than a route waypoint: these are
-   available fixes, not part of the plan, and the chart underneath is what is
-   being read. An aerodrome gets a filled square and its ICAO; a reporting
-   point gets a hollow triangle, because that is the symbol the VAC itself
-   uses for one. The label is click-through (pointer-events: none) so only the
-   symbol takes the click - a wide text label would otherwise swallow clicks
-   meant for the map or the route line. */
+    /* AIP FIXES. The SYMBOL is inline SVG, not CSS: a CSS border-triangle has a
+   zero-sized box by construction, so it could neither be measured nor resized
+   from one number, and the colour was baked into the stylesheet where the user
+   could not reach it. Shape, colour, size and style are Map settings now, so
+   the only thing left here is the frame and the label. The label is
+   click-through so only the symbol takes the click - a wide text label would
+   otherwise swallow clicks meant for the map or the route line. */
     .fix-icon { background: none; border: none; }
-    .fix-dot { width: 9px; height: 9px; box-sizing: border-box; }
-    .fix-dot.ad { background: #2b6cb0; border: 1.5px solid #fff; border-radius: 2px;
-      box-shadow: 0 0 0 1px rgba(0,0,0,0.45); }
-    .fix-dot.rp { width: 0; height: 0; background: none; border-left: 5px solid transparent;
-      border-right: 5px solid transparent; border-bottom: 9px solid #2f855a;
-      filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1.5px rgba(0,0,0,0.5)); }
-    .fix-label { position: absolute; left: 12px; top: -3px; white-space: nowrap;
+    .fix-svg { display: block; overflow: visible; }
+    /* THE LABEL DOES NOT FOLLOW THE THEME, and that is the same decision
+   .wp-label makes: it is drawn on the MAP, and both base charts are light
+   rasters in dark mode as well as light. The v16.34 build shipped a dark-mode
+   override here that put pale blue text with a dark halo over a light chart -
+   invisible in exactly the case the label exists for, and hidden during
+   development because the offline placeholder is grey.
+   The label also does NOT take the symbol's colour: a user is free to pick a
+   bright orange for the shape, which is right for a 10 px symbol you are
+   hunting for and wrong for text you have to read. The shape carries the
+   colour, the text stays legible. */
+    .fix-label { position: absolute; white-space: nowrap;
       font-size: 9px; font-weight: 700; letter-spacing: 0.2px; pointer-events: none;
-      color: #1a365d; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff; }
-    .fix-label.rp { color: #22543d; font-weight: 600; }
-    body.dark-mode .fix-label { color: #bee3f8; text-shadow: 0 0 2px #10151f, 0 0 3px #10151f, 0 0 4px #10151f; }
-    body.dark-mode .fix-label.rp { color: #9ae6b4; }
+      color: #14243d; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff, 0 1px 2px #fff; }
+    .fix-label.rp { font-weight: 600; }
+
+    /* SETTINGS PAGES. Two tabs rather than one long scroll: the aircraft page
+   is configured once per machine, the map page is pure display preference, and
+   mixing them meant scrolling past the POH tables to change a symbol colour. */
+    .settings-tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--border);
+      background: var(--card-bg); }
+    .settings-tab { appearance: none; border: 1px solid transparent; border-bottom: none;
+      background: none; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.3px; padding: 7px 12px; margin-bottom: -1px; border-radius: 4px 4px 0 0;
+      color: var(--text-muted); }
+    .settings-tab:hover { color: var(--text); background: var(--highlight-bg); }
+    .settings-tab.is-active { color: var(--highlight-text); background: var(--bg);
+      border-color: var(--border); border-bottom: 1px solid var(--bg); }
+    /* A live preview of the symbols, so the effect is visible before saving. */
+    .fix-preview { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border);
+      border-radius: 5px; background: linear-gradient(135deg, #e8e2d4 0%, #dfe6dc 100%);
+      display: flex; gap: 26px; align-items: center; flex-wrap: wrap; min-height: 40px; }
+    body.dark-mode .fix-preview { background: linear-gradient(135deg, #2a3140 0%, #232a36 100%); }
+    .fix-preview .pv { position: relative; display: flex; align-items: center; gap: 6px; }
+    .fix-preview .pv-name { font-size: 9px; font-weight: 700; letter-spacing: 0.2px;
+      color: #1a365d; text-shadow: 0 0 2px #fff, 0 0 3px #fff; }
+    body.dark-mode .fix-preview .pv-name { color: #bee3f8; text-shadow: 0 0 2px #10151f, 0 0 3px #10151f; }
+    .fix-preview .pv-kind { font-size: 9px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.4px; }
     /* Hover card for a fix: the published coordinate is the point of the
    feature, so it is what the card leads with. */
     .fix-tip { white-space: normal; width: max-content; max-width: 260px; font-size: 10.5px;

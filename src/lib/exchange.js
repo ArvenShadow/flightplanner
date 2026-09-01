@@ -30,7 +30,11 @@ export const PROFILE_KEYS = [
   'roc', 'climbTas', 'climbFf', 'rod', 'descTas', 'descFf',
   'patternTime', 'patternFf', 'taxiFuel',
   'theme', 'distUnit', 'fuelUnit', 'minuteMark', 'declutter', 'baseChart', 'chartDetail',
-  'airspaceOn', 'fixesOn'
+  'airspaceOn', 'fixesOn',
+  // Map-page display preferences. Colours are stored already validated to
+  // #rrggbb; normaliseFixStyle re-checks them on the way in regardless,
+  // because a route file can arrive from anyone.
+  'fixAdColor', 'fixRpColor', 'fixAdShape', 'fixRpShape', 'fixStyle', 'fixSize', 'fixLabels'
 ];
 
 /** Copy across only the allowed profile keys. Anything else - now or

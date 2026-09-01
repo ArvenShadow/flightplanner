@@ -615,6 +615,71 @@ errors is the standard.
     direct distance means a bad snap).
   - Simplification is Douglas-Peucker at 0.02 NM (37 m, 0.07 mm on a
     1:500 000 chart), so it cannot move a boundary anywhere a pilot could see.
+- **A BORDER REFERENCE IS PUBLISHED TWO WAYS, AND ONE OF THEM WAS BEING
+  DROPPED (v16.36 bug fix, user-spotted)**. The user looked at the ICAO chart
+  and said the CTA south-east of ENDU did not match the FIR border. It did not:
+  between Treriksrøset (the Norway/Sweden/Finland tripoint, 690336N 0203255E)
+  and 683212N 0180734E we drew a 60 NM STRAIGHT LINE where the AIP says
+  "westwards along the border between Norway and Sweden to", cutting off the
+  whole Abisko salient - a boundary that does not exist, which is the exact
+  failure this project is built to refuse.
+  - THE TWO FORMS. One is a properly typed field, which was handled:
+    `<span class="SD">Norway and Sweden</span>` + `TGEO_BORDER;TXT_NAME`.
+    The other carries the whole ENGLISH SENTENCE as a REMARK ON THE PRECEDING
+    VERTEX, under a marker that says nothing about borders at all:
+    `<span class="SD">westwards along the border between Norway and Sweden to</span>`
+    + `TAIRSPACE_VERTEX;CUSTOM_ATT27`. Measured on the 2026-06-11 edition: 40 of
+    the first form, 27 of the second, and ALL 27 were silently ignored.
+    `borderNameFromRemark` in `tools/aip-fields.mjs` reads it; every
+    CUSTOM_ATT27 on a vertex in the edition turned out to be a border phrase.
+  - Border-resolved airspaces 25 -> 41, resolved stretches -> 51. The Polaris
+    CTA over the whole eastern border (Russia, Finland, Sweden) now follows the
+    surveyed line: 58 ring points -> 1261, worst snap 0.236 NM.
+  - THE DIRECTION WORD IS DELIBERATELY NOT PARSED. "southwards"/"westwards" is
+    confirmation, not information - the prepared border is a single OPEN
+    polyline, so between the fix nearest A and the fix nearest B there is
+    exactly one path and no way round to choose. Parsing it would add a second
+    thing that can disagree with the geometry.
+  - **THE INVARIANT THAT WOULD HAVE CAUGHT IT ON DAY ONE, and it is now a build
+    error, not a warning**: count every border reference the SOURCE states, in
+    both forms, and require `resolved + refused + notDrawn == published`. It
+    reconciles at 67 = 51 + 11 + 5. Every count in the old report looked
+    healthy precisely because nothing knew to expect the missing 27. Two things
+    it immediately exposed while being written: references in airspace that is
+    never drawn (the FIR cites three borders) need their own bucket, and a
+    refusal returns from `ringOf` IMMEDIATELY - so the references AFTER the
+    failing one are never visited. Halti states two and only the first was ever
+    seen; `refuse()` now books `refsHere - resolved.length`.
+  - A COST, and it is the right one: `Polaris CTA (FL 115 - FL 660)` is now
+    REFUSED (`fix-not-on-border`, 19.44 NM) because its border reference is the
+    Skagerrak maritime stretch. It used to be drawn with a wrong straight line.
+    Absent for a stated reason beats present and wrong.
+  - Drawing cost measured in Chromium after the change: 2-22 ms per redraw at
+    z7-z11, ~1400 ring points on screen. Culling is what makes a 1261-point
+    polygon a non-issue; do not "optimise" the 0.02 NM simplification instead.
+- **ATS DELEGATION AREAS ARE NOT AIRSPACE (v16.36, user-spotted)**. The user
+  asked why a "FIR" called Silver 1 / Silver 2 was on their map when they have
+  no use for non-Norwegian airspace. They were right twice over.
+  - WHAT THEY ARE: ENR 2.2 **section 5** publishes the areas where Norway and a
+    neighbour have agreed, by bilateral letter, to transfer WHO PROVIDES THE
+    SERVICE. The airspace itself is unchanged and already drawn. Silver 1 and 2
+    are inside **SWEDEN FIR**; Halti and Manto inside HELSINKI FIR; Area II
+    inside SCOTTISH FIR. **13 of the 17 are inside a foreign FIR.**
+  - Drawing them as class-C volumes with a vertical band made them look like
+    controlled airspace to clear. Their bands are mostly FL 95 and above, which
+    a C182 never sees, so they were pure noise even where Norwegian.
+  - **THE DISCRIMINATOR IS THE SOURCE'S OWN MARKER, NOT THE NAME.** A
+    delegation row carries `TORG_AUTH` - the organisation authority - twice:
+    the FIR the area lies WITHIN (`TXT_NAME` whose trailing text is "FIR") and
+    the responsible state. Measured: `TORG_AUTH` appears on exactly 17 rows in
+    exactly one page, and they are exactly the 17 delegation areas. No name
+    matching, no section-offset arithmetic.
+  - THE CONFIRMATION THAT IT IS COMPLETE: the `OTHER` catch-all kind is now
+    **empty**. Every unclassified blob in the edition was one of these, which is
+    why they had no type to classify in the first place.
+  - Nothing is discarded: `report.delegations` keeps all 17 with `withinFir`
+    and `atsBy`, and each is reported in `skipped` with the reason
+    `ats-delegation-not-airspace` and that detail. Features 227 -> 212.
 - **STEPPED AIRSPACE: EACH BAND HAS ITS OWN RING (v16.30 bug fix)**. This was
   wrong in v16.29 and it is the worst kind of wrong - 71 of 164 polygons
   crossed themselves, each drawing an airspace that does not exist.
@@ -728,6 +793,69 @@ errors is the standard.
     `setView(..., {animate: false})` and settle: with the default animation
     `getZoom()` reports the OLD zoom for a frame, which made the first run read
     15 fixes at zoom 6 and 0 at zoom 7 — exactly inverted.
+- **MAP SETTINGS, AND THE FIX SYMBOL AS A PREFERENCE (v16.35, user request)**:
+  the settings modal is now TWO PAGES - `✈ Aircraft & Units` and `🗺 Map` -
+  and the fix symbol's shape, colour, size, fill style and labels are settings
+  with a live preview. `showSettingsPage()`, `readFixStyleForm()`,
+  `populateMapSettingsForm()`, `updateFixPreview()`, `resetFixStyle()` in
+  section 2f of the page; `normaliseFixStyle`, `fixSymbolSvg`, `fixMarkerHtml`
+  in `src/lib/anchors.js`.
+  - WHY IT IS A SETTING AT ALL. v16.34 drew reporting points in the same muted
+    green as the TIZ boundaries, which is exactly backwards: the overlay should
+    be quiet enough to read the chart through, but the thing you are trying to
+    CLICK should not be. Rather than pick a second colour and be wrong again,
+    the user asked for it to be configurable. The DEFAULT is now ORANGE
+    (#dd6b20) for a stated reason - nothing on either base chart or in the
+    airspace palette is orange except the mandatory zones, so it cannot be
+    mistaken for published chart ink.
+  - THE SYMBOL IS INLINE SVG, NOT CSS, and that was forced by the settings.
+    v16.34 drew the aerodrome as a bordered div and the reporting point as a
+    CSS border-triangle. A border-triangle has a ZERO-SIZED BOX by construction
+    - it is drawn entirely from borders - so it could not be measured, could
+    not be resized from one number, and made `tools/verify-fixes.mjs`
+    special-case it. One `<svg>` at `viewBox="0 0 100 100"` has a real box at
+    every size and one attribute swaps the shape.
+  - THE HALO IS `paint-order="stroke"`, so the white stroke is drawn UNDER the
+    fill and the symbol keeps its full colour area. Same lesson as the v16.28
+    TOC/TOD ticks: a halo drawn AROUND a small shape leaves almost no colour
+    once antialiased. Stroke widths are in the 100-unit space so they scale
+    with the symbol instead of vanishing at 6 px and swamping it at 18.
+  - **AN UNVALIDATED COLOUR IS AN HTML-INJECTION VECTOR**, and this is the real
+    reason `normaliseFixStyle` exists. The colour is interpolated into the SVG
+    that becomes a marker's `innerHTML`, AND it is in PROFILE_KEYS, so it can
+    arrive from a route file someone else wrote. Colours must match
+    `^#[0-9a-f]{6}$`, shapes must be in FIX_SHAPES, the size clamps to 6-18,
+    and anything else falls back to the DEFAULT - never to invisible markup.
+    Values are stored already-validated and re-validated on every read, because
+    localStorage can be hand-edited. Both jsdom and Chromium assert that a
+    hostile colour neither executes nor blanks the symbol.
+  - SIZE BOUNDS ARE MEASURED, not picked: below 6 px the symbol is not a
+    reliable click target, above 18 px it covers the chart it is meant to sit
+    on. The page says both, rather than presenting a slider with mystery ends.
+  - THE LABEL DOES NOT FOLLOW THE THEME, and v16.34 got this WRONG. It shipped
+    a `body.dark-mode .fix-label` override putting pale blue text with a dark
+    halo on the map - but BOTH base charts are light rasters in dark mode too,
+    so the label was invisible in exactly the case it exists for. It was hidden
+    during development because the offline placeholder background is grey.
+    `.wp-label` has no dark override for precisely this reason; `.fix-label`
+    now matches. The label also does NOT take the symbol's colour: a bright
+    orange is right for a 10 px shape you are hunting for and wrong for text
+    you have to read.
+  - THE KIND IS ON THE ICON (`fix-icon fix-ad` / `fix-rp`), not only in the
+    markup: with labels turned off there is otherwise nothing to tell an
+    aerodrome from a reporting point, in CSS or in a browser check. The first
+    run of the new Chromium checks read the aerodrome marker and reported the
+    reporting-point colour as unchanged - a test passing for the wrong reason.
+  - WHAT DELIBERATELY DID NOT MOVE TO THE MAP PAGE: the layer toggles, the base
+    chart and the chart-detail cap stay on the MAP, beside what they change -
+    they are used while planning, not set once, which is the whole basis for the
+    split. The zoom thresholds are not adjustable and the page SAYS SO with the
+    reason, rather than leaving a gap where a setting looks like it should be.
+    The quoted numbers are read from the modules, so they cannot drift from the
+    code.
+  - The PREVIEW renders through `fixSymbolSvg` - the same function the map calls
+    - so what it shows is what gets drawn. A preview built from its own markup
+    would drift from the map the first time either changed.
 - **Airspace OVERLAY (v16.31, roadmap item 4 COMPLETE)**: `src/lib/airspace.js`
   (pure: culling, colours, hover text) plus the Leaflet layers in section 2d of
   the page. 228 volumes available, ~11 drawn over Troms at z9.
