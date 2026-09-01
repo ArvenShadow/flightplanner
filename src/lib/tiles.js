@@ -121,45 +121,24 @@ export function estimateBytes(tiles, tilePxFn) {
 }
 
 /**
- * What a set of tiles will actually COST in browser storage.
+ * NOTE, so nobody adds this back: there was a paddedCostBytes() and a
+ * tilesThatFit() here, to predict how much browser storage a download
+ * would need and refuse when it would not fit.
  *
- * MEASURED, and it is not the download size. Avinor sends no
- * Access-Control-Allow-Origin, so from any other origin a chart tile is an
- * OPAQUE response - the page may render it but not read it. Browsers pad
- * the storage cost of opaque entries so that a site cannot measure a
- * cross-origin resource by watching its own quota. Chromium charged
- * 8.46 MB for a single 68-byte opaque tile in testing.
+ * The prediction is not obtainable. Avinor sends no CORS header, so a tile
+ * is an opaque response, and browsers RANDOMISE the padding they charge
+ * for opaque entries precisely so a page cannot measure them - on top of
+ * updating navigator.storage.estimate() asynchronously. Six consecutive
+ * probes of the same single-tile store measured 0.38, 9.15, 0.38, 5.69,
+ * 10.15 and 4.78 MB. A figure that swings 27x is worse than no figure, and
+ * refusing a download on the strength of it is worse still: it showed the
+ * pilot "5000 MB" and then "23000 MB" for the same unchanged route.
  *
- * So the honest figure to show a pilot before a download is the PADDED
- * cost, which is what decides whether it fits, not the bytes on the wire.
- * The padding is a browser implementation detail and changes, so the page
- * measures it once at runtime rather than trusting this constant; this is
- * only the fallback when the measurement is unavailable.
- *
- * @param {number} tileCount
- * @param {number} [measuredPadBytes] from a real probe, when available
- * @returns {number} bytes of quota the download will consume
+ * What the page does instead: quote the DOWNLOAD size, which is known;
+ * say plainly that browser storage costs far more for reasons outside our
+ * control; attempt it; then count what is actually in the cache afterwards
+ * and report THAT. Measure the outcome, do not predict it.
  */
-export function paddedCostBytes(tileCount, measuredPadBytes) {
-  const pad = (typeof measuredPadBytes === 'number' && measuredPadBytes > 0)
-    ? measuredPadBytes
-    : 8.5 * 1024 * 1024;   // observed in Chromium; a fallback only
-  return Math.round(tileCount * pad);
-}
-
-/**
- * How many tiles will fit in the storage actually available, keeping a
- * margin so the browser is never pushed to the point where it discards the
- * whole origin - which would take the app shell with it.
- *
- * @param {number} freeBytes
- * @param {number} [measuredPadBytes]
- * @returns {number}
- */
-export function tilesThatFit(freeBytes, measuredPadBytes) {
-  const per = paddedCostBytes(1, measuredPadBytes);
-  return Math.max(0, Math.floor((freeBytes * 0.7) / per));
-}
 
 /** "45 MB" / "820 kB". @param {number} bytes @returns {string} */
 export function formatBytes(bytes) {

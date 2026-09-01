@@ -2338,8 +2338,7 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                        M.metar.routeAerodromes([{ waypoints: [wp(69, 18, 0)] }])],
     'tiles.js': () => [M.tiles.routeBounds([{ waypoints: [wp(69, 18, 0), wp(69.7, 18.9, 0)] }]),
                        M.tiles.tilesForBounds({ north: 69.7, south: 69, west: 18, east: 19 }, 9, 10),
-                       M.tiles.formatBytes(1234567), M.tiles.paddedCostBytes(10),
-                       M.tiles.tilesThatFit(1e9)]
+                       M.tiles.formatBytes(1234567)]
   };
   for (const [name, run] of Object.entries(exercises)) {
     let out;
@@ -2588,26 +2587,20 @@ T('the tile list is bounded, and the size estimate is honest', () => {
   assert(T2.formatBytes(1234567) === '1.2 MB' && T2.formatBytes(45 * 1024 * 1024) === '45 MB',
     'size wording: ' + T2.formatBytes(1234567));
 });
-T('the size shown is what storage COSTS, not what downloads', () => {
+T('the download measures its outcome instead of predicting it', () => {
   const T2 = moduleExports.tiles;
-  // Avinor sends no Access-Control-Allow-Origin, so a tile is an OPAQUE
-  // response, and browsers pad the storage cost of those so a page cannot
-  // measure cross-origin resources by watching its own quota. Chromium
-  // charged 8.46 MB for a single 68-byte tile. Quoting the download size
-  // to the pilot would understate the real cost by about fifty times.
-  const pad = 8.46 * 1024 * 1024;
-  assert(T2.paddedCostBytes(100, pad) > 800 * 1024 * 1024, 'padding is not being applied');
-  assert(T2.paddedCostBytes(1, pad) === Math.round(pad), 'one tile should cost one pad');
-  // the padding is a browser implementation detail, so an unmeasured call
-  // must still fall back to something realistic rather than to zero
-  assert(T2.paddedCostBytes(10) > 50 * 1024 * 1024, 'the fallback padding is missing or tiny');
-  assert(T2.paddedCostBytes(10, 0) === T2.paddedCostBytes(10), 'a failed measurement must use the fallback');
-  // and a safety margin, because filling the quota makes the browser
-  // discard EVERYTHING for the origin - the app shell included
-  const free = 1000 * 1024 * 1024;
-  const fit = T2.tilesThatFit(free, pad);
-  assert(fit > 0 && fit < free / pad, 'no safety margin below the quota: ' + fit);
-  assert(T2.tilesThatFit(0, pad) === 0, 'no free space must mean no tiles');
+  // paddedCostBytes/tilesThatFit were removed on purpose: browsers randomise
+  // the padding on opaque entries so it cannot be measured, and predicting
+  // from it printed "5000 MB" then "23000 MB" for the same route.
+  assert(T2.paddedCostBytes === undefined && T2.tilesThatFit === undefined,
+    'the storage prediction is back - it cannot be measured, only observed');
+  const src = fs.readFileSync('src/lib/tiles.js', 'utf8');
+  assert(/RANDOMISE the padding/.test(src), 'the reason it was removed is undocumented');
+  // the page must report what is actually HELD after downloading
+  const page = fs.readFileSync('src/index.html', 'utf8');
+  const fn = page.slice(page.indexOf('async function downloadRouteChart'), page.indexOf('function metarStatus'));
+  assert(/caches\.open\('c182-tiles-'/.test(fn), 'the download never checks what the browser actually kept');
+  assert(/the browser only kept/.test(fn), 'a download that stores nothing would still claim success');
 });
 T('the download refuses to run without a known chart edition', () => {
   const page = fs.readFileSync('src/index.html', 'utf8');
@@ -2618,7 +2611,11 @@ T('the download refuses to run without a known chart edition', () => {
   assert(fn.indexOf('if (!vfrEdition)') < fn.indexOf('tilesForBounds'),
     'the edition is checked AFTER building the tile list');
   assert(/chartCacheAvailable\(\)/.test(fn), 'the download does not check a worker is present');
-  assert(/navigator\.storage/.test(fn), 'the download does not check the storage quota');
+  // it must NOT try to predict storage - that number is unmeasurable
+  assert(!/measureOpaqueTileCost/.test(fn), 'the storage probe is back; it measures noise');
+  // and it must say which detail mode the tiles are stored for, because the
+  // mode changes the tile URL and a mismatch means a blank chart offline
+  assert(/CHART_DETAIL_LABELS\[mode\]/.test(fn), 'the download does not state which Detail mode it stored');
   // and it must tell a file:// user why it cannot work rather than failing silently
   assert(/cannot store charts/.test(fn), 'no explanation for the file:// case');
 });

@@ -394,13 +394,25 @@ errors is the standard.
     charged 8.46 MB for a single 68-byte tile. So a 45 MB route download
     actually costs ~2.5 GB of quota. This is why the first attempt stored
     only 147 of 287 tiles: it silently hit the quota.
-  - The page therefore MEASURES the padding at runtime (store one probe
-    entry, watch navigator.storage.estimate(), delete it) rather than
-    trusting a constant, shows the pilot BOTH figures (download size and
-    storage cost), drops the overview zooms first if the whole range will
-    not fit, and refuses outright rather than half-filling the cache -
-    filling the quota makes the browser discard everything for the origin,
-    the app shell included.
+  - THAT PADDING CANNOT BE MEASURED, and v16.22 was wrong to try. Browsers
+    RANDOMISE it precisely so a page cannot, and usage updates
+    asynchronously: six consecutive probes of the same single-tile store
+    measured 0.38, 9.15, 0.38, 5.69, 10.15 and 4.78 MB. The pilot saw
+    "5000 MB" and then "23000 MB" for the same unchanged route, and the
+    refuse-if-it-will-not-fit logic fired on noise. Fixed in v16.25:
+    MEASURE THE OUTCOME, DO NOT PREDICT IT. Quote the download size (which
+    is known), say plainly that storage costs far more for reasons outside
+    our control, attempt it, then COUNT what is in the cache afterwards and
+    report that. A download that stores nothing now says so.
+  - THE DETAIL MODE IS PART OF THE TILE URL (v16.23 made it so), so tiles
+    downloaded at one Detail setting are a cache MISS at another - the
+    chart goes blank offline. The download records its mode and edition,
+    the dialog states both, and switching Detail warns that the offline
+    copy no longer matches.
+  - The tileerror banner used to say "switch back to Topo for the
+    offline-cached map". NOTHING cached topo - the worker only touches
+    same-origin files and Avinor tiles - so that sent a pilot looking for a
+    map that was never stored. It now says only what is true.
   - Requires a secure context. On file:// the button explains why it
     cannot work instead of failing silently.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
