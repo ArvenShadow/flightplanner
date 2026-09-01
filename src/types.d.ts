@@ -210,6 +210,14 @@ interface ScheduleLeg {
   /** True when a candidate altitude was computed, tried, and did not help -
    *  so no altitude at the previous fix makes the target reachable. */
   tocNoAltHelps: boolean;
+  /** Where the earlier leg's "be level by" pin goes when the advice is taken
+   *  (its full length), and where its climb then begins. Both are read from the
+   *  trial that verified the advice. Null when there is no earlier leg. */
+  tocAdviceLevelByNM: number | null;
+  tocAdviceClimbFromNM: number | null;
+  /** This leg's climb tops out ON its end fix and the next leg climbs straight
+   *  on from there: one climb through the fix, so this leg draws no TOC. */
+  climbContinues: boolean;
   /** The rate of climb the target would need from this leg's first fix, feet
    *  per minute - reported so the pilot can judge it, never used to recompute
    *  the climb. */

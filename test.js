@@ -4048,11 +4048,42 @@ T('when the climb will not fit, the ALTITUDE the previous fix needs is computed 
       'TOC at ' + after.tocAlongNM.toFixed(3));
     assert(Math.abs(after.tocAlongNM - target) < 0.05,
       'the TOC did not land on the target after taking the advice: ' + after.tocAlongNM);
-    // ...and so must rounding it UP to the next hundred, which is what the
-    // panel offers, because a pilot flies round numbers.
+    // ...and so must rounding it UP to the next hundred BY HAND. The panel no
+    // longer does that itself (v16.39): the figure is a crossing altitude passed
+    // in a climb, not a level to be flown, and rounding it up puts a short level
+    // sliver back at the fix. It must still be safe when a pilot does it.
     const rounded = Math.ceil(asked.tocNeedsEntryAlt / 100) * 100;
     const afterRound = route(rounded, { tocNM: target })[1];
     assert(afterRound.tocTargetMet, 'rounding up to ' + rounded + ' ft missed the target');
+
+    // AND IT MUST BE ONE CLIMB (v16.39, the user's correction). Raising the fix
+    // alone tops the earlier leg out early and holds the new altitude to the
+    // fix, so the pilot gets two climbs with a level stretch between them. The
+    // advice therefore also delays the earlier leg's climb to end ON the fix.
+    const both = L2.computeFlightSchedule({ id: 1, waypoints: [W('ENDU', 68.3, 254),
+      W('A', 69.0, asked.tocNeedsEntryAlt, { tocNM: asked.tocAdviceLevelByNM }),
+      W('B', 69.7, 6500, { tocNM: target })] });
+    const lead = both[0], climb = both[1];
+    assert(asked.tocAdviceLevelByNM !== null && asked.tocAdviceClimbFromNM !== null,
+      'the advice did not say where the earlier climb begins');
+    assert(Math.abs(lead.climbStartNM - asked.tocAdviceClimbFromNM) < 0.05,
+      'the offer described a climb start the plan does not produce: ' +
+      asked.tocAdviceClimbFromNM + ' vs ' + lead.climbStartNM);
+    assert(lead.distNM - (lead.climbStartNM + lead.climbDistNM) < 0.05,
+      'the earlier leg still levels off before the fix: ' +
+      (lead.distNM - (lead.climbStartNM + lead.climbDistNM)).toFixed(3) + ' NM');
+    assert(climb.climbStartNM < 0.05,
+      'the climb does not resume at the fix: ' + climb.climbStartNM.toFixed(3) + ' NM');
+    assert(climb.tocTargetMet && Math.abs(climb.tocAlongNM - target) < 0.05,
+      'the continuous climb missed the target: ' + climb.tocAlongNM);
+    // ONE climb means ONE top of climb on the map.
+    assert(lead.climbContinues === true, 'the earlier leg did not report a continuing climb');
+    const marks = L2.computeLegMarkers(both[0].from, both[0].to, lead)
+      .concat(L2.computeLegMarkers(both[1].from, both[1].to, climb));
+    const tocs = marks.filter((m) => m.kind === 'TOC');
+    assert(tocs.length === 1 && Math.abs(tocs[0].distNM - target) < 0.05,
+      'a continuous climb drew ' + tocs.length + ' tops of climb: ' +
+      marks.map((m) => m.kind + '@' + m.distNM.toFixed(1)).join(', '));
   }
 
   // The advice is the MINIMUM: one hundred feet lower must NOT be enough, or it
@@ -4070,7 +4101,8 @@ T('advice is only offered if it actually WORKS', () => {
   const L2 = moduleExports.legs;
   const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
   const rnd = (() => { let s = 987654; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
-  let given = 0, works = 0, noneHelps = 0, firstLeg = 0;
+  let given = 0, works = 0, noneHelps = 0, firstLeg = 0, continuous = 0, noEarlierClimb = 0;
+  const splitClimb = [], doubleToc = [];
   for (let iter = 0; iter < 3000; iter++) {
     const nWp = 3 + Math.floor(rnd() * 2);
     const wps = []; let lat = 68.5 + rnd() * 1.0;
@@ -4087,17 +4119,44 @@ T('advice is only offered if it actually WORKS', () => {
     if (!S || S.tocTargetNM == null || S.tocTargetMet) continue;
     if (S.tocNeedsEntryAlt === null) { if (S.i === 0) firstLeg++; else if (S.tocNoAltHelps) noneHelps++; continue; }
     given++;
-    const fixed = pin.map((w, k) => k === S.i ? { ...w, alt: S.tocNeedsEntryAlt } : { ...w });
-    const again = L2.computeFlightSchedule({ id: 1, waypoints: fixed })[S.i];
+    // APPLIED EXACTLY AS THE PANEL APPLIES IT (v16.39): the crossing altitude
+    // AND the "be level by" pin that delays the earlier leg's climb so the two
+    // halves are one continuous climb through the fix.
+    const fixed = pin.map((w, k) => k === S.i
+      ? { ...w, alt: S.tocNeedsEntryAlt, tocNM: S.tocAdviceLevelByNM }
+      : { ...w });
+    const T2 = L2.computeFlightSchedule({ id: 1, waypoints: fixed });
+    const again = T2[S.i], lead = T2[S.i - 1];
     if (again && again.tocTargetMet) works++;
+    // The climb must be CONTINUOUS through the raised fix, or the pilot is back
+    // to two climbs with a level stretch between them - which is the whole bug.
+    if (again && again.tocTargetMet && lead) {
+      const gapBefore = lead.distNM - (lead.climbStartNM + lead.climbDistNM);
+      if (lead.climbDistNM <= 0.05) noEarlierClimb++;   // it DESCENDS into the fix
+      else if (gapBefore < 0.05 && again.climbStartNM < 0.05 && lead.climbContinues) continuous++;
+      else splitClimb.push('leg ' + S.i + ': gap ' + gapBefore.toFixed(3) +
+        ' before / ' + again.climbStartNM.toFixed(3) + ' after, continues ' + lead.climbContinues);
+      // ONE climb draws ONE top of climb.
+      const tocs = L2.computeLegMarkers(lead.from, lead.to, lead)
+        .concat(L2.computeLegMarkers(again.from, again.to, again))
+        .filter((m) => m.kind === 'TOC');
+      if (tocs.length !== 1) doubleToc.push('leg ' + S.i + ': ' + tocs.length + ' TOC marks');
+    }
   }
   assert(given > 30, 'the sweep produced only ' + given + ' pieces of advice');
   assert(works === given, works + ' of ' + given + ' suggestions actually satisfied the target');
+  assert(splitClimb.length === 0, splitClimb.length + ' of ' + given +
+    ' suggestions still split the climb in two: ' + splitClimb.slice(0, 3).join(' | '));
+  assert(doubleToc.length === 0, doubleToc.length + ' continuous climbs drew two tops of climb: ' +
+    doubleToc.slice(0, 3).join(' | '));
   // ...and the honest third state must occur: sometimes NO altitude helps.
   assert(noneHelps > 0, 'the "no altitude helps" case never came up, so it is untested');
   assert(firstLeg > 0, 'the first-leg refusal never came up');
-  console.log('        ' + given + ' suggestions, all verified | ' + noneHelps +
-    ' where no altitude helps | ' + firstLeg + ' first-leg refusals');
+  assert(continuous > 20 && noEarlierClimb > 0,
+    'the sweep did not exercise both shapes: ' + continuous + ' continuous / ' + noEarlierClimb + ' descending');
+  console.log('        ' + given + ' suggestions, all verified | ' + continuous +
+    ' one continuous climb | ' + noEarlierClimb + ' descend into the fix | ' +
+    noneHelps + ' where no altitude helps | ' + firstLeg + ' first-leg refusals');
 });
 T('a "be level by" target overrides a bottom-of-climb pin on the same leg', () => {
   // Two settings for one corner is how a contradiction arises. The target owns
@@ -4126,7 +4185,7 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
   const rnd = (() => { let s = 12345; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
   const bad = [];
-  let legs = 0, withBoc = 0, withBod = 0, refused = 0, missed = 0;
+  let legs = 0, withBoc = 0, withBod = 0, refused = 0, missed = 0, continues = 0;
   for (let iter = 0; iter < 4000; iter++) {
     const nWp = 2 + Math.floor(rnd() * 3);
     const wps = []; let lat = 68.5 + rnd() * 1.0;
@@ -4144,7 +4203,8 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
       if (rnd() < 0.6) pin[li].bodNM = +(rnd() * legDist * 0.9).toFixed(2);
       if (rnd() < 0.4) pin[li].tocNM = +(rnd() * legDist).toFixed(2);
     }
-    for (const S of L2.computeFlightSchedule({ id: 1, waypoints: pin })) {
+    const sch = L2.computeFlightSchedule({ id: 1, waypoints: pin });
+    for (const S of sch) {
       if (!S) continue;
       legs++;
       if (S.climbStartNM > 0.05) withBoc++;
@@ -4179,12 +4239,36 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
       if (S.climbStartNM > 0.05 && S.climbDistNM > 0.05 && !kinds.includes('BOC')) bad.push('BOC pinned but unmarked on ' + S.i);
       if (S.bodTailNM > 0.05 && S.descDistNM > 0.05 && !kinds.includes('BOD')) bad.push('BOD pinned but unmarked on ' + S.i);
     }
+
+    // ONE CLIMB, ONE TOP OF CLIMB (v16.39). A leg whose climb tops out ON its
+    // end fix while the next leg climbs straight on from that same fix draws no
+    // TOC: the aircraft never levels off there, and the mark belongs to
+    // whichever leg the climb actually finishes on. Both halves are asserted -
+    // that the suppressed leg really is continuous, and that the mark is not
+    // simply lost.
+    for (let k = 0; k + 1 < sch.length; k++) {
+      const L = sch[k], N = sch[k + 1];
+      if (!L || !N || !L.climbContinues) continue;
+      continues++;
+      if (L.tocAlongNM === null || L.distNM - L.tocAlongNM > 0.05)
+        bad.push('a suppressed TOC did not reach its end fix on ' + L.i);
+      if (N.climbStartNM > 0.05)
+        bad.push('a suppressed TOC has a level stretch after it on ' + L.i);
+      if (L2.computeLegMarkers(L.from, L.to, L).some((m) => m.kind === 'TOC'))
+        bad.push('a continuing climb still drew a TOC on ' + L.i);
+      const later = sch.slice(k + 1).filter(Boolean)
+        .some((X) => L2.computeLegMarkers(X.from, X.to, X).some((m) => m.kind === 'TOC'));
+      if (!later && !sch.slice(k + 1).filter(Boolean).some((X) => X.stillClimbing))
+        bad.push('the top of a continuing climb was lost after ' + L.i);
+    }
   }
   assert(withBoc > 500 && withBod > 300, 'the sweep barely exercised the pins: ' + withBoc + '/' + withBod);
   assert(refused > 0 && missed > 0, 'the sweep never hit a refused BOD or a missed TOC target');
   assert(bad.length === 0, bad.length + ' violations, first few: ' + [...new Set(bad)].slice(0, 5).join(' | '));
+  assert(continues > 0, 'the sweep never produced a climb continuing through a fix');
   console.log('        ' + legs + ' pinned legs: ' + withBoc + ' with a BOC, ' + withBod +
-    ' with a BOD, ' + refused + ' pins refused, ' + missed + ' TOC targets missed, 0 violations');
+    ' with a BOD, ' + refused + ' pins refused, ' + missed + ' TOC targets missed, ' +
+    continues + ' climbs continuing through a fix, 0 violations');
 });
 
 console.log('\n=== 62b. TOC/TOD marks (the vanishing TOD, v16.28) ===');
