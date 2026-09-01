@@ -27,6 +27,14 @@
 import { calcDistanceNM, calcTrueTrack, interpolateGeo } from './geodesy.js';
 import { cruisePerf, climbPerf, climbCumulative, calcWCA, activeAircraftProfile, toRad } from './performance.js';
 
+// How close to a fix a corner has to fall before it IS that fix. It is the
+// tolerance the markers have always used to drop a degenerate mark (a climb or
+// descent occupying no distance on this leg belongs to the neighbouring one);
+// the climb-continuity pass in computeFlightSchedule uses the same number, so
+// what the schedule calls one climb and what the map draws as one climb cannot
+// disagree. 0.05 NM is 3 seconds at C182 speeds.
+const EDGE_NM = 0.05;
+
 // 4b. VIA POINTS & UNIFIED LEG ENGINE
 //
 // A leg may carry intermediate "via" points (stored on the DESTINATION
@@ -662,6 +670,16 @@ export function computeFlightSchedule(fl, opts) {
                  *  the first leg, where there is no earlier fix to raise. */
                 /** @type {number|null} */ tocNeedsEntryAlt: null,
                 tocNoAltHelps: false,
+                /** Where the earlier leg's "be level by" pin would go, and where
+                 *  its climb would then begin - both read from the trial that
+                 *  VERIFIED the advice, so the sentence offering it cannot
+                 *  describe something other than what applying it does. */
+                /** @type {number|null} */ tocAdviceLevelByNM: null,
+                /** @type {number|null} */ tocAdviceClimbFromNM: null,
+                // This leg's climb tops out ON its end fix and the next leg
+                // climbs straight on from there: ONE climb through the fix, so
+                // this leg has no top of climb to draw. See the pass below.
+                climbContinues: false,
                 // filled in below; declared here so the shape is complete
                 entryAlt: 0, exitAlt: 0 };
     if (alt === null) alt = from.alt;
@@ -827,6 +845,34 @@ export function computeFlightSchedule(fl, opts) {
     if (L && L.todStartsHere) L.todBeforeNM = L.bodTailNM + L.descDistNM;
   }
 
+  // ONE CLIMB THROUGH A FIX IS ONE CLIMB (v16.39).
+  //
+  // When a leg's climb tops out exactly ON its end fix and the next leg climbs
+  // straight on from that same fix, the aircraft never levels off: it is a
+  // single continuous climb that happens to cross a waypoint. The earlier leg
+  // therefore has no top of climb to draw, and saying it does puts TWO "TOC"
+  // marks on the map for one climb - the first of them at a point the aircraft
+  // flies straight through.
+  //
+  // This is a property of the SCHEDULE, not of how it was built, so it holds
+  // whether the corners were pinned, suggested by the "cross this fix at" advice
+  // or fell out of the altitudes on their own.
+  for (let k = 0; k + 1 < legs.length; k++) {
+    const L = legs[k], N = legs[k + 1];
+    if (!L || !N || L.tocAlongNM === null) continue;
+    if (L.distNM - L.tocAlongNM > EDGE_NM) continue;   // tops out on the end fix
+    if (N.climbStartNM > EDGE_NM) continue;            // and climbs on from it
+    // ...AND SOMEBODY ELSE DRAWS THAT CLIMB'S TOP. The test is who draws the
+    // mark, not how long the next climb is: a next-leg climb of 0.0499 NM is
+    // degenerate by length yet its TOC lands at 0.0500 NM and IS drawn, so
+    // testing the length suppressed nothing and put two marks a twentieth of a
+    // mile apart. If the next leg draws no top of climb - it does not climb at
+    // all, or its climb is too short to mark - then this leg's top IS the top
+    // and it stays.
+    if (!((N.tocAlongNM !== null && N.tocAlongNM > EDGE_NM) || N.stillClimbing)) continue;
+    L.climbContinues = true;
+  }
+
   // ADVICE IS ONLY OFFERED IF IT ACTUALLY WORKS.
   //
   // "Cross the previous fix at 4122 ft and the target fits" is computed from
@@ -840,18 +886,38 @@ export function computeFlightSchedule(fl, opts) {
   // A failed candidate means no altitude at that fix helps: a higher one is
   // strictly harder for the earlier legs to reach, so verifying once is enough
   // and there is nothing to search.
+  //
+  // THE TRIAL RAISES THE FIX **AND** DELAYS THE EARLIER CLIMB (v16.39), because
+  // that is what taking the advice does. Raising the fix alone tops the earlier
+  // leg out early and holds the new altitude to the fix, so the pilot gets two
+  // climbs with a level stretch between them instead of the one continuous
+  // climb they asked for. A "be level by" pin at the earlier leg's FULL length
+  // says "top out on that fix", which is the same climb - same minutes, same
+  // fuel - moved to the end of the leg, where it runs straight on into this
+  // leg's climb. Both legs' targets must then be met, or the advice is not
+  // offered: the earlier leg has a target of its own now.
   if (!opts || opts.verifyAdvice !== false) {
     for (const L of legs) {
       if (!L || L.tocNeedsEntryAlt === null) continue;
+      const prev = legs[L.i - 1] || null;
+      const levelBy = prev ? prev.distNM : 0;
       const trial = Object.assign({}, fl, {
         waypoints: wps.map((w, k) => k === L.i
-          ? Object.assign({}, w, { alt: L.tocNeedsEntryAlt })
+          ? Object.assign({}, w, { alt: L.tocNeedsEntryAlt, tocNM: levelBy || w.tocNM })
           : Object.assign({}, w))
       });
-      const check = computeFlightSchedule(trial, { verifyAdvice: false })[L.i];
-      if (!check || !check.tocTargetMet) {
+      const T = computeFlightSchedule(trial, { verifyAdvice: false });
+      const check = T[L.i], earlier = prev ? T[L.i - 1] : null;
+      if (!check || !check.tocTargetMet || (prev && (!earlier || !earlier.tocTargetMet))) {
         L.tocNeedsEntryAlt = null;
         L.tocNoAltHelps = true;
+      } else if (earlier && earlier.climbDistNM > EDGE_NM) {
+        // Only when there IS an earlier climb to delay. Where the aircraft
+        // DESCENDS into the raised fix (40 of 305 swept routes) the climb
+        // genuinely begins at the fix, nothing is split, and pinning "be level
+        // by" on a leg with no climb would write route data that does nothing.
+        L.tocAdviceLevelByNM = levelBy;
+        L.tocAdviceClimbFromNM = earlier.climbStartNM;
       }
     }
   }
@@ -876,8 +942,7 @@ export function computeLegMarkers(from, to, SL) {
   // guard is only against a degenerate marker: a climb or descent that
   // occupies no distance on THIS leg belongs to the neighbouring one, which
   // draws it.
-  const EDGE_NM = 0.05;
-  if (SL.tocAlongNM != null && SL.tocAlongNM > EDGE_NM) {
+  if (SL.tocAlongNM != null && SL.tocAlongNM > EDGE_NM && !SL.climbContinues) {
     const along = Math.min(SL.tocAlongNM, SL.distNM);
     const pt = pointAlongSegments(SL.segs, along);
     out.push({ kind: 'TOC', distNM: SL.tocAlongNM, refName: from.name, rel: 'after',

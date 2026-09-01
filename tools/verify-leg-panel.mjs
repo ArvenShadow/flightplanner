@@ -170,6 +170,10 @@ const advice = await page.evaluate(() => {
 });
 check(/Cross MID at/.test(advice.text) && advice.hasButton,
   'it offers the altitude MID needs, with a button: ' + JSON.stringify(advice.text));
+// v16.39: the offer must PROMISE one continuous climb, because that is what
+// taking it now does. The user's report was that it delivered two.
+check(/one continuous climb/.test(advice.text) && /passing MID on the way up/.test(advice.text),
+  'the offer describes the continuous climb: ' + JSON.stringify(advice.text));
 await page.evaluate(() => document.querySelector('#leg-preview .leg-warn button').click());
 await page.waitForTimeout(400);
 // The button raises the fix straight away (it is a route edit, and undoable);
@@ -182,6 +186,25 @@ const afterFix = await page.evaluate(() => ({
 }));
 check(afterFix.midAlt > 2500, 'the button raised MID: ' + afterFix.midAlt + ' ft');
 check(!afterFix.warn, 'the warning is gone once the advice is taken: ' + afterFix.preview);
+// ONE CLIMB, NOT TWO (v16.39, the user's report). Raising MID alone topped the
+// ENDU leg out early and held the new altitude to MID, so the pilot got a climb,
+// a long level stretch and a second climb. The advice must also delay the
+// earlier leg's climb so it ends ON MID and runs straight into the next one.
+const oneClimb = await page.evaluate(() => {
+  const S = computeFlightSchedule(flights[0]);
+  return { levelBy: flights[0].waypoints[1].tocNM,
+           leadDist: S[0].distNM, leadStart: S[0].climbStartNM, leadClimb: S[0].climbDistNM,
+           continues: S[0].climbContinues, nextStart: S[1].climbStartNM };
+});
+check(oneClimb.levelBy > 0, 'the earlier leg was given a "be level by" pin: ' + oneClimb.levelBy);
+check(oneClimb.leadStart > 1 && oneClimb.continues === true,
+  'the earlier climb was delayed to end on MID: starts ' + oneClimb.leadStart.toFixed(1) +
+  ' NM in, continues ' + oneClimb.continues);
+check(Math.abs(oneClimb.leadDist - (oneClimb.leadStart + oneClimb.leadClimb)) < 0.05 &&
+      oneClimb.nextStart < 0.05,
+  'no level stretch is left at MID: ' +
+  (oneClimb.leadDist - (oneClimb.leadStart + oneClimb.leadClimb)).toFixed(3) + ' NM before, ' +
+  oneClimb.nextStart.toFixed(3) + ' NM after');
 // Now commit the target and confirm the schedule really lands on it.
 await page.evaluate(() => saveLegSettings());
 await page.waitForTimeout(320);
@@ -192,6 +215,15 @@ const committed = await page.evaluate(() => {
 check(committed.pin === 5, 'the target was stored: ' + committed.pin);
 check(committed.met && Math.abs(committed.toc - 5) < 0.05,
   'the schedule lands on the target - TOC at ' + (committed.toc && committed.toc.toFixed(3)) + ' NM against 5');
+// ...and the map must PAINT one top of climb, not one at MID and one after it.
+await page.evaluate(() => { map.setView([69.2, 18.5], 9, { animate: false }); });
+await page.waitForTimeout(400);
+await page.evaluate(() => { applyZoomDeclutter(); refreshMap(); });
+await page.waitForTimeout(320);
+const painted = await page.evaluate(() => [...document.querySelectorAll('.toc-label, .tod-label')]
+  .map((el) => el.textContent.trim()));
+check(painted.filter((t) => /TOC/.test(t) && !/BOC/.test(t)).length === 1,
+  'one continuous climb paints exactly one TOC: ' + JSON.stringify(painted));
 
 // ---- the pinned corners are PAINTED ---------------------------------------
 // Rebuild the route with BOTH pins set, so all four marks exist at once, and

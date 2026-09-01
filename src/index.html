@@ -321,7 +321,7 @@
             <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service. <b>Both charts need internet</b> — neither is stored on your machine. The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
             <li><b>⬢ Airspace</b> draws the published airspace from <b>AIP Norge</b> — CTR and TIZ solid, TMA and TIA dashed, CTA finely dashed, the mandatory zones (RMZ/TMZ) in orange. <b>Hover any airspace</b> for a card showing its type, ICAO class, published vertical limits, and one row per service you would actually use — <b>ATIS, Approach, Tower</b>, or <b>Information</b> at an AFIS field. Nothing is drawn below zoom 7: at country zoom the polygons bury the chart you are trying to read. Clicking still adds a waypoint, so route building inside a TMA is unaffected — the information is on hover only. The choice is remembered with your settings.</li>
             <li><b>Right-click the track</b> for that leg's settings: the altitude it is crossed at, and <b>where its climb and descent sit</b>. Three corners are yours to name — <b>start the climb</b> N&nbsp;NM after the fix (hold your current altitude, then go up), <b>be level by</b> N&nbsp;NM after it (which sets the start of the climb for you), and <b>level off</b> N&nbsp;NM before the next fix (get down early, then run in level). Both are pure geometry: the climb and descent are unchanged, they just move, so they are always flyable. The <b>Here</b> buttons turn the spot you right-clicked into the number. A live preview shows the leg's time, fuel and where each corner lands before you apply anything, and the pinned corners are drawn on the map as <b>BOC</b> and <b>BOD</b> marks beside the usual TOC and TOD. Right-clicking used to insert a waypoint outright; that is now the first action <i>in</i> the panel, at the exact point you clicked, so nothing was lost.</li>
-            <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b>, with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
+            <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b>, with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Taking it gives you <b>one continuous climb</b>: the earlier leg's climb is delayed so it tops out exactly on that fix and runs straight on, rather than levelling off there and climbing again. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
             <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
             <li><b>What the airspace layer will not do.</b> Vertical limits are shown <b>exactly as published</b> — GND, UNL and flight levels stay as they are, and a flight level is never converted to an altitude. Where the source states no class, the card says so rather than guessing. Airspaces whose published boundary cannot be resolved are <b>absent rather than approximated</b>: the offshore zones defined as a circle radius, the <i>maritime</i> stretch of the Norway–Sweden boundary in the Skagerrak, and one citing the Finland–Sweden border. Where the AIP does say a boundary <b>follows the national border</b>, the real border is drawn from Kartverket’s official line — 51 such stretches in this edition, on 41 airspaces. <b>ATS delegation areas are not drawn at all</b>, and that is deliberate: ENR 2.2 section 5 publishes the areas where two states have agreed to transfer <i>who provides the service</i>, not the airspace itself. Silver 1 and Silver 2 are inside SWEDEN FIR, Halti and Manto inside HELSINKI FIR — 13 of the 17 lie in a foreign FIR, and drawing them as class-C volumes made them look like controlled airspace you had to clear. The card lists only the frequencies you would dial: clearance delivery and ground are left out, military channels are excluded (both the flagged ones and everything outside the 118–137 MHz civil band), and <b>121.500 is never listed</b> — you know it. An airspace worked only by an area control centre still shows that frequency, because otherwise there would be nobody to call. <b>Polaris CTA is a special case</b>: it is one airspace over the whole country, so the AIP lists all 26 sector frequencies against it. The card therefore names the <b>sector your cursor is in</b> — ENR 2.2 publishes each Polaris sector as its own volume, so this is a lookup, not a guess, and the frequency shown is always one the hovered airspace itself publishes. Where the AIP stacks sectors vertically you get one row per sector, each labelled with the band it works, so you pick by planned level. Over the Oslofjord, where Sectors 3 and 4 cannot be drawn (their boundary follows the <i>maritime</i> Norway–Sweden line, which is not in Kartverket’s land-border data), the card says so and shows no frequency rather than reciting all 26. ATIS rows are labelled <b>&lt;ICAO&gt; ATIS</b> rather than by the published callsign, which in Norway is often "…Information" and reads exactly like the AFIS service you would actually talk to. Every published service and frequency remains in the data. <b>This is a planning aid — verify against the current AIP and NOTAM.</b></li>
@@ -1025,7 +1025,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.38';
+    const APP_VERSION = '16.39';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3170,9 +3170,14 @@
     // 2g. LEG SETTINGS PANEL (v16.37, roadmap item 1)
     //
     // Right-click the track -> this leg's altitude, and where its climb and
-    // descent sit. See pinNM in src/lib/legs.js for why BOC and BOD are pins
-    // while "be level by" is only a check: honouring the third would mean
-    // inventing a climb rate the POH tables do not describe.
+    // descent sit. All three corners are PINS: BOC and BOD place the climb and
+    // descent directly, and "be level by" (v16.38) works the bottom of climb
+    // backwards from the top at the profile's own rate - see climbStartForToc
+    // in src/lib/legs.js. Nothing steeper than the POH tables is invented; only
+    // the climb's position moves. When it cannot fit even from the leg's first
+    // fix, applySuggestedEntryAlt offers the crossing altitude the previous fix
+    // needs AND delays that leg's climb, so the result is ONE continuous climb
+    // through the fix rather than two with a level stretch between (v16.39).
     //
     // The panel remembers WHERE on the leg you right-clicked, so "Here" turns
     // the gesture into the number. That is the whole reason the pin is easier
@@ -3261,6 +3266,13 @@
      * also where an unmet target or a refused pin is shown before the pilot
      * commits, rather than only afterwards in the red banner.
      */
+    /** Name of the fix one before the leg's start fix - where the continuous
+     *  climb offered by the "cross this fix at" advice actually begins. */
+    function prevFixName(S) {
+      const w = flights[legPanel.fIdx].waypoints[S.i - 1];
+      return w ? w.name : 'the previous fix';
+    }
+
     function updateLegPreview() {
       const host = document.getElementById('leg-preview');
       if (!host || !legPanel) return;
@@ -3304,15 +3316,22 @@
         // The target could not be met even climbing from this leg's first fix.
         // Offer the change that WOULD work rather than a rate to admire.
         if (S.tocNeedsEntryAlt !== null) {
-          const suggest = Math.ceil(S.tocNeedsEntryAlt / 100) * 100;
-          legPanel.suggestAlt = suggest;
+          legPanel.suggestAlt = S.tocNeedsEntryAlt;
+          legPanel.suggestLevelByNM = S.tocAdviceLevelByNM;
           warn += '<div class="leg-warn">The climb would have to begin before ' + esc(S.from.name) +
-            '. Cross ' + esc(S.from.name) + ' at <b>' + suggest + ' ft</b> instead of ' +
-            Math.round(S.entryAlt) + ' ft and it fits \u2014 ' +
+            '. Cross ' + esc(S.from.name) + ' at <b>' + S.tocNeedsEntryAlt + ' ft</b> instead of ' +
+            Math.round(S.entryAlt) + ' ft and it fits' +
+            (S.tocAdviceClimbFromNM !== null
+              ? ' \u2014 one continuous climb, starting ' + f(S.tocAdviceClimbFromNM) +
+                ' NM after ' + esc(prevFixName(S)) + ' and passing ' + esc(S.from.name) +
+                ' on the way up'
+              : '') +
+            ' \u2014 ' +
             '<button class="btn btn-outline btn-sm" style="padding:1px 6px; font-size:10px;" ' +
             'onclick="applySuggestedEntryAlt()">Do that</button></div>';
         } else {
           legPanel.suggestAlt = null;
+          legPanel.suggestLevelByNM = null;
           warn += '<div class="leg-warn">The climb would have to begin before ' + esc(S.from.name) +
             (S.tocNoAltHelps
               ? ', and crossing ' + esc(S.from.name) + ' higher does not help either \u2014 the earlier ' +
@@ -3324,6 +3343,7 @@
         }
       } else {
         legPanel.suggestAlt = null;
+        legPanel.suggestLevelByNM = null;
       }
       if (S.bodRefused) {
         warn += '<div class="leg-warn">Cannot be level ' + f(S.bodPinNM) + ' NM before ' + S.to.name +
@@ -3354,6 +3374,15 @@
       if (!from) return;
       pushUndoState();
       from.alt = legPanel.suggestAlt;
+      // AND DELAY THE EARLIER LEG'S CLIMB so the two halves are ONE climb
+      // (v16.39). Raising the fix alone tops the earlier leg out early and holds
+      // the new altitude all the way to the fix, which is two climbs with a
+      // level stretch between them - not what "be level by" asked for. A "be
+      // level by" pin at the earlier leg's full length moves that same climb
+      // (same minutes, same fuel, same TAS) to the end of the leg, where it runs
+      // straight on into this one. The figure comes from the trial that verified
+      // the advice, so this cannot apply something the offer did not describe.
+      if (legPanel.suggestLevelByNM) from.tocNM = legPanel.suggestLevelByNM;
       // The first waypoint's altitude IS the departure elevation; keep them in
       // step exactly as setFlightDepElevation does.
       if (legPanel.legEnd - 1 === 0) fl.depElev = legPanel.suggestAlt;
@@ -3361,7 +3390,9 @@
       renderAllFlightTables();
       saveActiveState();
       updateLegPreview();
-      say('Set ' + from.name + ' to ' + legPanel.suggestAlt + ' ft.', 'info', 4000);
+      say('Cross ' + from.name + ' at ' + legPanel.suggestAlt + ' ft' +
+          (legPanel.suggestLevelByNM ? ', climbing through it in one continuous climb.' : '.'),
+          'info', 4500);
     }
 
     function clearLegPins() {

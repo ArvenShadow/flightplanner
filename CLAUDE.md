@@ -326,6 +326,56 @@ errors is the standard.
     spill-the-climb-onto-the-previous-leg implementation would have done (the
     descent's own spill-back already has that flaw: leg 0 reports exit 8000 ft
     while a backed-up descent actually crosses that fix ~5000 ft lower).
+  - **v16.39 (the user's second correction, and again they were right): TAKING
+    THAT ADVICE MUST GIVE ONE CONTINUOUS CLIMB.** "Cross MID at 6032 ft" only
+    raised the fix, and raising a fix makes the EARLIER leg climb to it
+    immediately and then HOLD the new altitude all the way there. So the pilot
+    who asked for one corner got a climb, a 29.5 NM level stretch and a second
+    climb - two climbs with a phantom "TOC" chip painted at MID, a point the
+    aircraft flies straight through. The user's words: "i want the BOC to begin
+    at a point where i would cross wp at xxxx in the climb".
+    - THE FIX IS THE MECHANISM THAT ALREADY EXISTED, not a new one. "Do that"
+      now also pins the earlier leg's TOC target at that leg's FULL length -
+      "top out ON this fix" - so `climbStartForToc` delays the same climb (same
+      minutes, same fuel, same TAS) to the end of the leg, where it runs
+      straight on into this leg's climb. Measured: level gap 0.000 NM before the
+      fix and 0.000 NM after, TOC exactly on the 5 NM target.
+    - **THE VERIFICATION TRIAL HAS TO APPLY BOTH HALVES**, or it validates a
+      plan the button does not produce. It now also requires the EARLIER leg's
+      new target to be met, because that leg has a target of its own now.
+      `tocAdviceLevelByNM` / `tocAdviceClimbFromNM` are read back OUT of that
+      trial, so the sentence offering the advice cannot describe something other
+      than what applying it does.
+    - **THE ROUNDING TO THE NEXT HUNDRED FEET WAS DROPPED**, and it was the
+      cause of the last remaining sliver. 6032 -> 6100 crosses the fix 68 ft
+      higher than needed, which shortens the second climb, which delays it 0.23
+      NM to still hit the target - a 7-second level segment at the fix, i.e. the
+      same defect in miniature. A crossing altitude passed in a climb is not a
+      level to be flown, so tidiness bought nothing. The rounding ALSO made the
+      offer differ from what the engine had verified (rounding up is strictly
+      harder for the earlier legs, not easier). A test still asserts a pilot
+      rounding it up BY HAND stays safe.
+    - **WHO DRAWS THE MARK IS THE TEST FOR SUPPRESSING IT, NOT HOW LONG THE
+      NEXT CLIMB IS.** `climbContinues` is set when a leg's climb tops out on
+      its end fix AND the next leg climbs on from that fix AND the next leg (or
+      a later one) actually draws that climb's top. Testing the next climb's
+      LENGTH failed on the degenerate case the sweep found: a 0.0499 NM climb is
+      too short to mark by length, yet its TOC lands at 0.0500 NM and IS drawn -
+      so nothing was suppressed and two chips appeared a twentieth of a mile
+      apart. `EDGE_NM` is now one module-level constant shared by the marks and
+      the continuity pass, so what the schedule calls one climb and what the map
+      draws as one climb cannot drift.
+    - IT IS A PROPERTY OF THE SCHEDULE, NOT OF THE ADVICE, so it also fixes the
+      unpinned case: 21 of 48 957 generated unpinned legs top out exactly on a
+      fix the next leg climbs on from, and every one of those was drawing two
+      TOC marks for one climb since v16.5. Rare (0.04%) but always wrong.
+    - THE SWEEP IS AGAIN THE TEST: 305 pieces of advice, all verified, 265 give
+      one continuous climb and 0 split the climb; 40 legitimately DESCEND into
+      the raised fix, where the climb genuinely begins at the fix and there is
+      nothing to join - so no pin is written there, rather than parking a "be
+      level by" on a leg with no climb. The 20 000-route pin sweep gained a
+      whole-flight invariant: a suppressed TOC must really reach its end fix,
+      have no level stretch after it, and its mark must reappear on a later leg.
   - **BOTH SIDES OF THAT BISECTION MOVE**, which is why `entryAltForClimbBy`
     takes a callback rather than a minutes budget. A higher entry altitude
     shortens the climb but also raises its TAS, covering the target distance in
@@ -1112,7 +1162,7 @@ errors is the standard.
   NO CORS header, so it is genuinely unusable from a browser - MET Norway
   is used instead, and is the authoritative source for Norway anyway.
 
-## DEFERRED: known nits and small bugs (v16.38)
+## DEFERRED: known nits and small bugs (v16.39)
 
 The user's instruction: "we will iron out all the small bugs and nitpicks
 later, make sure you keep track of all the small details that can be ironed

@@ -114,7 +114,10 @@ export function collectIntegrityProblems(flights, signals) {
           `${SL.tocTargetNM.toFixed(1)} NM after ${from.name} - the climb would have to begin before ` +
           `${from.name}` +
           (SL.tocNeedsEntryAlt !== null
-            ? `. Cross ${from.name} at about ${SL.tocNeedsEntryAlt} ft instead of ${Math.round(SL.entryAlt)} ft and it fits.`
+            ? `. Cross ${from.name} at ${SL.tocNeedsEntryAlt} ft instead of ${Math.round(SL.entryAlt)} ft and it fits` +
+              (SL.tocAdviceClimbFromNM !== null
+                ? ` - one continuous climb, beginning ${SL.tocAdviceClimbFromNM.toFixed(1)} NM into the leg before and passing ${from.name} on the way up.`
+                : `.`)
             : SL.tocNoAltHelps
               ? `, and crossing ${from.name} higher does not help either - the earlier legs cannot climb that high by then.` +
                 (need ? ` Reaching it from ${from.name} would need about ${need} ft/min.` : '')
