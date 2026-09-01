@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.17)
+# C182 Flight Planner (v16.18)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -42,7 +42,7 @@ from the repo's Code button gets you the same files.
 npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
-npm test           # builds, then runs the suite against dist (265 tests)
+npm test           # builds, then runs the suite against dist (267 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
 node tools/verify-hosted.mjs   # Chromium check of the service-worker rules
                                # (needs `npm install --no-save playwright`)

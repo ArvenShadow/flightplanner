@@ -88,9 +88,12 @@ claude.ai; this repo is the continuation point for Claude Code.
     as a thin wrapper: three of its inputs can only come from what was
     actually RENDERED (a NaN in the table, an invalid daylight time,
     negative fuel remaining), so the page reads those from the DOM and
-    hands them in as a `signals` object. Still inline: map setup, base
-    chart, map interactions, the wind fetch and matrix fill, table
-    rendering, modals, plotting list, storage.
+    hands them in as a `signals` object. v16.18 added `exchange.js`
+    (buildExportPayload, pickProfileKeys, sanitiseFlights,
+    defaultFlights), taking the page to 4260 and completing the pure
+    slices. Still inline, and all genuinely DOM: map setup, base chart,
+    map interactions, the wind fetch and matrix fill, table rendering,
+    modals, plotting list, the localStorage layer.
   - HIDDEN GLOBALS ARE THE TRAP when extracting. `performance.js` read
     `aircraftProfile`, which is declared `let` at the top level of the
     page script: that is a global LEXICAL binding, shared with the
@@ -120,6 +123,15 @@ claude.ai; this repo is the continuation point for Claude Code.
   while this one stays a file you open.
 - User data (routes, settings) lives in browser localStorage plus manual
   JSON export/import. Personal data must NEVER leak into exports.
+  ENFORCED SINCE v16.18 by `src/lib/exchange.js`: `PROFILE_KEYS` is the
+  ONE whitelist and BOTH directions use it. Import had always whitelisted;
+  export had not - it serialised the live profile object wholesale, so any
+  key a future feature parked there would have shipped in every route
+  file the user emails or shares. A test now feeds a profile carrying a
+  name, an email, a licence number and coordinates through
+  buildExportPayload and asserts none of it appears in the JSON. Add new
+  aircraft settings to PROFILE_KEYS; never widen it to anything that
+  identifies a person, a machine or a place.
 
 ## Editing discipline (this is how quality was maintained)
 

@@ -1913,7 +1913,9 @@ T('the mode persists in the profile and cycles back to Auto', () => {
   assert(txtOf('declutter-btn').includes('Auto'), 'did not cycle back to Auto');
   const cl = doc.getElementById('map').classList;
   assert(!cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'auto at z9 should be full detail');
-  assert(fs.readFileSync(APP_HTML, 'utf8').includes("'minuteMark','declutter'"), 'declutter missing from the import whitelist');
+  // survives an export/import round trip - asserted through the shared
+  // whitelist rather than by grepping for its text
+  assert(ev("pickProfileKeys({ declutter: 'far' }).declutter") === 'far', 'declutter is dropped by the profile whitelist');
   ev('window.__stubZoom = undefined;');
 });
 
@@ -2133,7 +2135,7 @@ T('toggling shows the ICAO chart, states LCC->Mercator, and persists', () => {
   assert(lbl.includes('Lambert conformal conic 59°40′/69°20′'), 'label missing native projection: ' + lbl);
   assert(lbl.includes('Web Mercator'), 'label missing display projection: ' + lbl);
   assert(JSON.parse(w.localStorage.getItem('c182_perf_profile')).baseChart === 'vfr', 'choice not persisted');
-  assert(fs.readFileSync(APP_HTML, 'utf8').includes("'declutter','baseChart'"), 'baseChart missing from import whitelist');
+  assert(ev("pickProfileKeys({ baseChart: 'vfr' }).baseChart") === 'vfr', 'baseChart is dropped by the profile whitelist');
 });
 T('the JSONP edition callback lands in the label', () => {
   ev('window.__icaoEdition({ layers: [{ name: "AIRAC_19MAR26" }] })');
@@ -2170,8 +2172,10 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const dayModule = require('./src/lib/daylight.js');
   const windsModule = require('./src/lib/winds.js');
   const integrityModule = require('./src/lib/integrity.js');
+  const exchModule = require('./src/lib/exchange.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
-                    legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule };
+                    legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
+                    exch: exchModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2300,7 +2304,10 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                        M.winds.buildWindSamplePoints([{ waypoints: [wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500)] }], {})],
     'integrity.js': () => [M.integrity.collectIntegrityProblems([{ waypoints: [wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500)] }], {}),
                            M.integrity.flightTitle({ waypoints: [wp(69, 18, 0), wp(70, 18, 0)] }),
-                           M.integrity.integrityBannerHTML(['x'])]
+                           M.integrity.integrityBannerHTML(['x'])],
+    'exchange.js': () => [M.exch.buildExportPayload({ flights: [], profile: { mode: 'C182T' } }),
+                          M.exch.sanitiseFlights([{ waypoints: [wp(69, 18, 0)] }]),
+                          M.exch.defaultFlights(), M.exch.pickProfileKeys({ theme: 'dark' })]
   };
   for (const [name, run] of Object.entries(exercises)) {
     let out;
@@ -2344,6 +2351,43 @@ T('the integrity rules each fire on their own case (module, no DOM)', () => {
   // a clean plan must produce NOTHING - a banner that cries wolf is ignored
   assert(probs([W({ name: 'A' }), W({ name: 'B', lat: 69.4 })]).length === 0,
     'a sound plan raised a false alarm: ' + JSON.stringify(probs([W({ name: 'A' }), W({ name: 'B', lat: 69.4 })])));
+});
+// "Personal data must NEVER leak into exports" is a project rule, and an
+// export file is a thing that gets emailed and shared. So what leaves is
+// asserted directly, not inferred from the code.
+T('an export carries aircraft settings and NOTHING else off the profile', () => {
+  const X = moduleExports.exch;
+  const profile = {
+    mode: 'C182T', cruiseRpm: 2300, theme: 'dark', distUnit: 'NM', baseChart: 'vfr',
+    // things that must never travel, whatever put them there
+    pilotName: 'Ola Nordmann', email: 'someone@example.com', homeBase: 'ENDU',
+    lastLat: 69.68, lastLng: 18.91, licenceNo: 'NO-12345', apiKey: 'secret'
+  };
+  const out = X.buildExportPayload({ routes: {}, missions: {}, flights: [], profile });
+  const leaked = Object.keys(out.profile).filter(k => !X.PROFILE_KEYS.includes(k));
+  assert(leaked.length === 0, 'these leaked into the export: ' + leaked.join(', '));
+  const blob = JSON.stringify(out);
+  for (const secret of ['Ola Nordmann', 'someone@example.com', 'NO-12345', 'secret']) {
+    assert(!blob.includes(secret), 'the export file contains "' + secret + '"');
+  }
+  // and the settings that make the numbers reproducible DO travel
+  assert(out.profile.mode === 'C182T' && out.profile.cruiseRpm === 2300 && out.profile.theme === 'dark',
+    'aircraft settings were dropped - the same route would compute differently elsewhere');
+  assert(out.formatVersion === 2, 'format version changed silently');
+});
+T('an untrusted import cannot poison the plan', () => {
+  const X = moduleExports.exch;
+  assert(X.sanitiseFlights(null) === null && X.sanitiseFlights([]) === null && X.sanitiseFlights('nope') === null,
+    'garbage must yield null so the caller keeps the plan it already has');
+  // waypoints without usable coordinates are dropped, not loaded as NaN
+  const f = X.sanitiseFlights([{ waypoints: [
+    { name: 'GOOD', lat: 69, lng: 18 }, { name: 'BAD', lat: 'x', lng: 18 }, { name: 'NONE' }
+  ] }]);
+  assert(f[0].waypoints.length === 1 && f[0].waypoints[0].name === 'GOOD', 'bad coordinates survived the import');
+  // an empty via array must be removed, not left to render as a bent leg
+  const v = X.sanitiseFlights([{ waypoints: [{ lat: 69, lng: 18, via: [{ lat: 'x' }] }] }]);
+  assert(v[0].waypoints[0].via === undefined, 'an empty via array survived');
+  assert(X.defaultFlights()[0].waypoints.length === 0, 'defaultFlights is not blank');
 });
 T('rendered-page signals reach the banner, and duplicates collapse', () => {
   const I = moduleExports.integrity;
@@ -2518,7 +2562,8 @@ T('the page script no longer defines what the modules own', () => {
                     'utcOffsetLabel', 'fmtLocalHM', 'localDateStrOf', 'firstPlottedWaypoint',
                     'windToUV', 'uvToWind', 'buildWindSamplePoints', 'buildOpenMeteoUrl',
                     'interpolateWindProfile', 'extractPointWeather', 'extractPointWeatherAt', 'angleDiff',
-                    'flightTitle', 'collectIntegrityProblems', 'integrityBannerHTML']) {
+                    'flightTitle', 'collectIntegrityProblems', 'integrityBannerHTML',
+                    'sanitiseFlights', 'defaultFlights', 'buildExportPayload', 'pickProfileKeys']) {
     assert(!new RegExp('function ' + fn + '\\s*\\(').test(src),
       fn + ' is still defined in the page script (duplicate of its module)');
   }
