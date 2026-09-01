@@ -198,6 +198,32 @@ interface AirspaceFeature {
   _bbox?: { south: number, west: number, north: number, east: number };
 }
 
+/**
+ * A Polaris (or other ACC) sector: its published lateral boundary, band and
+ * the ONE frequency published for it in AIP ENR 2.2.
+ *
+ * Sectors are NOT drawn on the map - an en-route sector division far above a
+ * C182 would bury the CTRs and TMAs that matter. They exist so the hover card
+ * can name the sector working the piece of sky under the cursor instead of
+ * reciting every Polaris frequency in the country.
+ */
+interface AirspaceSector {
+  name: string;
+  lower: AirspaceLimit;
+  upper: AirspaceLimit;
+  callsign: string | null;
+  mhz: string;
+  /** The published frequency remark, verbatim. */
+  remark: string;
+  /** Designator tokens the remark claims, e.g. ["9", "12"] for "Sector 9/12" -
+   *  ONE frequency really does serve two combined sectors. */
+  designators: string[];
+  /** Operational free text after the designator phrase, or null. */
+  note: string | null;
+  ring: [number, number][];
+  borderSegments: number;
+}
+
 /** A TOC or TOD mark to draw on the map and list on the plotting sheet. */
 interface LegMarker {
   kind: string;

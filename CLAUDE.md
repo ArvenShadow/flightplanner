@@ -724,6 +724,71 @@ errors is the standard.
     bindTooltip/setStyle. It also kept only the LAST handler per map event, so
     adding moveend/zoomend silently disabled the declutter tests - the stub now
     keeps a list and `__fireMap(ev)` fires them all, like the real map.
+- **ACC SECTORS: THE RIGHT POLARIS FREQUENCY, BY POSITION (v16.33)**. Hovering
+  Polaris CTA printed ALL 26 VHF Polaris frequencies, which tells a pilot
+  nothing. The CTA is ONE airspace over the whole country, so its published
+  block genuinely does list every sector. ENR 2.2 publishes each sector as its
+  own airspace with its own lateral boundary, so the sector under the cursor is
+  a LOOKUP. 28 of 30 imported (`sectors` in `data/aip.js`); they are NOT drawn -
+  an en-route sector division far above a C182 would bury the CTRs and TMAs.
+  - THE eAIP NAMES AN ACC SECTOR IN THE **LAST** CELL OF ITS ROW, where ENR 2.1
+    and AD 2 name it in the FIRST. Grouping on the name marker therefore shifted
+    every ENR 2.2 sector's data by one row and put Sector 2's frequency on
+    Sector 1 - a plausible wrong frequency, the exact failure mode this project
+    refuses. `extractFields` now records each span's enclosing table `row`
+    (binary search; ENR 2.1 has ~4900 spans and a linear scan per span is
+    quadratic), and `airspaceBlocks` detects the orientation PER ENTRY by
+    whether the row's first vertex precedes or follows the name. Measured: ENR
+    2.2 is mixed, 35 name-first and 30 name-last, and the name-last run is
+    exactly the Polaris ACC sector table. A pure row-grouping fix was tried
+    first and REGRESSED `no-published-vertical-limits` from 1 to 50, because the
+    table uses `rowspan`.
+  - THE REMARK CROSS-CHECK IS A DESIGNATOR MATCH, NOT STRING EQUALITY. The
+    remark opens by naming the sector(s) and anything after the first full stop
+    is free text: "Sector 9/12" is ONE frequency working TWO combined sectors,
+    and "Sector 17. The radio coverage in the ISVIG area ... may be marginal."
+    carries a real operational note. Strict equality refused 8 legitimate
+    sectors. Only the leading phrase is read (or "FL100/180NM" in the prose
+    starts matching sector numbers) and it is compared as WHOLE TOKENS, so "1"
+    cannot match "15/16". `remarkDesignators`/`designatorTokens`/`remarkNote`
+    live in `tools/aip-fields.mjs` and are unit-tested.
+  - **THE GEOMETRY MAY ONLY SELECT, NEVER ASSERT.** A resolved sector's
+    frequency is shown only if it ALSO appears in the hovered airspace's own
+    published list, so the card can never state something that airspace does
+    not state. Measured over a grid of every point inside a Polaris CTA volume:
+    **1648 of 1648** sector hits corroborated. Independently, the lookup
+    reproduces the AIP's own per-airspace pairing at 24 of the 31 airspaces
+    publishing exactly one sector frequency - and the other 7 do not matter,
+    because an airspace that publishes ONE frequency never consults the
+    geometry at all. That is deliberate: Sogn TIA is published as Sector 17's
+    even though two sub-volumes reach east into Sector 6/7 territory, and the
+    AIP's own statement about its own airspace wins.
+  - THE CROSS-CHECK THAT SETTLED IT: Sørkjosen TIA - a small airspace right
+    where the user hovers - publishes exactly ONE ACC frequency, 126.705
+    "Sector 26". The point-in-polygon lookup on the sector rings returns Sector
+    26, 126.705. Two independent parts of the same edition agree.
+  - VERTICAL BAND IS NOT USED TO EXCLUDE A SECTOR, and that is a decision:
+    comparing a published FL against an altitude AMSL needs a QNH the planner
+    does not have. Where the AIP stacks sectors (23 GND-FL 85 under 27
+    FL 285-UNL) BOTH rows are shown, each labelled with its band, lowest first.
+    ~85% of positions resolve to one sector anyway; the band is only used to
+    ORDER rows, where a wrong answer is untidy rather than wrong.
+  - UNRESOLVED IS SAID, NOT PAPERED OVER. Sectors 3 and 4 are refused
+    (`fix-not-on-border`, 19-25 NM): their boundary follows the MARITIME
+    Norway-Sweden line in the outer Oslofjord, which Kartverket's LAND
+    Riksgrense does not contain - the same structural refusal as Farris TMA.
+    Over the Oslofjord the card shows NO frequency and points at ENR 2.2.
+    "No position yet" (the tooltip's initial content) is a THIRD state and says
+    something different, because claiming the sector is missing would be false.
+  - jsdom CANNOT PROVE THIS. The card is rebuilt on `mousemove` (keyed on the
+    resolved sector list, so the markup is regenerated when the cursor crosses a
+    boundary, not per pixel). `tools/verify-airspace-hover.mjs` drives real
+    Chromium offline: hovers a Sector 26 point and a Sector 25 point, asserts
+    ONE row each with the right frequency and not the other's, drags across the
+    seam in one continuous motion and asserts the card re-resolved, and
+    re-asserts that a click inside the airspace still reaches the map.
+  - 227 features (was 228): Ørje 2 publishes ONE volume, and the old rule had
+    given it two wrong bands. A correctness improvement, not a loss.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
