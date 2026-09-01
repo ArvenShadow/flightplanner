@@ -15,6 +15,7 @@
 import { computeFlightSchedule, computeLegTotals } from './legs.js';
 
 /** Route-derived name: first and last real waypoint, e.g. "ENDU-ENTC". */
+/** @param {Flight} fl @returns {string} e.g. "ENDU-ENTC" */
 export function flightTitle(fl) {
   const pts = (fl.waypoints || []).filter(w => !w.isPattern && w.name);
   if (pts.length >= 2) return `${pts[0].name}-${pts[pts.length - 1].name}`;
@@ -24,16 +25,18 @@ export function flightTitle(fl) {
 /**
  * All integrity problems for a set of flights.
  *
- * @param flights  the flight list
- * @param signals  what the page actually rendered, all optional:
- *                 { tableText, daylightText, fuelRemaining }
- * @returns array of human-readable problems, de-duplicated, in the order
+ * @param {Flight[]} flights  the flight list
+ * @param {{tableText?: string, daylightText?: string, fuelRemaining?: number}} [signals]
+ *        what the page actually rendered
+ * @returns {string[]} human-readable problems, de-duplicated, in the order
  *          found. Empty means nothing was detected - never a guarantee
  *          that the plan is sound, which is why the guide leads with
  *          PIC responsibility.
  */
 export function collectIntegrityProblems(flights, signals) {
+  /** @type {string[]} */
   const problems = [];
+  /** @param {string} m */
   const add = m => { if (!problems.includes(m)) problems.push(m); };
   const sig = signals || {};
 
@@ -47,8 +50,8 @@ export function collectIntegrityProblems(flights, signals) {
     add('The daylight/VFR-day card shows an invalid time - do not trust its window.');
 
   // --- what the data itself says --------------------------------------
-  (flights || []).forEach((fl) => {
-    (fl.waypoints || []).forEach((wp) => {
+  (flights || []).forEach((/** @type {Flight} */ fl) => {
+    (fl.waypoints || []).forEach((/** @type {any} */ wp) => {
       if (!isFinite(wp.lat) || !isFinite(wp.lng) || Math.abs(wp.lat) > 90 || Math.abs(wp.lng) > 180)
         add(`Waypoint "${wp.name}" has invalid coordinates.`);
       if (!isFinite(wp.alt))
@@ -57,13 +60,30 @@ export function collectIntegrityProblems(flights, signals) {
         add(`Waypoint "${wp.name}" is above the POH table ceiling (14,000 ft) - cruise figures are clamped, not computed.`);
       else if (wp.alt < -1300)
         add(`Waypoint "${wp.name}" altitude ${wp.alt} ft is below any terrain on Earth.`);
-      if (isFinite(wp.wdir) && (wp.wdir < 0 || wp.wdir > 360))
+      // A waypoint with no OAT or no wind cannot be computed at all - the
+      // leg time and fuel come out NaN, which the banner catches further
+      // down as "a non-numeric value appeared". Refusing to compute is
+      // RIGHT (assuming calm wind would be a plausible wrong answer), but
+      // the pilot needs to know WHICH field is missing, not just that
+      // something is NaN. Reachable through an imported file: the import
+      // sanitiser requires coordinates, not weather.
+      for (const [field, label] of [['oat', 'temperature (OAT)'], ['wdir', 'wind direction'], ['wspd', 'wind speed']]) {
+        if (typeof wp[field] !== 'number' || !isFinite(wp[field]))
+          add(`Waypoint "${wp.name}" has no ${label} - the leg ending there cannot be computed.`);
+      }
+      // Without a variation there is no magnetic track or heading: the row
+      // shows "---" rather than a number that could be flown, and the pilot
+      // is told which waypoint needs one.
+      if (typeof wp.var !== 'number' || !isFinite(wp.var))
+        add(`Waypoint "${wp.name}" has no magnetic variation - MT and MH cannot be computed and show "---".`);
+      if (typeof wp.wdir === 'number' && isFinite(wp.wdir) && (wp.wdir < 0 || wp.wdir > 360))
         add(`Waypoint "${wp.name}" wind direction ${wp.wdir}\u00b0 is outside 000-360.`);
-      if (isFinite(wp.wspd) && (wp.wspd < 0 || wp.wspd > 120))
+      if (typeof wp.wspd === 'number' && isFinite(wp.wspd) && (wp.wspd < 0 || wp.wspd > 120))
         add(`Waypoint "${wp.name}" wind speed ${wp.wspd} kt is implausible for VFR planning.`);
     });
     const schedI = computeFlightSchedule(fl);
-    let lastTravelRes = null, lastTravelTo = null;
+    /** @type {LegResult|null} */ let lastTravelRes = null;
+    /** @type {Waypoint|null} */ let lastTravelTo = null;
     for (let i = 0; i < (fl.waypoints || []).length - 1; i++) {
       const from = fl.waypoints[i], to = fl.waypoints[i + 1];
       if (from.isPattern || to.isPattern) continue;
@@ -72,19 +92,20 @@ export function collectIntegrityProblems(flights, signals) {
       lastTravelRes = res; lastTravelTo = to;
       if (!isFinite(res.timeMin) || res.timeMin < 0 || !isFinite(res.burnGal) || res.burnGal < 0)
         add(`Leg ${from.name} \u2192 ${to.name}: computed time/fuel is invalid.`);
-      if (to.wspd >= res.minPhaseTas)
+      // no wind entered is not a problem; a wind that swamps the aircraft is
+      if (typeof to.wspd === 'number' && to.wspd >= res.minPhaseTas)
         add(`Leg ${from.name} \u2192 ${to.name}: wind (${to.wspd} kt) meets or exceeds the slowest phase's TAS (${res.minPhaseTas} kt) - groundspeed and time are NOT reliable.`);
       else if (res.effGS < 30)
         add(`Leg ${from.name} \u2192 ${to.name}: effective groundspeed ${res.effGS} kt - check the wind entry.`);
       if (res.shortfall)
         add(`Leg ${from.name} \u2192 ${to.name}: cannot get down to ${res.shortfall.alt} ft at ${res.shortfall.target} - the descent is ${res.shortfall.min.toFixed(1)} min short even when started on earlier legs. Lower the cruise altitude or expect to arrive HIGH.`);
     }
-    if (lastTravelRes && lastTravelRes.stillClimbing)
+    if (lastTravelRes && lastTravelTo && lastTravelRes.stillClimbing)
       add(`${flightTitle(fl)}: still climbing at ${lastTravelTo.name} - the climb to ${lastTravelTo.alt} ft does not fit within the flight (reaches ~${lastTravelRes.exitAlt} ft).`);
   });
 
   // --- fuel, as actually totalled on screen ----------------------------
-  if (isFinite(sig.fuelRemaining) && sig.fuelRemaining < 0)
+  if (typeof sig.fuelRemaining === 'number' && isFinite(sig.fuelRemaining) && sig.fuelRemaining < 0)
     add('Planned fuel remaining goes NEGATIVE - the mission does not fit the fuel on board.');
 
   return problems;
@@ -92,6 +113,7 @@ export function collectIntegrityProblems(flights, signals) {
 
 /** Banner markup for a problem list. Only the first few are shown; the
  *  rest go to the console, so the banner stays readable. */
+/** @param {string[]} problems @param {number} [maxShown] @returns {string} */
 export function integrityBannerHTML(problems, maxShown) {
   const shown = problems.slice(0, maxShown || 5);
   return '\u26d4 <u>INTEGRITY CHECK FAILED - DO NOT USE THESE FIGURES</u><br>' +

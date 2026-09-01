@@ -14,9 +14,12 @@
 // US gallons (the POH's units) and converted only for display, so a unit
 // change can never move a number.
 
+/** @param {number|string|null|undefined} mins @returns {string} "HH:MM", or "-" */
 export function formatTimeHHMM(mins) {
-  if (mins === undefined || mins === null || isNaN(mins) || mins === '') return '-';
-  const total = Math.max(0, Math.round(mins));
+  if (mins === undefined || mins === null || mins === '') return '-';
+  const n = Number(mins);
+  if (isNaN(n)) return '-';
+  const total = Math.max(0, Math.round(n));
   const h = Math.floor(total / 60);
   const m = total % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -24,6 +27,7 @@ export function formatTimeHHMM(mins) {
 
 // Degrees + decimal minutes, the format printed on VFR chart margins,
 // so waypoints can be plotted without any mental conversion.
+/** @param {number} value degrees @param {boolean} isLat @returns {string} e.g. "69\u00b040.83'N" */
 export function toDMM(value, isLat) {
   const hemi = isLat ? (value >= 0 ? 'N' : 'S') : (value >= 0 ? 'E' : 'W');
   const abs = Math.abs(value);
@@ -38,6 +42,8 @@ export function toDMM(value, isLat) {
 // mission reads "01:00+1", not a time that looks earlier than the ETD.
 // Returns null for a missing or malformed ETD - the caller shows nothing
 // rather than an invented time.
+/** @param {string} etd "HH:MM" @param {number} accMins minutes after ETD
+ *  @returns {string|null} "HH:MM", with "+1" past midnight; null if the ETD is unusable */
 export function clockFromMinutes(etd, accMins) {
   if (!etd || !/^\d{1,2}:\d{2}$/.test(etd)) return null;
   const [h, m] = etd.split(':').map(Number);
@@ -47,16 +53,21 @@ export function clockFromMinutes(etd, accMins) {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` + (days > 0 ? `+${days}` : '');
 }
 
+/** @param {string} [u] @returns {string} */
 export function distLabel(u) { return u === 'KM' ? 'km' : (u === 'SM' ? 'SM' : 'NM'); }
+/** @param {string} [u] @returns {string} */
 export function fuelLabel(u) { return u === 'LITERS' ? 'L' : (u === 'KG' ? 'kg' : 'gal'); }
+/** @param {string} [u] @returns {string} */
 export function fuelRateLabel(u) { return fuelLabel(u) + '/h'; }
 
+/** @param {number} nm @param {string} [targetUnit] @returns {number} */
 export function convertDist(nm, targetUnit) {
   if (targetUnit === 'KM') return nm * 1.852;
   if (targetUnit === 'SM') return nm * 1.15078;
   return nm;
 }
 
+/** @param {number} gal @param {string} [targetUnit] @returns {number} */
 export function convertFuel(gal, targetUnit) {
   if (targetUnit === 'LITERS') return gal * 3.78541;
   if (targetUnit === 'KG') return gal * 2.72; // AvGas 100LL density approx

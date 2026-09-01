@@ -26,10 +26,17 @@ import { pathSegments, pointAlongSegments } from './legs.js';
 export const OM_LEVELS = [1000, 975, 950, 925, 900, 850, 800, 700, 600];
 
 
+/** Wind direction/speed to a u/v vector. Averaging in u/v space is what
+ *  makes a multi-model or multi-point mean SPEED-WEIGHTED, and what stops
+ *  350 and 010 averaging to the reciprocal 180.
+ *  @param {number} dirDeg degrees the wind blows FROM @param {number} spd knots
+ *  @returns {[number, number]} [u, v] */
 export function windToUV(dirDeg, spd) {
   const r = toRad(dirDeg);
   return [-spd * Math.sin(r), -spd * Math.cos(r)];
 }
+/** @param {number} u @param {number} v
+ *  @returns {[number, number]} [direction degrees, speed knots] */
 export function uvToWind(u, v) {
   const spd = Math.hypot(u, v);
   const dir = (toDeg(Math.atan2(-u, -v)) + 360) % 360;
@@ -40,10 +47,13 @@ export function uvToWind(u, v) {
 /** Three sample points per leg - start, midpoint, end - for every flight.
  *  Takes the flight list and the leg start-time map as ARGUMENTS: they are
  *  app state owned by the page, and reading them off the ambient scope is
- *  what made this module unusable outside a browser. */
+ *  what made this module unusable outside a browser.
+ *  @param {Flight[]} flights @param {Record<string, number>} [legStartTimes]
+ *  @returns {WindSamplePoint[]} three per non-pattern leg */
 export function buildWindSamplePoints(flights, legStartTimes) {
+  /** @type {WindSamplePoint[]} */
   const pts = [];
-  (flights || []).forEach((fl, fIdx) => {
+  (flights || []).forEach((/** @type {Flight} */ fl, /** @type {number} */ fIdx) => {
     for (let i = 0; i < fl.waypoints.length - 1; i++) {
       const from = fl.waypoints[i], to = fl.waypoints[i + 1];
       if (from.isPattern || to.isPattern) continue;
@@ -61,6 +71,8 @@ export function buildWindSamplePoints(flights, legStartTimes) {
   return pts;
 }
 
+/** @param {WindSamplePoint[]} pts @param {string} dateStr "YYYY-MM-DD"
+ *  @param {string} [modelId] @returns {string} */
 export function buildOpenMeteoUrl(pts, dateStr, modelId) {
   const vars = ['wind_speed_10m', 'wind_direction_10m', 'temperature_2m'];
   OM_LEVELS.forEach(L => vars.push(
@@ -78,6 +90,9 @@ export function buildOpenMeteoUrl(pts, dateStr, modelId) {
 
 // Vertical interpolation through the model column, wind via u/v components
 // so direction interpolates correctly across the 360-degree wrap.
+/** @param {WindLevel[]} profile the model column, lowest level first
+ *  @param {number} targetM geopotential height, metres
+ *  @returns {WindAtPoint|null} */
 export function interpolateWindProfile(profile, targetM) {
   if (!profile.length) return null;
   if (targetM <= profile[0].h) return { dir: profile[0].dir, spd: profile[0].spd, temp: profile[0].temp };
@@ -100,6 +115,9 @@ export function interpolateWindProfile(profile, targetM) {
 // Blend the columns at floor/ceil of a fractional forecast hour in u/v
 // space, so a 09:30 ETD uses half of 09:00 and half of 10:00 rather than
 // snapping to the nearest hour.
+/** @param {any} loc one Open-Meteo location response
+ *  @param {number} hourFloat fractional forecast hour @param {number} altFt
+ *  @returns {WindAtPoint|null} */
 export function extractPointWeather(loc, hourFloat, altFt) {
   const h0 = Math.max(0, Math.min(23, Math.floor(hourFloat)));
   const h1 = Math.min(23, h0 + 1);
@@ -117,6 +135,8 @@ export function extractPointWeather(loc, hourFloat, altFt) {
 }
 
 // One location's column at one whole forecast hour -> wind/temp at altFt.
+/** @param {any} loc @param {number} hourIdx @param {number} altFt
+ *  @returns {WindAtPoint|null} */
 export function extractPointWeatherAt(loc, hourIdx, altFt) {
   const H = loc.hourly || {};
   const groundH = (typeof loc.elevation === 'number' ? loc.elevation : 0) + 10;
@@ -139,6 +159,9 @@ export function extractPointWeatherAt(loc, hourIdx, altFt) {
   return interpolateWindProfile(prof, altFt * 0.3048);
 }
 
+/** Smallest angle between two bearings, degrees 0-180 - so 350 and 010 are
+ *  20 apart, not 340.
+ *  @param {number} a @param {number} b @returns {number} */
 export function angleDiff(a, b) {
   const d = Math.abs(a - b) % 360;
   return d > 180 ? 360 - d : d;

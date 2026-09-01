@@ -828,7 +828,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.19';
+    const APP_VERSION = '16.20';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2432,8 +2432,12 @@
 
           const dist = Number(convertDist(res.distNM, distUnit).toFixed(1));
           const tt = res.rowTT;
-          const mt = Math.round((tt + to.var + 360) % 360);
-          const mh = Math.round((mt + res.rowWCA + 360) % 360);
+          // Numeric first, so MH can be derived; both fall back to "---".
+          // Without a variation there IS no magnetic heading, and printing a
+          // number that merely looks like one is the dangerous failure.
+          const mtNum = magneticTrack(tt, to.var);
+          const mt = mtNum === null ? '---' : String(mtNum).padStart(3, '0');
+          const mh = mtNum === null ? '---' : String(Math.round((mtNum + res.rowWCA + 360) % 360)).padStart(3, '0');
           const varIndicator = `Auto (${window.WMM_MODEL || "WMM"}) - editable`;
           const legTime = Math.round(res.timeMin);
 
@@ -2503,7 +2507,7 @@
         <td><input type="number" value="${flights[fIdx].waypoints[wpIndex+1].alt}" step="500" title="Target Alt" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="cc"><input type="number" value="${oat}" title="OAT" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].oat=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="calc-cell cc">${tas}</td>
-        <td class="calc-cell cc">${tt}°</td>
+        <td class="calc-cell cc">${String(tt).padStart(3, '0')}°</td>
         <td class="cc" title="Declination Source: ${varIndicator}">
           <input type="number" value="${magVar}" title="Mag VAR (${varIndicator})" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].var=Number(this.value); flights[${fIdx}].waypoints[${wpIndex+1}].varSource='MANUAL'; refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}>
         </td>
@@ -2784,8 +2788,8 @@
       }
       if (res.segs.length > 1) {
         const segTxt = res.segs.map(sg => {
-          const smt = Math.round((sg.tt + to.var + 360) % 360);
-          return `${String(smt).padStart(3, '0')}° ${convertDist(sg.distNM, distUnit).toFixed(1)}`;
+          const smt = magneticTrackLabel(sg.tt, to.var);
+          return `${smt}\u00b0 ${convertDist(sg.distNM, distUnit).toFixed(1)}`;
         }).join(' → ');
         parts.push(`via ${res.segs.length - 1} pt${res.segs.length > 2 ? 's' : ''} — flown tracks °M (row TT/MT/MH = direct ${from.name}–${to.name}): ${segTxt} ${dl}`);
       }
@@ -2878,7 +2882,7 @@
         res.segs.forEach((sg, k) => {
           const nameA = k === 0 ? from.name : `·${k}`;
           const nameB = k === nViaSegs - 1 ? to.name : `·${k + 1}`;
-          const smt = Math.round((sg.tt + to.var + 360) % 360);
+          const smt = magneticTrackLabel(sg.tt, to.var);
           // TOC/TOD notes on the segment you'd actually mark them on.
           const segMarks = profs.filter(p => { const along = p.kind === 'TOC' ? p.distNM : res.distNM - p.distNM;
                                                return along > acc - 0.001 && along <= acc + sg.distNM + 0.001; });
@@ -2891,7 +2895,7 @@
           <tr>
             <td style="text-align:left; padding-left:6px;"><b>${nameA}</b> → <b>${nameB}</b>${nViaSegs > 1 ? ` <span style="color:var(--text-muted); font-size:9px;">(leg ${from.name}–${to.name})</span>` : ''}</td>
             <td>${String(sg.tt).padStart(3, '0')}°</td>
-            <td class="highlight-cell">${String(smt).padStart(3, '0')}°</td>
+            <td class="highlight-cell">${smt}°</td>
             <td>${convertDist(sg.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)}</td>
             <td style="text-align:left; padding-left:6px; font-size:10px; ${hasProf ? (prof.kind === 'TOC' ? 'color:#2f855a;' : 'color:#c05621;') : 'color:var(--text-muted);'} font-weight:700;">${profTxt}</td>
           </tr>`;

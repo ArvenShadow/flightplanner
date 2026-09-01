@@ -29,6 +29,8 @@
 export const SOLAR_DEG = Math.PI / 180;
 
 // Sun declination (rad) and equation of time (minutes) at a UTC instant.
+/** @param {number} ms UTC milliseconds
+ *  @returns {{decl: number, eqTime: number}} declination in radians, equation of time in minutes */
 export function sunDeclEqTime(ms) {
   const T = (ms / 86400000 + 2440587.5 - 2451545) / 36525;
   const L0 = ((280.46646 + T * (36000.76983 + 0.0003032 * T)) % 360 + 360) % 360;
@@ -55,6 +57,13 @@ export function sunDeclEqTime(ms) {
 // zenith 96° = civil twilight (sun centre 6° below the horizon).
 // rising=true -> morning crossing. Returns UTC ms, or the string
 // 'above'/'below' when the sun stays above/below that altitude all day.
+/** UTC instant at which the sun centre crosses a given zenith angle.
+ *  @param {string} dateStr "YYYY-MM-DD" @param {number} lat @param {number} lng
+ *  @param {number} zenithDeg 90.833 for sunrise/set, 96 for civil twilight
+ *  @param {boolean} rising true for the morning crossing
+ *  @returns {number|'below'|'above'} UTC ms, or a sentinel when the sun never
+ *  reaches that angle: 'below' = it stays below it all day, 'above' = it
+ *  never drops to it. The caller turns those into the polar regimes. */
 export function solarCrossingUTC(dateStr, lat, lng, zenithDeg, rising) {
   const p = dateStr.split('-').map(Number);
   const midnight = Date.UTC(p[0], p[1] - 1, p[2]);
@@ -79,7 +88,11 @@ export function solarCrossingUTC(dateStr, lat, lng, zenithDeg, rising) {
 //  'all-day'     civil twilight never ends: midnight sun, or the sun
 //                sets but stays above -6° (bright polar summer night)
 //  'polar-night' the sun never reaches -6°: NO day-VFR window this date
+/** Sun times and the SERA day-VFR window for one date and place.
+ *  @param {string} dateStr "YYYY-MM-DD" @param {number} lat @param {number} lng
+ *  @returns {DaylightResult} */
 export function computeDaylight(dateStr, lat, lng) {
+  /** @param {number|string} v @returns {number|null} */
   const num = v => (typeof v === 'number' ? v : null);
   const mct = solarCrossingUTC(dateStr, lat, lng, 96, true);
   if (mct === 'below') return { kind: 'polar-night', mct: null, ect: null, sunrise: null, sunset: null };
@@ -93,6 +106,7 @@ export function computeDaylight(dateStr, lat, lng) {
 
 // "UTC+2" / "UTC-3:30" for the LOCAL offset in effect at noon of the
 // given date — evaluated per-date so DST (CET vs CEST) labels correctly.
+/** @param {string} dateStr "YYYY-MM-DD" @returns {string} e.g. "UTC+2" */
 export function utcOffsetLabel(dateStr) {
   const p = dateStr.split('-').map(Number);
   const offMin = -new Date(p[0], p[1] - 1, p[2], 12).getTimezoneOffset();
@@ -100,16 +114,20 @@ export function utcOffsetLabel(dateStr) {
   return 'UTC' + (offMin < 0 ? '-' : '+') + Math.floor(a / 60) + (a % 60 ? ':' + String(a % 60).padStart(2, '0') : '');
 }
 
+/** @param {number|null} ms UTC milliseconds @returns {string} local "HH:MM" */
 export function fmtLocalHM(ms) {
   if (ms == null || !isFinite(ms)) return '—';
   const d = new Date(ms);
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
+/** @param {number} ms @returns {string} LOCAL date "YYYY-MM-DD" - local, not
+ *  UTC, because it decides which calendar day a takeoff belongs to */
 export function localDateStrOf(ms) {
   const d = new Date(ms);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
+/** @param {Flight} fl @returns {Waypoint|null} first real waypoint with usable coordinates */
 export function firstPlottedWaypoint(fl) {
   return (fl.waypoints || []).find(w => !w.isPattern && isFinite(w.lat) && isFinite(w.lng)) || null;
 }

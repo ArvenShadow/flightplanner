@@ -17,8 +17,13 @@
  * Chromium and in the jsdom test harness.
  */
 
+/** The open dialog's finisher: call it with a button id to resolve and tear
+ *  down. Null when nothing is on screen.
+ *  @type {((id: string) => void)|null} */
 let openDialog = null;
 
+/** @param {string} tag @param {Record<string, any>} [props] @param {Node[]} [children]
+ *  @returns {HTMLElement} */
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
   Object.assign(node, props);
@@ -33,6 +38,7 @@ export function dialogIsOpen() {
 }
 
 /** Programmatically resolve the open dialog - used by tests and Escape. */
+/** @param {string} result the button id to resolve with */
 export function closeDialog(result) {
   if (openDialog) openDialog(result);
 }
@@ -43,15 +49,19 @@ export function closeDialog(result) {
  * @param {object} opts
  * @param {string} opts.title
  * @param {string} [opts.message]      plain text; newlines become breaks
- * @param {Array}  opts.buttons        [{ id, label, variant?, hint? }]
- *                                     variant: primary | danger | ghost
- * @param {object} [opts.input]        { label, value, placeholder } -> adds a text field
+ * @param {DialogButton[]} opts.buttons  variant: primary | danger | ghost
+ * @param {{label?: string, value?: string, placeholder?: string}} [opts.input]
+ *                                     adds a text field
  * @param {string} [opts.cancelId]     id returned on Esc / backdrop (default 'cancel')
  * @returns {Promise<{id: string, value: string|null}>}
  */
 export function ask(opts) {
   const { title, message, buttons = [], input = null, cancelId = 'cancel' } = opts;
-  if (openDialog) closeDialog({ id: cancelId, value: null });
+  // Superseding an open dialog resolves it as a cancel. closeDialog takes a
+  // button ID, not a result object: passing an object here made the first
+  // dialog resolve with `id` set to that object, so a caller checking
+  // `r.id === 'cancel'` would not see a cancel at all.
+  if (openDialog) closeDialog(cancelId);
 
   const backdrop = el('div', { className: 'dlg-backdrop', id: 'app-dialog' });
   const box = el('div', { className: 'dlg' });
@@ -68,11 +78,12 @@ export function ask(opts) {
     box.appendChild(body);
   }
 
+  /** @type {HTMLInputElement|null} */
   let field = null;
   if (input) {
     const wrap = el('div', { className: 'dlg-field' });
     if (input.label) wrap.appendChild(el('label', { textContent: input.label }));
-    field = el('input', { type: 'text', value: input.value || '', placeholder: input.placeholder || '' });
+    field = /** @type {HTMLInputElement} */ (el('input', { type: 'text', value: input.value || '', placeholder: input.placeholder || '' }));
     field.className = 'dlg-input';
     wrap.appendChild(field);
     box.appendChild(wrap);
@@ -94,9 +105,12 @@ export function ask(opts) {
   box.appendChild(row);
   backdrop.appendChild(box);
 
+  /** @type {(r: {id: string, value: string|null}) => void} */
   let settle;
+  /** @type {Promise<{id: string, value: string|null}>} */
   const promise = new Promise(resolve => { settle = resolve; });
 
+  /** @param {string} id */
   function finish(id) {
     if (!openDialog) return;
     const value = field ? field.value : null;
@@ -106,6 +120,7 @@ export function ask(opts) {
     settle({ id, value });
   }
 
+  /** @param {KeyboardEvent} e */
   function onKey(e) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(cancelId); return; }
     if (e.key === 'Enter') {
@@ -121,13 +136,13 @@ export function ask(opts) {
     }
   }
 
-  backdrop.addEventListener('mousedown', (e) => { if (e.target === backdrop) finish(cancelId); });
+  backdrop.addEventListener('mousedown', (/** @type {MouseEvent} */ e) => { if (e.target === backdrop) finish(cancelId); });
   document.addEventListener('keydown', onKey, true);
   document.body.appendChild(backdrop);
   openDialog = finish;
 
   // focus the text field if there is one, else the default button
-  const focusTarget = field || nodes.find((_, i) => buttons[i].variant === 'primary' || buttons[i].variant === 'danger') || nodes[0];
+  const focusTarget = field || nodes.find((/** @type {any} */ _, /** @type {number} */ i) => buttons[i].variant === 'primary' || buttons[i].variant === 'danger') || nodes[0];
   if (focusTarget && focusTarget.focus) {
     try { focusTarget.focus(); if (field && field.select) field.select(); } catch (e) {}
   }
@@ -135,6 +150,9 @@ export function ask(opts) {
 }
 
 /** Yes/no question. Resolves true only for the confirming option. */
+/** @param {string} title @param {string} message
+ *  @param {{okLabel?: string, cancelLabel?: string, danger?: boolean}} [opts]
+ *  @returns {Promise<boolean>} */
 export async function confirmDialog(title, message, opts = {}) {
   const r = await ask({
     title,
@@ -148,6 +166,9 @@ export async function confirmDialog(title, message, opts = {}) {
 }
 
 /** Text entry. Resolves the string, or null if cancelled. */
+/** @param {string} title @param {string} label @param {string} [value]
+ *  @param {{message?: string, placeholder?: string, okLabel?: string}} [opts]
+ *  @returns {Promise<string|null>} */
 export async function promptDialog(title, label, value = '', opts = {}) {
   const r = await ask({
     title,
@@ -166,6 +187,9 @@ export async function promptDialog(title, label, value = '', opts = {}) {
  * matters for the messages the app shows after every save or import.
  * tone: info | good | warn | bad
  */
+/** Toast notification - no click required, unlike a dialog.
+ *  @param {string} message @param {string} [tone] good | warn | bad | info
+ *  @param {number} [ms] @returns {HTMLElement} the toast, so a caller can dismiss it */
 export function say(message, tone = 'info', ms = 5000) {
   let host = document.getElementById('app-toasts');
   if (!host) {
@@ -180,6 +204,7 @@ export function say(message, tone = 'info', ms = 5000) {
   toast.addEventListener('click', () => { if (toast.parentNode) toast.parentNode.removeChild(toast); });
   host.appendChild(toast);
   const timer = setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, ms);
-  toast.__timer = timer;
+  // kept so a caller could cancel the auto-dismiss; not part of HTMLElement
+  /** @type {any} */ (toast).__timer = timer;
   return toast;
 }

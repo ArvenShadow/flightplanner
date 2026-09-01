@@ -99,26 +99,36 @@ export const C182T_LEVELS = [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000];
 // The aircraft profile is the page's object, handed over by reference at
 // startup (see setAircraftProfile). These defaults mirror the page's own
 // and only apply when the module is used standalone - e.g. in unit tests.
+/** @type {EngineProfile} */
 const DEFAULT_PROFILE = {
   mode: 'C182T', cruiseRpm: 2300, cruiseMp: 23, cruiseTas: 130, cruiseFf: 12.5,
   climbMode: 'CRUISECLIMB', ccRoc: 500, ccKias: 90, ccFf: 15.0,
   roc: 700, climbTas: 90, climbFf: 15.0, rod: 500, descTas: 120, descFf: 8.5
 };
+/** @type {EngineProfile} */
 let profile = DEFAULT_PROFILE;
 
 /** Hand the module the live profile object. Held by reference, so later
  *  edits to its fields (settings form, imported route) are seen here. */
+/** Hand the module the live profile object, by reference.
+ *  @param {EngineProfile} p @returns {EngineProfile} */
 export function setAircraftProfile(p) {
   if (p && typeof p === 'object') profile = p;
   return profile;
 }
+/** @returns {EngineProfile} the live profile the page owns */
 export function activeAircraftProfile() { return profile; }
 
+/** ISA temperature at a pressure altitude.
+ *  @param {number} alt feet @returns {number} degrees C */
 export function isaTemp(alt) { return 15 - 2 * alt / 1000; }
 
 // Cumulative climb figures at an arbitrary altitude, linear between POH
 // rows; above 10,000 ft extrapolates the last segment (POH table ends
 // there), capped at 14,000 ft.
+/** Cumulative climb from sea level, interpolated between POH rows.
+ *  @param {number} alt feet
+ *  @returns {{t: number, f: number, d: number}} minutes, gallons, NM */
 export function climbCumulative(alt) {
   const a = Math.max(0, Math.min(14000, alt));
   const tbl = C182T_CLIMB;
@@ -138,6 +148,9 @@ export function climbCumulative(alt) {
 // POH climb between two altitudes, with the POH's "+10% per 10 degC above
 // standard" correction. Average climb TAS falls straight out of the table
 // (air distance / time), so no separate climb-TAS assumption is needed.
+/** POH climb between two altitudes, with the +10%/10degC-above-ISA correction.
+ *  @param {number} fromAlt feet @param {number} toAlt feet @param {number} oat degrees C
+ *  @returns {{timeMin: number, fuelGal: number, tasAvg: number}} */
 export function climbPerf(fromAlt, toAlt, oat) {
   if (profile.mode === 'MANUAL') {
     const t = (toAlt - fromAlt) / Math.max(1, profile.roc);
@@ -167,8 +180,15 @@ export function climbPerf(fromAlt, toAlt, oat) {
 // One (altitude level, rpm, mp) cell with temperature interpolation on
 // ISA deviation, clamped to the POH's +/-20 degC envelope. MP is capped
 // to what the table lists at that level (= full throttle with altitude).
+/** One POH cruise cell, temperature-interpolated on ISA deviation.
+ *  @param {number} level one of C182T_LEVELS, feet
+ *  @param {number} rpm  snapped to the nearest RPM the table lists
+ *  @param {number} mp   clamped to the MP range the table lists at that level
+ *  @param {number} oat  degrees C
+ *  @returns {{tas: number, gph: number, mcp: number, usedMp: number, usedRpm: number}} */
 export function cruiseAtLevel(level, rpm, mp, oat) {
-  const bank = C182T_CRUISE[level];
+  const bank = /** @type {Record<number, Record<number, number[]>>} */ (
+    /** @type {any} */ (C182T_CRUISE)[level]);
   const rpms = Object.keys(bank).map(Number);
   const useRpm = rpms.includes(rpm)
     ? rpm
@@ -193,6 +213,11 @@ export function cruiseAtLevel(level, rpm, mp, oat) {
 
 // Cruise TAS/GPH for any altitude & OAT. C182T mode: POH Fig 5-9 with
 // altitude + temperature interpolation. MANUAL mode: user's fixed values.
+/** Cruise TAS and fuel flow at any altitude. C182T mode interpolates the POH
+ *  tables; MANUAL mode returns the pilot's own fixed figures.
+ *  @param {number} alt feet @param {number} oat degrees C
+ *  @param {number} [rpmOpt] @param {number} [mpOpt]
+ *  @returns {{tas: number, gph: number, mcp: number|null, usedMp: number|null, usedRpm: number|null}} */
 export function cruisePerf(alt, oat, rpmOpt, mpOpt) {
   if (profile.mode === 'MANUAL' && rpmOpt === undefined) {
     return { tas: Math.round(profile.cruiseTas), gph: Number(Number(profile.cruiseFf).toFixed(1)), mcp: null, usedMp: null, usedRpm: null };
@@ -216,11 +241,18 @@ export function cruisePerf(alt, oat, rpmOpt, mpOpt) {
   };
 }
 
-export const toRad = deg => deg * Math.PI / 180;
-export const toDeg = rad => rad * 180 / Math.PI;
+/** @param {number} deg @returns {number} radians */
+export const toRad = (/** @type {number} */ deg) => deg * Math.PI / 180;
+/** @param {number} rad @returns {number} degrees */
+export const toDeg = (/** @type {number} */ rad) => rad * 180 / Math.PI;
 
 // Wind Correction Angle. Clamped so wind stronger than TAS cannot produce
 // NaN out of Math.asin (which previously poisoned MH / GS / time / fuel).
+/** Wind correction angle, clamped so wind stronger than TAS cannot produce
+ *  NaN out of Math.asin (which used to poison MH, GS, time and fuel together).
+ *  @param {number} tas knots @param {number} wspd knots
+ *  @param {number} wAngleRad angle between track and wind, radians
+ *  @returns {number} degrees */
 export function calcWCA(tas, wspd, wAngleRad) {
   if (!tas || tas <= 0 || !wspd || wspd <= 0) return 0;
   const ratio = (wspd * Math.sin(wAngleRad)) / tas;

@@ -14,7 +14,10 @@
 import { toDMM, convertDist, distLabel } from './format.js';
 import { computeFlightSchedule, computeLegTotals, computeLegMarkers } from './legs.js';
 import { flightTitle } from './integrity.js';
+import { magneticTrackLabel } from './magvar.js';
 
+/** @param {Flight} fl @param {string} [distUnit] NM (default), SM or KM
+ *  @returns {string} the block of text the pilot copies onto the paper OFP */
 export function buildPlottingText(fl, distUnit) {
   distUnit = distUnit || 'NM';
   const lines = [];
@@ -33,16 +36,16 @@ export function buildPlottingText(fl, distUnit) {
     if (!res) continue;
     const profs = computeLegMarkers(from, to, schedT[i]);
     let acc = 0;
-    res.segs.forEach((sg, k) => {
+    res.segs.forEach((/** @type {PathSegment} */ sg, /** @type {number} */ k) => {
       const nameA = k === 0 ? from.name : 'v' + k;
       const nameB = k === res.segs.length - 1 ? to.name : 'v' + (k + 1);
-      const smt = Math.round((sg.tt + to.var + 360) % 360);
+      const smt = magneticTrackLabel(sg.tt, to.var);
       const profTxt = profs
         .filter(p => { const along = p.kind === 'TOC' ? p.distNM : res.distNM - p.distNM;
                        return along > acc - 0.001 && along <= acc + sg.distNM + 0.001; })
         .map(p => `  | ${p.kind} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`)
         .join('');
-      lines.push(`${(nameA + ' - ' + nameB).padEnd(28)} TT ${String(sg.tt).padStart(3, '0')}  MT ${String(smt).padStart(3, '0')}  ${convertDist(sg.distNM, distUnit).toFixed(1).padStart(5)} ${distLabel(distUnit)}${profTxt}`);
+      lines.push(`${(nameA + ' - ' + nameB).padEnd(28)} TT ${String(sg.tt).padStart(3, '0')}  MT ${smt}  ${convertDist(sg.distNM, distUnit).toFixed(1).padStart(5)} ${distLabel(distUnit)}${profTxt}`);
       acc += sg.distNM;
     });
   }

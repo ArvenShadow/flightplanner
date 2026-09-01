@@ -165,7 +165,16 @@ export async function runBuild({ quiet = false } = {}) {
   // define every function twice and silently double-register listeners
   if (siteHtml.includes('window.C182 = Object.assign')) fail('site/index.html has the bundle inlined as well as linked');
 
-  const sw = readFileSync(SW_SRC, 'utf8').replace('self.__APP_VERSION__ || \'dev\'', JSON.stringify(version));
+  // Stamp the worker with the app version so a release drops the old shell.
+  // Fail LOUDLY if the placeholder moves: a silent miss here leaves every
+  // visitor on a stale shell forever, and nothing else would notice.
+  const swSrc = readFileSync(SW_SRC, 'utf8');
+  const SW_VERSION_TOKEN = "sw.__APP_VERSION__ || 'dev'";
+  if (!swSrc.includes(SW_VERSION_TOKEN)) {
+    fail('src/sw.js no longer contains the version placeholder ' + SW_VERSION_TOKEN +
+         ' - the worker would never be version-stamped and old shells would never be dropped.');
+  }
+  const sw = swSrc.replace(SW_VERSION_TOKEN, JSON.stringify(version));
   checkSyntax(sw, 'service worker (src/sw.js)');
   mkdirSync(SITE_DIR, { recursive: true });
   writeFileSync(join(SITE_DIR, 'index.html'), lf(siteHtml));

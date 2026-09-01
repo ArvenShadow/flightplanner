@@ -1,0 +1,34 @@
+{
+  "//": [
+    "Phase 2: the REAL TypeScript compiler checks these files, but they stay",
+    "plain .js with the types written in JSDoc comments.",
+    "",
+    "Why not .ts files: the test suite proves a module has no hidden page",
+    "globals by require()ing it directly in bare Node - that is how toRad,",
+    "OM_LEVELS and flights were caught. With .ts sources Node cannot load",
+    "them without a compile step, so that guard would be testing compiled",
+    "output instead of the source. Same checker, same errors, no new build",
+    "step, and the annotations carry over unchanged if we ever do move.",
+    "",
+    "noEmit: nothing is generated. This is a checker, not a build."
+  ],
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "lib": ["ES2019", "DOM"]
+  },
+  "include": ["src/**/*.js", "src/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "site"]
+}

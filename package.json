@@ -1,16 +1,18 @@
 {
   "name": "c182-flight-planner",
-  "version": "16.19.0",
+  "version": "16.20.0",
   "description": "VFR flight planner for Cessna 182T, built to one self-contained HTML file (ground planning only)",
   "scripts": {
     "serve": "node tools/build.mjs && node tools/serve.mjs",
     "build": "node tools/build.mjs",
     "watch": "node tools/build.mjs --watch",
-    "test": "npm run build --silent && node test.js"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck --silent && npm run build --silent && node test.js"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "jsdom": "^24.0.0"
+    "jsdom": "^24.0.0",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "geographiclib-geodesic": "^2.2.0",

@@ -1,3 +1,14 @@
+/// <reference lib="webworker" />
+
+// In a worker `self` is a ServiceWorkerGlobalScope, not a Window. Everything
+// worker-specific goes through this alias so the difference is visible.
+// NOTE: tools/build.mjs replaces the literal `sw.__APP_VERSION__ || 'dev'`
+// below with the real version, and FAILS the build if it cannot find it.
+const sw = /** @type {any} */ (self);
+
+/** @type {string|null} the live AIRAC cycle, once the page has told us */
+let knownEdition = null;
+
 /**
  * Service worker for the hosted planner.
  *
@@ -29,7 +40,7 @@
  * not.
  */
 
-const APP_VERSION = self.__APP_VERSION__ || 'dev';
+const APP_VERSION = sw.__APP_VERSION__ || 'dev';
 const SHELL_CACHE = `c182-shell-v${APP_VERSION}`;
 const TILE_PREFIX = 'c182-tiles-';
 const SHELL_ASSETS = ['./', './index.html', './app.js'];
@@ -41,57 +52,58 @@ const TILE_HOST = 'avigis.avinor.no';
 // and get the whole cache evicted, shell included.
 const TILE_LIMIT = 400;
 
-// Set only by a message from the page. null = we do not yet know which AIRAC
+// knownEdition is declared at the top: null = we do not yet know which AIRAC
 // cycle is live, so no tile may be read from or written to a cache.
-let knownEdition = null;
 
-const sanitize = (s) => String(s).replace(/[^A-Za-z0-9_-]/g, '');
+const sanitize = (/** @type {any} */ s) => String(s).replace(/[^A-Za-z0-9_-]/g, '');
 
-self.addEventListener('install', (event) => {
+sw.addEventListener('install', (/** @type {any} */ event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE)
       // addAll is atomic: one 404 and nothing is cached, which is what we
       // want - a half-cached shell is worse than none.
       .then((cache) => cache.addAll(SHELL_ASSETS))
-      .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting())
+      .then(() => sw.skipWaiting())
+      .catch(() => sw.skipWaiting())
   );
 });
 
-self.addEventListener('activate', (event) => {
+sw.addEventListener('activate', (/** @type {any} */ event) => {
   event.waitUntil(
     caches.keys()
-      .then((names) => Promise.all(names.map((name) =>
+      .then((names) => Promise.all(names.map((/** @type {string} */ name) =>
         // drop old shells; never touch tile caches here, those are retired
         // by edition rather than by app release
         (name.startsWith('c182-shell-') && name !== SHELL_CACHE) ? caches.delete(name) : null
       )))
-      .then(() => self.clients.claim())
+      .then(() => sw.clients.claim())
   );
 });
 
 /** The page reports the live AIRAC edition once it has read it. */
-self.addEventListener('message', (event) => {
+sw.addEventListener('message', (/** @type {any} */ event) => {
   const data = event.data || {};
   if (data.type !== 'chart-edition' || !data.edition) return;
   knownEdition = sanitize(data.edition);
   const keep = TILE_PREFIX + knownEdition;
   event.waitUntil(
-    caches.keys().then((names) => Promise.all(names.map((name) =>
+    caches.keys().then((names) => Promise.all(names.map((/** @type {string} */ name) =>
       (name.startsWith(TILE_PREFIX) && name !== keep) ? caches.delete(name) : null
     )))
   );
 });
 
 /** Bound a cache by trimming oldest-first (Cache API keys are insertion-ordered). */
+/** @param {Cache} cache @param {number} limit */
 async function trim(cache, limit) {
   const keys = await cache.keys();
   if (keys.length <= limit) return;
-  await Promise.all(keys.slice(0, keys.length - limit).map((k) => cache.delete(k)));
+  await Promise.all(keys.slice(0, keys.length - limit).map((/** @type {Request} */ k) => cache.delete(k)));
 }
 
 /** Cache-first, but only within a known edition. A chart cycle is immutable,
  *  so once a tile is held for THIS cycle there is no reason to ask again. */
+/** @param {Request} request */
 async function tileFirst(request) {
   const cache = await caches.open(TILE_PREFIX + knownEdition);
   const hit = await cache.match(request);
@@ -106,6 +118,7 @@ async function tileFirst(request) {
   return response;
 }
 
+/** @param {Request} request */
 async function shellFirst(request) {
   try {
     const response = await fetch(request);
@@ -121,7 +134,7 @@ async function shellFirst(request) {
   }
 }
 
-self.addEventListener('fetch', (event) => {
+sw.addEventListener('fetch', (/** @type {any} */ event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
@@ -139,7 +152,7 @@ self.addEventListener('fetch', (event) => {
 
   // Same-origin app shell. Live data (winds) is cross-origin and is left
   // alone: a cached forecast is a wrong forecast.
-  if (url.origin === self.location.origin) {
+  if (url.origin === sw.location.origin) {
     event.respondWith(shellFirst(request));
   }
 });
