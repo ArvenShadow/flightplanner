@@ -2292,7 +2292,7 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
   const M = moduleExports;
   const wp = (lat, lng, alt) => ({ name: 'X', lat, lng, alt, oat: 0, wdir: 240, wspd: 18, var: 0 });
   const exercises = {
-    'magvar.js': () => M.magvar.resolveMagVar(69.055, 18.544, 2026.6438).raw,
+    'magvar.js': () => [M.magvar.resolveMagVar(69.055, 18.544, 2026.6438).raw, M.magvar.magneticTrackLabel(10, -11)],
     'geodesy.js': () => M.geodesy.calcDistanceNM(69.055, 18.545, 69.679, 18.911),
     'performance.js': () => [M.perf.climbPerf(0, 6000, 15), M.perf.cruisePerf(6000, -5), M.perf.calcWCA(120, 20, 1)],
     'format.js': () => [M.fmt.formatTimeHHMM(125), M.fmt.toDMM(69.68, true), M.fmt.clockFromMinutes('23:30', 90)],
@@ -2377,6 +2377,36 @@ T('an export carries aircraft settings and NOTHING else off the profile', () => 
     'aircraft settings were dropped - the same route would compute differently elsewhere');
   assert(out.formatVersion === 2, 'format version changed silently');
 });
+// Found by the type checker in Phase 2, then confirmed by running it: with
+// no magnetic variation the old inline arithmetic printed MT 000 for a
+// null - a number a pilot could copy onto the OFP and fly - or NaN for an
+// undefined. There is no magnetic track without a variation, and the tool
+// must say so rather than invent one.
+T('no variation means no magnetic track - never a plausible wrong one', () => {
+  const M = moduleExports.magvar;
+  assert(M.magneticTrack(0, -11) === 349, 'normal case broken: ' + M.magneticTrack(0, -11));
+  assert(M.magneticTrack(0, null) === null, 'a null variation must not yield a heading');
+  assert(M.magneticTrack(0, undefined) === null, 'an undefined variation must not yield a heading');
+  assert(M.magneticTrack(0, NaN) === null, 'NaN variation must not yield a heading');
+  assert(M.magneticTrackLabel(0, -11) === '349', 'label: ' + M.magneticTrackLabel(0, -11));
+  for (const bad of [null, undefined, NaN, 'x']) {
+    assert(M.magneticTrackLabel(0, bad) === '---', 'unresolved variation must read "---", got ' + M.magneticTrackLabel(0, bad));
+  }
+});
+T('the plotting list and the OFP row both refuse to invent a heading', () => {
+  const P = moduleExports.plot, W = (n, lat, lng, v) => ({ name: n, lat, lng, alt: 2500, oat: 0, wdir: 0, wspd: 0, var: v });
+  for (const bad of [null, undefined]) {
+    const t = P.buildPlottingText({ id: 1, waypoints: [W('A', 69, 18, bad), W('B', 69.4, 18, bad)] }, 'NM');
+    const line = t.split('\n').find(l => l.includes('TT ')) || '';
+    assert(line.includes('MT ---'), `variation ${bad} produced "${line.trim()}"`);
+    assert(!/MT\s+(NaN|000)/.test(line), 'a fabricated magnetic track survived: ' + line.trim());
+  }
+  // the integrity check must NAME the waypoint that needs one
+  const probs = moduleExports.integrity.collectIntegrityProblems(
+    [{ waypoints: [W('A', 69, 18, null), W('B', 69.4, 18, -11)] }], {});
+  assert(probs.some(p => p.includes('"A"') && p.includes('magnetic variation')),
+    'an unresolved variation is not reported: ' + JSON.stringify(probs));
+});
 T('the plotting text is pure content, and honours the distance unit', () => {
   const P = moduleExports.plot, W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 0, wspd: 0, var: -11 });
   const fl = { id: 1, waypoints: [W('ENDU', 69.05505349, 18.54466865, 254), W('ENTC', 69.67895054, 18.91143033, 2500)] };
@@ -2391,6 +2421,56 @@ T('the plotting text is pure content, and honours the distance unit', () => {
   const nmDist = parseFloat(nm.match(/([\d.]+) NM/)[1]);
   const kmDist = parseFloat(km.match(/([\d.]+) km/)[1]);
   assert(Math.abs(kmDist / nmDist - 1.852) < 0.01, `unit conversion is wrong: ${nmDist} NM vs ${kmDist} km`);
+});
+TA('superseding an open dialog resolves the first one as a real cancel', async () => {
+  // Found by the type checker: closeDialog takes a button ID, but ask() was
+  // handing it a whole result object. The first dialog then resolved with
+  // `id` set to that object, so a caller checking `r.id === 'cancel'` did not
+  // see a cancel. Only reachable by opening a second dialog over a first.
+  const first = w.ask({ title: 'First', buttons: [{ id: 'ok', label: 'OK' }] });
+  const second = w.ask({ title: 'Second', buttons: [{ id: 'ok', label: 'OK' }] });
+  const r = await first;
+  assert(typeof r.id === 'string', 'the superseded dialog resolved with a ' + typeof r.id + ', not a string');
+  assert(r.id === 'cancel', 'a superseded dialog must resolve as a cancel, got ' + JSON.stringify(r.id));
+  answerDialog('OK');
+  await second;
+});
+T('tracks and headings are three digits everywhere, as they are spoken', () => {
+  // 024, not 24. The plotting list always did this; the OFP row did not, so
+  // the same leg read differently in two places. Both are padded now.
+  ev(SEED);
+  const rows = doc.getElementById('flight-plans-container').textContent;
+  // seed route leg 2, FINNSNES -> ENTC: TT 036, VAR -12, MT 024 (calm wind,
+  // so MH equals MT here). Before this change the row read "36" and "24"
+  // while the plotting list already said "036" and "024".
+  for (const expect of ['036\u00b0', '024\u00b0']) {
+    assert(rows.includes(expect), 'expected ' + expect + ' in the OFP row');
+  }
+  assert(!rows.includes('36\u00b0 24\u00b0'), 'the unpadded pair is still being rendered');
+  // and the plotting list, which always padded, must still agree
+  const plot = ev('plottingTextFor(0)');
+  assert(/TT 036\s+MT 024/.test(plot), 'the plotting list disagrees with the OFP row:\n' + plot);
+});
+T('the whole source type-checks, and the checker cannot be quietly dropped', () => {
+  // Phase 2: the real TypeScript compiler checks these files; the types live
+  // in JSDoc so the modules stay plain .js that Node can require directly -
+  // which is what the standalone-run guard above depends on.
+  assert(fs.existsSync('tsconfig.json'), 'tsconfig.json is gone - nothing is type-checked');
+  const cfg = JSON.parse(fs.readFileSync('tsconfig.json', 'utf8').replace(/^\s*"\/\/":\s*\[[^\]]*\],?/m, ''));
+  const co = cfg.compilerOptions;
+  assert(co.checkJs === true && co.allowJs === true, 'checkJs/allowJs turned off - the .js files stop being checked');
+  assert(co.strict === true, 'strict mode turned off');
+  assert(co.noEmit === true, 'noEmit turned off - the checker would start writing files');
+  assert(fs.existsSync('src/types.d.ts'), 'the domain types are gone');
+  const types = fs.readFileSync('src/types.d.ts', 'utf8');
+  for (const t of ['interface Waypoint', 'interface Flight', 'interface LegResult',
+                   'interface ScheduleLeg', 'interface AircraftProfile', 'interface DaylightResult']) {
+    assert(types.includes(t), 'missing domain type: ' + t);
+  }
+  // npm test must actually RUN it, or it rots
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  assert(/typecheck/.test(pkg.scripts.test), 'npm test no longer runs the type checker');
+  assert(/tsc --noEmit/.test(pkg.scripts.typecheck), 'the typecheck script does not run tsc');
 });
 T('the source is navigable: styling and each calculation have ONE home', () => {
   // A UI edit should not require reading 4000 lines to find the right place.
@@ -2599,6 +2679,7 @@ T('the page script no longer defines what the modules own', () => {
                     'windToUV', 'uvToWind', 'buildWindSamplePoints', 'buildOpenMeteoUrl',
                     'interpolateWindProfile', 'extractPointWeather', 'extractPointWeatherAt', 'angleDiff',
                     'flightTitle', 'collectIntegrityProblems', 'integrityBannerHTML',
+                    'magneticTrack', 'magneticTrackLabel',
                     'sanitiseFlights', 'defaultFlights', 'buildExportPayload', 'pickProfileKeys']) {
     assert(!new RegExp('function ' + fn + '\\s*\\(').test(src),
       fn + ' is still defined in the page script (duplicate of its module)');

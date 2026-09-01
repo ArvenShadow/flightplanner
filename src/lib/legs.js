@@ -25,7 +25,7 @@
  * object once via setAircraftProfile().
  */
 import { calcDistanceNM, calcTrueTrack, interpolateGeo } from './geodesy.js';
-import { cruisePerf, climbPerf, climbCumulative, calcWCA, activeAircraftProfile, toRad, toDeg } from './performance.js';
+import { cruisePerf, climbPerf, climbCumulative, calcWCA, activeAircraftProfile, toRad } from './performance.js';
 
 // 4b. VIA POINTS & UNIFIED LEG ENGINE
 //
@@ -36,6 +36,9 @@ import { cruisePerf, climbPerf, climbCumulative, calcWCA, activeAircraftProfile,
 // TOTALS, and the detail (climb, descent, via tracks) goes in a compact
 // sub-line under the row.
 // =========================================================================
+/** The points the flown path passes through, from and to included.
+ *  @param {Waypoint} from @param {Waypoint} to
+ *  @returns {Array<{lat: number, lng: number}>} */
 export function legPath(from, to) {
   const pts = [{ lat: from.lat, lng: from.lng }];
   (to.via || []).forEach(v => {
@@ -45,6 +48,8 @@ export function legPath(from, to) {
   return pts;
 }
 
+/** The flown path split into straight spans (one per via point plus one).
+ *  @param {Waypoint} from @param {Waypoint} to @returns {PathSegment[]} */
 export function pathSegments(from, to) {
   const pts = legPath(from, to);
   const segs = [];
@@ -58,6 +63,8 @@ export function pathSegments(from, to) {
 }
 
 // Geographic point (and local track) a given distance along the bent path.
+/** @param {PathSegment[]} segs @param {number} dNM distance along the bent path
+ *  @returns {PointOnPath} the point AND the local track there */
 export function pointAlongSegments(segs, dNM) {
   let acc = 0;
   for (const s of segs) {
@@ -74,6 +81,9 @@ export function pointAlongSegments(segs, dNM) {
 
 // Perpendicular distance (NM, equirectangular approx - fine at leg scale)
 // from a point to a segment, for finding which leg segment was clicked.
+/** Perpendicular distance from a point to a span, for hit-testing a click.
+ *  @param {{lat: number, lng: number}} p @param {{lat: number, lng: number}} a
+ *  @param {{lat: number, lng: number}} b @returns {number} nautical miles */
 export function distToSegmentNM(p, a, b) {
   const kx = 60 * Math.cos(toRad((a.lat + b.lat) / 2));
   const ax = a.lng * kx, ay = a.lat * 60;
@@ -87,6 +97,10 @@ export function distToSegmentNM(p, a, b) {
 }
 
 
+/** Groundspeed and wind correction for one phase of flight.
+ *  @param {number} tas knots @param {number} wdir degrees true @param {number} wspd knots
+ *  @param {number} tt true track, degrees
+ *  @returns {{gs: number, wca: number}} */
 export function phaseGS(tas, wdir, wspd, tt) {
   const wAngle = toRad(wdir - tt);
   const wca = calcWCA(tas, wspd, wAngle);
@@ -102,17 +116,23 @@ export function phaseGS(tas, wdir, wspd, tt) {
 // carried in from neighbouring legs; without it the leg is computed
 // independently exactly as before (kept for tools and tests that look at
 // one leg in isolation).
+/** Everything the OFP row needs for one leg.
+ *  @param {Waypoint} from @param {Waypoint} to
+ *  @param {ScheduleLeg|null} [SL] this leg's place in the whole-flight altitude
+ *         plan. WITHOUT it the leg is treated as independent, which is the
+ *         old behaviour some tests and one-off tools rely on.
+ *  @returns {LegResult|null} */
 export function computeLegTotals(from, to, SL) {
   if (SL) {
     const cruiseAlt = (SL.tocAlongNM != null || SL.stillClimbing) ? to.alt : SL.entryAlt;
-    const crz = cruisePerf(cruiseAlt, to.oat);
+    const crz = cruisePerf(cruiseAlt, Number(to.oat));
     const cruiseDist = Math.max(0, SL.distNM - SL.climbDistNM - SL.descDistNM);
     let acc = 0, cruiseTime = 0;
     for (const s of SL.segs) {
       const midStart = Math.max(acc, SL.climbDistNM);
       const midEnd = Math.min(acc + s.distNM, SL.climbDistNM + cruiseDist);
       if (midEnd - midStart > 0.001)
-        cruiseTime += ((midEnd - midStart) / phaseGS(crz.tas, to.wdir, to.wspd, s.tt).gs) * 60;
+        cruiseTime += ((midEnd - midStart) / phaseGS(crz.tas, Number(to.wdir), Number(to.wspd), s.tt).gs) * 60;
       acc += s.distNM;
     }
     const timeMin = SL.climbMin + cruiseTime + SL.descMin;
@@ -133,7 +153,7 @@ export function computeLegTotals(from, to, SL) {
     if (cruiseTime > 0.5 || parts.length === 0) tasCands.push(crz.tas);
     if (SL.descMin > 0.05) tasCands.push(activeAircraftProfile().descTas);
     const rowTT = Math.round(calcTrueTrack(from.lat, from.lng, to.lat, to.lng));
-    const { wca } = phaseGS(startTas, to.wdir, to.wspd, rowTT);
+    const { wca } = phaseGS(startTas, Number(to.wdir), Number(to.wspd), rowTT);
     const effGS = timeMin > 0 ? SL.distNM / (timeMin / 60) : 0;
     const climbInfo = SL.climbMin > 0.05 ? {
       timeMin: SL.climbMin, fuelGal: SL.climbFuelGal,
@@ -169,15 +189,15 @@ export function computeLegTotals(from, to, SL) {
   let startTas, profileTag, minPhaseTas;
 
   if (deltaAlt > 0) {
-    const cp = climbPerf(from.alt, to.alt, to.oat);
-    const crz = cruisePerf(to.alt, to.oat);
+    const cp = climbPerf(from.alt, to.alt, Number(to.oat));
+    const crz = cruisePerf(to.alt, Number(to.oat));
     startTas = Math.round(cp.tasAvg);
     let remClimb = cp.timeMin;   // minutes of climb left
     let climbDist = 0;
     for (const s of segs) {
       let segRemain = s.distNM;
       if (remClimb > 0.001) {
-        const gsC = phaseGS(cp.tasAvg, to.wdir, to.wspd, s.tt).gs;
+        const gsC = phaseGS(cp.tasAvg, Number(to.wdir), Number(to.wspd), s.tt).gs;
         const segClimbCap = gsC * (remClimb / 60);          // NM climbable in this seg
         const climbHere = Math.min(segRemain, segClimbCap);
         const tHere = (climbHere / gsC) * 60;
@@ -185,7 +205,7 @@ export function computeLegTotals(from, to, SL) {
         climbDist += climbHere; segRemain -= climbHere;
       }
       if (segRemain > 0.001) {
-        const gsX = phaseGS(crz.tas, to.wdir, to.wspd, s.tt).gs;
+        const gsX = phaseGS(crz.tas, Number(to.wdir), Number(to.wspd), s.tt).gs;
         timeMin += (segRemain / gsX) * 60;
       }
     }
@@ -206,14 +226,14 @@ export function computeLegTotals(from, to, SL) {
     minPhaseTas = cp.tasAvg;
   } else if (deltaAlt < 0) {
     const tDesc = Math.abs(deltaAlt) / Math.max(1, activeAircraftProfile().rod);
-    const crz = cruisePerf(from.alt, to.oat);
+    const crz = cruisePerf(from.alt, Number(to.oat));
     startTas = crz.tas;
     // Descent occupies the BACK of the path: walk segments in reverse
     // consuming descent time to find its along-path length.
     let remDesc = tDesc, descDist = 0;
     for (let k = segs.length - 1; k >= 0 && remDesc > 0.001; k--) {
       const s = segs[k];
-      const gsD = phaseGS(activeAircraftProfile().descTas, to.wdir, to.wspd, s.tt).gs;
+      const gsD = phaseGS(activeAircraftProfile().descTas, Number(to.wdir), Number(to.wspd), s.tt).gs;
       const cap = gsD * (remDesc / 60);
       const here = Math.min(s.distNM, cap);
       remDesc -= (here / gsD) * 60;
@@ -226,8 +246,8 @@ export function computeLegTotals(from, to, SL) {
     for (const s of segs) {
       const cruiseHere = Math.max(0, Math.min(s.distNM, todAt - acc));
       const descHere = s.distNM - cruiseHere;
-      if (cruiseHere > 0.001) timeMin += (cruiseHere / phaseGS(crz.tas, to.wdir, to.wspd, s.tt).gs) * 60;
-      if (descHere > 0.001) timeMin += (descHere / phaseGS(activeAircraftProfile().descTas, to.wdir, to.wspd, s.tt).gs) * 60;
+      if (cruiseHere > 0.001) timeMin += (cruiseHere / phaseGS(crz.tas, Number(to.wdir), Number(to.wspd), s.tt).gs) * 60;
+      if (descHere > 0.001) timeMin += (descHere / phaseGS(activeAircraftProfile().descTas, Number(to.wdir), Number(to.wspd), s.tt).gs) * 60;
       acc += s.distNM;
     }
     const cruiseTime = timeMin - descTimeSpent;
@@ -237,9 +257,9 @@ export function computeLegTotals(from, to, SL) {
     if (profileTag === 'DES') startTas = activeAircraftProfile().descTas;
     minPhaseTas = Math.min(crz.tas, activeAircraftProfile().descTas);
   } else {
-    const crz = cruisePerf(to.alt, to.oat);
+    const crz = cruisePerf(to.alt, Number(to.oat));
     startTas = crz.tas;
-    for (const s of segs) timeMin += (s.distNM / phaseGS(crz.tas, to.wdir, to.wspd, s.tt).gs) * 60;
+    for (const s of segs) timeMin += (s.distNM / phaseGS(crz.tas, Number(to.wdir), Number(to.wspd), s.tt).gs) * 60;
     burnGal = (timeMin / 60) * crz.gph;
     profileTag = 'CRZ';
     minPhaseTas = crz.tas;
@@ -251,7 +271,7 @@ export function computeLegTotals(from, to, SL) {
   // differ per segment: those are listed in the ↳ sub-line and in the
   // plotting list. Distance/time/fuel/GS always walk the real bent path.
   const rowTT = Math.round(calcTrueTrack(from.lat, from.lng, to.lat, to.lng));
-  const { wca } = phaseGS(startTas, to.wdir, to.wspd, rowTT);
+  const { wca } = phaseGS(startTas, Number(to.wdir), Number(to.wspd), rowTT);
   const effGS = timeMin > 0 ? (totalDist / (timeMin / 60)) : 0;
   return {
     segs, distNM: totalDist, timeMin, burnGal,
@@ -267,6 +287,8 @@ export function computeLegTotals(from, to, SL) {
 // TOC is referenced as "distance AFTER the leg's start waypoint";
 // TOD as "distance BEFORE the leg's end waypoint" - the way you would
 // measure with a ruler from a known fix when marking a VFR chart.
+/** @param {Waypoint} from @param {Waypoint} to
+ *  @returns {any} the climb/descent breakdown shown under a leg row */
 export function computeLegProfile(from, to) {
   if (from.isPattern || to.isPattern) return null;
   const res = computeLegTotals(from, to);
@@ -289,8 +311,13 @@ export function computeLegProfile(from, to) {
 // fromAlt toward targetAlt. For the POH table the cumulative time column
 // is inverted by bisection (the ISA correction scales total time evenly,
 // so the time FRACTION maps 1:1 onto the uncorrected table).
+/** Altitude actually reached after a partial climb (POH table inverted).
+ *  @param {number} fromAlt feet @param {number} targetAlt feet
+ *  @param {number} minutesFlown @param {number} [oat] degrees C - missing gives
+ *         NaN through climbPerf, which is deliberate (see integrity.js)
+ *  @returns {number} feet */
 export function climbAltReached(fromAlt, targetAlt, minutesFlown, oat) {
-  const cp = climbPerf(fromAlt, targetAlt, oat);
+  const cp = climbPerf(fromAlt, targetAlt, Number(oat));
   if (minutesFlown >= cp.timeMin - 0.001) return targetAlt;
   if (minutesFlown <= 0) return fromAlt;
   if (activeAircraftProfile().mode === 'MANUAL')
@@ -310,6 +337,11 @@ export function climbAltReached(fromAlt, targetAlt, minutesFlown, oat) {
 
 // Per-flight altitude schedule: an array indexed like the waypoint legs
 // (legs[i] = wp[i] -> wp[i+1]; null for pattern pairs).
+/** The whole-flight altitude plan: a forward pass so an unfinished climb
+ *  spills onto later legs, then a backward pass so a descent starts early
+ *  enough that every fix is crossed AT its planned altitude.
+ *  @param {Flight} fl
+ *  @returns {Array<ScheduleLeg|null>} null where a pattern stop breaks the chain */
 export function computeFlightSchedule(fl) {
   const wps = fl.waypoints || [];
   const legs = new Array(Math.max(0, wps.length - 1)).fill(null);
@@ -323,20 +355,22 @@ export function computeFlightSchedule(fl) {
     if (!segs.length) continue;
     const L = { i, from, to, segs, distNM: segs.reduce((a, s) => a + s.distNM, 0),
                 climbMin: 0, climbFuelGal: 0, climbDistNM: 0, climbTas: 0,
-                tocAlongNM: null, stillClimbing: false,
+                /** @type {number|null} */ tocAlongNM: null, stillClimbing: false,
                 descMin: 0, descDistNM: 0, todStartsHere: false, todBeforeNM: null,
                 descContinues: false, descTargetName: null, descTargetAlt: null,
-                shortfallMin: 0 };
+                shortfallMin: 0,
+                // filled in below; declared here so the shape is complete
+                entryAlt: 0, exitAlt: 0 };
     if (alt === null) alt = from.alt;
     L.entryAlt = alt;
     const target = to.alt;
     if (target > alt + 1) {
-      const cp = climbPerf(alt, target, to.oat);
+      const cp = climbPerf(alt, target, Number(to.oat));
       L.climbTas = cp.tasAvg;
       let rem = cp.timeMin, dist = 0;
       for (const s of segs) {
         if (rem <= 0.001) break;
-        const gsC = phaseGS(cp.tasAvg, to.wdir, to.wspd, s.tt).gs;
+        const gsC = phaseGS(cp.tasAvg, Number(to.wdir), Number(to.wspd), s.tt).gs;
         const here = Math.min(s.distNM, gsC * (rem / 60));
         rem -= (here / gsC) * 60;
         dist += here;
@@ -349,7 +383,7 @@ export function computeFlightSchedule(fl) {
         alt = target;
       } else {
         L.stillClimbing = true;
-        alt = climbAltReached(L.entryAlt, target, L.climbMin, to.oat);
+        alt = climbAltReached(L.entryAlt, target, L.climbMin, Number(to.oat));
       }
     } else {
       alt = target;   // level, or a descent placed by the backward pass
@@ -382,7 +416,7 @@ export function computeFlightSchedule(fl) {
           if (left <= 0.001) continue;
           left = Math.min(left, availDist - usedDist);
           if (left <= 0.001) break;
-          const gsD = phaseGS(activeAircraftProfile().descTas, Lk.to.wdir, Lk.to.wspd, seg.tt).gs;
+          const gsD = phaseGS(activeAircraftProfile().descTas, Number(Lk.to.wdir), Number(Lk.to.wspd), seg.tt).gs;
           const here = Math.min(left, gsD * (remMin / 60));
           const tHere = (here / gsD) * 60;
           usedDist += here; usedMin += tHere; remMin -= tHere;
@@ -410,6 +444,9 @@ export function computeFlightSchedule(fl) {
 // Map/plotting markers for one leg under the flight schedule: a leg can
 // now carry a TOC (possibly from a climb begun legs earlier) AND a TOD
 // (possibly for a low waypoint legs later), so this returns a list.
+/** TOC/TOD marks to draw on the map and list on the plotting sheet.
+ *  @param {Waypoint} from @param {Waypoint} to @param {ScheduleLeg|null} [SL]
+ *  @returns {LegMarker[]} a TOD also carries the fix it is descending TO */
 export function computeLegMarkers(from, to, SL) {
   if (!SL) { const p = computeLegProfile(from, to); return p ? [p] : []; }
   const out = [];
@@ -418,7 +455,7 @@ export function computeLegMarkers(from, to, SL) {
     out.push({ kind: 'TOC', distNM: SL.tocAlongNM, refName: from.name, rel: 'after',
                lat: pt.lat, lng: pt.lng, alt: to.alt, tt: pt.tt });
   }
-  if (SL.todStartsHere && SL.todBeforeNM > 0.05 && SL.todBeforeNM < SL.distNM - 0.05) {
+  if (SL.todStartsHere && SL.todBeforeNM !== null && SL.todBeforeNM > 0.05 && SL.todBeforeNM < SL.distNM - 0.05) {
     const pt = pointAlongSegments(SL.segs, SL.distNM - SL.todBeforeNM);
     out.push({ kind: 'TOD', distNM: SL.todBeforeNM, refName: to.name, rel: 'before',
                lat: pt.lat, lng: pt.lng, alt: SL.descTargetAlt, tt: pt.tt,

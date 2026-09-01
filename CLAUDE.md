@@ -147,6 +147,46 @@ claude.ai; this repo is the continuation point for Claude Code.
   aircraft settings to PROFILE_KEYS; never widen it to anything that
   identifies a person, a machine or a place.
 
+## Phase 2: types (v16.20)
+
+The REAL TypeScript compiler checks every module, but the sources stay
+plain `.js` with the types in JSDoc, and `src/types.d.ts` holds the
+domain (Waypoint, Flight, LegResult, ScheduleLeg, EngineProfile,
+DaylightResult, WindLevel...). `npm test` runs `tsc --noEmit` first; 0
+errors is the standard.
+
+- WHY NOT `.ts` FILES: the suite proves a module has no hidden page
+  globals by `require()`ing it directly in bare Node - that is how
+  toRad, OM_LEVELS and flights were caught. With `.ts` sources Node
+  cannot load them without a compile step, so that guard would test
+  compiled output instead of source. Same checker, same errors, no new
+  build step, and the annotations carry over unchanged if we ever move.
+- The checker found NO arithmetic bugs - the calculations were already
+  guarded - but it did find three real defects, all of the same shape:
+  a value that is legitimately absent being used as though it were not.
+  1. MAGNETIC TRACK. `(tt + wp.var + 360) % 360` was inline at four call
+     sites. With `var` undefined it printed NaN; with `var` null it
+     printed MT === TT, which is FAR worse - a plausible heading a pilot
+     could copy onto the OFP and fly. Now one helper, `magneticTrack()`
+     returning null, and `magneticTrackLabel()` rendering `---`. MH is
+     derived from the numeric value and shows `---` too: without a
+     variation there IS no magnetic heading.
+  2. A waypoint with no OAT or wind yields NaN time and fuel. That is
+     CORRECT - assuming calm wind would be a plausible wrong answer - but
+     the banner only said "a non-numeric value appeared". It now names
+     the waypoint and the missing field.
+  3. `closeDialog` takes a button id; `ask()` passed it a result object,
+     so a dialog superseded by another resolved with `id` set to an
+     object and `r.id === 'cancel'` never matched.
+- It also caught the author's own inaccurate documentation twice: there
+  are FOUR daylight regimes (polar-night is distinct from no-sunrise),
+  and `solarCrossingUTC` returns 'below'/'above' sentinels, not null.
+  Types written from reading the code are guesses; only the checker
+  proves them.
+- TRACKS AND HEADINGS ARE THREE DIGITS. The plotting list always padded;
+  the OFP row did not, so the same leg read "36 / 24" in one place and
+  "036 / 024" in the other. Both padded now.
+
 ## Editing discipline (this is how quality was maintained)
 
 1. Make edits with unique-anchor string replacement (in Claude Code: the

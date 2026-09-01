@@ -40,12 +40,16 @@ function nowDecimalYear() {
  * @param {number} lng
  * @param {number} [yearDecimal] pin the epoch (test fixtures); live use omits it.
  */
+/** @param {number} lat @param {number} lng @param {number} [yearDecimal]
+ *  @returns {number} declination in degrees, EAST positive */
 export function magneticDeclination(lat, lng, yearDecimal) {
   const year = (typeof yearDecimal === 'number') ? yearDecimal : nowDecimalYear();
   return calculateMagVarForDecimalYear(year, lat, lng);
 }
 
 /** True whether the WMM epoch still covers the given (or current) year. */
+/** @param {number} [yearDecimal] @returns {boolean} false once WMM2025 expires,
+ *  which a test asserts so the suite FAILS when the coefficients need updating */
 export function isWmmCurrent(yearDecimal) {
   const y = (typeof yearDecimal === 'number') ? yearDecimal : nowDecimalYear();
   return y >= MODEL_EPOCH && y < MODEL_VALID_UNTIL;
@@ -56,6 +60,9 @@ export function isWmmCurrent(yearDecimal) {
  * `val` follows the OFP convention (negative = easterly declination, so that
  * MT = TT + val); `raw` keeps two decimals of the east-positive declination.
  */
+/** @param {number} lat @param {number} lng @param {number} [yearDecimal]
+ *  @returns {{val: number, raw: string, source: string}} val uses the OFP's
+ *  WEST-positive convention, so MH = TT + val */
 export function resolveMagVar(lat, lng, yearDecimal) {
   const east = magneticDeclination(lat, lng, yearDecimal);
   return {
@@ -63,4 +70,34 @@ export function resolveMagVar(lat, lng, yearDecimal) {
     raw: east.toFixed(2),
     source: WMM_MODEL
   };
+}
+
+/**
+ * Magnetic track from a true track and a variation, or NULL when the
+ * variation is not a usable number.
+ *
+ * Null matters. The arithmetic used to be inline at four call sites as
+ * `(tt + wp.var + 360) % 360`, and JavaScript quietly turns an unresolved
+ * variation into a plausible-looking heading: `undefined` gives NaN, but
+ * `null` gives MT === TT, which is FAR worse - it reads as a valid
+ * magnetic track a pilot could copy onto the OFP and fly. A waypoint whose
+ * variation has not been resolved must show that it has not been resolved.
+ *
+ * @param {number} trueTrack degrees
+ * @param {number|null|undefined} variation WEST-positive, as the OFP uses it
+ * @returns {number|null} degrees magnetic, or null if it cannot be computed
+ */
+export function magneticTrack(trueTrack, variation) {
+  if (typeof variation !== 'number' || !isFinite(variation)) return null;
+  if (typeof trueTrack !== 'number' || !isFinite(trueTrack)) return null;
+  return Math.round((trueTrack + variation + 360) % 360);
+}
+
+/** Three digits, or "---" when the variation is unresolved. Never a number
+ *  that could be mistaken for a heading when we do not have one.
+ *  @param {number} trueTrack @param {number|null|undefined} variation
+ *  @returns {string} */
+export function magneticTrackLabel(trueTrack, variation) {
+  const mt = magneticTrack(trueTrack, variation);
+  return mt === null ? '---' : String(mt).padStart(3, '0');
 }

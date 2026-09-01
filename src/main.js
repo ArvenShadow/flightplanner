@@ -29,7 +29,7 @@ const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...le
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {
-  window[name] = value;
+  /** @type {any} */ (window)[name] = value;
 }
 // Namespaced access for new code.
 window.C182 = Object.assign(window.C182 || {}, api);
