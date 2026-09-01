@@ -82,10 +82,15 @@ claude.ai; this repo is the continuation point for Claude Code.
     aircraft profile from performance.js (`activeAircraftProfile()`), so
     there is still exactly ONE injected copy. v16.16 added `daylight.js`
     (the SERA solar math) and `winds.js` (u/v vector maths + the
-    Open-Meteo request/response shapes), taking the page to 4338. Still
-    inline: map setup, base chart, map interactions, the wind fetch and
-    matrix fill, table rendering, modals, integrity check, plotting list,
-    storage.
+    Open-Meteo request/response shapes), taking the page to 4338, and
+    v16.17 added `integrity.js` (the RULES behind the red banner, plus
+    flightTitle), taking it to 4289. runIntegrityCheck stays in the page
+    as a thin wrapper: three of its inputs can only come from what was
+    actually RENDERED (a NaN in the table, an invalid daylight time,
+    negative fuel remaining), so the page reads those from the DOM and
+    hands them in as a `signals` object. Still inline: map setup, base
+    chart, map interactions, the wind fetch and matrix fill, table
+    rendering, modals, plotting list, storage.
   - HIDDEN GLOBALS ARE THE TRAP when extracting. `performance.js` read
     `aircraftProfile`, which is declared `let` at the top level of the
     page script: that is a global LEXICAL binding, shared with the

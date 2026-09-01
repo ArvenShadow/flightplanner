@@ -4206,8 +4206,77 @@ svg.leaflet-image-layer.leaflet-interactive path {
     return d > 180 ? 360 - d : d;
   }
 
+  // src/lib/integrity.js
+  var integrity_exports = {};
+  __export(integrity_exports, {
+    collectIntegrityProblems: () => collectIntegrityProblems,
+    flightTitle: () => flightTitle,
+    integrityBannerHTML: () => integrityBannerHTML
+  });
+  function flightTitle(fl) {
+    const pts = (fl.waypoints || []).filter((w) => !w.isPattern && w.name);
+    if (pts.length >= 2) return `${pts[0].name}-${pts[pts.length - 1].name}`;
+    return fl.title || `Flight Plan ${fl.id || ""}`.trim();
+  }
+  function collectIntegrityProblems(flights, signals) {
+    const problems = [];
+    const add = (m) => {
+      if (!problems.includes(m)) problems.push(m);
+    };
+    const sig = signals || {};
+    const tableTxt = sig.tableText || "";
+    if (tableTxt.includes("NaN")) add("A non-numeric value (NaN) appeared in the flight table.");
+    if (tableTxt.includes("Infinity")) add("An infinite value appeared in the flight table.");
+    const dlTxt = sig.daylightText || "";
+    if (dlTxt.includes("NaN") || dlTxt.includes("Invalid"))
+      add("The daylight/VFR-day card shows an invalid time - do not trust its window.");
+    (flights || []).forEach((fl) => {
+      (fl.waypoints || []).forEach((wp) => {
+        if (!isFinite(wp.lat) || !isFinite(wp.lng) || Math.abs(wp.lat) > 90 || Math.abs(wp.lng) > 180)
+          add(`Waypoint "${wp.name}" has invalid coordinates.`);
+        if (!isFinite(wp.alt))
+          add(`Waypoint "${wp.name}" has a non-numeric altitude.`);
+        else if (wp.alt > 14e3)
+          add(`Waypoint "${wp.name}" is above the POH table ceiling (14,000 ft) - cruise figures are clamped, not computed.`);
+        else if (wp.alt < -1300)
+          add(`Waypoint "${wp.name}" altitude ${wp.alt} ft is below any terrain on Earth.`);
+        if (isFinite(wp.wdir) && (wp.wdir < 0 || wp.wdir > 360))
+          add(`Waypoint "${wp.name}" wind direction ${wp.wdir}° is outside 000-360.`);
+        if (isFinite(wp.wspd) && (wp.wspd < 0 || wp.wspd > 120))
+          add(`Waypoint "${wp.name}" wind speed ${wp.wspd} kt is implausible for VFR planning.`);
+      });
+      const schedI = computeFlightSchedule(fl);
+      let lastTravelRes = null, lastTravelTo = null;
+      for (let i = 0; i < (fl.waypoints || []).length - 1; i++) {
+        const from = fl.waypoints[i], to = fl.waypoints[i + 1];
+        if (from.isPattern || to.isPattern) continue;
+        const res = computeLegTotals(from, to, schedI[i]);
+        if (!res) continue;
+        lastTravelRes = res;
+        lastTravelTo = to;
+        if (!isFinite(res.timeMin) || res.timeMin < 0 || !isFinite(res.burnGal) || res.burnGal < 0)
+          add(`Leg ${from.name} → ${to.name}: computed time/fuel is invalid.`);
+        if (to.wspd >= res.minPhaseTas)
+          add(`Leg ${from.name} → ${to.name}: wind (${to.wspd} kt) meets or exceeds the slowest phase's TAS (${res.minPhaseTas} kt) - groundspeed and time are NOT reliable.`);
+        else if (res.effGS < 30)
+          add(`Leg ${from.name} → ${to.name}: effective groundspeed ${res.effGS} kt - check the wind entry.`);
+        if (res.shortfall)
+          add(`Leg ${from.name} → ${to.name}: cannot get down to ${res.shortfall.alt} ft at ${res.shortfall.target} - the descent is ${res.shortfall.min.toFixed(1)} min short even when started on earlier legs. Lower the cruise altitude or expect to arrive HIGH.`);
+      }
+      if (lastTravelRes && lastTravelRes.stillClimbing)
+        add(`${flightTitle(fl)}: still climbing at ${lastTravelTo.name} - the climb to ${lastTravelTo.alt} ft does not fit within the flight (reaches ~${lastTravelRes.exitAlt} ft).`);
+    });
+    if (isFinite(sig.fuelRemaining) && sig.fuelRemaining < 0)
+      add("Planned fuel remaining goes NEGATIVE - the mission does not fit the fuel on board.");
+    return problems;
+  }
+  function integrityBannerHTML(problems, maxShown) {
+    const shown = problems.slice(0, maxShown || 5);
+    return "⛔ <u>INTEGRITY CHECK FAILED - DO NOT USE THESE FIGURES</u><br>" + shown.map((m) => "• " + m).join("<br>") + (problems.length > shown.length ? `<br>… and ${problems.length - shown.length} more (see console).` : "");
+  }
+
   // src/main.js
-  var api = { ...magvar_exports, ...geodesy_exports, ...dialog_exports, ...performance_exports, ...format_exports, ...legs_exports, ...daylight_exports, ...winds_exports };
+  var api = { ...magvar_exports, ...geodesy_exports, ...dialog_exports, ...performance_exports, ...format_exports, ...legs_exports, ...daylight_exports, ...winds_exports, ...integrity_exports };
   for (const [name, value] of Object.entries(api)) {
     window[name] = value;
   }
@@ -4393,11 +4462,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // (add/delete/drag a waypoint and it updates on the next render). The
     // stored fl.title is only the fallback while a flight has fewer than
     // two plotted waypoints, and stays untouched in saves and exports.
-    function flightTitle(fl) {
-      const pts = (fl.waypoints || []).filter(w => !w.isPattern && w.name);
-      if (pts.length >= 2) return `${pts[0].name}-${pts[pts.length - 1].name}`;
-      return fl.title || `Flight Plan ${fl.id || ''}`.trim();
-    }
+    // flightTitle -> src/lib/integrity.js
 
     function getReserveDisplayUnits() {
       const el = document.getElementById('fuel-reserve');
@@ -4415,7 +4480,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.16';
+    const APP_VERSION = '16.17';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6330,69 +6395,24 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // print. This is deliberately independent of the input guards: it checks
     // the RESULTS, so even an unforeseen bug surfaces visibly.
     // =========================================================================
+    // The RULES behind this banner -> src/lib/integrity.js (pure, so every
+    // rule is tested without a browser). Only the three signals that can
+    // come from nothing but the rendered page are gathered here.
     function runIntegrityCheck() {
-      const problems = [];
-      const add = m => { if (!problems.includes(m)) problems.push(m); };
-
-      const tableTxt = document.getElementById('flight-plans-container').textContent;
-      if (tableTxt.includes('NaN')) add('A non-numeric value (NaN) appeared in the flight table.');
-      if (tableTxt.includes('Infinity')) add('An infinite value appeared in the flight table.');
-
-      const dlEl = document.getElementById('daylight-body');
-      const dlTxt = dlEl ? dlEl.textContent : '';
-      if (dlTxt.includes('NaN') || dlTxt.includes('Invalid'))
-        add('The daylight/VFR-day card shows an invalid time - do not trust its window.');
-
-      flights.forEach((fl) => {
-        fl.waypoints.forEach((wp) => {
-          if (!isFinite(wp.lat) || !isFinite(wp.lng) || Math.abs(wp.lat) > 90 || Math.abs(wp.lng) > 180)
-            add(`Waypoint "${wp.name}" has invalid coordinates.`);
-          if (!isFinite(wp.alt))
-            add(`Waypoint "${wp.name}" has a non-numeric altitude.`);
-          else if (wp.alt > 14000)
-            add(`Waypoint "${wp.name}" is above the POH table ceiling (14,000 ft) - cruise figures are clamped, not computed.`);
-          else if (wp.alt < -1300)
-            add(`Waypoint "${wp.name}" altitude ${wp.alt} ft is below any terrain on Earth.`);
-          if (isFinite(wp.wdir) && (wp.wdir < 0 || wp.wdir > 360))
-            add(`Waypoint "${wp.name}" wind direction ${wp.wdir}° is outside 000-360.`);
-          if (isFinite(wp.wspd) && (wp.wspd < 0 || wp.wspd > 120))
-            add(`Waypoint "${wp.name}" wind speed ${wp.wspd} kt is implausible for VFR planning.`);
-        });
-        const schedI = computeFlightSchedule(fl);
-        let lastTravelRes = null, lastTravelTo = null;
-        for (let i = 0; i < fl.waypoints.length - 1; i++) {
-          const from = fl.waypoints[i], to = fl.waypoints[i + 1];
-          if (from.isPattern || to.isPattern) continue;
-          const res = computeLegTotals(from, to, schedI[i]);
-          if (!res) continue;
-          lastTravelRes = res; lastTravelTo = to;
-          if (!isFinite(res.timeMin) || res.timeMin < 0 || !isFinite(res.burnGal) || res.burnGal < 0)
-            add(`Leg ${from.name} → ${to.name}: computed time/fuel is invalid.`);
-          if (to.wspd >= res.minPhaseTas)
-            add(`Leg ${from.name} → ${to.name}: wind (${to.wspd} kt) meets or exceeds the slowest phase's TAS (${res.minPhaseTas} kt) - groundspeed and time are NOT reliable.`);
-          else if (res.effGS < 30)
-            add(`Leg ${from.name} → ${to.name}: effective groundspeed ${res.effGS} kt - check the wind entry.`);
-          if (res.shortfall)
-            add(`Leg ${from.name} → ${to.name}: cannot get down to ${res.shortfall.alt} ft at ${res.shortfall.target} - the descent is ${res.shortfall.min.toFixed(1)} min short even when started on earlier legs. Lower the cruise altitude or expect to arrive HIGH.`);
-        }
-        if (lastTravelRes && lastTravelRes.stillClimbing)
-          add(`${flightTitle(fl)}: still climbing at ${lastTravelTo.name} - the climb to ${lastTravelTo.alt} ft does not fit within the flight (reaches ~${lastTravelRes.exitAlt} ft).`);
-      });
-
       const remEl = document.getElementById('grand-final-rem');
-      const remVal = parseFloat(remEl.innerText !== undefined ? remEl.innerText : remEl.textContent);
-      if (isFinite(remVal) && remVal < 0)
-        add('Planned fuel remaining goes NEGATIVE - the mission does not fit the fuel on board.');
+      const dlEl = document.getElementById('daylight-body');
+      const problems = collectIntegrityProblems(flights, {
+        tableText: document.getElementById('flight-plans-container').textContent,
+        daylightText: dlEl ? dlEl.textContent : '',
+        fuelRemaining: remEl ? parseFloat(remEl.innerText !== undefined ? remEl.innerText : remEl.textContent) : NaN
+      });
 
       const banner = document.getElementById('integrity-banner');
       if (problems.length === 0) {
         banner.style.display = 'none';
         banner.innerHTML = '';
       } else {
-        const shown = problems.slice(0, 5);
-        banner.innerHTML = '⛔ <u>INTEGRITY CHECK FAILED - DO NOT USE THESE FIGURES</u><br>' +
-          shown.map(m => '• ' + m).join('<br>') +
-          (problems.length > 5 ? `<br>… and ${problems.length - 5} more (see console).` : '');
+        banner.innerHTML = integrityBannerHTML(problems);
         banner.style.display = 'block';
         if (typeof console !== 'undefined') console.warn('Integrity check:', problems);
       }

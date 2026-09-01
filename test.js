@@ -2169,8 +2169,9 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const legsModule = require('./src/lib/legs.js');
   const dayModule = require('./src/lib/daylight.js');
   const windsModule = require('./src/lib/winds.js');
+  const integrityModule = require('./src/lib/integrity.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
-                    legs: legsModule, day: dayModule, winds: windsModule };
+                    legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2296,7 +2297,10 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
     'daylight.js': () => [M.day.computeDaylight('2026-09-01', 69.68, 18.92), M.day.fmtLocalHM(Date.now())],
     'winds.js': () => [M.winds.windToUV(260, 20), M.winds.uvToWind(-5, -12),
                        M.winds.buildOpenMeteoUrl([{ lat: 69, lng: 18 }], '2026-09-01', 'best_match'),
-                       M.winds.buildWindSamplePoints([{ waypoints: [wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500)] }], {})]
+                       M.winds.buildWindSamplePoints([{ waypoints: [wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500)] }], {})],
+    'integrity.js': () => [M.integrity.collectIntegrityProblems([{ waypoints: [wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500)] }], {}),
+                           M.integrity.flightTitle({ waypoints: [wp(69, 18, 0), wp(70, 18, 0)] }),
+                           M.integrity.integrityBannerHTML(['x'])]
   };
   for (const [name, run] of Object.entries(exercises)) {
     let out;
@@ -2306,6 +2310,55 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
     }
     assert(out !== undefined && out !== null, name + ' returned nothing when run standalone');
   }
+});
+// The integrity check is the last thing between a wrong number and the
+// pilot, so each rule is asserted on its own, with no browser involved.
+T('the integrity rules each fire on their own case (module, no DOM)', () => {
+  const I = moduleExports.integrity;
+  const W = (o) => Object.assign({ name: 'X', lat: 69, lng: 18, alt: 2500, oat: 0, wdir: 0, wspd: 0, var: 0 }, o);
+  const probs = (wps) => I.collectIntegrityProblems([{ waypoints: wps }], {});
+  const hits = (wps, needle) => probs(wps).some(p => p.includes(needle));
+
+  assert(hits([W({ name: 'BAD', lat: 999 }), W({ name: 'B', lat: 69.4 })], 'invalid coordinates'), 'bad coordinates not caught');
+  assert(hits([W({ name: 'A' }), W({ name: 'HIGH', lat: 69.4, alt: 20000 })], 'POH table ceiling'),
+    'an altitude above the POH tables must say the figures are CLAMPED, not computed');
+  assert(hits([W({ name: 'A' }), W({ name: 'DEEP', lat: 69.4, alt: -5000 })], 'below any terrain'), 'impossible altitude not caught');
+  assert(hits([W({ name: 'A' }), W({ name: 'B', lat: 69.4, wdir: 400 })], 'outside 000-360'), 'wind direction out of range not caught');
+  assert(hits([W({ name: 'A' }), W({ name: 'B', lat: 69.4, wspd: 200 })], 'implausible for VFR'), 'absurd wind speed not caught');
+  // The one that silently poisons groundspeed, time and fuel together.
+  // Needs a SLOW phase to isolate: on a climbing leg the slowest phase TAS
+  // is ~97 kt, so a 100 kt wind trips this rule while staying under the
+  // 120 kt "implausible speed" threshold.
+  const climbing = [W({ name: 'A', alt: 254 }), W({ name: 'B', lat: 69.6, alt: 8000, wspd: 100, wdir: 180 })];
+  assert(hits(climbing, "slowest phase's TAS"), 'wind at or above the slowest phase TAS must be called out');
+  // and the same case must report that the climb does not fit the flight
+  assert(hits(climbing, 'still climbing at B'), 'an unfinished climb is not reported');
+  // a wind BELOW the phase TAS but crushing the groundspeed is a different
+  // warning - the pilot needs to know which one it is
+  const slow = [W({ name: 'A' }), W({ name: 'B', lat: 69.4, wspd: 115, wdir: 0 })];
+  assert(hits(slow, 'effective groundspeed'), 'a collapsed groundspeed is not flagged');
+  assert(!hits(slow, "slowest phase's TAS"), 'the wrong rule fired: 115 kt is below the 133 kt cruise TAS');
+  // a descent that cannot be flown must say so rather than be fudged
+  assert(hits([W({ name: 'A', alt: 9500 }), W({ name: 'B', lat: 69.02, alt: 1000 })], 'expect to arrive HIGH'),
+    'an impossible descent is not reported to the pilot');
+  // a clean plan must produce NOTHING - a banner that cries wolf is ignored
+  assert(probs([W({ name: 'A' }), W({ name: 'B', lat: 69.4 })]).length === 0,
+    'a sound plan raised a false alarm: ' + JSON.stringify(probs([W({ name: 'A' }), W({ name: 'B', lat: 69.4 })])));
+});
+T('rendered-page signals reach the banner, and duplicates collapse', () => {
+  const I = moduleExports.integrity;
+  assert(I.collectIntegrityProblems([], { tableText: 'GS NaN kt' })[0].includes('NaN'), 'a NaN on screen is not caught');
+  assert(I.collectIntegrityProblems([], { tableText: 'Infinity' })[0].includes('infinite'), 'an infinite value is not caught');
+  assert(I.collectIntegrityProblems([], { daylightText: 'Invalid Date' })[0].includes('do not trust'), 'a broken daylight card is not caught');
+  assert(I.collectIntegrityProblems([], { fuelRemaining: -3 })[0].includes('NEGATIVE'), 'negative fuel remaining is not caught');
+  // a positive figure, and an absent one, must NOT raise it
+  assert(I.collectIntegrityProblems([], { fuelRemaining: 12 }).length === 0, 'positive fuel raised a false alarm');
+  assert(I.collectIntegrityProblems([], {}).length === 0, 'missing signals raised a false alarm');
+  // the banner shows the first few and says how many are hidden
+  const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  const html = I.integrityBannerHTML(many);
+  assert(html.includes('DO NOT USE THESE FIGURES'), 'the banner no longer says not to use the figures');
+  assert(html.includes('and 2 more'), 'the banner hides problems without saying how many: ' + html);
 });
 T('the winds mean is speed-weighted, and survives the 000/360 wrap', () => {
   const W = moduleExports.winds;
@@ -2464,7 +2517,8 @@ T('the page script no longer defines what the modules own', () => {
                     'sunDeclEqTime', 'solarCrossingUTC', 'computeDaylight',
                     'utcOffsetLabel', 'fmtLocalHM', 'localDateStrOf', 'firstPlottedWaypoint',
                     'windToUV', 'uvToWind', 'buildWindSamplePoints', 'buildOpenMeteoUrl',
-                    'interpolateWindProfile', 'extractPointWeather', 'extractPointWeatherAt', 'angleDiff']) {
+                    'interpolateWindProfile', 'extractPointWeather', 'extractPointWeatherAt', 'angleDiff',
+                    'flightTitle', 'collectIntegrityProblems', 'integrityBannerHTML']) {
     assert(!new RegExp('function ' + fn + '\\s*\\(').test(src),
       fn + ' is still defined in the page script (duplicate of its module)');
   }
