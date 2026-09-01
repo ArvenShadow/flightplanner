@@ -347,6 +347,31 @@ errors is the standard.
     asserts the worker never learns the weather host.
   - Aerodromes are the first and last real waypoint of EVERY flight (the
     daylight card's rule); non-ICAO names like FINNSNES are excluded.
+- **Offline chart download (v16.22)**: a button pre-fetches every tile
+  along the route corridor into the service-worker cache.
+  - WHY PANNING FELT LIKE RELOADING: Avinor sends
+    `Cache-Control: must-revalidate, max-age=0`, so the browser may never
+    reuse a tile without asking the server first. Kartverket sends
+    max-age=432000, which is why the topo map feels fine by comparison.
+    A service worker is NOT bound by that - cache-first, so once a tile is
+    held it is served outright. Both tile layers now also keep the same
+    wider ring of off-screen tiles (`keepBuffer: 4`).
+  - THE HARD LIMIT, and it is the browser's, not ours: Avinor sends no
+    Access-Control-Allow-Origin, so a chart tile is an OPAQUE response.
+    Browsers PAD the storage cost of opaque entries so a page cannot
+    measure cross-origin resources by watching its own quota - Chromium
+    charged 8.46 MB for a single 68-byte tile. So a 45 MB route download
+    actually costs ~2.5 GB of quota. This is why the first attempt stored
+    only 147 of 287 tiles: it silently hit the quota.
+  - The page therefore MEASURES the padding at runtime (store one probe
+    entry, watch navigator.storage.estimate(), delete it) rather than
+    trusting a constant, shows the pilot BOTH figures (download size and
+    storage cost), drops the overview zooms first if the whole range will
+    not fit, and refuses outright rather than half-filling the cache -
+    filling the quota makes the browser discard everything for the origin,
+    the app shell included.
+  - Requires a secure context. On file:// the button explains why it
+    cannot work instead of failing silently.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends

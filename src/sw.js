@@ -48,9 +48,14 @@ const SHELL_ASSETS = ['./', './index.html', './app.js'];
 // Chart tiles come only from this host; nothing else is cached at runtime.
 const TILE_HOST = 'avigis.avinor.no';
 
-// A cap so a few sessions of panning cannot fill the origin's storage quota
-// and get the whole cache evicted, shell included.
-const TILE_LIMIT = 400;
+// A cap so panning cannot fill the origin's storage quota and get the whole
+// cache evicted, shell included. Raised from 400 in v16.22: a deliberate
+// route download stores a whole corridor at once (the Bardufoss-Tromso
+// corridor is ~280 tiles across z7-z11), and a limit that evicted it as
+// soon as you panned would defeat the point. The page shows a size estimate
+// and checks the browser's storage quota before downloading, so this is a
+// backstop rather than the real bound.
+const TILE_LIMIT = 2500;
 
 // knownEdition is declared at the top: null = we do not yet know which AIRAC
 // cycle is live, so no tile may be read from or written to a cache.

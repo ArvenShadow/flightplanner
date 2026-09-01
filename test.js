@@ -2175,9 +2175,10 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const exchModule = require('./src/lib/exchange.js');
   const plotModule = require('./src/lib/plotting.js');
   const metarModule = require('./src/lib/metar.js');
+  const tilesModule = require('./src/lib/tiles.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
-                    exch: exchModule, plot: plotModule, metar: metarModule };
+                    exch: exchModule, plot: plotModule, metar: metarModule, tiles: tilesModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2314,7 +2315,11 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
-                       M.metar.routeAerodromes([{ waypoints: [wp(69, 18, 0)] }])]
+                       M.metar.routeAerodromes([{ waypoints: [wp(69, 18, 0)] }])],
+    'tiles.js': () => [M.tiles.routeBounds([{ waypoints: [wp(69, 18, 0), wp(69.7, 18.9, 0)] }]),
+                       M.tiles.tilesForBounds({ north: 69.7, south: 69, west: 18, east: 19 }, 9, 10),
+                       M.tiles.formatBytes(1234567), M.tiles.paddedCostBytes(10),
+                       M.tiles.tilesThatFit(1e9)]
   };
   for (const [name, run] of Object.entries(exercises)) {
     let out;
@@ -2529,6 +2534,87 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
     'MET Norway attribution is missing');
   assert(/obtain an official briefing before flight/i.test(built),
     'the card does not tell the pilot to get a real briefing');
+});
+
+console.log('\n=== 62. Offline chart download ===');
+T('the corridor covers every plotted point, including via points', () => {
+  const T2 = moduleExports.tiles;
+  const W = (lat, lng, via) => ({ name: 'X', lat, lng, alt: 2500, via });
+  const b = T2.routeBounds([{ waypoints: [W(69.05, 18.54), W(69.68, 18.91, [{ lat: 70.2, lng: 20.5 }])] }]);
+  // the via point is OUTSIDE the two waypoints and must still be inside the box
+  assert(b.north > 70.2 && b.east > 20.5, 'a via point fell outside the download area: ' + JSON.stringify(b));
+  assert(b.south < 69.05 && b.west < 18.54, 'the margin was not applied on the other side');
+  // this far north a degree of longitude is much shorter than one of latitude,
+  // so the margin must be widened in longitude or the corridor is too narrow
+  const dLat = b.north - 70.2, dLon = b.east - 20.5;
+  assert(dLon > dLat * 1.5, 'the longitude margin was not scaled for latitude: ' + dLat + ' vs ' + dLon);
+  assert(T2.routeBounds([]) === null && T2.routeBounds([{ waypoints: [] }]) === null,
+    'an empty route must not produce an area to download');
+});
+T('the tile list is bounded, and the size estimate is honest', () => {
+  const T2 = moduleExports.tiles;
+  const b = { north: 69.95, south: 68.85, west: 17.6, east: 19.4 };
+  const { tiles, capped } = T2.tilesForBounds(b, 8, 11);
+  assert(!capped && tiles.length > 100 && tiles.length < 1000, 'unexpected tile count: ' + tiles.length);
+  assert(tiles.every(t => t.z >= 8 && t.z <= 11), 'tiles outside the requested zoom range');
+  // a careless bounding box must not generate a runaway list
+  const huge = T2.tilesForBounds({ north: 80, south: 0, west: -180, east: 180 }, 8, 11, 500);
+  assert(huge.capped === true && huge.tiles.length === 500, 'the cap did not hold: ' + huge.tiles.length);
+  // bytes scale with the raster actually requested, not a flat guess
+  const px = () => 1024;
+  const small = () => 256;
+  const big = T2.estimateBytes(tiles, px), lil = T2.estimateBytes(tiles, small);
+  assert(big > lil * 15, 'the estimate ignores the requested tile size');
+  assert(T2.formatBytes(1234567) === '1.2 MB' && T2.formatBytes(45 * 1024 * 1024) === '45 MB',
+    'size wording: ' + T2.formatBytes(1234567));
+});
+T('the size shown is what storage COSTS, not what downloads', () => {
+  const T2 = moduleExports.tiles;
+  // Avinor sends no Access-Control-Allow-Origin, so a tile is an OPAQUE
+  // response, and browsers pad the storage cost of those so a page cannot
+  // measure cross-origin resources by watching its own quota. Chromium
+  // charged 8.46 MB for a single 68-byte tile. Quoting the download size
+  // to the pilot would understate the real cost by about fifty times.
+  const pad = 8.46 * 1024 * 1024;
+  assert(T2.paddedCostBytes(100, pad) > 800 * 1024 * 1024, 'padding is not being applied');
+  assert(T2.paddedCostBytes(1, pad) === Math.round(pad), 'one tile should cost one pad');
+  // the padding is a browser implementation detail, so an unmeasured call
+  // must still fall back to something realistic rather than to zero
+  assert(T2.paddedCostBytes(10) > 50 * 1024 * 1024, 'the fallback padding is missing or tiny');
+  assert(T2.paddedCostBytes(10, 0) === T2.paddedCostBytes(10), 'a failed measurement must use the fallback');
+  // and a safety margin, because filling the quota makes the browser
+  // discard EVERYTHING for the origin - the app shell included
+  const free = 1000 * 1024 * 1024;
+  const fit = T2.tilesThatFit(free, pad);
+  assert(fit > 0 && fit < free / pad, 'no safety margin below the quota: ' + fit);
+  assert(T2.tilesThatFit(0, pad) === 0, 'no free space must mean no tiles');
+});
+T('the download refuses to run without a known chart edition', () => {
+  const page = fs.readFileSync('src/index.html', 'utf8');
+  // Same rule as the service worker: tiles of unknown vintage are never
+  // stored, so the button must check the AIRAC cycle before fetching.
+  const fn = page.slice(page.indexOf('async function downloadRouteChart'), page.indexOf('function metarStatus'));
+  assert(/if \(!vfrEdition\)/.test(fn), 'the download does not check the chart edition first');
+  assert(fn.indexOf('if (!vfrEdition)') < fn.indexOf('tilesForBounds'),
+    'the edition is checked AFTER building the tile list');
+  assert(/chartCacheAvailable\(\)/.test(fn), 'the download does not check a worker is present');
+  assert(/navigator\.storage/.test(fn), 'the download does not check the storage quota');
+  // and it must tell a file:// user why it cannot work rather than failing silently
+  assert(/cannot store charts/.test(fn), 'no explanation for the file:// case');
+});
+T('a downloaded route is not evicted by ordinary panning', () => {
+  const sw = fs.readFileSync('site/sw.js', 'utf8');
+  const m = sw.match(/const TILE_LIMIT = (\d+);/);
+  assert(m, 'the tile cache no longer has a limit');
+  // the Bardufoss-Tromso corridor is ~280 tiles across z8-z11; a limit near
+  // the old 400 would evict a download as soon as you panned
+  assert(Number(m[1]) >= 1500, 'TILE_LIMIT ' + m[1] + ' is too small to hold a downloaded route');
+  // the VFR layer keeps the same wide ring as topo - it matters more here,
+  // because Avinor forbids reusing a tile without revalidating
+  const page = fs.readFileSync('src/index.html', 'utf8');
+  const vfr = page.slice(page.indexOf('const vfrTiles = L.tileLayer'), page.indexOf('vfrTiles.getTileUrl'));
+  assert(/keepBuffer: 4/.test(vfr), 'the VFR layer lost its tile buffer');
+  assert(/must-revalidate/.test(vfr), 'the reason the buffer matters is undocumented');
 });
 
 T('the whole source type-checks, and the checker cannot be quietly dropped', () => {
