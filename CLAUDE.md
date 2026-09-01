@@ -1251,7 +1251,7 @@ is forgotten.
     8x8 badge). It could accept a known badge region rather than needing the
     diff read by hand every time.
 
-## Roadmap (the user's list, v16.28 - NOT yet agreed in detail)
+## Roadmap (the user's list, v16.28, extended v16.41 - NOT yet agreed in detail)
 
 Written down so it is not lost. NOTHING here is built, and none of it is
 approved for implementation without asking first - several items need
@@ -1289,7 +1289,46 @@ scoped. In the user's order:
 6. **PARTLY DONE at v16.41** - the OFP half. Print OFP now outputs the
    company "Operational flightplan" form filled from the plan; see the section
    above. The M&B half waits on item 5.
-7. More to come.
+
+### Added v16.41 (a QoL batch, in the user's order)
+
+Nothing below is built. The notes are what a look at the code turned up, so
+whoever picks these up starts from facts rather than assumptions.
+
+7. **An easy way to begin a new flight plan from the MAP-ONLY view.**
+   This is a real gap, not a preference: the `+ Add Flight Plan` button lives
+   INSIDE `#sidebar`, and `layout-map` hides the sidebar - so in the view where
+   you are actually drawing on the chart there is no way to start a plan.
+   The place for it is the `#map-controls` stack (`.map-ctl`), which since
+   v16.24 is a flex column where a new control needs no CSS at all. Worth
+   pairing with an active-plan indicator there, because the flight switcher
+   (`setActiveFlight`, the per-section Select button) is also inside the
+   sidebar and equally unreachable in map-only.
+8. **Remove the dashed track on every other flight plan.**
+   `refreshMap` sets `dashArray: (fIdx % 2 === 1) ? '10, 8' : null`. NOTE this
+   REVERSES a stated decision - the comment there says the dash exists so an
+   identical return route drawn on top of the outbound stays distinguishable.
+   Ask what should carry that instead before deleting it: colour
+   (`ROUTE_COLORS`) and the edit-mode dimming of inactive flights already
+   separate them, so the dash may simply be redundant now. The guide says
+   "every second one is dashed" and would need the same edit.
+9. **Number keys to activate a flight plan** (1-9 -> that plan).
+   THE TRAP IS ALREADY IN THE CODEBASE: `dialog.js` binds 1-9 to pick a
+   dialog option, and `ask()` is used everywhere. A global digit binding MUST
+   stand down while a dialog is open, or naming a waypoint becomes a game of
+   chance. Same for the settings/wind/help modals.
+10. **General keybinds for navigation and editing.**
+    Only two exist today (Esc closes modals, Ctrl+Z / Ctrl+Shift+Z undo and
+    redo). Two constraints are already documented in the Ctrl+Z handler and
+    apply to anything added: a binding must be inert while the user is TYPING,
+    and "inert in every input" is too blunt - the app's number/date/select
+    fields commit on change and keep focus, so exempting them all made undo
+    silently dead right after editing fuel or an altitude (verified in
+    Chromium). The existing handler's `textLike` test is the precedent.
+    A pure key->action resolver in `src/lib/*.js` would let the whole mapping
+    be tested without a browser, which is how every other rule in this project
+    is checked. Whatever is bound has to be discoverable: the Feature Guide
+    and a `?` overlay, not folklore.
 
 ## Circuit altitude, and editing a waypoint from the map (v16.40)
 
