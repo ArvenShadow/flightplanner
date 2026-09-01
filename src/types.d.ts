@@ -176,6 +176,10 @@ interface LegMarker {
   tt?: number;
   /** TOD only: the fix being descended to. */
   targetName?: string | null;
+  /** Set when the mark falls ON a waypoint rather than part-way along a leg -
+   *  a descent that fills a whole leg starts AT the previous fix. Names that
+   *  fix, so the label can say "at B" instead of "27.1 NM before ENTC". */
+  atWaypoint?: string | null;
 }
 
 /**

@@ -253,8 +253,9 @@
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
             <li><b>Grab a leg line and drag</b> to bend it around terrain: a diamond <b>via point</b> appears under the cursor and follows it, with the route redrawing as you move — one motion, press to release. Let go where you want it. A plain click still drops a via point on the spot, and either way you can drag the diamond again later or right-click it to remove. The line has a generous invisible grab area, so you do not have to hit the 4-pixel stroke exactly.</li>
             <li>A via point <b>bends a leg without adding a row</b>. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
-            <li><b>Forgot a waypoint in the middle of a route?</b> Two ways to insert one, and it gets its own OFP row with its own altitude, times and fuel: <b>right-click the leg line</b> where you want it, or press the <b>+</b> button on that leg's OFP row to put it halfway along. Either way the leg splits in two, and any via points on it stay on the correct half so the flown track does not move. The new waypoint inherits the altitude, OAT and wind of the waypoint it is inserted before — the leg was already planned to arrive at those, so nothing is invented — and all of it is editable in the row. Its magnetic variation is computed for the new position.</li>
+            <li><b>Forgot a waypoint in the middle of a route?</b> <b>Right-click the leg line</b> where you want it: it gets its own OFP row with its own altitude, times and fuel, the leg splits in two, and any via points on it stay on the correct half so the flown track does not move. (Clicking empty map adds a waypoint at the END of the route; right-clicking the line is how you get one in the middle.) The new waypoint inherits the altitude, OAT and wind of the waypoint it is inserted before — the leg was already planned to arrive at those, so nothing is invented — and all of it is editable in the row. Its magnetic variation is computed for the new position.</li>
             <li>Climb and descent no longer split legs into separate rows: each leg row shows <b>total</b> distance/time/burn for easy copying, with the CLB/DES portion and TOC/TOD marking distance in the sub-line.</li>
+            <li><b>TOC and TOD are drawn as a short tick across the track</b>, the way you would mark them on the paper chart, with a small <b>TOC</b> / <b>TOD</b> chip beside it — <b>hover the chip</b> for the full sentence (which altitude, how far from which fix, and for a TOD the aerodrome being descended to). The distances are also in the leg's ↳ sub-line and the plotting list, which is what you copy from and what prints. A descent that fills a whole leg starts <b>at</b> the previous fix, and the mark is drawn there and says so.</li>
             <li>Press <b>👁 View Mode</b> to lock all editing for in-flight use; tapping a map waypoint then highlights its OFP row. The button flips to <b>✏ Edit Mode</b> to switch back.</li>
             <li><b>Undo / Redo</b> cover every change. <b>Esc</b> closes any window like this one.</li>
           </ul>
@@ -313,7 +314,7 @@
             <li><b>Climbs and descents are planned across leg boundaries</b>: a climb that doesn't fit its leg simply continues on the next (the ▲ TOC lands on the leg where the altitude is actually reached), and a descent that doesn't fit its leg <b>backs up onto earlier legs</b> — the ▼ TOD names the low waypoint it serves (e.g. "TOD · 7.2 NM before B → 200' at C") — so you always cross a waypoint AT its planned altitude, never above it. A circuit (pattern) stop breaks the chain. If even all the preceding distance can't absorb the descent, the red integrity banner says so instead of letting you plan an arrival that's too high.</li>
             <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
             <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service. <b>Both charts need internet</b> — neither is stored on your machine. The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
-            <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (their exact-position dots remain); zoomed further out only dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
+            <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (the tick across the track stays); zoomed further out only waypoint dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
           </ul>
         </div>
 
@@ -852,7 +853,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.27';
+    const APP_VERSION = '16.28';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -981,7 +982,7 @@
     // stays live and draggable:
     //   full   everything (normal working detail)
     //   mid    compact waypoint labels; TOC/TOD & ruler chips hidden
-    //          (their exact-position dots remain)
+    //          (the tick across the track stays)
     //   far    dots and route lines only — all text hidden
     // The 🔎 button on the map cycles the mode: AUTO picks the level from the
     // zoom (full at z>=8, mid at 6-7, far at <=5); FULL/MID/FAR lock a level
@@ -1676,18 +1677,6 @@
           `edit its row, or drag it on the map.`, 'good', 7000);
     }
 
-    // The table's "+" button: same command, positioned halfway along the leg
-    // it was pressed on, measured along the flown path rather than the direct
-    // line so a dog-legged leg does not put it out in the terrain.
-    function insertWaypointMidLeg(fIdx, legIdx) {
-      const fl = flights[fIdx];
-      if (!fl) return;
-      const from = fl.waypoints[legIdx], to = fl.waypoints[legIdx + 1];
-      if (!from || !to || from.isPattern || to.isPattern) return;
-      const mid = legMidpoint(from, to);
-      if (!mid) { say('That leg has no length to split.', 'warn'); return; }
-      insertWaypointOnLeg(fIdx, mid);
-    }
     // 5. MAP INTERACTIONS, RULER MODE & UNDO / REDO
     // =========================================================================
     function pushUndoState() {
@@ -2166,10 +2155,20 @@
           });
         });
 
-        // TOC & TOD markers.
-        // Labels carry the distance from a named waypoint (for chart marking)
-        // and are offset ~20px perpendicular-RIGHT of their own track. Since a
-        // return leg flies the reciprocal track, its labels land on the
+        // TOC & TOD markers (v16.28).
+        //
+        // THE MARK IS A TICK ACROSS THE TRACK, not a diamond: that is how the
+        // point is drawn on a paper chart, and it reads unambiguously even
+        // when it lands ON a waypoint - which a descent filling a whole leg
+        // does, and which used to make the mark vanish entirely.
+        //
+        // THE CHIP IS JUST "TOC" / "TOD". The old chip spelled the whole
+        // sentence out and covered the chart. The numbers live in the OFP
+        // sub-line and the plotting list, which is where they get copied from
+        // anyway; hovering the chip gives the same sentence as a tooltip.
+        //
+        // Chips are offset ~30px perpendicular-RIGHT of their own track. A
+        // return leg flies the reciprocal track, so its chips land on the
         // OPPOSITE side of the shared line - out/return no longer overlap.
         const schedM = computeFlightSchedule(fl);
         for (let i = 0; i < fl.waypoints.length - 1; i++) {
@@ -2182,19 +2181,34 @@
           const dx = Math.round(30 * Math.cos(theta));   // right-perp of track
           const dy = Math.round(30 * Math.sin(theta));
 
-          // A dot marks the EXACT point on the line; the readable chip floats
-          // beside it, centered on a point ~30px perpendicular to the track.
-          // A TOD whose low waypoint lies legs ahead names that target too.
-          const chipStyle = `position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(${dx}px,${dy}px);`;
+          // Where it is, in words. A mark sitting ON a fix says so - "27.1 NM
+          // before ENTC" is true but useless when the answer is "start down
+          // at B".
+          const wherePart = prof.atWaypoint
+            ? `at ${prof.atWaypoint}`
+            : `${distTxt} ${prof.rel} ${prof.refName}`;
           const todTgt = (prof.kind === 'TOD' && prof.targetName && prof.targetName !== prof.refName)
-            ? ` → ${prof.alt}' at ${prof.targetName}` : '';
-          const labelHtml = prof.kind === 'TOC'
-            ? `<div class="prof-point toc"></div><div class="toc-label" style="${chipStyle}">${fTag}▲ TOC ${prof.alt}' · ${distTxt} after ${prof.refName}</div>`
-            : `<div class="prof-point tod"></div><div class="tod-label" style="${chipStyle}">${fTag}▼ TOD · ${distTxt} before ${prof.refName}${todTgt}</div>`;
+            ? `, down to ${prof.alt}' at ${prof.targetName}` : '';
+          const tip = prof.kind === 'TOC'
+            ? `Top of climb - level at ${prof.alt}', ${wherePart}`
+            : `Top of descent - ${wherePart}${todTgt}`;
+
+          // The tick crosses the track: a bar drawn along north, rotated to
+          // the local true track and then a further 90 degrees.
+          const tickStyle = `transform:translate(-50%,-50%) rotate(${Math.round(prof.tt + 90)}deg);`;
+          const chipStyle = `position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(${dx}px,${dy}px);`;
+          const kindCls = prof.kind === 'TOC' ? 'toc' : 'tod';
+          const labelHtml =
+            `<div class="prof-tick ${kindCls}" style="${tickStyle}"></div>` +
+            `<div class="${kindCls}-label" style="${chipStyle}" title="${tip}">${fTag}${prof.kind}</div>`;
 
           const m = L.marker([prof.lat, prof.lng], {
             interactive: false,
             opacity: dimmed ? 0.35 : 1,
+            // Above the waypoint markers. A TOD that lands ON a fix would
+            // otherwise be drawn UNDER that fix's own name label - which is
+            // the case the v16.28 fix exists to make visible.
+            zIndexOffset: 650,
             icon: L.divIcon({
               className: prof.kind === 'TOC' ? 'toc-custom-icon' : 'tod-custom-icon',
               html: labelHtml,
@@ -2729,7 +2743,7 @@
               <th style="width:5%">Burn (${fuelLabel(fuelUnit)})</th>
               <th class="acc-fuel-cell cc" style="width:5%;">Acc (${fuelLabel(fuelUnit)})</th>
               <th style="width:5%">Rem (${fuelLabel(fuelUnit)})</th>
-              <th class="no-print" style="width:4%" title="+ inserts a waypoint halfway along this leg; × deletes this row's waypoint">+ ×</th>
+              <th class="no-print" style="width:3%">×</th>
             </tr>
           </thead>
           <tbody id="tbody-flight-${fIdx}"></tbody>
@@ -2912,7 +2926,7 @@
         <td class="calc-cell" style="min-width:48px;">${legBurn.toFixed(1)}</td>
         <td class="calc-cell acc-fuel-cell cc" style="min-width:52px;">${accBurn.toFixed(1)}</td>
         <td class="calc-cell ${remFuel < getReserveDisplayUnits() ? 'low-fuel' : ''}" style="min-width:52px; font-weight:700;" ${remFuel < getReserveDisplayUnits() ? 'title="Below planned reserve!"' : ''}>${remFuel.toFixed(1)}</td>
-        <td class="no-print row-actions"><button class="btn btn-insert btn-sm" title="Insert a new waypoint halfway along this leg - it gets its own OFP row" onclick="insertWaypointMidLeg(${fIdx}, ${wpIndex})" ${isDoneMode ? 'disabled' : ''}>+</button>${showDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteWaypointFromFlight(${fIdx}, ${wpIndex+1})" ${isDoneMode ? 'disabled' : ''}>×</button>` : ''}</td>
+        <td class="no-print row-actions">${showDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteWaypointFromFlight(${fIdx}, ${wpIndex+1})" ${isDoneMode ? 'disabled' : ''}>×</button>` : ''}</td>
       `;
       return tr;
     }
@@ -3151,12 +3165,19 @@
     function buildSubLegRow(from, to, res, distUnit, fuelUnit) {
       const dl = distLabel(distUnit);
       const parts = [];
+      // A mark that lands ON a fix is reported as "at <fix>". Saying
+      // "27.1 NM before ENTC" for a descent that fills the whole leg is true
+      // and useless: the answer the pilot needs is "start down at B". Same
+      // rule as the map marks (computeLegMarkers, `atWaypoint`).
+      const EDGE_NM = 0.05;
       if (res.climbInfo) {
         const c = res.climbInfo;
         const cont = c.carriedIn ? ` (cont. from ~${Math.round(c.fromAlt)}')` : '';
         parts.push(`▲ CLB${cont} ${Math.round(c.timeMin)} min · ${convertFuel(c.fuelGal, fuelUnit).toFixed(1)} ${fuelLabel(fuelUnit)}` +
           (c.completed
-            ? ` · TOC ${convertDist(c.tocAlongNM, distUnit).toFixed(1)} ${dl} after ${from.name}`
+            ? (res.distNM - c.tocAlongNM <= EDGE_NM
+                ? ` · TOC at ${to.name}`
+                : ` · TOC ${convertDist(c.tocAlongNM, distUnit).toFixed(1)} ${dl} after ${from.name}`)
             : ` · still climbing at ${to.name} — TOC carries onto the next leg`));
       }
       if (res.descInfo) {
@@ -3164,7 +3185,10 @@
         const tgt = (d.targetName && d.targetName !== to.name)
           ? ` — down to ${d.targetAlt}' at ${d.targetName}` : '';
         if (d.startsHere) {
-          parts.push(`▼ DES ${Math.round(d.timeMin)} min · TOD ${convertDist(d.todBeforeNM, distUnit).toFixed(1)} ${dl} before ${to.name}` +
+          const todTxt = res.distNM - d.todBeforeNM <= EDGE_NM
+            ? `TOD at ${from.name}`
+            : `TOD ${convertDist(d.todBeforeNM, distUnit).toFixed(1)} ${dl} before ${to.name}`;
+          parts.push(`▼ DES ${Math.round(d.timeMin)} min · ${todTxt}` +
             (d.continues ? ` · descent continues past ${to.name}${tgt}` : ''));
         } else if (d.carriedIn) {
           parts.push(`▼ DES (cont.) ${Math.round(d.timeMin)} min${d.continues ? ` · continues past ${to.name}` : ''}${tgt}`);

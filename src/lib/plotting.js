@@ -43,7 +43,9 @@ export function buildPlottingText(fl, distUnit) {
       const profTxt = profs
         .filter(p => { const along = p.kind === 'TOC' ? p.distNM : res.distNM - p.distNM;
                        return along > acc - 0.001 && along <= acc + sg.distNM + 0.001; })
-        .map(p => `  | ${p.kind} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`)
+        .map(p => p.atWaypoint
+          ? `  | ${p.kind} at ${p.atWaypoint}`
+          : `  | ${p.kind} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`)
         .join('');
       lines.push(`${(nameA + ' - ' + nameB).padEnd(28)} TT ${String(sg.tt).padStart(3, '0')}  MT ${smt}  ${convertDist(sg.distNM, distUnit).toFixed(1).padStart(5)} ${distLabel(distUnit)}${profTxt}`);
       acc += sg.distNM;
