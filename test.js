@@ -22,10 +22,13 @@ const leafletStub = `
   Layer.prototype.setLatLngs = function(v){ this._ll = v; return this; };
   Layer.prototype.on = function(ev, fn){ (this._h=this._h||{})[ev]=fn; return this; };
   Layer.prototype.getLatLng = function(){ return this._latlng; };
+  Layer.prototype.setLatLng = function(ll){ this._latlng = ll; return this; };
   window.L = {
     map: function(){ return {
       setView: function(){ return this; },
       on: function(ev, fn){ window.__mapHandlers[ev] = fn; },
+      off: function(ev, fn){ if (window.__mapHandlers[ev] === fn) delete window.__mapHandlers[ev]; },
+      dragging: { enable: function(){}, disable: function(){} },
       removeLayer: function(){},
       addLayer: function(){},
       invalidateSize: function(){},
@@ -1425,7 +1428,11 @@ T('drag handler stays lean (guard against the per-mousemove rebuild returning)',
   const raw = fs.readFileSync(APP_HTML, 'utf8');
   const seg = raw.split("marker.on('drag'")[1].split("marker.on('dragend'")[0];
   assert(!seg.includes('renderAllFlightTables'), 'renderAllFlightTables is back in the drag handler');
-  assert(seg.includes('setLatLngs'), 'route line no longer follows the drag');
+  assert(seg.includes('drawLiveLine'), 'route line no longer follows the drag');
+  // ...and the live redraw must use the FULL path. Rebuilding from waypoints
+  // alone made via points visibly vanish for the duration of every drag.
+  const live = raw.split('function drawLiveLine')[1].split('\n    }')[0];
+  assert(live.includes('flightLineCoords'), 'the live redraw dropped the via points again');
 });
 T('base tiles keep a wider buffer so panning shows fewer grey gaps', () => {
   assert(ev('baseTiles._opts.keepBuffer') === 4, 'keepBuffer not 4: ' + ev('baseTiles._opts.keepBuffer'));
@@ -2317,6 +2324,9 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
     'geodesy.js': () => M.geodesy.calcDistanceNM(69.055, 18.545, 69.679, 18.911),
     'performance.js': () => [M.perf.climbPerf(0, 6000, 15), M.perf.cruisePerf(6000, -5), M.perf.calcWCA(120, 20, 1)],
     'format.js': () => [M.fmt.formatTimeHHMM(125), M.fmt.toDMM(69.68, true), M.fmt.clockFromMinutes('23:30', 90)],
+    'legs.js+paths': () => [M.legs.flightLineCoords({ waypoints: [wp(69, 18, 0), wp(69.7, 18.9, 2500)] }),
+                            M.legs.findPathInsertion([wp(69, 18, 0), wp(69.7, 18.9, 2500)], { lat: 69.3, lng: 18.4 }),
+                            M.legs.legMidpoint(wp(69, 18, 0), wp(69.7, 18.9, 2500))],
     'legs.js': () => [M.legs.computeLegTotals(wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500), null),
                       M.legs.computeFlightSchedule({ waypoints: [wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500)] }),
                       M.legs.computeLegMarkers(wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500), null)],
@@ -2549,6 +2559,201 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
     'MET Norway attribution is missing');
   assert(/obtain an official briefing before flight/i.test(built),
     'the card does not tell the pilot to get a real briefing');
+});
+
+console.log('\n=== 63. Drag the line to bend it, and insert waypoints mid-route (v16.27) ===');
+T('the drawn path walks waypoints AND via points, and skips patterns', () => {
+  const L2 = moduleExports.legs;
+  const fl = { waypoints: [
+    { lat: 69.0, lng: 18.0, name: 'A' },
+    { lat: 69.5, lng: 18.5, name: 'B', via: [{ lat: 69.2, lng: 18.9 }, { lat: 69.4, lng: 19.1 }] },
+    { lat: 69.6, lng: 18.6, name: 'PATTERN', isPattern: true, laps: 3 },
+    { lat: 70.0, lng: 19.0, name: 'C' }
+  ]};
+  const line = L2.flightLineCoords(fl);
+  // A, v1, v2, B, C - the pattern is not a place on the ground
+  assert(line.length === 5, 'path length ' + line.length + ': ' + JSON.stringify(line));
+  assert(line[1][0] === 69.2 && line[2][0] === 69.4, 'via points are not between their waypoints');
+  assert(!line.some(p => p[0] === 69.6), 'a PATTERN waypoint was drawn as a place on the ground');
+  // a via with a broken coordinate must be skipped, not drawn as NaN
+  const bad = L2.flightLineCoords({ waypoints: [{ lat: 69, lng: 18 },
+    { lat: 70, lng: 19, via: [{ lat: NaN, lng: 18.5 }] }] });
+  assert(bad.length === 2 && bad.every(p => isFinite(p[0]) && isFinite(p[1])), 'a NaN via reached the line');
+});
+T('the line hit-test names the leg and the slot within it', () => {
+  const L2 = moduleExports.legs;
+  const wps = [
+    { lat: 69.0, lng: 18.0, name: 'A' },
+    { lat: 69.5, lng: 18.0, name: 'B', via: [{ lat: 69.25, lng: 18.5 }] },
+    { lat: 70.0, lng: 18.0, name: 'C' }
+  ];
+  // near the FIRST half of leg A->B (A -> via), so slot 0
+  let h = L2.findPathInsertion(wps, { lat: 69.12, lng: 18.25 });
+  assert(h.legEnd === 1 && h.insertAt === 0, 'first span: ' + JSON.stringify(h));
+  // near the SECOND half (via -> B), so slot 1: splicing here keeps the
+  // existing via first, which is the whole point
+  h = L2.findPathInsertion(wps, { lat: 69.38, lng: 18.25 });
+  assert(h.legEnd === 1 && h.insertAt === 1, 'second span: ' + JSON.stringify(h));
+  // clearly on the B->C leg
+  h = L2.findPathInsertion(wps, { lat: 69.75, lng: 18.01 });
+  assert(h.legEnd === 2 && h.insertAt === 0, 'second leg: ' + JSON.stringify(h));
+  // a leg touching a PATTERN cannot be bent or split
+  assert(L2.findPathInsertion([{ lat: 69, lng: 18 }, { lat: 70, lng: 19, isPattern: true }],
+    { lat: 69.5, lng: 18.5 }) === null, 'a pattern leg was offered as bendable');
+  assert(L2.findPathInsertion([{ lat: 69, lng: 18 }], { lat: 69, lng: 18 }) === null,
+    'a single waypoint is not a leg');
+});
+T('the leg midpoint is measured along the FLOWN path, not the direct line', () => {
+  const L2 = moduleExports.legs;
+  const from = { lat: 69.0, lng: 18.0 };
+  // a leg dog-legged a long way east; the direct midpoint would sit at lng 18
+  const to = { lat: 70.0, lng: 18.0, via: [{ lat: 69.5, lng: 19.5 }] };
+  const mid = L2.legMidpoint(from, to);
+  assert(mid.lng > 18.6, 'the midpoint fell on the direct line, not the flown path: ' + JSON.stringify(mid));
+  // and on a straight leg it really is halfway
+  const straight = L2.legMidpoint({ lat: 69, lng: 18 }, { lat: 70, lng: 18 });
+  assert(Math.abs(straight.lat - 69.5) < 0.01 && Math.abs(straight.lng - 18) < 0.01,
+    'straight-leg midpoint: ' + JSON.stringify(straight));
+  assert(L2.legMidpoint({ lat: 69, lng: 18 }, { lat: 69, lng: 18 }) === null,
+    'a zero-length leg has no midpoint');
+});
+T('press-drag-release on the line bends it in one motion', () => {
+  ev(SEED);
+  const before = ev('flights[0].waypoints[2].via ? flights[0].waypoints[2].via.length : 0');
+  // press on the ENDU->FINNSNES..ENTC line, drag, release
+  ev(`(function(){
+    hitLines[0]._h.mousedown({ latlng: { lat: 69.45, lng: 18.90 }, originalEvent: { button: 0, preventDefault: function(){} } });
+  })()`);
+  assert(ev('lineDrag !== null'), 'the press did not start a drag');
+  assert(ev('flights[0].waypoints[2].via.length') === before + 1, 'the press did not create the via point');
+  // the line must follow the cursor DURING the drag, without rebuilding tables
+  const sentinel = doc.createElement('div');
+  sentinel.id = 'via-drag-sentinel';
+  doc.getElementById('flight-plans-container').appendChild(sentinel);
+  ev(`__mapHandlers.mousemove({ latlng: { lat: 69.60, lng: 19.40 } })`);
+  assert(doc.getElementById('via-drag-sentinel') !== null, 'the OFP tables rebuilt on every mousemove');
+  assert(ev('flights[0].waypoints[2].via[0].lng') === 19.40, 'the via did not follow the cursor');
+  assert(JSON.stringify(ev('polylines[0]._ll')).includes('19.4'), 'the route line did not move with the drag');
+  // release commits
+  ev(`__mapHandlers.mouseup()`);
+  assert(ev('lineDrag === null'), 'the drag never ended');
+  assert(doc.getElementById('via-drag-sentinel') === null, 'release did not do the full recalc');
+  assert(ev('flights[0].waypoints[2].via.length') === before + 1, 'release changed the via count');
+  // one undo takes the whole gesture back - the state is pushed at the press
+  ev('undoLast(true)');
+  assert(ev('flights[0].waypoints[2].via ? flights[0].waypoints[2].via.length : 0') === before,
+    'undo did not remove the via created by the drag');
+});
+T('the click that trails a drag does not drop a second via', () => {
+  ev(SEED);
+  ev(`(function(){
+    hitLines[0]._h.mousedown({ latlng: { lat: 69.45, lng: 18.90 }, originalEvent: { button: 0, preventDefault: function(){} } });
+    __mapHandlers.mouseup();
+    hitLines[0]._h.click({ latlng: { lat: 69.45, lng: 18.90 } });
+  })()`);
+  assert(ev('flights[0].waypoints[2].via.length') === 1,
+    'the drag and its trailing click both added a via: ' + ev('flights[0].waypoints[2].via.length'));
+});
+T('a plain click still bends the line (the touch path, where mousedown never fires)', () => {
+  ev(SEED);
+  ev('lineDragEndedAt = 0');   // the previous test just finished a drag
+  ev(`hitLines[0]._h.click({ latlng: { lat: 69.45, lng: 18.90 } })`);
+  assert(ev('flights[0].waypoints[2].via.length') === 1, 'a tap no longer inserts a via point');
+  assert(ev('polylines[0]._ll.length') === 4, 'the map did not redraw after the tap');
+});
+T('the route has a fat invisible grab line, and it is not the one you see', () => {
+  ev(SEED);
+  assert(ev('hitLines.length') === ev('polylines.length'), 'one grab line per route');
+  assert(ev('hitLines[0]._opts.opacity') === 0, 'the grab line is visible');
+  assert(ev('hitLines[0]._opts.weight') >= 12, 'the grab line is too thin to help: ' + ev('hitLines[0]._opts.weight'));
+  assert(ev('polylines[0]._opts.weight') === 4, 'the VISIBLE line got fattened instead');
+  assert(ev('hitLines[0]._opts.bubblingMouseEvents') === false,
+    'a line gesture would also fire the map click and append a waypoint');
+  // and it tracks the same coordinates, or the grab area drifts off the route
+  assert(JSON.stringify(ev('hitLines[0]._ll')) === JSON.stringify(ev('polylines[0]._ll')),
+    'the grab line does not follow the drawn line');
+});
+TA('inserting a waypoint mid-leg splits it and keeps the via points on the right halves', async () => {
+  ev(SEED);
+  // bend the ENDU->FINNSNES leg twice, one via on each side of where the new
+  // waypoint will go
+  ev(`flights[0].waypoints[1].via = [{ lat: 69.10, lng: 18.40 }, { lat: 69.20, lng: 18.10 }];
+      refreshMap(); renderAllFlightTables();`);
+  const p = w.insertWaypointOnLeg(0, { lat: 69.15, lng: 18.25 });
+  await tick();
+  typeInDialog('MIDPT');
+  answerDialog('Insert waypoint');
+  await p;
+  const names = ev('flights[0].waypoints.map(w => w.name)');
+  assert(JSON.stringify(names) === JSON.stringify(['ENDU', 'MIDPT', 'FINNSNES', 'ENTC']),
+    'wrong insertion position: ' + JSON.stringify(names));
+  const v1 = ev('flights[0].waypoints[1].via'), v2 = ev('flights[0].waypoints[2].via');
+  assert(v1.length === 1 && Math.abs(v1[0].lat - 69.10) < 1e-9, 'first half lost its via: ' + JSON.stringify(v1));
+  assert(v2.length === 1 && Math.abs(v2[0].lat - 69.20) < 1e-9, 'second half lost its via: ' + JSON.stringify(v2));
+  // it inherits the plan it was inserted into - nothing invented
+  assert(ev('flights[0].waypoints[1].alt') === 2500, 'the new waypoint invented an altitude');
+  assert(ev('flights[0].waypoints[1].oat') === 10, 'the new waypoint invented an OAT');
+  // ...except variation, which is COMPUTED for the new position
+  assert(ev('flights[0].waypoints[1].varSource') !== 'MANUAL', 'variation was not resolved for the new point');
+  assert(isFinite(ev('flights[0].waypoints[1].var')), 'the new waypoint has no variation');
+  // and it is a real OFP row now: three legs, not two
+  const rows = doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)');
+  assert(rows.length === 3, 'the leg did not split into two rows: ' + rows.length);
+  assert(!doc.getElementById('flight-plans-container').textContent.includes('NaN'), 'NaN after the insert');
+});
+TA('cancelling the insert changes nothing', async () => {
+  ev(SEED);
+  const before = ev('JSON.stringify(flights)');
+  const p = w.insertWaypointOnLeg(0, { lat: 69.15, lng: 18.25 });
+  await tick();
+  answerDialog('Cancel');
+  await p;
+  assert(ev('JSON.stringify(flights)') === before, 'cancelling the insert still changed the route');
+});
+TA('right-clicking the line inserts a waypoint; the "+" button uses the leg midpoint', async () => {
+  ev(SEED);
+  ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.45, lng: 18.90 }, originalEvent: { preventDefault: function(){} } })`);
+  await tick();
+  typeInDialog('BEND');
+  answerDialog('Insert waypoint');
+  await tick(); await tick();
+  assert(ev('flights[0].waypoints.map(w => w.name)').includes('BEND'), 'right-click did not insert a waypoint');
+
+  ev(SEED);
+  w.insertWaypointMidLeg(0, 0);
+  await tick();
+  typeInDialog('HALF');
+  answerDialog('Insert waypoint');
+  await tick(); await tick();
+  const wps = ev('flights[0].waypoints');
+  assert(wps[1].name === 'HALF', 'the + button inserted in the wrong place: ' + JSON.stringify(wps.map(x=>x.name)));
+  // halfway along ENDU -> FINNSNES
+  assert(Math.abs(wps[1].lat - (69.05505349 + 69.23781330) / 2) < 0.01,
+    'the + button did not use the leg midpoint: ' + wps[1].lat);
+});
+T('every leg row offers the insert button, and PATTERN rows do not', () => {
+  ev(SEED);
+  const rows = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')];
+  assert(rows.length === 2, 'seed route should have two leg rows');
+  for (const tr of rows) {
+    assert(/insertWaypointMidLeg\(0, \d+\)/.test(tr.innerHTML), 'a leg row has no insert button');
+  }
+  // and the argument is the leg's START index, or it splits the wrong leg
+  assert(rows[0].innerHTML.includes('insertWaypointMidLeg(0, 0)'), 'row 1 points at the wrong leg');
+  assert(rows[1].innerHTML.includes('insertWaypointMidLeg(0, 1)'), 'row 2 points at the wrong leg');
+  // a traffic circuit is not a line on the ground and cannot be split
+  ev(`flights[0].waypoints.push({ lat: 69.68, lng: 18.91, name: 'PATTERN', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12, isPattern: true, laps: 3 });
+      refreshMap(); renderAllFlightTables();`);
+  const pat = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')]
+    .find(tr => tr.textContent.includes('PATTERN'));
+  assert(pat && !pat.innerHTML.includes('insertWaypointMidLeg'), 'a PATTERN row offers to split itself');
+});
+T('the guide explains both gestures', () => {
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(/Grab a leg line and drag/.test(built), 'the guide does not mention the drag gesture');
+  assert(/Forgot a waypoint in the middle of a route/.test(built),
+    'the guide does not explain how to insert a waypoint mid-route');
+  assert(/right-click the leg line/i.test(built), 'the guide does not mention the right-click insert');
 });
 
 console.log('\n=== 62. The offline chart download stays removed ===');

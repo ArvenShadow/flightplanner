@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.26)
+# C182 Flight Planner (v16.27)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -53,7 +53,7 @@ module, with no DOM, and is tested in plain Node:
 | `performance.js` | POH climb & cruise tables, TAS, fuel flow, WCA |
 | `geodesy.js` | WGS-84 distance and true track |
 | `magvar.js` | magnetic variation (WMM2025) |
-| `legs.js` | legs, via points, the climb/descent schedule, TOC/TOD |
+| `legs.js` | legs, via points, the drawn path and line hit-test, the climb/descent schedule, TOC/TOD |
 | `daylight.js` | sunrise/sunset and the SERA day-VFR window |
 | `winds.js` | winds-aloft vector maths and the Open-Meteo API shapes |
 | `integrity.js` | the rules behind the red DO-NOT-USE banner |

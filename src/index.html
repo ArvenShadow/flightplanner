@@ -251,7 +251,9 @@
             <li><b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> redoes (⌘ on Mac), step by step up to 30 states — same stacks as the Undo/Redo buttons. Inside a text field the keys keep their normal text-editing meaning.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
-            <li><b>Click a leg line</b> to bend it around terrain: a diamond <b>via point</b> appears where you clicked — drag it into position, right-click to remove. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
+            <li><b>Grab a leg line and drag</b> to bend it around terrain: a diamond <b>via point</b> appears under the cursor and follows it, with the route redrawing as you move — one motion, press to release. Let go where you want it. A plain click still drops a via point on the spot, and either way you can drag the diamond again later or right-click it to remove. The line has a generous invisible grab area, so you do not have to hit the 4-pixel stroke exactly.</li>
+            <li>A via point <b>bends a leg without adding a row</b>. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
+            <li><b>Forgot a waypoint in the middle of a route?</b> Two ways to insert one, and it gets its own OFP row with its own altitude, times and fuel: <b>right-click the leg line</b> where you want it, or press the <b>+</b> button on that leg's OFP row to put it halfway along. Either way the leg splits in two, and any via points on it stay on the correct half so the flown track does not move. The new waypoint inherits the altitude, OAT and wind of the waypoint it is inserted before — the leg was already planned to arrive at those, so nothing is invented — and all of it is editable in the row. Its magnetic variation is computed for the new position.</li>
             <li>Climb and descent no longer split legs into separate rows: each leg row shows <b>total</b> distance/time/burn for easy copying, with the CLB/DES portion and TOC/TOD marking distance in the sub-line.</li>
             <li>Press <b>👁 View Mode</b> to lock all editing for in-flight use; tapping a map waypoint then highlights its OFP row. The button flips to <b>✏ Edit Mode</b> to switch back.</li>
             <li><b>Undo / Redo</b> cover every change. <b>Esc</b> closes any window like this one.</li>
@@ -629,6 +631,7 @@
     //   distance & track            -> src/lib/geodesy.js
     //   magnetic variation          -> src/lib/magvar.js
     //   legs, via points, TOC/TOD   -> src/lib/legs.js
+    //   the drawn path & line hit-test -> src/lib/legs.js
     //   sunrise / SERA day-VFR      -> src/lib/daylight.js
     //   winds aloft maths + API     -> src/lib/winds.js
     //   the red banner's rules      -> src/lib/integrity.js
@@ -849,7 +852,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.26';
+    const APP_VERSION = '16.27';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1218,6 +1221,9 @@
     let markers = [];
     let profileMarkers = [];
     let polylines = [];
+    // Invisible fat lines drawn over the routes so the mouse can grab a leg
+    // without pixel-hunting a 4 px stroke. One per flight, same index.
+    let hitLines = [];
     let undoStack = [];
     let redoStack = [];
 
@@ -1514,25 +1520,173 @@
     // Only the command below stays here: it mutates app state and drives the
     // UI, so it belongs with the map interactions rather than the engine.
     // =========================================================================
-    function insertViaAtLatLng(fIdx, latlng) {
+    // Put a via point where the line was grabbed, and hand back the object so
+    // a drag can keep moving it. Does NOT redraw: the drag redraws per
+    // mousemove, and the click path below commits once. Returns null when
+    // there is no bendable leg (one waypoint, or all PATTERN).
+    function addViaAtLatLng(fIdx, latlng) {
       const fl = flights[fIdx];
-      if (!fl) return;
-      let best = null;
-      for (let i = 0; i < fl.waypoints.length - 1; i++) {
-        const from = fl.waypoints[i], to = fl.waypoints[i + 1];
-        if (from.isPattern || to.isPattern) continue;
-        const pts = legPath(from, to);
-        for (let k = 0; k < pts.length - 1; k++) {
-          const d = distToSegmentNM(latlng, pts[k], pts[k + 1]);
-          if (!best || d < best.d) best = { d, legEnd: i + 1, insertAt: k };
-        }
-      }
-      if (!best) return;
+      if (!fl) return null;
+      const best = findPathInsertion(fl.waypoints, latlng);
+      if (!best) return null;
       pushUndoState();
       const to = fl.waypoints[best.legEnd];
       to.via = to.via || [];
-      to.via.splice(best.insertAt, 0, { lat: latlng.lat, lng: latlng.lng });
+      const v = { lat: latlng.lat, lng: latlng.lng };
+      to.via.splice(best.insertAt, 0, v);
+      return { wp: to, v: v };
+    }
+
+    /** Insert a via point and commit it - the click path, and the command
+     *  anything outside the drag should call. */
+    function insertViaAtLatLng(fIdx, latlng) {
+      const made = addViaAtLatLng(fIdx, latlng);
+      if (!made) return null;
       refreshMap(); renderAllFlightTables(); saveActiveState();
+      return made;
+    }
+
+    // -------------------------------------------------------------------------
+    // DRAG THE LINE TO BEND IT (v16.27)
+    //
+    // Before this, bending a leg took two gestures: click the line to drop a
+    // via point, let go, then find the diamond and drag it. Now the whole
+    // thing is one press-drag-release: the press creates the via, the drag
+    // moves it with the line redrawing live under the cursor, the release
+    // commits. A press with no movement leaves a via exactly where the old
+    // click did, so nothing that worked before stopped working - including
+    // touch, where a tap fires `click` without a `mousedown` and falls
+    // through to the same command.
+    //
+    // Leaflet's own marker dragging cannot be used here: the marker does not
+    // exist until the press happens, and there is no way to hand an
+    // in-progress mouse gesture to a Draggable created mid-press. So the drag
+    // is driven from map-level mousemove, with a document-level mouseup as
+    // well - releasing the button outside the map must not leave the route
+    // stuck to the cursor.
+    // -------------------------------------------------------------------------
+    /** @type {{fIdx: number, v: {lat: number, lng: number}, ghost: any}|null} */
+    let lineDrag = null;
+    // A press-release with no movement ends the drag AND fires a click on the
+    // same element, which would add a second via on top of the first. The
+    // browser synthesises that click immediately after the mouseup, so a
+    // quarter-second window catches it; anything longer would start
+    // swallowing a genuine second click further along the line.
+    let lineDragEndedAt = 0;
+    const TRAILING_CLICK_MS = 250;
+
+    function beginLineDrag(fIdx, latlng) {
+      if (isDoneMode || isRulerMode || lineDrag) return;
+      const made = addViaAtLatLng(fIdx, latlng);
+      if (!made) return;
+      const color = ROUTE_COLORS[fIdx % ROUTE_COLORS.length];
+      const ghost = L.marker([latlng.lat, latlng.lng], {
+        interactive: false, zIndexOffset: 1000,
+        icon: L.divIcon({ className: 'via-icon',
+          html: `<div class="via-dot dragging" style="background:${color};"></div>`,
+          iconAnchor: [0, 0] })
+      }).addTo(map);
+      lineDrag = { fIdx: fIdx, v: made.v, ghost: ghost };
+      map.dragging.disable();
+      map.on('mousemove', onLineDragMove);
+      map.on('mouseup', endLineDrag);
+      document.addEventListener('mouseup', endLineDrag);
+      drawLiveLine(fIdx);
+    }
+
+    function onLineDragMove(e) {
+      if (!lineDrag) return;
+      lineDrag.v.lat = e.latlng.lat;
+      lineDrag.v.lng = e.latlng.lng;
+      lineDrag.ghost.setLatLng(e.latlng);
+      drawLiveLine(lineDrag.fIdx);
+    }
+
+    function endLineDrag() {
+      if (!lineDrag) return;
+      map.off('mousemove', onLineDragMove);
+      map.off('mouseup', endLineDrag);
+      document.removeEventListener('mouseup', endLineDrag);
+      map.removeLayer(lineDrag.ghost);
+      map.dragging.enable();
+      lineDrag = null;
+      lineDragEndedAt = Date.now();
+      refreshMap(); renderAllFlightTables(); saveActiveState();
+    }
+
+    // Redraw one flight's line from the CURRENT waypoints and via points.
+    // Used by every live drag; the OFP tables deliberately do not rebuild
+    // here, because that fires per mousemove and makes the drag stutter.
+    function drawLiveLine(fIdx) {
+      if (polylines[fIdx]) polylines[fIdx].setLatLngs(flightLineCoords(flights[fIdx]));
+      if (hitLines[fIdx]) hitLines[fIdx].setLatLngs(flightLineCoords(flights[fIdx]));
+    }
+
+    // -------------------------------------------------------------------------
+    // INSERT A REAL WAYPOINT PART-WAY ALONG A LEG (v16.27)
+    //
+    // A via point bends a leg without adding an OFP row. This is the other
+    // thing: a forgotten fix that needs its own row, its own altitude and its
+    // own times - ENSK between ENDU and ENEV, added after the route was drawn.
+    //
+    // Splitting a leg that already has via points has one right answer: the
+    // vias BEFORE the split stay on the first half, the ones after go to the
+    // second. Anything else silently moves the flown track.
+    //
+    // The new waypoint inherits the altitude, OAT and wind of the waypoint it
+    // is being inserted BEFORE - the leg was already planned to arrive at
+    // those, so nothing is invented. Variation is computed for the new
+    // position, like any other waypoint. All of it is editable in the row.
+    // -------------------------------------------------------------------------
+    async function insertWaypointOnLeg(fIdx, latlng) {
+      if (isDoneMode) return;
+      const fl = flights[fIdx];
+      if (!fl) return;
+      const best = findPathInsertion(fl.waypoints, latlng);
+      if (!best) { say('Draw at least two waypoints first.', 'warn'); return; }
+
+      const before = fl.waypoints[best.legEnd - 1], after = fl.waypoints[best.legEnd];
+      const named = await ask({
+        title: 'Insert a waypoint here',
+        message: `Between ${before.name} and ${after.name}, on [${flightTitle(fl)}]. ` +
+                 `It becomes its own OFP row; the leg splits in two.`,
+        input: { label: 'Waypoint name', value: 'WP' + (fl.waypoints.length + 1) },
+        buttons: [
+          { id: 'ok', label: 'Insert waypoint', variant: 'primary' },
+          { id: 'cancel', label: 'Cancel' }
+        ]
+      });
+      if (named.id === 'cancel') return;
+
+      pushUndoState();
+      const via = Array.isArray(after.via) ? after.via : [];
+      const magData = resolveMagVar(latlng.lat, latlng.lng);
+      const wp = {
+        lat: latlng.lat, lng: latlng.lng,
+        name: (named.value || '').trim() || ('WP' + (fl.waypoints.length + 1)),
+        alt: after.alt, oat: after.oat, wdir: after.wdir, wspd: after.wspd,
+        var: magData.val, varSource: magData.source,
+        isPattern: false, laps: 3,
+        via: via.slice(0, best.insertAt)
+      };
+      after.via = via.slice(best.insertAt);
+      fl.waypoints.splice(best.legEnd, 0, wp);
+      refreshMap(); renderAllFlightTables(); saveActiveState();
+      say(`${wp.name} inserted between ${before.name} and ${after.name}, planned at ${wp.alt}' - ` +
+          `edit its row, or drag it on the map.`, 'good', 7000);
+    }
+
+    // The table's "+" button: same command, positioned halfway along the leg
+    // it was pressed on, measured along the flown path rather than the direct
+    // line so a dog-legged leg does not put it out in the terrain.
+    function insertWaypointMidLeg(fIdx, legIdx) {
+      const fl = flights[fIdx];
+      if (!fl) return;
+      const from = fl.waypoints[legIdx], to = fl.waypoints[legIdx + 1];
+      if (!from || !to || from.isPattern || to.isPattern) return;
+      const mid = legMidpoint(from, to);
+      if (!mid) { say('That leg has no length to split.', 'warn'); return; }
+      insertWaypointOnLeg(fIdx, mid);
     }
     // 5. MAP INTERACTIONS, RULER MODE & UNDO / REDO
     // =========================================================================
@@ -1826,9 +1980,11 @@
       markers.forEach(m => map.removeLayer(m));
       profileMarkers.forEach(m => map.removeLayer(m));
       polylines.forEach(p => map.removeLayer(p));
+      hitLines.forEach(p => map.removeLayer(p));
       markers = [];
       profileMarkers = [];
       polylines = [];
+      hitLines = [];
 
       flights.forEach((fl, fIdx) => {
         const color = ROUTE_COLORS[fIdx % ROUTE_COLORS.length];
@@ -1838,20 +1994,12 @@
         // waypoints or lines. In VIEW mode all flights show at full strength.
         const dimmed = !isDoneMode && fIdx !== activeFlightIndex;
 
-        const lineCoords = [];
+        // The drawn path, vias included -> src/lib/legs.js. Every live drag
+        // redraws from the same function, so a drag can never straighten a
+        // bent leg on screen.
+        const lineCoords = flightLineCoords(fl);
 
         fl.waypoints.forEach((wp, idx) => {
-          if (!wp.isPattern) {
-            // Via points of the leg ARRIVING at this waypoint come first so
-            // the drawn line follows the actual bent path.
-            if (idx > 0 && Array.isArray(wp.via)) {
-              wp.via.forEach(v => {
-                if (v && isFinite(v.lat) && isFinite(v.lng)) lineCoords.push([v.lat, v.lng]);
-              });
-            }
-            lineCoords.push([wp.lat, wp.lng]);
-          }
-
           const isPattern = wp.isPattern;
           const isHighlighted = (isDoneMode && highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === idx);
           
@@ -1914,7 +2062,7 @@
             marker.on('drag', function(e) {
               wp.lat = e.target.getLatLng().lat;
               wp.lng = e.target.getLatLng().lng;
-              polylines[fIdx].setLatLngs(fl.waypoints.filter(w=>!w.isPattern).map(w => [w.lat, w.lng]));
+              drawLiveLine(fIdx);
             });
 
             marker.on('dragend', function() {
@@ -1938,13 +2086,44 @@
           interactive: !dimmed,        // only the active flight's line takes via-clicks
           bubblingMouseEvents: false   // a line click must NOT also add a waypoint
         }).addTo(map);
-        // Click anywhere on the leg line to bend it: inserts a draggable via
-        // point right where you clicked, without adding an OFP row.
-        poly.on('click', function(e) {
+        polylines.push(poly);
+
+        // A 4 px line is a 4 px target. This invisible fat line sits over it
+        // and takes the mouse instead, so grabbing the route does not require
+        // pixel-hunting. It carries every route-line gesture.
+        const hit = L.polyline(lineCoords, {
+          className: 'route-hit',      // the cursor is the only hint it is there
+          color: color, weight: 20, opacity: 0,
+          interactive: !dimmed && !isDoneMode,
+          bubblingMouseEvents: false   // a line gesture must NOT also add a waypoint
+        }).addTo(map);
+
+        // PRESS AND DRAG to bend the leg: the via point appears under the
+        // cursor and follows it until you let go.
+        hit.on('mousedown', function(e) {
           if (isDoneMode || isRulerMode) return;
+          if (e.originalEvent && e.originalEvent.button !== 0) return;   // left button only
+          if (e.originalEvent && e.originalEvent.preventDefault) e.originalEvent.preventDefault();
+          beginLineDrag(fIdx, e.latlng);
+        });
+        // A plain click still drops a via where you clicked - that is what a
+        // press-release with no movement means, and it is the path a TAP takes
+        // on a touch screen, where mousedown never fires. The guard stops the
+        // click that trails every mouse drag from adding a second one.
+        hit.on('click', function(e) {
+          if (isDoneMode || isRulerMode) return;
+          if (Date.now() - lineDragEndedAt < TRAILING_CLICK_MS) return;
           insertViaAtLatLng(fIdx, e.latlng);
         });
-        polylines.push(poly);
+        // RIGHT-CLICK the line to insert a real waypoint there instead: its
+        // own OFP row, its own altitude and times. Mirrors right-click on a
+        // via point, which removes it.
+        hit.on('contextmenu', function(e) {
+          if (isDoneMode || isRulerMode) return;
+          if (e.originalEvent && e.originalEvent.preventDefault) e.originalEvent.preventDefault();
+          insertWaypointOnLeg(fIdx, e.latlng);
+        });
+        hitLines.push(hit);
 
         // Via point markers: diamonds in the flight colour. Drag to reshape,
         // right-click to remove.
@@ -1962,8 +2141,16 @@
                 iconAnchor: [0, 0]
               })
             }).addTo(map);
+            vm.on('dragstart', function() { pushUndoState(); });
+            // Same rule as the waypoint markers: the line follows live, the
+            // OFP tables wait for dragend. Rebuilding the tables per mousemove
+            // makes the drag stutter.
+            vm.on('drag', function(e) {
+              const ll = e.target.getLatLng();
+              v.lat = ll.lat; v.lng = ll.lng;
+              drawLiveLine(fIdx);
+            });
             vm.on('dragend', function(e) {
-              pushUndoState();
               const ll = e.target.getLatLng();
               v.lat = ll.lat; v.lng = ll.lng;
               refreshMap(); renderAllFlightTables(); saveActiveState();
@@ -2542,7 +2729,7 @@
               <th style="width:5%">Burn (${fuelLabel(fuelUnit)})</th>
               <th class="acc-fuel-cell cc" style="width:5%;">Acc (${fuelLabel(fuelUnit)})</th>
               <th style="width:5%">Rem (${fuelLabel(fuelUnit)})</th>
-              <th class="no-print" style="width:3%">×</th>
+              <th class="no-print" style="width:4%" title="+ inserts a waypoint halfway along this leg; × deletes this row's waypoint">+ ×</th>
             </tr>
           </thead>
           <tbody id="tbody-flight-${fIdx}"></tbody>
@@ -2618,7 +2805,7 @@
               <td class="calc-cell" style="min-width:48px;">${patternBurn.toFixed(1)}</td>
               <td class="calc-cell acc-fuel-cell cc" style="min-width:52px;">${runningAccBurn.toFixed(1)}</td>
               <td class="calc-cell ${runningFuelRemaining < getReserveDisplayUnits() ? 'low-fuel' : ''}" style="min-width:52px; font-weight:700;">${runningFuelRemaining.toFixed(1)}</td>
-              <td class="no-print"><button class="btn btn-danger btn-sm" onclick="deleteWaypointFromFlight(${fIdx}, ${i+1})" ${isDoneMode ? 'disabled' : ''}>×</button></td>
+              <td class="no-print row-actions"><button class="btn btn-danger btn-sm" onclick="deleteWaypointFromFlight(${fIdx}, ${i+1})" ${isDoneMode ? 'disabled' : ''}>×</button></td>
             `;
             tbody.appendChild(tr);
             continue;
@@ -2725,7 +2912,7 @@
         <td class="calc-cell" style="min-width:48px;">${legBurn.toFixed(1)}</td>
         <td class="calc-cell acc-fuel-cell cc" style="min-width:52px;">${accBurn.toFixed(1)}</td>
         <td class="calc-cell ${remFuel < getReserveDisplayUnits() ? 'low-fuel' : ''}" style="min-width:52px; font-weight:700;" ${remFuel < getReserveDisplayUnits() ? 'title="Below planned reserve!"' : ''}>${remFuel.toFixed(1)}</td>
-        <td class="no-print">${showDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteWaypointFromFlight(${fIdx}, ${wpIndex+1})" ${isDoneMode ? 'disabled' : ''}>×</button>` : ''}</td>
+        <td class="no-print row-actions"><button class="btn btn-insert btn-sm" title="Insert a new waypoint halfway along this leg - it gets its own OFP row" onclick="insertWaypointMidLeg(${fIdx}, ${wpIndex})" ${isDoneMode ? 'disabled' : ''}>+</button>${showDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteWaypointFromFlight(${fIdx}, ${wpIndex+1})" ${isDoneMode ? 'disabled' : ''}>×</button>` : ''}</td>
       `;
       return tr;
     }
