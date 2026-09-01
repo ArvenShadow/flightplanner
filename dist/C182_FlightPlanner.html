@@ -804,26 +804,53 @@ svg.leaflet-image-layer.leaflet-interactive path {
       max-width: 74%; line-height: 1.35; pointer-events: none; }
     body.dark-mode #fixes-attribution { color: #e2e8f0; background: rgba(26,32,44,0.78); }
 
-    /* AIP FIXES. Deliberately quieter than a route waypoint: these are
-   available fixes, not part of the plan, and the chart underneath is what is
-   being read. An aerodrome gets a filled square and its ICAO; a reporting
-   point gets a hollow triangle, because that is the symbol the VAC itself
-   uses for one. The label is click-through (pointer-events: none) so only the
-   symbol takes the click - a wide text label would otherwise swallow clicks
-   meant for the map or the route line. */
+    /* AIP FIXES. The SYMBOL is inline SVG, not CSS: a CSS border-triangle has a
+   zero-sized box by construction, so it could neither be measured nor resized
+   from one number, and the colour was baked into the stylesheet where the user
+   could not reach it. Shape, colour, size and style are Map settings now, so
+   the only thing left here is the frame and the label. The label is
+   click-through so only the symbol takes the click - a wide text label would
+   otherwise swallow clicks meant for the map or the route line. */
     .fix-icon { background: none; border: none; }
-    .fix-dot { width: 9px; height: 9px; box-sizing: border-box; }
-    .fix-dot.ad { background: #2b6cb0; border: 1.5px solid #fff; border-radius: 2px;
-      box-shadow: 0 0 0 1px rgba(0,0,0,0.45); }
-    .fix-dot.rp { width: 0; height: 0; background: none; border-left: 5px solid transparent;
-      border-right: 5px solid transparent; border-bottom: 9px solid #2f855a;
-      filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1.5px rgba(0,0,0,0.5)); }
-    .fix-label { position: absolute; left: 12px; top: -3px; white-space: nowrap;
+    .fix-svg { display: block; overflow: visible; }
+    /* THE LABEL DOES NOT FOLLOW THE THEME, and that is the same decision
+   .wp-label makes: it is drawn on the MAP, and both base charts are light
+   rasters in dark mode as well as light. The v16.34 build shipped a dark-mode
+   override here that put pale blue text with a dark halo over a light chart -
+   invisible in exactly the case the label exists for, and hidden during
+   development because the offline placeholder is grey.
+   The label also does NOT take the symbol's colour: a user is free to pick a
+   bright orange for the shape, which is right for a 10 px symbol you are
+   hunting for and wrong for text you have to read. The shape carries the
+   colour, the text stays legible. */
+    .fix-label { position: absolute; white-space: nowrap;
       font-size: 9px; font-weight: 700; letter-spacing: 0.2px; pointer-events: none;
-      color: #1a365d; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff; }
-    .fix-label.rp { color: #22543d; font-weight: 600; }
-    body.dark-mode .fix-label { color: #bee3f8; text-shadow: 0 0 2px #10151f, 0 0 3px #10151f, 0 0 4px #10151f; }
-    body.dark-mode .fix-label.rp { color: #9ae6b4; }
+      color: #14243d; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff, 0 1px 2px #fff; }
+    .fix-label.rp { font-weight: 600; }
+
+    /* SETTINGS PAGES. Two tabs rather than one long scroll: the aircraft page
+   is configured once per machine, the map page is pure display preference, and
+   mixing them meant scrolling past the POH tables to change a symbol colour. */
+    .settings-tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--border);
+      background: var(--card-bg); }
+    .settings-tab { appearance: none; border: 1px solid transparent; border-bottom: none;
+      background: none; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.3px; padding: 7px 12px; margin-bottom: -1px; border-radius: 4px 4px 0 0;
+      color: var(--text-muted); }
+    .settings-tab:hover { color: var(--text); background: var(--highlight-bg); }
+    .settings-tab.is-active { color: var(--highlight-text); background: var(--bg);
+      border-color: var(--border); border-bottom: 1px solid var(--bg); }
+    /* A live preview of the symbols, so the effect is visible before saving. */
+    .fix-preview { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border);
+      border-radius: 5px; background: linear-gradient(135deg, #e8e2d4 0%, #dfe6dc 100%);
+      display: flex; gap: 26px; align-items: center; flex-wrap: wrap; min-height: 40px; }
+    body.dark-mode .fix-preview { background: linear-gradient(135deg, #2a3140 0%, #232a36 100%); }
+    .fix-preview .pv { position: relative; display: flex; align-items: center; gap: 6px; }
+    .fix-preview .pv-name { font-size: 9px; font-weight: 700; letter-spacing: 0.2px;
+      color: #1a365d; text-shadow: 0 0 2px #fff, 0 0 3px #fff; }
+    body.dark-mode .fix-preview .pv-name { color: #bee3f8; text-shadow: 0 0 2px #10151f, 0 0 3px #10151f; }
+    .fix-preview .pv-kind { font-size: 9px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.4px; }
     /* Hover card for a fix: the published coordinate is the point of the
    feature, so it is what the card leads with. */
     .fix-tip { white-space: normal; width: max-content; max-width: 260px; font-size: 10.5px;
@@ -1365,7 +1392,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
             <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service. <b>Both charts need internet</b> — neither is stored on your machine. The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
             <li><b>⬢ Airspace</b> draws the published airspace from <b>AIP Norge</b> — CTR and TIZ solid, TMA and TIA dashed, CTA finely dashed, the mandatory zones (RMZ/TMZ) in orange. <b>Hover any airspace</b> for a card showing its type, ICAO class, published vertical limits, and one row per service you would actually use — <b>ATIS, Approach, Tower</b>, or <b>Information</b> at an AFIS field. Nothing is drawn below zoom 7: at country zoom the polygons bury the chart you are trying to read. Clicking still adds a waypoint, so route building inside a TMA is unaffected — the information is on hover only. The choice is remembered with your settings.</li>
-            <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
+            <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
             <li><b>What the airspace layer will not do.</b> Vertical limits are shown <b>exactly as published</b> — GND, UNL and flight levels stay as they are, and a flight level is never converted to an altitude. Where the source states no class, the card says so rather than guessing. Airspaces whose published boundary cannot be resolved are <b>absent rather than approximated</b>: the offshore zones defined as a circle radius, the maritime stretch of the Norway–Sweden boundary, and one citing the Finland–Sweden border. The card lists only the frequencies you would dial: clearance delivery and ground are left out, military channels are excluded (both the flagged ones and everything outside the 118–137 MHz civil band), and <b>121.500 is never listed</b> — you know it. An airspace worked only by an area control centre still shows that frequency, because otherwise there would be nobody to call. <b>Polaris CTA is a special case</b>: it is one airspace over the whole country, so the AIP lists all 26 sector frequencies against it. The card therefore names the <b>sector your cursor is in</b> — ENR 2.2 publishes each Polaris sector as its own volume, so this is a lookup, not a guess, and the frequency shown is always one the hovered airspace itself publishes. Where the AIP stacks sectors vertically you get one row per sector, each labelled with the band it works, so you pick by planned level. Over the Oslofjord, where Sectors 3 and 4 cannot be drawn (their boundary follows the <i>maritime</i> Norway–Sweden line, which is not in Kartverket’s land-border data), the card says so and shows no frequency rather than reciting all 26. ATIS rows are labelled <b>&lt;ICAO&gt; ATIS</b> rather than by the published callsign, which in Norway is often "…Information" and reads exactly like the AFIS service you would actually talk to. Every published service and frequency remains in the data. <b>This is a planning aid — verify against the current AIP and NOTAM.</b></li>
             <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (the tick across the track stays); zoomed further out only waypoint dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
@@ -1469,11 +1496,23 @@ svg.leaflet-image-layer.leaflet-interactive path {
   <div id="settings-modal" class="modal-backdrop">
     <div class="modal">
       <div class="modal-header">
-        <h2>⚙ Aircraft Settings & Unit Preferences</h2>
+        <h2>⚙ Settings</h2>
         <button class="btn btn-outline btn-sm" onclick="closeSettingsModal()">×</button>
       </div>
+      <!-- Two pages rather than one long scroll. The aircraft page is set up
+           once per machine and then left alone; the map page is pure display
+           preference. Mixing them meant scrolling past the POH tables to
+           change a symbol colour. -->
+      <div id="settings-tabs" class="settings-tabs no-print" role="tablist">
+        <button id="settings-tab-aircraft" class="settings-tab is-active" role="tab"
+                onclick="showSettingsPage('aircraft')">✈ Aircraft &amp; Units</button>
+        <button id="settings-tab-map" class="settings-tab" role="tab"
+                onclick="showSettingsPage('map')">🗺 Map</button>
+      </div>
       <div class="modal-body">
-        
+
+        <div id="settings-page-aircraft" class="settings-page">
+
         <div class="setting-section">
           <h3>Display Units</h3>
           <div class="setting-row">
@@ -1507,7 +1546,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
         </div>
 
         <div class="setting-section">
-          <h3>Appearance & UI Preferences</h3>
+          <h3>Appearance &amp; UI Preferences <span style="font-weight:normal; text-transform:none; font-size:10px;">— map symbols are on the Map tab</span></h3>
           <div class="setting-row">
             <label>Interface Theme:</label>
             <div>
@@ -1655,6 +1694,83 @@ svg.leaflet-image-layer.leaflet-interactive path {
             <div><input type="number" id="perf-taxi-fuel" value="1.7" step="0.1"> <span id="lbl-taxi-fuel">Gal</span></div>
           </div>
         </div>
+
+        </div><!-- /settings-page-aircraft -->
+
+        <div id="settings-page-map" class="settings-page" hidden>
+
+          <div class="setting-section">
+            <h3>AIP fix symbols <span style="font-weight:normal; text-transform:none; font-size:10px;">— the ⌖ Fixes layer</span></h3>
+            <p style="font-size:10px; color:var(--text-muted); margin:0 0 8px; line-height:1.5;">
+              How aerodromes and VFR reporting points are drawn. The overlay should stay quiet
+              enough to read the chart through, but the symbol you are trying to click should not —
+              that is why the reporting-point default is orange: nothing on either base chart is
+              orange except the mandatory zones, so it cannot be mistaken for published chart ink.
+            </p>
+            <div class="setting-row">
+              <label>Aerodrome:</label>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <select id="map-fix-ad-shape" onchange="updateFixPreview()" style="width:110px;"><option value="triangle">Triangle</option><option value="circle">Circle</option><option value="square">Square</option><option value="diamond">Diamond</option></select>
+                <input type="color" id="map-fix-ad-color" onchange="updateFixPreview()" oninput="updateFixPreview()"
+                       title="Aerodrome symbol colour" style="width:44px; height:26px; padding:1px; cursor:pointer;">
+              </div>
+            </div>
+            <div class="setting-row">
+              <label>Reporting point:</label>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <select id="map-fix-rp-shape" onchange="updateFixPreview()" style="width:110px;"><option value="triangle">Triangle</option><option value="circle">Circle</option><option value="square">Square</option><option value="diamond">Diamond</option></select>
+                <input type="color" id="map-fix-rp-color" onchange="updateFixPreview()" oninput="updateFixPreview()"
+                       title="Reporting-point symbol colour" style="width:44px; height:26px; padding:1px; cursor:pointer;">
+              </div>
+            </div>
+            <div class="setting-row">
+              <label>Symbol style:</label>
+              <div>
+                <select id="map-fix-style" onchange="updateFixPreview()" style="width:110px;">
+                  <option value="filled">Filled</option>
+                  <option value="outline">Outline</option>
+                </select>
+              </div>
+              <label>Show names:</label>
+              <div>
+                <select id="map-fix-labels" onchange="updateFixPreview()" style="width:110px;">
+                  <option value="yes">Yes</option>
+                  <option value="no">No — symbol only</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <label>Symbol size:</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="range" id="map-fix-size" min="6" max="18" step="1"
+                       oninput="updateFixPreview()" onchange="updateFixPreview()" style="width:150px;">
+                <span id="map-fix-size-val" style="font-size:11px; font-weight:700; min-width:34px;"></span>
+              </div>
+            </div>
+            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+              Below 6 px a symbol is not a reliable click target; above 18 px it covers the chart
+              it is meant to sit on.
+            </div>
+            <div id="map-fix-preview" class="fix-preview"></div>
+            <div class="setting-row" style="margin-top:8px;">
+              <label>Reset:</label>
+              <div><button class="btn btn-outline btn-sm" onclick="resetFixStyle()">Restore defaults</button></div>
+            </div>
+          </div>
+
+          <div class="setting-section">
+            <h3>Zoom thresholds <span style="font-weight:normal; text-transform:none; font-size:10px;">— fixed, and why</span></h3>
+            <p style="font-size:10px; color:var(--text-muted); margin:0; line-height:1.5;">
+              Aerodromes appear from zoom <b id="map-zoom-ad">7</b>, reporting points from
+              <b id="map-zoom-rp">9</b>, and airspace from <b id="map-zoom-as">7</b>. These are not
+              adjustable on purpose: at country zoom the 243 reporting points are a spatter that
+              hides the 53 aerodromes, and 227 airspace polygons are a wash that hides the CTRs
+              that matter. The layer toggles, base chart and chart detail live on the map itself,
+              beside what they change.
+            </p>
+          </div>
+
+        </div><!-- /settings-page-map -->
 
       </div>
       <div class="modal-footer">
@@ -4493,12 +4609,22 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
   var anchors_exports = {};
   __export(anchors_exports, {
     AERODROME_MIN_ZOOM: () => AERODROME_MIN_ZOOM,
+    DEFAULT_FIX_STYLE: () => DEFAULT_FIX_STYLE,
+    FIX_SHAPES: () => FIX_SHAPES,
+    FIX_SIZE_MAX: () => FIX_SIZE_MAX,
+    FIX_SIZE_MIN: () => FIX_SIZE_MIN,
+    FIX_STYLES: () => FIX_STYLES,
     REPORTING_POINT_MIN_ZOOM: () => REPORTING_POINT_MIN_ZOOM,
     anchorAttribution: () => anchorAttribution,
     anchorCoverage: () => anchorCoverage,
     anchorWaypoint: () => anchorWaypoint,
     buildAnchors: () => buildAnchors,
+    escapeText: () => escapeText,
+    fixMarkerHtml: () => fixMarkerHtml,
+    fixSymbolSvg: () => fixSymbolSvg,
     foldName: () => foldName,
+    isHexColor: () => isHexColor,
+    normaliseFixStyle: () => normaliseFixStyle,
     roughNM: () => roughNM,
     searchAnchors: () => searchAnchors,
     visibleAnchors: () => visibleAnchors
@@ -4574,6 +4700,68 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       if (a.kind === "AD" ? !ad : !rp) return false;
       return a.lat >= view.south && a.lat <= view.north && a.lng >= view.west && a.lng <= view.east;
     });
+  }
+  var FIX_SHAPES = ["triangle", "circle", "square", "diamond"];
+  var FIX_STYLES = ["filled", "outline"];
+  var DEFAULT_FIX_STYLE = {
+    adColor: "#2b6cb0",
+    // the same blue the CTR boundaries use: an aerodrome IS its CTR
+    rpColor: "#dd6b20",
+    // orange - see above
+    adShape: "square",
+    rpShape: "triangle",
+    // the symbol the VAC itself uses for a reporting point
+    style: "filled",
+    size: 10,
+    labels: true
+  };
+  var FIX_SIZE_MIN = 6;
+  var FIX_SIZE_MAX = 18;
+  function isHexColor(v) {
+    return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
+  }
+  function normaliseFixStyle(profile2) {
+    const p = profile2 || {};
+    const shape = (v, dflt) => typeof v === "string" && FIX_SHAPES.includes(v) ? v : dflt;
+    const n = Number(p.fixSize);
+    return {
+      adColor: isHexColor(p.fixAdColor) ? String(p.fixAdColor).toLowerCase() : DEFAULT_FIX_STYLE.adColor,
+      rpColor: isHexColor(p.fixRpColor) ? String(p.fixRpColor).toLowerCase() : DEFAULT_FIX_STYLE.rpColor,
+      adShape: shape(p.fixAdShape, DEFAULT_FIX_STYLE.adShape),
+      rpShape: shape(p.fixRpShape, DEFAULT_FIX_STYLE.rpShape),
+      style: typeof p.fixStyle === "string" && FIX_STYLES.includes(p.fixStyle) ? p.fixStyle : DEFAULT_FIX_STYLE.style,
+      size: isFinite(n) ? Math.min(FIX_SIZE_MAX, Math.max(FIX_SIZE_MIN, Math.round(n))) : DEFAULT_FIX_STYLE.size,
+      // Only an explicit false hides the labels; an absent key means default on.
+      labels: p.fixLabels === void 0 || p.fixLabels === null ? DEFAULT_FIX_STYLE.labels : p.fixLabels !== false
+    };
+  }
+  var SHAPE_GEOMETRY = {
+    triangle: '<polygon points="50,10 92,86 8,86"/>',
+    circle: '<circle cx="50" cy="50" r="40"/>',
+    square: '<rect x="12" y="12" width="76" height="76" rx="10"/>',
+    diamond: '<polygon points="50,7 93,50 50,93 7,50"/>'
+  };
+  function fixSymbolSvg(shape, color, size, style) {
+    const geom = SHAPE_GEOMETRY[FIX_SHAPES.includes(shape) ? shape : DEFAULT_FIX_STYLE.rpShape];
+    const col = isHexColor(color) ? color : DEFAULT_FIX_STYLE.rpColor;
+    const px = Math.min(FIX_SIZE_MAX, Math.max(FIX_SIZE_MIN, Math.round(Number(size) || DEFAULT_FIX_STYLE.size)));
+    const outline = style === "outline";
+    const paint = outline ? `fill="none" stroke="${col}" stroke-width="16"` : `fill="${col}" stroke="#ffffff" stroke-width="14" paint-order="stroke"`;
+    return `<svg class="fix-svg" width="${px}" height="${px}" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><g ${paint} stroke-linejoin="round">${geom}</g>` + (outline ? `<g fill="none" stroke="#ffffff" stroke-width="5" stroke-linejoin="round">${geom}</g>` : "") + `</svg>`;
+  }
+  function fixMarkerHtml(a, st) {
+    const isAd = a.kind === "AD";
+    const svg = fixSymbolSvg(
+      isAd ? st.adShape : st.rpShape,
+      isAd ? st.adColor : st.rpColor,
+      st.size,
+      st.style
+    );
+    const label = st.labels ? `<span class="fix-label ${isAd ? "ad" : "rp"}" style="left:${st.size + 3}px;top:${Math.round(st.size / 2) - 6}px;">${escapeText(a.label)}</span>` : "";
+    return { html: svg + label, size: st.size, anchor: st.size / 2 };
+  }
+  function escapeText(t) {
+    return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
   function anchorWaypoint(a, defaults) {
     const d = defaults || {};
@@ -4914,7 +5102,17 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     "baseChart",
     "chartDetail",
     "airspaceOn",
-    "fixesOn"
+    "fixesOn",
+    // Map-page display preferences. Colours are stored already validated to
+    // #rrggbb; normaliseFixStyle re-checks them on the way in regardless,
+    // because a route file can arrive from anyone.
+    "fixAdColor",
+    "fixRpColor",
+    "fixAdShape",
+    "fixRpShape",
+    "fixStyle",
+    "fixSize",
+    "fixLabels"
   ];
   function pickProfileKeys(profile2) {
     const out = {};
@@ -5386,7 +5584,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.34';
+    const APP_VERSION = '16.35';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -7389,14 +7587,20 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
         { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }, zoom);
       if (!shown.length) return;
 
+      // Shape, colour, size and labels are Map settings - see normaliseFixStyle
+      // in src/lib/anchors.js, which validates every field. It is read here
+      // rather than cached so a Save redraws with the new symbol immediately.
+      const st = normaliseFixStyle(aircraftProfile);
       for (const a of shown) {
-        const cls = a.kind === 'AD' ? 'ad' : 'rp';
+        const mk = fixMarkerHtml(a, st);
         const m = L.marker([a.lat, a.lng], {
           icon: L.divIcon({
-            className: 'fix-icon',
-            html: '<div class="fix-dot ' + cls + '"></div>' +
-                  '<div class="fix-label ' + cls + '">' + a.label + '</div>',
-            iconSize: [9, 9], iconAnchor: [4, 4]
+            // The kind is on the icon, not only in the markup: with the labels
+            // turned off there is otherwise nothing to tell an aerodrome from a
+            // reporting point, in CSS or in a browser check.
+            className: 'fix-icon fix-' + (a.kind === 'AD' ? 'ad' : 'rp'),
+            html: mk.html,
+            iconSize: [mk.size, mk.size], iconAnchor: [mk.anchor, mk.anchor]
           }),
           // Under the route markers: a fix is an option, the route is the plan.
           zIndexOffset: -200,
@@ -7505,6 +7709,99 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     // culling is what keeps 296 markers usable.
     map.on('moveend', drawFixes);
     map.on('zoomend', drawFixes);
+
+    // =========================================================================
+    // 2f. MAP SETTINGS (v16.35)
+    //
+    // The settings modal is two PAGES rather than one long scroll: the aircraft
+    // page is set up once per machine and then left alone, the map page is pure
+    // display preference. Mixing them meant scrolling past the POH cruise
+    // tables to change a symbol colour.
+    //
+    // WHAT IS NOT HERE, deliberately: the layer toggles, the base chart and the
+    // chart detail cap stay on the map itself, beside what they change - those
+    // are used while planning, not set once. The zoom thresholds are not
+    // adjustable either, and the page says why rather than leaving a gap.
+    // =========================================================================
+    function showSettingsPage(which) {
+      const pages = ['aircraft', 'map'];
+      for (const p of pages) {
+        const page = document.getElementById('settings-page-' + p);
+        const tab = document.getElementById('settings-tab-' + p);
+        // `hidden` rather than style.display: the stylesheet's own
+        // [hidden]{display:none} wins and there is nothing to restore later.
+        if (page) page.hidden = (p !== which);
+        if (tab) tab.classList.toggle('is-active', p === which);
+      }
+      const body = document.querySelector('#settings-modal .modal-body');
+      if (body) body.scrollTop = 0;
+    }
+
+    /** The Map page's inputs, read and validated through the module. */
+    function readFixStyleForm() {
+      const g = (id) => document.getElementById(id);
+      return normaliseFixStyle({
+        fixAdColor: g('map-fix-ad-color').value,
+        fixRpColor: g('map-fix-rp-color').value,
+        fixAdShape: g('map-fix-ad-shape').value,
+        fixRpShape: g('map-fix-rp-shape').value,
+        fixStyle:   g('map-fix-style').value,
+        fixSize:    Number(g('map-fix-size').value),
+        fixLabels:  g('map-fix-labels').value !== 'no'
+      });
+    }
+
+    function populateMapSettingsForm() {
+      const st = normaliseFixStyle(aircraftProfile);
+      document.getElementById('map-fix-ad-color').value = st.adColor;
+      document.getElementById('map-fix-rp-color').value = st.rpColor;
+      document.getElementById('map-fix-ad-shape').value = st.adShape;
+      document.getElementById('map-fix-rp-shape').value = st.rpShape;
+      document.getElementById('map-fix-style').value    = st.style;
+      document.getElementById('map-fix-labels').value   = st.labels ? 'yes' : 'no';
+      document.getElementById('map-fix-size').value     = String(st.size);
+      document.getElementById('map-zoom-ad').textContent = String(AERODROME_MIN_ZOOM);
+      document.getElementById('map-zoom-rp').textContent = String(REPORTING_POINT_MIN_ZOOM);
+      document.getElementById('map-zoom-as').textContent = String(AIRSPACE_MIN_ZOOM);
+      updateFixPreview();
+    }
+
+    /** The live preview, over a chart-ish background so the halo is visible.
+     *  It renders through the SAME function the map uses, so what it shows is
+     *  what gets drawn - a preview built from separate markup would drift. */
+    function updateFixPreview() {
+      const st = readFixStyleForm();
+      const host = document.getElementById('map-fix-preview');
+      const val = document.getElementById('map-fix-size-val');
+      if (val) val.textContent = st.size + ' px';
+      if (!host) return;
+      const rows = [
+        { a: { kind: 'AD', label: 'ENDU' }, kind: 'Aerodrome' },
+        { a: { kind: 'RP', label: 'SØRREISA' }, kind: 'Reporting point' }
+      ];
+      host.innerHTML = rows.map(r => {
+        const mk = fixMarkerHtml(r.a, st);
+        return '<span class="pv">' + fixSymbolSvg(
+            r.a.kind === 'AD' ? st.adShape : st.rpShape,
+            r.a.kind === 'AD' ? st.adColor : st.rpColor, st.size, st.style) +
+          (st.labels ? '<span class="pv-name">' + escapeText(r.a.label) + '</span>' : '') +
+          '<span class="pv-kind">' + r.kind + '</span></span>';
+      }).join('');
+    }
+
+    async function resetFixStyle() {
+      if (!await confirmDialog('Restore the default fix symbols?',
+        'Aerodromes go back to a blue square, reporting points to an orange triangle, ' +
+        '10 px, filled, names shown.', { okLabel: 'Restore' })) return;
+      document.getElementById('map-fix-ad-color').value = DEFAULT_FIX_STYLE.adColor;
+      document.getElementById('map-fix-rp-color').value = DEFAULT_FIX_STYLE.rpColor;
+      document.getElementById('map-fix-ad-shape').value = DEFAULT_FIX_STYLE.adShape;
+      document.getElementById('map-fix-rp-shape').value = DEFAULT_FIX_STYLE.rpShape;
+      document.getElementById('map-fix-style').value    = DEFAULT_FIX_STYLE.style;
+      document.getElementById('map-fix-labels').value   = DEFAULT_FIX_STYLE.labels ? 'yes' : 'no';
+      document.getElementById('map-fix-size').value     = String(DEFAULT_FIX_STYLE.size);
+      updateFixPreview();
+    }
 
     function metarStatus(msg, isError) {
       const el = document.getElementById('metar-status');
@@ -7885,8 +8182,10 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       // Re-sync the form with the live profile so a previous Cancel can't
       // leave stale values sitting in the inputs.
       populateSettingsForm();
+      populateMapSettingsForm();
       updatePerfModelVisibility();
       updateC182Preview();
+      showSettingsPage('aircraft');
       openModal('settings-modal');
     }
 
@@ -7929,6 +8228,17 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
         ? Number(document.getElementById('qol-minute-mark').value) : 3;
       aircraftProfile.fuelUnit = document.getElementById('qol-fuel-unit').value;
 
+      // Map page. Stored already-validated, so a hand-edited localStorage or an
+      // imported route file cannot put an unchecked colour into marker markup.
+      const fixSt = readFixStyleForm();
+      aircraftProfile.fixAdColor = fixSt.adColor;
+      aircraftProfile.fixRpColor = fixSt.rpColor;
+      aircraftProfile.fixAdShape = fixSt.adShape;
+      aircraftProfile.fixRpShape = fixSt.rpShape;
+      aircraftProfile.fixStyle   = fixSt.style;
+      aircraftProfile.fixSize    = fixSt.size;
+      aircraftProfile.fixLabels  = fixSt.labels;
+
       // The performance figures above are always stored internally in GPH/gal.
       // Only the *initial fuel on board* box is in display units, so convert it
       // when the unit changes, otherwise "64 gal" silently became "64 litres".
@@ -7953,6 +8263,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       updatePerfBadge();
       closeSettingsModal();
       refreshMap();
+      drawFixes();          // the symbols may have changed shape, colour or size
       renderAllFlightTables();
     }
 

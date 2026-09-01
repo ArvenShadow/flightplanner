@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.34)
+# C182 Flight Planner (v16.35)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -81,6 +81,16 @@ strength, then by distance from the middle of your map.
 Reporting points come from the **coordinate table printed on each aerodrome's
 Visual Approach Chart**, read from the PDF's text layer at build time
 (`npm run build:vac`). 243 points at 24 aerodromes.
+
+**Settings → Map** sets how they are drawn: shape, colour, size, filled or
+outline, and whether names are shown, with a live preview. Reporting points
+default to **orange** — nothing on either base chart is orange except the
+mandatory zones, so the symbol you are hunting for cannot be mistaken for
+published chart ink.
+
+The settings modal is two pages: **Aircraft & Units**, which you set up once
+per machine, and **Map**, which is pure display preference. The layer toggles,
+base chart and chart detail stay on the map itself, beside what they change.
 
 **29 of the 53 aerodromes publish their points on the chart face only**, with
 no table to read. Those aerodromes still anchor on their ARP but carry **no
@@ -169,7 +179,7 @@ npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
 npm run typecheck  # TypeScript checks every module (0 errors required)
-npm test           # typecheck, build, then the suite against dist (342 tests)
+npm test           # typecheck, build, then the suite against dist (346 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
 npm run verify:hover           # Chromium check of the position-dependent
                                # Polaris sector frequency on the hover card

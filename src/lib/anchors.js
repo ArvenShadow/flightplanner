@@ -179,6 +179,161 @@ export function visibleAnchors(anchors, view, zoom) {
 }
 
 /**
+ * HOW A FIX IS DRAWN, and why it is a setting rather than a constant.
+ *
+ * The first version drew reporting points in the same muted green as the TIZ
+ * boundaries, which is exactly wrong for a symbol you are hunting for on a
+ * dense chart: the overlay should be quiet, but the thing you are trying to
+ * CLICK should not be. Rather than pick a second colour and be wrong again,
+ * the symbol is a preference - Map settings.
+ *
+ * The default reporting-point colour is ORANGE for that reason: nothing on
+ * either base chart or in the airspace palette is orange except the mandatory
+ * zones, so it cannot be mistaken for published chart ink.
+ */
+export const FIX_SHAPES = ['triangle', 'circle', 'square', 'diamond'];
+export const FIX_STYLES = ['filled', 'outline'];
+
+/** @type {{adColor: string, rpColor: string, adShape: string, rpShape: string,
+ *          style: string, size: number, labels: boolean}} */
+export const DEFAULT_FIX_STYLE = {
+  adColor: '#2b6cb0',   // the same blue the CTR boundaries use: an aerodrome IS its CTR
+  rpColor: '#dd6b20',   // orange - see above
+  adShape: 'square',
+  rpShape: 'triangle',  // the symbol the VAC itself uses for a reporting point
+  style: 'filled',
+  size: 10,
+  labels: true
+};
+
+/** Symbols smaller than this are not reliable click targets; larger than this
+ *  they cover the chart they are supposed to sit on. Both ends measured
+ *  against a real 1:500 000 raster at reading zoom. */
+export const FIX_SIZE_MIN = 6;
+export const FIX_SIZE_MAX = 18;
+
+/**
+ * Is this a colour we are willing to put in markup?
+ *
+ * NOT fussiness. The colour is interpolated into the SVG that becomes a
+ * marker's innerHTML, so an unvalidated string is an HTML-injection vector -
+ * and this value travels through export/import, which means it can arrive
+ * from a route file someone else wrote. Six hex digits with a leading hash,
+ * or it is not used.
+ *
+ * @param {unknown} v @returns {boolean}
+ */
+export function isHexColor(v) {
+  return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+}
+
+/**
+ * The fix style a profile asks for, with every field checked.
+ *
+ * Anything missing, malformed or out of range falls back to the default rather
+ * than being trusted: this object is rebuilt from localStorage and from
+ * imported route files on every load, and a broken value must degrade to a
+ * visible symbol, never to an invisible one or to injected markup.
+ *
+ * @param {Record<string, any>|null|undefined} profile
+ * @returns {{adColor: string, rpColor: string, adShape: string, rpShape: string,
+ *            style: string, size: number, labels: boolean}}
+ */
+export function normaliseFixStyle(profile) {
+  const p = profile || {};
+  const shape = (/** @type {unknown} */ v, /** @type {string} */ dflt) =>
+    typeof v === 'string' && FIX_SHAPES.includes(v) ? v : dflt;
+  const n = Number(p.fixSize);
+  return {
+    adColor: isHexColor(p.fixAdColor) ? String(p.fixAdColor).toLowerCase() : DEFAULT_FIX_STYLE.adColor,
+    rpColor: isHexColor(p.fixRpColor) ? String(p.fixRpColor).toLowerCase() : DEFAULT_FIX_STYLE.rpColor,
+    adShape: shape(p.fixAdShape, DEFAULT_FIX_STYLE.adShape),
+    rpShape: shape(p.fixRpShape, DEFAULT_FIX_STYLE.rpShape),
+    style: typeof p.fixStyle === 'string' && FIX_STYLES.includes(p.fixStyle)
+      ? p.fixStyle : DEFAULT_FIX_STYLE.style,
+    size: isFinite(n) ? Math.min(FIX_SIZE_MAX, Math.max(FIX_SIZE_MIN, Math.round(n))) : DEFAULT_FIX_STYLE.size,
+    // Only an explicit false hides the labels; an absent key means default on.
+    labels: p.fixLabels === undefined || p.fixLabels === null ? DEFAULT_FIX_STYLE.labels : p.fixLabels !== false
+  };
+}
+
+/** The shape itself, in a 100x100 box so one path serves every size.
+ *  @type {Record<string, string>} */
+const SHAPE_GEOMETRY = {
+  triangle: '<polygon points="50,10 92,86 8,86"/>',
+  circle: '<circle cx="50" cy="50" r="40"/>',
+  square: '<rect x="12" y="12" width="76" height="76" rx="10"/>',
+  diamond: '<polygon points="50,7 93,50 50,93 7,50"/>'
+};
+
+/**
+ * The marker symbol, as inline SVG.
+ *
+ * WHY SVG AND NOT CSS. The first version drew the aerodrome as a bordered
+ * div and the reporting point as a CSS border-triangle. That triangle has a
+ * ZERO-SIZED box by construction - it is drawn entirely from borders - so it
+ * could not be measured, could not be resized from one number, and forced the
+ * browser verifier to special-case it. An `<svg>` has a real box at any size
+ * and one attribute swaps the shape.
+ *
+ * THE HALO IS `paint-order="stroke"`, not a second element: it draws the white
+ * stroke UNDER the fill, so the symbol keeps its full colour area and still
+ * reads over dark terrain and over white sea. A halo drawn as a border around
+ * a 2 px shape leaves almost no colour once antialiased - the same mistake the
+ * v16.28 TOC/TOD ticks made before they moved to a box-shadow.
+ *
+ * @param {string} shape one of FIX_SHAPES
+ * @param {string} color a validated hex colour
+ * @param {number} size px
+ * @param {string} [style] 'filled' (default) or 'outline'
+ * @returns {string} SVG markup
+ */
+export function fixSymbolSvg(shape, color, size, style) {
+  const geom = SHAPE_GEOMETRY[FIX_SHAPES.includes(shape) ? shape : DEFAULT_FIX_STYLE.rpShape];
+  const col = isHexColor(color) ? color : DEFAULT_FIX_STYLE.rpColor;
+  const px = Math.min(FIX_SIZE_MAX, Math.max(FIX_SIZE_MIN, Math.round(Number(size) || DEFAULT_FIX_STYLE.size)));
+  const outline = style === 'outline';
+  // Stroke widths are in the 100-unit space, so they scale with the symbol
+  // instead of vanishing at 6 px and swamping it at 18.
+  const paint = outline
+    ? `fill="none" stroke="${col}" stroke-width="16"`
+    : `fill="${col}" stroke="#ffffff" stroke-width="14" paint-order="stroke"`;
+  return `<svg class="fix-svg" width="${px}" height="${px}" viewBox="0 0 100 100" ` +
+    `aria-hidden="true" focusable="false"><g ${paint} stroke-linejoin="round">${geom}</g>` +
+    (outline ? `<g fill="none" stroke="#ffffff" stroke-width="5" stroke-linejoin="round">${geom}</g>` : '') +
+    `</svg>`;
+}
+
+/**
+ * The whole marker: symbol plus an optional label, and the sizes Leaflet needs.
+ *
+ * The label offset SCALES with the symbol - it was hardcoded at 12 px for a
+ * 9 px square, so at 18 px the text sat on top of the shape.
+ *
+ * @param {Anchor} a @param {ReturnType<typeof normaliseFixStyle>} st
+ * @returns {{html: string, size: number, anchor: number}}
+ */
+export function fixMarkerHtml(a, st) {
+  const isAd = a.kind === 'AD';
+  const svg = fixSymbolSvg(isAd ? st.adShape : st.rpShape,
+    isAd ? st.adColor : st.rpColor, st.size, st.style);
+  const label = st.labels
+    ? `<span class="fix-label ${isAd ? 'ad' : 'rp'}" style="left:${st.size + 3}px;` +
+      `top:${Math.round(st.size / 2) - 6}px;">${escapeText(a.label)}</span>`
+    : '';
+  return { html: svg + label, size: st.size, anchor: st.size / 2 };
+}
+
+/** Fix names are published data, not user input, but they land in innerHTML
+ *  and one of them could gain an ampersand in a future edition. */
+/** @param {string} t @returns {string} */
+export function escapeText(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
  * The waypoint an anchor becomes.
  *
  * The coordinate is the PUBLISHED one, unrounded - that is the entire reason

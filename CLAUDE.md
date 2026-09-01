@@ -728,6 +728,69 @@ errors is the standard.
     `setView(..., {animate: false})` and settle: with the default animation
     `getZoom()` reports the OLD zoom for a frame, which made the first run read
     15 fixes at zoom 6 and 0 at zoom 7 — exactly inverted.
+- **MAP SETTINGS, AND THE FIX SYMBOL AS A PREFERENCE (v16.35, user request)**:
+  the settings modal is now TWO PAGES - `✈ Aircraft & Units` and `🗺 Map` -
+  and the fix symbol's shape, colour, size, fill style and labels are settings
+  with a live preview. `showSettingsPage()`, `readFixStyleForm()`,
+  `populateMapSettingsForm()`, `updateFixPreview()`, `resetFixStyle()` in
+  section 2f of the page; `normaliseFixStyle`, `fixSymbolSvg`, `fixMarkerHtml`
+  in `src/lib/anchors.js`.
+  - WHY IT IS A SETTING AT ALL. v16.34 drew reporting points in the same muted
+    green as the TIZ boundaries, which is exactly backwards: the overlay should
+    be quiet enough to read the chart through, but the thing you are trying to
+    CLICK should not be. Rather than pick a second colour and be wrong again,
+    the user asked for it to be configurable. The DEFAULT is now ORANGE
+    (#dd6b20) for a stated reason - nothing on either base chart or in the
+    airspace palette is orange except the mandatory zones, so it cannot be
+    mistaken for published chart ink.
+  - THE SYMBOL IS INLINE SVG, NOT CSS, and that was forced by the settings.
+    v16.34 drew the aerodrome as a bordered div and the reporting point as a
+    CSS border-triangle. A border-triangle has a ZERO-SIZED BOX by construction
+    - it is drawn entirely from borders - so it could not be measured, could
+    not be resized from one number, and made `tools/verify-fixes.mjs`
+    special-case it. One `<svg>` at `viewBox="0 0 100 100"` has a real box at
+    every size and one attribute swaps the shape.
+  - THE HALO IS `paint-order="stroke"`, so the white stroke is drawn UNDER the
+    fill and the symbol keeps its full colour area. Same lesson as the v16.28
+    TOC/TOD ticks: a halo drawn AROUND a small shape leaves almost no colour
+    once antialiased. Stroke widths are in the 100-unit space so they scale
+    with the symbol instead of vanishing at 6 px and swamping it at 18.
+  - **AN UNVALIDATED COLOUR IS AN HTML-INJECTION VECTOR**, and this is the real
+    reason `normaliseFixStyle` exists. The colour is interpolated into the SVG
+    that becomes a marker's `innerHTML`, AND it is in PROFILE_KEYS, so it can
+    arrive from a route file someone else wrote. Colours must match
+    `^#[0-9a-f]{6}$`, shapes must be in FIX_SHAPES, the size clamps to 6-18,
+    and anything else falls back to the DEFAULT - never to invisible markup.
+    Values are stored already-validated and re-validated on every read, because
+    localStorage can be hand-edited. Both jsdom and Chromium assert that a
+    hostile colour neither executes nor blanks the symbol.
+  - SIZE BOUNDS ARE MEASURED, not picked: below 6 px the symbol is not a
+    reliable click target, above 18 px it covers the chart it is meant to sit
+    on. The page says both, rather than presenting a slider with mystery ends.
+  - THE LABEL DOES NOT FOLLOW THE THEME, and v16.34 got this WRONG. It shipped
+    a `body.dark-mode .fix-label` override putting pale blue text with a dark
+    halo on the map - but BOTH base charts are light rasters in dark mode too,
+    so the label was invisible in exactly the case it exists for. It was hidden
+    during development because the offline placeholder background is grey.
+    `.wp-label` has no dark override for precisely this reason; `.fix-label`
+    now matches. The label also does NOT take the symbol's colour: a bright
+    orange is right for a 10 px shape you are hunting for and wrong for text
+    you have to read.
+  - THE KIND IS ON THE ICON (`fix-icon fix-ad` / `fix-rp`), not only in the
+    markup: with labels turned off there is otherwise nothing to tell an
+    aerodrome from a reporting point, in CSS or in a browser check. The first
+    run of the new Chromium checks read the aerodrome marker and reported the
+    reporting-point colour as unchanged - a test passing for the wrong reason.
+  - WHAT DELIBERATELY DID NOT MOVE TO THE MAP PAGE: the layer toggles, the base
+    chart and the chart-detail cap stay on the MAP, beside what they change -
+    they are used while planning, not set once, which is the whole basis for the
+    split. The zoom thresholds are not adjustable and the page SAYS SO with the
+    reason, rather than leaving a gap where a setting looks like it should be.
+    The quoted numbers are read from the modules, so they cannot drift from the
+    code.
+  - The PREVIEW renders through `fixSymbolSvg` - the same function the map calls
+    - so what it shows is what gets drawn. A preview built from its own markup
+    would drift from the map the first time either changed.
 - **Airspace OVERLAY (v16.31, roadmap item 4 COMPLETE)**: `src/lib/airspace.js`
   (pure: culling, colours, hover text) plus the Leaflet layers in section 2d of
   the page. 228 volumes available, ~11 drawn over Troms at z9.
