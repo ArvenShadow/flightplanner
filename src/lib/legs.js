@@ -178,6 +178,55 @@ export function distToSegmentNM(p, a, b) {
 }
 
 
+/**
+ * How far along a leg's FLOWN path a clicked point falls, in NM.
+ *
+ * This is what lets the leg panel pre-fill a pin at the spot the pilot
+ * right-clicked: "start the climb HERE" is a gesture, not a number they should
+ * have to work out. It walks the bent path, so on a leg dog-legged around
+ * terrain the answer is a distance along the route actually flown.
+ *
+ * The projection onto the nearest segment uses the same local flat metric as
+ * distToSegmentNM, which is a UI convenience and is deliberately NOT how any
+ * distance on the OFP is computed - those come from the WGS-84 geodesics in
+ * geodesy.js. The value is only ever used to seed a pin the pilot then sees
+ * and can edit.
+ *
+ * @param {Waypoint} from @param {Waypoint} to
+ * @param {{lat: number, lng: number}} point
+ * @returns {{alongNM: number, totalNM: number, offTrackNM: number}|null}
+ *          null for a leg with no drawable path
+ */
+export function alongLegNM(from, to, point) {
+  const pts = legPath(from, to);
+  if (!pts || pts.length < 2) return null;
+  let acc = 0, best = null;
+  for (let k = 0; k < pts.length - 1; k++) {
+    const a = pts[k], b = pts[k + 1];
+    const kx = 60 * Math.cos(toRad((a.lat + b.lat) / 2));
+    const ax = a.lng * kx, ay = a.lat * 60;
+    const bx = b.lng * kx, by = b.lat * 60;
+    const px = point.lng * kx, py = point.lat * 60;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+    const off = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    const segLen = Math.hypot(dx, dy);
+    if (!best || off < best.offTrackNM) best = { alongNM: acc + t * segLen, offTrackNM: off };
+    acc += segLen;
+  }
+  if (!best) return null;
+  // Report the total from the SEGMENT lengths the schedule uses, so a pin
+  // seeded here cannot exceed the leg the engine will clamp it against.
+  const segs = pathSegments(from, to);
+  const totalNM = segs.reduce((a, x) => a + x.distNM, 0);
+  return {
+    alongNM: Math.max(0, Math.min(best.alongNM, totalNM)),
+    totalNM,
+    offTrackNM: best.offTrackNM
+  };
+}
+
 /** Groundspeed and wind correction for one phase of flight.
  *  @param {number} tas knots @param {number} wdir degrees true @param {number} wspd knots
  *  @param {number} tt true track, degrees
@@ -207,17 +256,33 @@ export function computeLegTotals(from, to, SL) {
   if (SL) {
     const cruiseAlt = (SL.tocAlongNM != null || SL.stillClimbing) ? to.alt : SL.entryAlt;
     const crz = cruisePerf(cruiseAlt, Number(to.oat));
-    const cruiseDist = Math.max(0, SL.distNM - SL.climbDistNM - SL.descDistNM);
-    let acc = 0, cruiseTime = 0;
-    for (const s of SL.segs) {
-      const midStart = Math.max(acc, SL.climbDistNM);
-      const midEnd = Math.min(acc + s.distNM, SL.climbDistNM + cruiseDist);
-      if (midEnd - midStart > 0.001)
-        cruiseTime += ((midEnd - midStart) / phaseGS(crz.tas, Number(to.wdir), Number(to.wspd), s.tt).gs) * 60;
-      acc += s.distNM;
+    // WHERE EACH PHASE SITS ON THE LEG. Before the pins there was one level
+    // stretch and it always followed the climb, so the old arithmetic could
+    // assume `[climbDistNM, climbDistNM + cruiseDist]`. A BOC puts level
+    // flight BEFORE the climb and a BOD puts it AFTER the descent, so there
+    // are now up to three level pieces - and they are not all at the same
+    // altitude, which is why each is priced at its own.
+    const climbA = SL.climbStartNM, climbB = SL.climbStartNM + SL.climbDistNM;
+    const descB = SL.distNM - SL.bodTailNM, descA = descB - SL.descDistNM;
+    const wdir = Number(to.wdir), wspd = Number(to.wspd);
+    /** Level pieces as [from, to, altitude]: the lead is flown at the altitude
+     *  the leg was entered at, the run-in at the altitude it ends at, and the
+     *  middle at cruise. */
+    const levels = [
+      [0, Math.max(0, climbA), SL.entryAlt],
+      [climbB, Math.max(climbB, descA), cruiseAlt],
+      [Math.max(descB, climbB), SL.distNM, to.alt]
+    ];
+    let cruiseTime = 0, cruiseGal = 0;
+    for (const [a, b, at] of levels) {
+      if (b - a <= 0.001) continue;
+      const p = at === cruiseAlt ? crz : cruisePerf(at, Number(to.oat));
+      const min = phaseMinutes(SL.segs, a, b, p.tas, wdir, wspd);
+      cruiseTime += min;
+      cruiseGal += (min / 60) * p.gph;
     }
     const timeMin = SL.climbMin + cruiseTime + SL.descMin;
-    const burnGal = SL.climbFuelGal + (cruiseTime / 60) * crz.gph + (SL.descMin / 60) * activeAircraftProfile().descFf;
+    const burnGal = SL.climbFuelGal + cruiseGal + (SL.descMin / 60) * activeAircraftProfile().descFf;
     const parts = [];
     if (SL.climbMin > 0.05) parts.push('CLB');
     if (cruiseTime > 0.5) parts.push('CRZ');
@@ -418,6 +483,73 @@ export function climbAltReached(fromAlt, targetAlt, minutesFlown, oat) {
 
 // Per-flight altitude schedule: an array indexed like the waypoint legs
 // (legs[i] = wp[i] -> wp[i+1]; null for pattern pairs).
+/**
+ * Minutes to fly from `startNM` to `endNM` along a leg's segments at a fixed
+ * TAS, honouring the wind on each segment.
+ *
+ * Used for the TOC target's required-rate readout, and by computeLegTotals for
+ * the level stretches a pin can create. Kept in one place because "how long is
+ * this piece of the leg" is now asked about four different pieces.
+ *
+ * @param {{distNM: number, tt: number}[]} segs
+ * @param {number} startNM @param {number} endNM
+ * @param {number} tas @param {number} wdir @param {number} wspd
+ * @returns {number} minutes
+ */
+function phaseMinutes(segs, startNM, endNM, tas, wdir, wspd) {
+  let acc = 0, min = 0;
+  for (const s of segs) {
+    const a = Math.max(acc, startNM), b = Math.min(acc + s.distNM, endNM);
+    if (b - a > 0.001) min += ((b - a) / phaseGS(tas, wdir, wspd, s.tt).gs) * 60;
+    acc += s.distNM;
+  }
+  return min;
+}
+
+/**
+ * A leg's climb/descent PINS, and the reason only two of the four corners are
+ * pinnable while the other two are checked.
+ *
+ * v16.5 made legs interdependent: the forward pass places the climb as early
+ * as the POH allows and the backward pass places the descent as late as it
+ * can, so every waypoint is crossed AT its planned altitude. That derives all
+ * four corners - bottom of climb, top of climb, top of descent, bottom of
+ * descent - and the pilot could not move any of them.
+ *
+ * WHAT IS PINNABLE, and why it is exactly these two:
+ *
+ *   BOC - hold the current altitude for `bocNM` after the leg's start fix,
+ *         then climb. A DELAY. It moves the whole climb later and can spill
+ *         the TOC onto the next leg, which the forward pass already handles.
+ *         Nothing about the aircraft changes, so it is always flyable.
+ *
+ *   BOD - be level `bodNM` before the leg's end fix, then run in level. Also
+ *         pure geometry: the descent simply starts earlier, which the backward
+ *         pass already knows how to back up across legs. If there is not room,
+ *         that is the existing `shortfallMin`, reported in the red banner.
+ *
+ * WHAT IS NOT PINNABLE, and this is the NO GUESSTIMATES rule doing real work:
+ * "be at 6500 by this point" implies a RATE OF CLIMB. If that rate is higher
+ * than the profile's, the POH table this planner is built on says nothing
+ * about the fuel flow or the TAS at that rate, and inventing them would put a
+ * plausible wrong number on the OFP. So a TOC request is a TARGET, not a pin:
+ * the schedule is still flown at the profile's performance, and the leg
+ * reports whether the target was met and what rate of climb it would actually
+ * need. That is information the pilot can act on; a fabricated climb is not.
+ *
+ * Distances are along the FLOWN path (via points included), measured the way
+ * a pilot would say them: BOC and TOC after the start fix, BOD before the end
+ * fix. They live on the leg's TO waypoint, where alt, OAT and wind already do.
+ *
+ * @param {unknown} v @param {number} maxNM
+ * @returns {number} 0 when absent; never negative, never past the leg
+ */
+function pinNM(v, maxNM) {
+  const n = Number(v);
+  if (!isFinite(n) || n <= 0) return 0;
+  return Math.min(n, Math.max(0, maxNM));
+}
+
 /** The whole-flight altitude plan: a forward pass so an unfinished climb
  *  spills onto later legs, then a backward pass so a descent starts early
  *  enough that every fix is crossed AT its planned altitude.
@@ -440,31 +572,64 @@ export function computeFlightSchedule(fl) {
                 descMin: 0, descDistNM: 0, todStartsHere: false, todBeforeNM: null,
                 descContinues: false, descTargetName: null, descTargetAlt: null,
                 shortfallMin: 0,
+                // PINS (v16.37). climbStartNM is the BOC - how far the current
+                // altitude is held before the climb begins. bodTailNM is the
+                // BOD - how far before the end fix the descent must finish, so
+                // the last stretch is flown level. Both default to 0, which is
+                // exactly the derived v16.5 behaviour.
+                climbStartNM: 0, bodPinNM: 0, bodTailNM: 0, bodRefused: false,
+                /** @type {number|null} */ tocTargetNM: null,
+                tocTargetMet: true,
+                /** @type {number|null} */ climbRateReqFpm: null,
                 // filled in below; declared here so the shape is complete
                 entryAlt: 0, exitAlt: 0 };
     if (alt === null) alt = from.alt;
     L.entryAlt = alt;
+    L.climbStartNM = pinNM(to.bocNM, L.distNM);
+    // THE REQUEST, not yet the effective tail. A BOD pin is a statement about
+    // the descent that TERMINATES at this leg's end fix, and only the backward
+    // pass knows whether such a descent exists here and whether the tail is
+    // still free - so bodTailNM stays 0 until it decides.
+    L.bodPinNM = pinNM(to.bodNM, L.distNM);
     const target = to.alt;
     if (target > alt + 1) {
       const cp = climbPerf(alt, target, Number(to.oat));
       L.climbTas = cp.tasAvg;
-      let rem = cp.timeMin, dist = 0;
+      // The climb begins at the BOC, so the first climbStartNM of the leg is
+      // skipped. With no pin that is 0 and this is the v16.5 walk exactly.
+      let rem = cp.timeMin, dist = 0, skip = L.climbStartNM;
       for (const s of segs) {
+        let left = s.distNM;
+        if (skip > 0) { const sk = Math.min(skip, left); skip -= sk; left -= sk; }
+        if (left <= 0.001) continue;
         if (rem <= 0.001) break;
         const gsC = phaseGS(cp.tasAvg, Number(to.wdir), Number(to.wspd), s.tt).gs;
-        const here = Math.min(s.distNM, gsC * (rem / 60));
+        const here = Math.min(left, gsC * (rem / 60));
         rem -= (here / gsC) * 60;
         dist += here;
       }
       L.climbMin = cp.timeMin - Math.max(0, rem);
       L.climbFuelGal = cp.timeMin > 0 ? cp.fuelGal * (L.climbMin / cp.timeMin) : 0;
-      L.climbDistNM = Math.min(dist, L.distNM);
+      L.climbDistNM = Math.min(dist, Math.max(0, L.distNM - L.climbStartNM));
       if (rem <= 0.05) {
-        L.tocAlongNM = L.climbDistNM;
+        L.tocAlongNM = L.climbStartNM + L.climbDistNM;
         alt = target;
       } else {
         L.stillClimbing = true;
         alt = climbAltReached(L.entryAlt, target, L.climbMin, Number(to.oat));
+      }
+      // THE TOC TARGET IS A CHECK, NOT A PIN. The climb above is still the
+      // POH's; this only says whether the pilot's "be level by here" was met
+      // and, if not, what rate of climb it would actually take. Inventing a
+      // steeper climb would mean inventing its fuel flow and TAS too.
+      const tocT = pinNM(to.tocNM, L.distNM);
+      if (tocT > 0) {
+        L.tocTargetNM = tocT;
+        L.tocTargetMet = L.tocAlongNM != null && L.tocAlongNM <= tocT + 0.05;
+        const availMin = phaseMinutes(segs, L.climbStartNM, Math.max(L.climbStartNM, tocT),
+          cp.tasAvg, Number(to.wdir), Number(to.wspd));
+        const needFt = target - L.entryAlt;
+        L.climbRateReqFpm = availMin > 0.001 ? Math.round(needFt / availMin) : null;
       }
     } else {
       alt = target;   // level, or a descent placed by the backward pass
@@ -481,15 +646,32 @@ export function computeFlightSchedule(fl) {
     const highAlt = L.stillClimbing ? L.exitAlt
                   : (target > L.entryAlt ? target : L.entryAlt);
     if (target >= highAlt - 1) continue;
+    // THE BOD PIN, resolved here because this is where a descent is known to
+    // terminate at L.to. If a descent for a LATER, lower fix has already
+    // claimed the tail of this leg, the aircraft is still going down through
+    // it and "be level X NM before this fix" cannot be true - so the pin is
+    // REFUSED and reported rather than half-applied.
+    let bodTail = 0;
+    if (L.bodPinNM > 0) {
+      if (L.descDistNM > 0.001) L.bodRefused = true;
+      else { bodTail = L.bodPinNM; L.bodTailNM = bodTail; }
+    }
     let remMin = (highAlt - target) / Math.max(1, activeAircraftProfile().rod);
     for (let k = i; k >= 0 && remMin > 0.001; k--) {
       const Lk = legs[k];
       if (!Lk) break;   // a pattern stop ends the chain
-      const availDist = Lk.distNM - Lk.climbDistNM - Lk.descDistNM;
+      // The climb blocks everything up to its TOC, not just its own length:
+      // with a BOC the climb no longer starts at the leg's beginning.
+      // The BOD tail is level flight and belongs to no phase, so it is
+      // unavailable to the descent as well - but only on the leg whose end
+      // fix terminates this descent, which is leg i.
+      const tail = k === i ? bodTail : 0;
+      const availDist = Lk.distNM - (Lk.climbStartNM + Lk.climbDistNM) - Lk.descDistNM - tail;
       if (availDist > 0.01) {
         // walk this leg's segments from the END; the very back may
-        // already belong to a descent placed for a LATER low waypoint.
-        let skip = Lk.descDistNM, usedDist = 0, usedMin = 0;
+        // already belong to a descent placed for a LATER low waypoint, or to
+        // the level run-in a BOD pin asked for.
+        let skip = tail + Lk.descDistNM, usedDist = 0, usedMin = 0;
         for (let s = Lk.segs.length - 1; s >= 0 && remMin > 0.001; s--) {
           const seg = Lk.segs[s];
           let left = seg.distNM;
@@ -507,7 +689,9 @@ export function computeFlightSchedule(fl) {
         if (!Lk.descTargetName) { Lk.descTargetName = L.to.name; Lk.descTargetAlt = target; }
         if (remMin <= 0.001) {
           Lk.todStartsHere = true;
-          Lk.todBeforeNM = Lk.descDistNM;
+          // Distance before the leg's END fix. The level run-in a BOD pin adds
+          // sits between the descent and the fix, so it counts too.
+          Lk.todBeforeNM = tail + Lk.descDistNM;
           Lk.descTargetName = L.to.name;
           Lk.descTargetAlt = target;
         }
@@ -518,6 +702,22 @@ export function computeFlightSchedule(fl) {
       if (remMin > 0.001 && (Lk.tocAlongNM != null || Lk.stillClimbing)) break;
     }
     if (remMin > 0.001) L.shortfallMin = remMin;
+  }
+
+  // WHERE THE DESCENT ACTUALLY STARTS, settled after ALL of it is placed.
+  //
+  // todBeforeNM used to be latched during the walk, at the moment a descent
+  // finished backing up. That is too early: a SECOND descent - for a later,
+  // lower fix - can be placed on the same leg afterwards and extend further
+  // back, and the latched value then pointed at where the aircraft was already
+  // descending rather than where it starts down. The descent's start is simply
+  // where its distance ends up reaching, so it is computed once, here.
+  //
+  // A BOD pin is what made this reachable in practice (it pushes a descent
+  // back onto the previous leg), but the flaw was latent: the right altitudes
+  // alone could always have produced two descents on one leg.
+  for (const L of legs) {
+    if (L && L.todStartsHere) L.todBeforeNM = L.bodTailNM + L.descDistNM;
   }
   return legs;
 }
@@ -556,6 +756,26 @@ export function computeLegMarkers(from, to, SL) {
                targetName: SL.descTargetName,
                atWaypoint: along <= EDGE_NM ? from.name : null });
   }
+  // THE PINNED CORNERS ARE DRAWN ONLY WHEN THEY WERE PINNED. With no pin the
+  // bottom of a climb IS the start fix and the bottom of a descent IS the end
+  // fix, and marking a point that is already a named waypoint adds nothing but
+  // clutter - the same reason a degenerate TOC is left to the neighbouring leg.
+  if (SL.climbStartNM > EDGE_NM && SL.climbDistNM > EDGE_NM) {
+    const pt = pointAlongSegments(SL.segs, SL.climbStartNM);
+    out.push({ kind: 'BOC', distNM: SL.climbStartNM, refName: from.name, rel: 'after',
+               lat: pt.lat, lng: pt.lng, alt: SL.entryAlt, tt: pt.tt, atWaypoint: null });
+  }
+  if (SL.bodTailNM > EDGE_NM && SL.descDistNM > EDGE_NM) {
+    const pt = pointAlongSegments(SL.segs, Math.max(0, SL.distNM - SL.bodTailNM));
+    out.push({ kind: 'BOD', distNM: SL.bodTailNM, refName: to.name, rel: 'before',
+               lat: pt.lat, lng: pt.lng, alt: to.alt, tt: pt.tt, atWaypoint: null });
+  }
+  // IN FLIGHT ORDER, not the order they happened to be built in. The plotting
+  // list and the OFP sub-line both print this straight through, and a pilot
+  // reading "TOC ... BOC" down a leg they fly BOC-first has to reorder it in
+  // their head. `rel` says which end each distance is measured from.
+  out.sort((a, b) => (a.rel === 'after' ? a.distNM : SL.distNM - a.distNM)
+                   - (b.rel === 'after' ? b.distNM : SL.distNM - b.distNM));
   return out;
 }
 

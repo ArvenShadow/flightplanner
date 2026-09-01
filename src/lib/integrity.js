@@ -99,6 +99,26 @@ export function collectIntegrityProblems(flights, signals) {
         add(`Leg ${from.name} \u2192 ${to.name}: effective groundspeed ${res.effGS} kt - check the wind entry.`);
       if (res.shortfall)
         add(`Leg ${from.name} \u2192 ${to.name}: cannot get down to ${res.shortfall.alt} ft at ${res.shortfall.target} - the descent is ${res.shortfall.min.toFixed(1)} min short even when started on earlier legs. Lower the cruise altitude or expect to arrive HIGH.`);
+      // A PIN THE SCHEDULE COULD NOT HONOUR IS SAID OUT LOUD. Quietly ignoring
+      // what the pilot asked for is exactly the kind of confident wrongness
+      // this banner exists to catch - and a TOC target is usually pinned for
+      // terrain, so a missed one is not cosmetic.
+      const SL = schedI[i];
+      if (SL && SL.tocTargetNM != null && !SL.tocTargetMet) {
+        const need = SL.climbRateReqFpm;
+        // Two pins can contradict each other: "be level by 3 NM" cannot be met
+        // if the climb is also pinned not to start until 20 NM. Say WHICH,
+        // rather than reporting a rate of infinity or none at all.
+        const conflict = SL.climbStartNM > SL.tocTargetNM - 0.05;
+        add(`Leg ${from.name} \u2192 ${to.name}: NOT level at ${to.alt} ft by ${SL.tocTargetNM.toFixed(1)} NM after ${from.name} as asked` +
+          (conflict
+            ? ` - the climb is pinned not to start until ${SL.climbStartNM.toFixed(1)} NM, so those two settings contradict each other.`
+            : (SL.tocAlongNM != null ? ` - the climb tops out at ${SL.tocAlongNM.toFixed(1)} NM` : ' - the climb does not finish on this leg') +
+              (need ? `, and reaching it by then needs about ${need} ft/min` : '') +
+              `. The schedule is still flown at YOUR profile's climb, not at that rate.`));
+      }
+      if (SL && SL.bodRefused)
+        add(`Leg ${from.name} \u2192 ${to.name}: cannot be level ${SL.bodPinNM.toFixed(1)} NM before ${to.name} - a descent for a later, lower fix already runs through that stretch, so the aircraft is still going down there. The pin was NOT applied.`);
     }
     if (lastTravelRes && lastTravelTo && lastTravelRes.stillClimbing)
       add(`${flightTitle(fl)}: still climbing at ${lastTravelTo.name} - the climb to ${lastTravelTo.alt} ft does not fit within the flight (reaches ~${lastTravelRes.exitAlt} ft).`);

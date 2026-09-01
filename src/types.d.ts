@@ -44,6 +44,29 @@ interface Waypoint {
   isPattern?: boolean;
   /** Number of circuits flown at a pattern stop. */
   laps?: number;
+  /**
+   * BOTTOM OF CLIMB pin for the leg ENDING here: hold the entry altitude for
+   * this many NM along the flown path after the leg's START fix, then climb.
+   * A delay, so it is always flyable - it only moves the TOC later, possibly
+   * onto the next leg. Absent or 0 means climb from the fix, which is the
+   * derived v16.5 behaviour.
+   */
+  bocNM?: number | null;
+  /**
+   * BOTTOM OF DESCENT pin for the leg ENDING here: be level this many NM
+   * before the leg's END fix and run in level. Also pure geometry - the
+   * descent simply starts earlier. If there is no room for it, that is the
+   * existing shortfall and the red banner says so.
+   */
+  bodNM?: number | null;
+  /**
+   * TOP OF CLIMB TARGET for the leg ending here: "be at the planned altitude
+   * by this many NM after the start fix". A CHECK, NOT A PIN - honouring it
+   * would mean climbing at a rate the POH tables say nothing about, so the
+   * schedule stays on the profile's performance and the leg reports whether
+   * the target was met and what rate it would need. See pinNM in legs.js.
+   */
+  tocNM?: number | null;
   /** Intermediate points that BEND the path to this waypoint without
    *  creating an OFP row. Distance, time and fuel walk the bent path; the
    *  row still shows the direct chart track between the named fixes. */
@@ -156,6 +179,27 @@ interface ScheduleLeg {
   entryAlt: number;
   /** Altitude at the end of the leg, feet. */
   exitAlt: number;
+  /** BOC: how far into the leg the entry altitude is held before climbing.
+   *  0 = climb from the start fix. */
+  climbStartNM: number;
+  /** The BOD the pilot asked for, before the backward pass ruled on it. */
+  bodPinNM: number;
+  /** BOD as actually applied: how far before the end fix the descent finishes,
+   *  leaving a level run-in. 0 = level exactly at the fix, which is also what
+   *  a refused pin leaves behind. */
+  bodTailNM: number;
+  /** True when a BOD pin could not be honoured because a descent for a later,
+   *  lower fix already runs through this leg's tail - the aircraft is still
+   *  going down there, so "be level before this fix" cannot be true. */
+  bodRefused: boolean;
+  /** The pilot's "be level by here", or null. A target, never a pin. */
+  tocTargetNM: number | null;
+  /** False only when a tocTargetNM was asked for and the profile's climb does
+   *  not reach the altitude by then. */
+  tocTargetMet: boolean;
+  /** The rate of climb the tocTargetNM would actually need, feet per minute -
+   *  reported so the pilot can judge it, never used to recompute the climb. */
+  climbRateReqFpm: number | null;
 }
 
 /** A published vertical limit, kept as its three source fields. GND/UNL are
@@ -226,6 +270,9 @@ interface AirspaceSector {
 
 /** A TOC or TOD mark to draw on the map and list on the plotting sheet. */
 interface LegMarker {
+  /** TOC, TOD, and - only when the pilot pinned them - BOC and BOD. With no
+   *  pin the bottom of a climb IS the start fix and the bottom of a descent IS
+   *  the end fix, so those marks are not drawn. */
   kind: string;
   /** Distance from the reference point, nautical miles. */
   distNM: number;

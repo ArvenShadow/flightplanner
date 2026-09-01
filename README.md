@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.36)
+# C182 Flight Planner (v16.37)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -160,7 +160,7 @@ module, with no DOM, and is tested in plain Node:
 | `performance.js` | POH climb & cruise tables, TAS, fuel flow, WCA |
 | `geodesy.js` | WGS-84 distance and true track |
 | `magvar.js` | magnetic variation (WMM2025) |
-| `legs.js` | legs, via points, the drawn path and line hit-test, the climb/descent schedule, TOC/TOD |
+| `legs.js` | legs, via points, the drawn path and line hit-test, the climb/descent schedule, TOC/TOD and the pinned BOC/BOD |
 | `daylight.js` | sunrise/sunset and the SERA day-VFR window |
 | `winds.js` | winds-aloft vector maths and the Open-Meteo API shapes |
 | `integrity.js` | the rules behind the red DO-NOT-USE banner |
@@ -192,13 +192,17 @@ npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
 npm run typecheck  # TypeScript checks every module (0 errors required)
-npm test           # typecheck, build, then the suite against dist (351 tests)
+npm test           # typecheck, build, then the suite against dist (360 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
 npm run verify:hover           # Chromium check of the position-dependent
                                # Polaris sector frequency on the hover card
 npm run verify:fixes           # Chromium check of the AIP fixes layer: every
                                # control measured on screen, one click = one
                                # waypoint on the published coordinate
+npm run verify:leg             # Chromium check of the leg settings panel: the
+                               # right-click gesture, the pins, and all four
+                               # schedule marks measured against their own
+                               # coordinates
 node tools/verify-hosted.mjs   # Chromium check of the service-worker rules
 node tools/verify-visual.mjs   # pixel + computed-style diff vs a reference build
                                # (all three need `npm install --no-save playwright`)
