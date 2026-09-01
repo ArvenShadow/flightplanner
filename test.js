@@ -2195,10 +2195,9 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const exchModule = require('./src/lib/exchange.js');
   const plotModule = require('./src/lib/plotting.js');
   const metarModule = require('./src/lib/metar.js');
-  const tilesModule = require('./src/lib/tiles.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
-                    exch: exchModule, plot: plotModule, metar: metarModule, tiles: tilesModule };
+                    exch: exchModule, plot: plotModule, metar: metarModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2335,10 +2334,7 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
-                       M.metar.routeAerodromes([{ waypoints: [wp(69, 18, 0)] }])],
-    'tiles.js': () => [M.tiles.routeBounds([{ waypoints: [wp(69, 18, 0), wp(69.7, 18.9, 0)] }]),
-                       M.tiles.tilesForBounds({ north: 69.7, south: 69, west: 18, east: 19 }, 9, 10),
-                       M.tiles.formatBytes(1234567)]
+                       M.metar.routeAerodromes([{ waypoints: [wp(69, 18, 0)] }])]
   };
   for (const [name, run] of Object.entries(exercises)) {
     let out;
@@ -2555,77 +2551,60 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
     'the card does not tell the pilot to get a real briefing');
 });
 
-console.log('\n=== 62. Offline chart download ===');
-T('the corridor covers every plotted point, including via points', () => {
-  const T2 = moduleExports.tiles;
-  const W = (lat, lng, via) => ({ name: 'X', lat, lng, alt: 2500, via });
-  const b = T2.routeBounds([{ waypoints: [W(69.05, 18.54), W(69.68, 18.91, [{ lat: 70.2, lng: 20.5 }])] }]);
-  // the via point is OUTSIDE the two waypoints and must still be inside the box
-  assert(b.north > 70.2 && b.east > 20.5, 'a via point fell outside the download area: ' + JSON.stringify(b));
-  assert(b.south < 69.05 && b.west < 18.54, 'the margin was not applied on the other side');
-  // this far north a degree of longitude is much shorter than one of latitude,
-  // so the margin must be widened in longitude or the corridor is too narrow
-  const dLat = b.north - 70.2, dLon = b.east - 20.5;
-  assert(dLon > dLat * 1.5, 'the longitude margin was not scaled for latitude: ' + dLat + ' vs ' + dLon);
-  assert(T2.routeBounds([]) === null && T2.routeBounds([{ waypoints: [] }]) === null,
-    'an empty route must not produce an area to download');
-});
-T('the tile list is bounded, and the size estimate is honest', () => {
-  const T2 = moduleExports.tiles;
-  const b = { north: 69.95, south: 68.85, west: 17.6, east: 19.4 };
-  const { tiles, capped } = T2.tilesForBounds(b, 8, 11);
-  assert(!capped && tiles.length > 100 && tiles.length < 1000, 'unexpected tile count: ' + tiles.length);
-  assert(tiles.every(t => t.z >= 8 && t.z <= 11), 'tiles outside the requested zoom range');
-  // a careless bounding box must not generate a runaway list
-  const huge = T2.tilesForBounds({ north: 80, south: 0, west: -180, east: 180 }, 8, 11, 500);
-  assert(huge.capped === true && huge.tiles.length === 500, 'the cap did not hold: ' + huge.tiles.length);
-  // bytes scale with the raster actually requested, not a flat guess
-  const px = () => 1024;
-  const small = () => 256;
-  const big = T2.estimateBytes(tiles, px), lil = T2.estimateBytes(tiles, small);
-  assert(big > lil * 15, 'the estimate ignores the requested tile size');
-  assert(T2.formatBytes(1234567) === '1.2 MB' && T2.formatBytes(45 * 1024 * 1024) === '45 MB',
-    'size wording: ' + T2.formatBytes(1234567));
-});
-T('the download measures its outcome instead of predicting it', () => {
-  const T2 = moduleExports.tiles;
-  // paddedCostBytes/tilesThatFit were removed on purpose: browsers randomise
-  // the padding on opaque entries so it cannot be measured, and predicting
-  // from it printed "5000 MB" then "23000 MB" for the same route.
-  assert(T2.paddedCostBytes === undefined && T2.tilesThatFit === undefined,
-    'the storage prediction is back - it cannot be measured, only observed');
-  const src = fs.readFileSync('src/lib/tiles.js', 'utf8');
-  assert(/RANDOMISE the padding/.test(src), 'the reason it was removed is undocumented');
-  // the page must report what is actually HELD after downloading
+console.log('\n=== 62. The offline chart download stays removed ===');
+T('nothing offers to download the chart', () => {
+  // v16.26: removed after it failed in the pilot's hands. Avinor sends no
+  // CORS header, so every tile is an OPAQUE response; browsers pad the
+  // storage cost of those (8.46 MB charged for a 68-byte tile) and randomise
+  // the padding so it cannot be measured. A route corridor cost gigabytes of
+  // quota and the browser evicted the whole origin - the chart worked for a
+  // while and then vanished on zooming out and back in.
+  assert(!fs.existsSync('src/lib/tiles.js'), 'src/lib/tiles.js is back');
   const page = fs.readFileSync('src/index.html', 'utf8');
-  const fn = page.slice(page.indexOf('async function downloadRouteChart'), page.indexOf('function metarStatus'));
-  assert(/caches\.open\('c182-tiles-'/.test(fn), 'the download never checks what the browser actually kept');
-  assert(/the browser only kept/.test(fn), 'a download that stores nothing would still claim success');
+  for (const gone of ['downloadRouteChart', 'chartCacheAvailable', 'chart-dl-btn',
+                      'tilesForBounds', 'routeBounds', 'c182_chart_download']) {
+    assert(!page.includes(gone), 'the chart download is back in the page: ' + gone);
+  }
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(!/\u2b07 Chart/.test(built) && !built.includes('downloadRouteChart'),
+    'the built app still offers a chart download');
+  assert(!doc.getElementById('chart-dl-btn'), 'the download button is still in the DOM');
+  // and the reason must stay written down, or someone rebuilds it
+  assert(/OPAQUE response/.test(page), 'the reason the download was removed is undocumented');
 });
-T('the download refuses to run without a known chart edition', () => {
+T('nothing promises an offline map any more', () => {
   const page = fs.readFileSync('src/index.html', 'utf8');
-  // Same rule as the service worker: tiles of unknown vintage are never
-  // stored, so the button must check the AIRAC cycle before fetching.
-  const fn = page.slice(page.indexOf('async function downloadRouteChart'), page.indexOf('function metarStatus'));
-  assert(/if \(!vfrEdition\)/.test(fn), 'the download does not check the chart edition first');
-  assert(fn.indexOf('if (!vfrEdition)') < fn.indexOf('tilesForBounds'),
-    'the edition is checked AFTER building the tile list');
-  assert(/chartCacheAvailable\(\)/.test(fn), 'the download does not check a worker is present');
-  // it must NOT try to predict storage - that number is unmeasurable
-  assert(!/measureOpaqueTileCost/.test(fn), 'the storage probe is back; it measures noise');
-  // and it must say which detail mode the tiles are stored for, because the
-  // mode changes the tile URL and a mismatch means a blank chart offline
-  assert(/CHART_DETAIL_LABELS\[mode\]/.test(fn), 'the download does not state which Detail mode it stored');
-  // and it must tell a file:// user why it cannot work rather than failing silently
-  assert(/cannot store charts/.test(fn), 'no explanation for the file:// case');
+  // there are two tileerror notes - one per base layer; the VFR one is last
+  const note = page.slice(page.lastIndexOf("note.id = 'offline-tile-note'"),
+                          page.lastIndexOf("appendChild(note)"));
+  assert(/both charts are streamed/.test(note), 'the tile-error note no longer says the chart needs internet');
+  assert(!/downloaded|offline copy|cached map/i.test(note),
+    'the tile-error note promises an offline chart again: ' + note);
+  // and neither note may claim a stored map
+  const topo = page.slice(page.indexOf("note.id = 'offline-tile-note'"),
+                          page.indexOf("appendChild(note)"));
+  assert(!/downloaded|offline copy|cached map/i.test(topo),
+    'the topo tile-error note promises an offline chart: ' + topo);
 });
-T('a downloaded route is not evicted by ordinary panning', () => {
+T('the guide does not offer topo as the offline chart', () => {
+  // This is the promise the pilot actually acted on: they turned the wifi
+  // off, saw a blank VFR chart, switched to Topo as instructed and found
+  // nothing there either. Nothing has ever stored topo tiles for offline use.
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(!/topo is the offline choice/i.test(built), 'the guide still calls topo the offline chart');
+  assert(!/offline-cached/i.test(built), 'a control still claims a chart is cached offline');
+  assert(/Both charts need internet/i.test(built), 'the guide does not say both charts need internet');
+  assert(/no chart download, on purpose/i.test(built),
+    'the guide does not record why the chart download was removed');
+});
+T('the tile cache is back to a size the browser will actually keep', () => {
   const sw = fs.readFileSync('site/sw.js', 'utf8');
   const m = sw.match(/const TILE_LIMIT = (\d+);/);
   assert(m, 'the tile cache no longer has a limit');
-  // the Bardufoss-Tromso corridor is ~280 tiles across z8-z11; a limit near
-  // the old 400 would evict a download as soon as you panned
-  assert(Number(m[1]) >= 1500, 'TILE_LIMIT ' + m[1] + ' is too small to hold a downloaded route');
+  // Opaque tiles are charged megabytes each, so a large limit does not hold
+  // more chart - it fills the origin's quota and gets EVERYTHING evicted,
+  // app shell included. 400 was the value before the download feature.
+  assert(Number(m[1]) <= 400, 'TILE_LIMIT ' + m[1] + ' will fill the quota and evict the whole origin');
   // the VFR layer keeps the same wide ring as topo - it matters more here,
   // because Avinor forbids reusing a tile without revalidating
   const page = fs.readFileSync('src/index.html', 'utf8');
@@ -2644,15 +2623,15 @@ T('every map control is in the stack, so none can be invisible', () => {
   const holder = doc.getElementById('map-controls');
   assert(holder, 'the map controls container is gone');
   const btns = [...holder.querySelectorAll('button')];
-  assert(btns.length >= 4, 'expected every map control inside the stack, found ' + btns.length);
-  for (const id of ['declutter-btn', 'chart-btn', 'chart-detail-btn', 'chart-dl-btn']) {
+  assert(btns.length >= 3, 'expected every map control inside the stack, found ' + btns.length);
+  for (const id of ['declutter-btn', 'chart-btn', 'chart-detail-btn']) {
     const el = doc.getElementById(id);
     assert(el, 'missing map control: ' + id);
     assert(el.parentElement === holder, id + ' is outside the control stack - it will not be positioned');
     assert(el.classList.contains('map-ctl'), id + ' does not carry the shared class');
   }
   // and no control may go back to being positioned by its own id
-  for (const id of ['#declutter-btn', '#chart-btn', '#chart-detail-btn', '#chart-dl-btn']) {
+  for (const id of ['#declutter-btn', '#chart-btn', '#chart-detail-btn']) {
     assert(!new RegExp('\\' + id + '\\s*\\{[^}]*position:\\s*absolute').test(css),
       id + ' is positioned individually again - the next button added will be invisible');
   }

@@ -378,43 +378,49 @@ errors is the standard.
     over the floor.
   - Do not "fix" perceived map slowness with more caching again without
     measuring decode first.
-- **Offline chart download (v16.22)**: a button pre-fetches every tile
-  along the route corridor into the service-worker cache.
-  - WHY PANNING FELT LIKE RELOADING: Avinor sends
-    `Cache-Control: must-revalidate, max-age=0`, so the browser may never
-    reuse a tile without asking the server first. Kartverket sends
-    max-age=432000, which is why the topo map feels fine by comparison.
-    A service worker is NOT bound by that - cache-first, so once a tile is
-    held it is served outright. Both tile layers now also keep the same
-    wider ring of off-screen tiles (`keepBuffer: 4`).
+- **Offline chart download: BUILT v16.22-v16.25, REMOVED v16.26. Do not
+  rebuild it.** A button pre-fetched the route corridor into the
+  service-worker cache. It failed in the pilot's hands - "it worked for a
+  small while, but zooming far enough out and back in deletes the cache" -
+  and the reason is structural, not a bug that was left unfixed.
   - THE HARD LIMIT, and it is the browser's, not ours: Avinor sends no
     Access-Control-Allow-Origin, so a chart tile is an OPAQUE response.
     Browsers PAD the storage cost of opaque entries so a page cannot
     measure cross-origin resources by watching its own quota - Chromium
     charged 8.46 MB for a single 68-byte tile. So a 45 MB route download
-    actually costs ~2.5 GB of quota. This is why the first attempt stored
-    only 147 of 287 tiles: it silently hit the quota.
-  - THAT PADDING CANNOT BE MEASURED, and v16.22 was wrong to try. Browsers
-    RANDOMISE it precisely so a page cannot, and usage updates
+    actually costs ~2.5 GB of quota. When an origin's quota fills, the
+    browser discards EVERYTHING for that origin - which is precisely the
+    disappearing cache the pilot reported. Nothing in the page can prevent
+    that, ration around it, or even see it coming.
+  - THAT PADDING CANNOT BE MEASURED either, and v16.22 was wrong to try.
+    Browsers RANDOMISE it precisely so a page cannot, and usage updates
     asynchronously: six consecutive probes of the same single-tile store
     measured 0.38, 9.15, 0.38, 5.69, 10.15 and 4.78 MB. The pilot saw
-    "5000 MB" and then "23000 MB" for the same unchanged route, and the
-    refuse-if-it-will-not-fit logic fired on noise. Fixed in v16.25:
-    MEASURE THE OUTCOME, DO NOT PREDICT IT. Quote the download size (which
-    is known), say plainly that storage costs far more for reasons outside
-    our control, attempt it, then COUNT what is in the cache afterwards and
-    report that. A download that stores nothing now says so.
-  - THE DETAIL MODE IS PART OF THE TILE URL (v16.23 made it so), so tiles
-    downloaded at one Detail setting are a cache MISS at another - the
-    chart goes blank offline. The download records its mode and edition,
-    the dialog states both, and switching Detail warns that the offline
-    copy no longer matches.
+    "5000 MB" and then "23000 MB" for the same unchanged route. v16.25
+    replaced the prediction with measure-the-outcome; the feature still
+    could not hold what it stored, so v16.26 removed it.
+  - The GENERAL LESSON, and it is the NO GUESSTIMATES rule again: a feature
+    whose promise the platform can silently revoke is a plausible wrong
+    answer. "Your chart is downloaded" that turns out false at the moment
+    the internet is gone is worse than never offering it. Do not reintroduce
+    this without a tile source that sends CORS headers - then tiles are no
+    longer opaque, the quota accounting is real, and the promise can be kept.
+  - WHAT SURVIVED, and why it is not the same thing: Avinor sends
+    `Cache-Control: must-revalidate, max-age=0`, so the browser may never
+    reuse a tile without asking the server first - which is why panning the
+    VFR chart felt like it reloaded constantly. Kartverket sends
+    max-age=432000, which is why the topo map feels fine by comparison. The
+    service worker is not bound by that and still keeps a SMALL tile cache
+    (TILE_LIMIT back to 400, down from the 2500 the download needed), and
+    both layers keep a wider ring of off-screen tiles (`keepBuffer: 4`).
+    That is a PANNING CONVENIENCE only. Nothing claims the chart works
+    offline, and a big limit would not help: it would fill the quota and get
+    the whole origin evicted, app shell included.
   - The tileerror banner used to say "switch back to Topo for the
     offline-cached map". NOTHING cached topo - the worker only touches
     same-origin files and Avinor tiles - so that sent a pilot looking for a
-    map that was never stored. It now says only what is true.
-  - Requires a secure context. On file:// the button explains why it
-    cannot work instead of failing silently.
+    map that was never stored. It now says only what is true: both charts
+    are streamed and need internet, and everything else still works.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
