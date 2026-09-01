@@ -213,8 +213,12 @@ const committed = await page.evaluate(() => {
   return { pin: flights[0].waypoints[2].tocNM, met: S.tocTargetMet, toc: S.tocAlongNM };
 });
 check(committed.pin === 5, 'the target was stored: ' + committed.pin);
-check(committed.met && Math.abs(committed.toc - 5) < 0.05,
-  'the schedule lands on the target - TOC at ' + (committed.toc && committed.toc.toFixed(3)) + ' NM against 5');
+// AT OR BEFORE the deadline: the crossing altitude is rounded up to a whole
+// hundred (v16.40), so the aircraft reaches the fix a little higher than the
+// minimum and tops out a little sooner than asked. "Be level BY" is a deadline.
+check(committed.met && committed.toc > 0 && committed.toc <= 5.05,
+  'the schedule tops out at or before the target - TOC at ' +
+  (committed.toc && committed.toc.toFixed(3)) + ' NM against 5');
 // ...and the map must PAINT one top of climb, not one at MID and one after it.
 await page.evaluate(() => { map.setView([69.2, 18.5], 9, { animate: false }); });
 await page.waitForTimeout(400);
@@ -224,6 +228,58 @@ const painted = await page.evaluate(() => [...document.querySelectorAll('.toc-la
   .map((el) => el.textContent.trim()));
 check(painted.filter((t) => /TOC/.test(t) && !/BOC/.test(t)).length === 1,
   'one continuous climb paints exactly one TOC: ' + JSON.stringify(painted));
+
+// ---- right-clicking a WAYPOINT is the OTHER panel (v16.40) -----------------
+// A waypoint sits ON the route line, and right-clicking the line opens the leg
+// panel. jsdom cannot prove which one a real right-click reaches, so measure it:
+// the waypoint menu must open and the leg panel must NOT.
+await page.evaluate(async () => {
+  flights = [{ id: 1, title: 'F3', depElev: 254, waypoints: [
+    { lat: 68.40, lng: 18.50, name: 'ENDU', alt: 254,  oat: 5, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.20, lng: 18.50, name: 'MID',  alt: 2500, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.95, lng: 18.50, name: 'ENTC', alt: 4500, oat: 0, wdir: 0, wspd: 0, var: -12 }] }];
+  activeFlightIndex = 0;
+  map.setView([69.2, 18.5], 8, { animate: false });
+  await new Promise((r) => setTimeout(r, 320));
+  applyZoomDeclutter(); refreshMap(); renderAllFlightTables();
+});
+await page.waitForTimeout(320);
+const wpPt = await page.evaluate(() => {
+  const p = map.latLngToContainerPoint([69.20, 18.50]);
+  const r = document.getElementById('map').getBoundingClientRect();
+  return [r.left + p.x, r.top + p.y];
+});
+await page.mouse.click(wpPt[0], wpPt[1], { button: 'right' });
+await page.waitForTimeout(320);
+const wpMenu = await page.evaluate(() => {
+  const d = document.getElementById('app-dialog');
+  return { open: !!d, text: d ? d.textContent : '',
+           legPanel: getComputedStyle(document.getElementById('leg-modal')).display };
+});
+check(wpMenu.open && /MID/.test(wpMenu.text),
+  'right-clicking a waypoint opened its own menu: ' + JSON.stringify(wpMenu.text.slice(0, 80)));
+check(wpMenu.legPanel !== 'flex',
+  'the route line underneath ALSO opened the leg panel (display ' + wpMenu.legPanel + ')');
+// Rename through the real dialog, then confirm the route changed.
+await page.evaluate(() => {
+  const inp = document.querySelector('#app-dialog input');
+  inp.value = 'MIDPOINT';
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  [...document.querySelectorAll('#app-dialog button')]
+    .find((b) => /Rename/.test(b.textContent)).click();
+});
+await page.waitForTimeout(320);
+check(await page.evaluate(() => flights[0].waypoints[1].name) === 'MIDPOINT',
+  'the rename did not reach the route');
+// ...and delete it.
+await page.mouse.click(wpPt[0], wpPt[1], { button: 'right' });
+await page.waitForTimeout(320);
+await page.evaluate(() => [...document.querySelectorAll('#app-dialog button')]
+  .find((b) => /Delete/.test(b.textContent)).click());
+await page.waitForTimeout(320);
+const afterDel = await page.evaluate(() => flights[0].waypoints.map((w) => w.name));
+check(JSON.stringify(afterDel) === JSON.stringify(['ENDU', 'ENTC']),
+  'delete from the map removed the wrong waypoint: ' + JSON.stringify(afterDel));
 
 // ---- the pinned corners are PAINTED ---------------------------------------
 // Rebuild the route with BOTH pins set, so all four marks exist at once, and

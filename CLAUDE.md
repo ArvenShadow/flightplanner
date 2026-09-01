@@ -376,6 +376,31 @@ errors is the standard.
       level by" on a leg with no climb. The 20 000-route pin sweep gained a
       whole-flight invariant: a suppressed TOC must really reach its end fix,
       have no level stretch after it, and its mark must reappear on a later leg.
+  - **v16.40 (user request): THE CROSSING ALTITUDE IS A WHOLE HUNDRED FEET, AND
+    IT ROUNDS UP.** v16.39 had dropped the rounding because it re-introduced a
+    level sliver; the user asked for it back, and they fly and write round
+    altitudes. It rounds UP, never to the NEAREST, and that is not stylistic:
+    the figure is a MINIMUM, so the nearest hundred is below it half the time
+    and taking that advice would miss the very target it was computed to meet.
+    Capped at the leg's own target altitude - crossing the previous fix ABOVE
+    what this leg climbs to would make it a descent.
+    - **THE SLIVER IS GONE BECAUSE A HANDED-OVER CLIMB IS NEVER DELAYED**, which
+      is the piece v16.39 was missing. When the leg before tops out exactly ON
+      the shared fix and this leg climbs on, the two are one climb through the
+      fix: there is no level flight there to postpone. A "be level by" target on
+      such a leg is therefore a DEADLINE to check (`tocContinuation`), not a
+      position to set. The extra height from rounding makes the climb finish a
+      little SOONER than asked instead of levelling off for seven seconds at the
+      fix - and early is safe, which is what "be level BY" means.
+    - THAT IS ALSO WHY THE TARGET IS NO LONGER MET EXACTLY, and the tests say so
+      rather than asserting equality: TOC at 4.77 NM against a 5 NM deadline.
+    - THREE OUTCOMES ARE NOW LEGITIMATE and the sweep asserts all three occur:
+      302 suggestions, all verified - 251 one continuous climb, 40 that DESCEND
+      into the raised fix (the climb genuinely begins there), and 11 where
+      rounding up reaches the leg's OWN target altitude so the whole climb is
+      absorbed by the earlier leg and finishes on the fix. 0 split the climb.
+      The one-TOC check counts marks over the WHOLE flight, because a climb
+      continuing through more than one fix lands its mark on a later leg.
   - **BOTH SIDES OF THAT BISECTION MOVE**, which is why `entryAltForClimbBy`
     takes a callback rather than a minutes budget. A higher entry altitude
     shortens the climb but also raises its TAS, covering the target distance in
@@ -1264,6 +1289,42 @@ scoped. In the user's order:
 6. **A print page that pixel-matches the real OFP / M&B form**, so the PDF
    can be copied straight onto the company paperwork.
 7. More to come.
+
+## Circuit altitude, and editing a waypoint from the map (v16.40)
+
+- **A CIRCUIT ALTITUDE IS DERIVED, NOT INHERITED.** A PATTERN stop used to take
+  whatever altitude the previous waypoint happened to be at, which is not a
+  circuit altitude at all. `patternAltitude` (anchors.js) is the field elevation
+  ROUNDED TO THE NEAREST 100 ft plus 1000 ft - rounding the elevation before
+  adding, not the sum, because that is the arithmetic a pilot does in their head
+  and it differs only on a half-hundred. ENTC's 31 ft gives 1000 ft.
+  - **ENDU IS 1500 ft AND THAT IS A TOLD VALUE, NOT A COMPUTED ONE.** The rule
+    would give 1300. `KNOWN_PATTERN_ALT_FT` is a table on purpose: the eAIP hands
+    us elevations and NEVER circuit altitudes, so every entry in it comes from a
+    person who knows the field, and the VAC stays the authority. The guide and
+    the toast both say the derived figure is a default to check, and the OFP cell
+    is now editable (it was static text).
+  - **THE RESOLUTION RADIUS CANNOT BE AMBIGUOUS**: the two closest aerodromes in
+    the dataset are ENGM and ENKJ at 14.07 NM, so a 5 NM catch cannot pick the
+    wrong field, and a VFR circuit is flown within ~3 NM of the runway. A test
+    re-measures that spacing so the constant fails if the dataset ever changes.
+    Beyond 5 NM NOTHING is derived and the old behaviour stands - an invented
+    circuit altitude is exactly the plausible wrong answer this project refuses.
+- **RIGHT-CLICK A WAYPOINT TO RENAME OR DELETE IT** (`openWaypointMenu`). One
+  dialog with the name pre-filled, so Rename is Enter and Delete is one click.
+  - THE GESTURE HAD TO GO ON THE MARKER, and this is the trap: right-clicking
+    the route LINE opens the leg panel (v16.37), and a waypoint sits on that
+    line. Leaflet markers do not bubble to the map, and `L.DomEvent.stop` is
+    applied as well, so exactly one panel can open. jsdom cannot prove which one
+    a real right-click reaches - `verify-leg-panel.mjs` asserts the waypoint menu
+    opens AND the leg panel stays closed, then renames and deletes through the
+    real dialog.
+  - A CIRCUIT STOP IS OFFERED DELETION ONLY. Its name is the literal "PATTERN"
+    that the add-flow and the return-leg builder test for, so a renamed circuit
+    stop would silently stop being one. A test guards that the option is withheld.
+  - `toDMM(value, isLat)` TAKES A FLAG, NOT THE OTHER COORDINATE. Calling it
+    `toDMM(wp.lat, wp.lng)` printed the latitude alone and silently dropped the
+    longitude; only reading the real dialog text in Chromium showed it.
 
 ## Dialogs (v16.11)
 

@@ -579,10 +579,19 @@ export function entryAltForClimbBy(targetAlt, oat, lowAlt, timeAvailableAtTas) {
     const mid = (lo + hi) / 2;
     if (fits(mid)) hi = mid; else lo = mid;
   }
-  // CEIL, not round: this is a recommendation, and rounding down by half a foot
-  // makes the climb marginally too long, so taking the advice would still miss
-  // the target. Erring upwards means it is always satisfied.
-  return Math.ceil(hi);
+  // ROUNDED UP TO THE NEXT HUNDRED FEET (v16.40, the user's request): a pilot
+  // flies and writes whole hundreds, so an OFP crossing altitude should be one.
+  //
+  // It rounds UP, never to the NEAREST, and that is not a stylistic choice: the
+  // figure is a MINIMUM, so the nearest hundred is below it half the time and
+  // taking that advice would miss the target it was computed to meet. Rounding
+  // down by even half a foot makes the climb marginally too long.
+  //
+  // The extra height is why a target may now be met EARLY rather than exactly -
+  // see the handed-over-climb rule in computeFlightSchedule. Capped at the
+  // leg's own target altitude: crossing the previous fix ABOVE the altitude
+  // this leg climbs to would make it a descent, not a climb.
+  return Math.min(Math.ceil(Math.ceil(hi) / 100) * 100, Math.ceil(targetAlt));
 }
 
 /**
@@ -642,6 +651,7 @@ export function computeFlightSchedule(fl, opts) {
   const legs = new Array(Math.max(0, wps.length - 1)).fill(null);
 
   // ---- forward: entry altitudes and climb placement (climbs may span legs)
+  /** @type {number|null} */
   let alt = null;
   for (let i = 0; i < wps.length - 1; i++) {
     const from = wps[i], to = wps[i + 1];
@@ -670,6 +680,11 @@ export function computeFlightSchedule(fl, opts) {
                  *  the first leg, where there is no earlier fix to raise. */
                 /** @type {number|null} */ tocNeedsEntryAlt: null,
                 tocNoAltHelps: false,
+                // This leg's climb is handed over from the previous leg, which
+                // topped out on the shared fix: it starts AT the fix and cannot
+                // be delayed, so a "be level by" target here is a deadline to
+                // check rather than a position to set.
+                tocContinuation: false,
                 /** Where the earlier leg's "be level by" pin would go, and where
                  *  its climb would then begin - both read from the trial that
                  *  VERIFIED the advice, so the sentence offering it cannot
@@ -704,26 +719,44 @@ export function computeFlightSchedule(fl, opts) {
       // only the climb's POSITION moves. It is the same kind of pin as a BOC,
       // just stated from the other end, and it is what a BOC pin becomes.
       const tocT = pinNM(to.tocNM, L.distNM);
+      // IT DOES NOT FIT / IT OVERSHOT. Either way the honest answer is not a
+      // steeper climb - the POH says nothing about that - it is the altitude
+      // this leg would have to START from. The pilot raises the previous fix
+      // and then the altitude column, every leg's numbers and the target all
+      // agree. On the FIRST leg there is no earlier fix to raise (you cannot
+      // climb before takeoff), so only the required rate can be reported.
+      const missTarget = () => {
+        const availMin = phaseMinutes(segs, 0, tocT, cp.tasAvg, wdirC, wspdC);
+        L.tocTargetMet = false;
+        L.climbRateReqFpm = availMin > 0.001 ? Math.round((target - L.entryAlt) / availMin) : null;
+        L.tocNeedsEntryAlt = i > 0
+          ? entryAltForClimbBy(target, Number(to.oat), L.entryAlt,
+              (tas) => phaseMinutes(segs, 0, tocT, tas, wdirC, wspdC))
+          : null;
+      };
       if (tocT > 0) {
         L.tocTargetNM = tocT;
         L.tocDerivedBoc = true;
-        const back = climbStartForToc(segs, tocT, cp.timeMin, cp.tasAvg, wdirC, wspdC);
-        L.climbStartNM = back.startNM;
-        if (back.shortMin > 0.001) {
-          // IT DOES NOT FIT even climbing from this leg's first fix. The honest
-          // answer is not a steeper climb - the POH says nothing about that -
-          // it is the altitude this leg would have to START from. The pilot
-          // raises the previous fix and then the altitude column, every leg's
-          // numbers and the target all agree. On the FIRST leg there is no
-          // earlier fix to raise (you cannot climb before takeoff), so only the
-          // required rate can be reported.
-          const availMin = phaseMinutes(segs, 0, tocT, cp.tasAvg, wdirC, wspdC);
-          L.tocTargetMet = false;
-          L.climbRateReqFpm = availMin > 0.001 ? Math.round((target - alt) / availMin) : null;
-          L.tocNeedsEntryAlt = i > 0
-            ? entryAltForClimbBy(target, Number(to.oat), alt,
-                (tas) => phaseMinutes(segs, 0, tocT, tas, wdirC, wspdC))
-            : null;
+        // A CLIMB HANDED OVER FROM THE PREVIOUS LEG CANNOT BE DELAYED (v16.40).
+        //
+        // When the leg before tops out exactly ON the shared fix and this leg
+        // climbs on, the two are ONE climb through the fix: there is no level
+        // flight at the fix to postpone. The target is then a DEADLINE to check
+        // rather than a position to set, and topping out EARLY is never a
+        // problem. This is what lets the "cross this fix at" advice round to a
+        // whole hundred feet: the rounding buys a little height, so the climb
+        // finishes a little sooner than asked and stays continuous, instead of
+        // levelling off for seven seconds at the fix just to restart.
+        const prevL = legs[i - 1];
+        const handedOver = !!prevL && prevL.climbDistNM > EDGE_NM && prevL.tocAlongNM !== null
+          && prevL.distNM - prevL.tocAlongNM <= EDGE_NM;
+        L.tocContinuation = handedOver;
+        if (handedOver) {
+          L.climbStartNM = 0;   // checked against the target after the walk
+        } else {
+          const back = climbStartForToc(segs, tocT, cp.timeMin, cp.tasAvg, wdirC, wspdC);
+          L.climbStartNM = back.startNM;
+          if (back.shortMin > 0.001) missTarget();
         }
       } else {
         L.climbStartNM = pinNM(to.bocNM, L.distNM);
@@ -753,6 +786,10 @@ export function computeFlightSchedule(fl, opts) {
       }
       // A climb that does not finish on this leg cannot have met a target on it.
       if (L.tocTargetNM != null && L.tocAlongNM == null) L.tocTargetMet = false;
+      // A handed-over climb was not positioned, so its target is checked here:
+      // it is met when the climb tops out AT OR BEFORE the deadline.
+      if (L.tocContinuation && L.tocTargetMet
+          && (L.tocAlongNM === null || L.tocAlongNM > tocT + EDGE_NM)) missTarget();
     } else {
       // No climb on this leg, so no BOC to place - and climbStartNM MUST stay
       // 0, or the backward pass would treat the first stretch as blocked and

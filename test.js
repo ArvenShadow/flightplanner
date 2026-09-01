@@ -59,7 +59,10 @@ const leafletStub = `
     polyline: function(c, o){ var l = new Layer(); l._ll = c; l._opts = o || {}; return l; },
     polygon: function(c, o){ var l = new Layer(); l._ll = c; l._opts = o || {}; l._isPolygon = true; return l; },
     marker: function(ll, o){ var l = new Layer(); l._latlng = ll; l._opts = o || {}; return l; },
-    divIcon: function(o){ return o; }
+    divIcon: function(o){ return o; },
+    // Used by the waypoint context menu to stop the route line underneath from
+    // also opening its leg panel.
+    DomEvent: { stop: function(){}, stopPropagation: function(){}, preventDefault: function(){} }
   };
 `;
 
@@ -2419,7 +2422,9 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                         M.anchors.fixSymbolSvg('triangle', '#dd6b20', 10),
                         M.anchors.fixMarkerHtml({ kind: 'RP', label: 'X' }, M.anchors.normaliseFixStyle({})),
                         M.anchors.isHexColor('#dd6b20'),
-                        M.anchors.escapeText('a&b')],
+                        M.anchors.escapeText('a&b'),
+                        M.anchors.patternAltitude({ icao: 'ENDU', elevFt: 254 }),
+                        M.anchors.patternAltitudeAt(69.0, 18.5, [])],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -4037,6 +4042,12 @@ T('when the climb will not fit, the ALTITUDE the previous fix needs is computed 
     assert(!asked.tocTargetMet, 'target ' + target + ' NM was somehow met from 2500 ft');
     assert(asked.tocNeedsEntryAlt > 2500 && asked.tocNeedsEntryAlt <= 6500,
       'implausible advice for ' + target + ' NM: ' + asked.tocNeedsEntryAlt);
+    // A WHOLE HUNDRED FEET (v16.40, the user's request) - a pilot writes and
+    // flies round altitudes. It rounds UP, never to the nearest: the figure is
+    // a MINIMUM, so the nearest hundred is below it half the time and taking
+    // that advice would miss the very target it was computed to meet.
+    assert(asked.tocNeedsEntryAlt % 100 === 0,
+      'the advice is not a whole hundred feet: ' + asked.tocNeedsEntryAlt);
     // TAKING THE ADVICE MUST WORK. It did not at first: the required altitude
     // was bisected against a time budget computed at the ORIGINAL climb TAS,
     // but a higher entry altitude raises the TAS and so shortens the time
@@ -4074,14 +4085,20 @@ T('when the climb will not fit, the ALTITUDE the previous fix needs is computed 
       (lead.distNM - (lead.climbStartNM + lead.climbDistNM)).toFixed(3) + ' NM');
     assert(climb.climbStartNM < 0.05,
       'the climb does not resume at the fix: ' + climb.climbStartNM.toFixed(3) + ' NM');
-    assert(climb.tocTargetMet && Math.abs(climb.tocAlongNM - target) < 0.05,
-      'the continuous climb missed the target: ' + climb.tocAlongNM);
+    // AT OR BEFORE the deadline, not exactly on it (v16.40). The crossing
+    // altitude is rounded UP to a whole hundred, so the aircraft arrives at the
+    // fix slightly higher than the minimum and tops out slightly sooner than
+    // asked. "Be level BY" is a deadline; early is safe, and it is what keeps
+    // the climb continuous instead of levelling off for seconds at the fix.
+    assert(climb.tocTargetMet && climb.tocAlongNM > 0 && climb.tocAlongNM <= target + 0.05,
+      'the continuous climb did not top out at or before the target: ' + climb.tocAlongNM);
+    assert(climb.tocContinuation === true, 'the climb was not treated as handed over');
     // ONE climb means ONE top of climb on the map.
     assert(lead.climbContinues === true, 'the earlier leg did not report a continuing climb');
     const marks = L2.computeLegMarkers(both[0].from, both[0].to, lead)
       .concat(L2.computeLegMarkers(both[1].from, both[1].to, climb));
     const tocs = marks.filter((m) => m.kind === 'TOC');
-    assert(tocs.length === 1 && Math.abs(tocs[0].distNM - target) < 0.05,
+    assert(tocs.length === 1 && tocs[0].distNM <= target + 0.05,
       'a continuous climb drew ' + tocs.length + ' tops of climb: ' +
       marks.map((m) => m.kind + '@' + m.distNM.toFixed(1)).join(', '));
   }
@@ -4101,7 +4118,7 @@ T('advice is only offered if it actually WORKS', () => {
   const L2 = moduleExports.legs;
   const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
   const rnd = (() => { let s = 987654; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
-  let given = 0, works = 0, noneHelps = 0, firstLeg = 0, continuous = 0, noEarlierClimb = 0;
+  let given = 0, works = 0, noneHelps = 0, firstLeg = 0, continuous = 0, noEarlierClimb = 0, absorbed = 0;
   const splitClimb = [], doubleToc = [];
   for (let iter = 0; iter < 3000; iter++) {
     const nWp = 3 + Math.floor(rnd() * 2);
@@ -4133,14 +4150,24 @@ T('advice is only offered if it actually WORKS', () => {
     if (again && again.tocTargetMet && lead) {
       const gapBefore = lead.distNM - (lead.climbStartNM + lead.climbDistNM);
       if (lead.climbDistNM <= 0.05) noEarlierClimb++;   // it DESCENDS into the fix
+      // Rounding up to a whole hundred can reach the leg's OWN target altitude,
+      // and then there is no climb left here at all: the whole climb finishes
+      // on the earlier leg, which draws the top. One climb, not a split.
+      else if (again.climbDistNM <= 0.05 && gapBefore < 0.05) absorbed++;
       else if (gapBefore < 0.05 && again.climbStartNM < 0.05 && lead.climbContinues) continuous++;
       else splitClimb.push('leg ' + S.i + ': gap ' + gapBefore.toFixed(3) +
         ' before / ' + again.climbStartNM.toFixed(3) + ' after, continues ' + lead.climbContinues);
-      // ONE climb draws ONE top of climb.
-      const tocs = L2.computeLegMarkers(lead.from, lead.to, lead)
-        .concat(L2.computeLegMarkers(again.from, again.to, again))
+      // ONE climb draws ONE top of climb - counted over the WHOLE flight,
+      // because a climb continuing through more than one fix lands its mark on
+      // a later leg than the two being compared here.
+      const tocs = T2.filter(Boolean)
+        .flatMap((X) => L2.computeLegMarkers(X.from, X.to, X))
         .filter((m) => m.kind === 'TOC');
-      if (tocs.length !== 1) doubleToc.push('leg ' + S.i + ': ' + tocs.length + ' TOC marks');
+      const climbing = T2.filter(Boolean).filter((X) => X.climbDistNM > 0.05).length;
+      if (climbing > 0 && tocs.length === 0 && !T2.filter(Boolean).some((X) => X.stillClimbing))
+        doubleToc.push('leg ' + S.i + ': a climb with no TOC anywhere');
+      if (tocs.length > climbing)
+        doubleToc.push('leg ' + S.i + ': ' + tocs.length + ' TOC marks for ' + climbing + ' climbing legs');
     }
   }
   assert(given > 30, 'the sweep produced only ' + given + ' pieces of advice');
@@ -4152,11 +4179,13 @@ T('advice is only offered if it actually WORKS', () => {
   // ...and the honest third state must occur: sometimes NO altitude helps.
   assert(noneHelps > 0, 'the "no altitude helps" case never came up, so it is untested');
   assert(firstLeg > 0, 'the first-leg refusal never came up');
-  assert(continuous > 20 && noEarlierClimb > 0,
-    'the sweep did not exercise both shapes: ' + continuous + ' continuous / ' + noEarlierClimb + ' descending');
+  assert(continuous > 20 && noEarlierClimb > 0 && absorbed > 0,
+    'the sweep did not exercise all three shapes: ' + continuous + ' continuous / ' +
+    noEarlierClimb + ' descending / ' + absorbed + ' absorbed');
   console.log('        ' + given + ' suggestions, all verified | ' + continuous +
-    ' one continuous climb | ' + noEarlierClimb + ' descend into the fix | ' +
-    noneHelps + ' where no altitude helps | ' + firstLeg + ' first-leg refusals');
+    ' one continuous climb | ' + noEarlierClimb + ' descend into the fix | ' + absorbed +
+    ' climb absorbed by the earlier leg | ' + noneHelps + ' where no altitude helps | ' +
+    firstLeg + ' first-leg refusals');
 });
 T('a "be level by" target overrides a bottom-of-climb pin on the same leg', () => {
   // Two settings for one corner is how a contradiction arises. The target owns
@@ -4269,6 +4298,55 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   console.log('        ' + legs + ' pinned legs: ' + withBoc + ' with a BOC, ' + withBod +
     ' with a BOD, ' + refused + ' pins refused, ' + missed + ' TOC targets missed, ' +
     continues + ' climbs continuing through a fix, 0 violations');
+});
+
+console.log('\n=== 62a2. Circuit altitude from the field elevation (v16.40) ===');
+T('a circuit altitude is 1000 ft above the field, rounded to a whole hundred', () => {
+  const A = moduleExports.anchors;
+  // The rule, on the published elevations in the shipped dataset.
+  assert(A.patternAltitude({ icao: 'ENTC', elevFt: 31 }) === 1000, 'ENTC 31 ft');
+  assert(A.patternAltitude({ icao: 'ENEV', elevFt: 84 }) === 1100, 'ENEV 84 ft');   // 84 -> 100
+  assert(A.patternAltitude({ icao: 'XXXX', elevFt: 149 }) === 1100, '149 ft rounds down');
+  assert(A.patternAltitude({ icao: 'XXXX', elevFt: 150 }) === 1200, '150 ft rounds up');
+  assert(A.patternAltitude({ icao: 'XXXX', elevFt: 2054 }) === 3100, 'the highest field');
+  // ENDU is the exception the user gave: 1500 ft, not the 1300 the rule gives.
+  assert(A.patternAltitude({ icao: 'ENDU', elevFt: 254 }) === 1500, 'ENDU must be 1500 ft');
+  assert(A.patternAltitude({ icao: 'endu', elevFt: 254 }) === 1500, 'the override is case-insensitive');
+  assert(A.patternAltitude({ icao: 'XXXX', elevFt: 254 }) === 1300, 'the rule still gives 1300 elsewhere');
+  // Nothing is invented from a missing elevation.
+  assert(A.patternAltitude({ icao: 'XXXX', elevFt: null }) === null, 'no elevation, no altitude');
+  assert(A.patternAltitude(null) === null, 'no aerodrome, no altitude');
+});
+T('the circuit resolves to the aerodrome it is flown at, or to nothing', () => {
+  const A = moduleExports.anchors;
+  const set = JSON.parse((() => { const s = fs.readFileSync('data/aip.js', 'utf8'); return s.slice(s.indexOf('{'), s.lastIndexOf(';')); })());
+  const anchors = A.buildAnchors(set);
+  const endu = anchors.find((a) => a.kind === 'AD' && a.icao === 'ENDU');
+  assert(endu, 'ENDU is not in the dataset');
+  // On the field, and a couple of miles off it - a circuit is flown within ~3 NM.
+  const on = A.patternAltitudeAt(endu.lat, endu.lng, anchors);
+  assert(on && on.icao === 'ENDU' && on.alt === 1500 && on.known === true,
+    'a circuit at ENDU: ' + JSON.stringify(on));
+  const near = A.patternAltitudeAt(endu.lat + 0.03, endu.lng + 0.03, anchors);
+  assert(near && near.icao === 'ENDU', 'a circuit 2 NM off ENDU did not resolve to it');
+  // Out in the fjord, nothing is invented.
+  const far = A.patternAltitudeAt(endu.lat + 1.2, endu.lng, anchors);
+  assert(far === null, 'an altitude was invented far from any aerodrome: ' + JSON.stringify(far));
+  // THE RADIUS CANNOT BE AMBIGUOUS: the two closest aerodromes in the dataset
+  // are 14.07 NM apart, so a 5 NM catch can never resolve to the wrong field.
+  const ads = anchors.filter((a) => a.kind === 'AD');
+  let closest = Infinity;
+  for (let i = 0; i < ads.length; i++)
+    for (let j = i + 1; j < ads.length; j++)
+      closest = Math.min(closest, A.roughNM([ads[i].lat, ads[i].lng], [ads[j].lat, ads[j].lng]));
+  assert(closest > 2 * A.PATTERN_AD_MAX_NM,
+    'two aerodromes are ' + closest.toFixed(2) + ' NM apart, so a ' + A.PATTERN_AD_MAX_NM +
+    ' NM catch is ambiguous');
+  // Every published field yields a whole hundred.
+  const odd = ads.filter((a) => { const v = A.patternAltitude(a); return v !== null && v % 100 !== 0; });
+  assert(odd.length === 0, odd.length + ' aerodromes give a non-round circuit altitude');
+  console.log('        ' + ads.length + ' aerodromes, closest pair ' + closest.toFixed(2) +
+    ' NM, all circuit altitudes whole hundreds');
 });
 
 console.log('\n=== 62b. TOC/TOD marks (the vanishing TOD, v16.28) ===');
@@ -4526,6 +4604,49 @@ TA('right-clicking the line opens the LEG PANEL, and inserting is still there', 
   assert(JSON.stringify(names) === JSON.stringify(['ENDU', 'FINNSNES', 'BEND', 'ENTC']),
     'the panel inserted in the wrong place: ' + JSON.stringify(names));
   assert(!legOpen(), 'the panel stayed open');
+});
+TA('right-clicking a WAYPOINT renames it, and offers to delete it (v16.40)', async () => {
+  // The gesture had to go on the MARKER: right-clicking the route line opens
+  // the leg panel, and a waypoint sits on that line. Exactly one panel may open.
+  ev(SEED);
+  const legOpen = () => doc.getElementById('leg-modal').style.display === 'flex';
+  const p = ev(`markers[1]._h.contextmenu({ originalEvent: {} })`);
+  await tick();
+  assert(!legOpen(), 'right-clicking the waypoint also opened the leg panel');
+  assert(/FINNSNES/.test(doc.getElementById('app-dialog').textContent),
+    'the menu did not name the waypoint: ' + doc.getElementById('app-dialog').textContent);
+  typeInDialog('MIDWAY');
+  answerDialog('Rename');
+  await p; await tick();
+  assert(JSON.stringify(ev('flights[0].waypoints.map(w => w.name)')) ===
+    JSON.stringify(['ENDU', 'MIDWAY', 'ENTC']), 'the rename did not take: ' +
+    JSON.stringify(ev('flights[0].waypoints.map(w => w.name)')));
+
+  // ...and delete removes exactly that one.
+  const p2 = ev(`markers[1]._h.contextmenu({ originalEvent: {} })`);
+  await tick();
+  answerDialog('Delete this waypoint');
+  await p2; await tick();
+  assert(JSON.stringify(ev('flights[0].waypoints.map(w => w.name)')) ===
+    JSON.stringify(['ENDU', 'ENTC']), 'the delete removed the wrong waypoint: ' +
+    JSON.stringify(ev('flights[0].waypoints.map(w => w.name)')));
+
+  // Cancel must change nothing.
+  const p3 = ev(`markers[0]._h.contextmenu({ originalEvent: {} })`);
+  await tick();
+  answerDialog('Cancel');
+  await p3; await tick();
+  assert(ev('flights[0].waypoints.length') === 2, 'cancelling changed the route');
+});
+T('a circuit stop is offered deletion only - renaming it would break the PATTERN marker', () => {
+  // "PATTERN" is the name the add-flow and the return-leg builder test for, so
+  // a renamed circuit stop would silently stop being one.
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const fn = raw.split('async function openWaypointMenu')[1].split('function deleteWaypointFromFlight')[0];
+  assert(/isPat \? \[\] : \[\{ id: 'rename'/.test(fn.replace(/\s+/g, ' ')) ||
+         /isPat \? \[\] :/.test(fn),
+    'the waypoint menu no longer withholds Rename from a circuit stop');
+  assert(/isDoneMode/.test(fn), 'the waypoint menu is not disabled in done mode');
 });
 T('the leg panel reads the leg, pins from where you clicked, and previews the result', () => {
   const L2 = moduleExports.legs;
