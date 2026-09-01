@@ -29,7 +29,7 @@ export const PROFILE_KEYS = [
   'climbMode', 'ccRoc', 'ccKias', 'ccFf',
   'roc', 'climbTas', 'climbFf', 'rod', 'descTas', 'descFf',
   'patternTime', 'patternFf', 'taxiFuel',
-  'theme', 'distUnit', 'fuelUnit', 'minuteMark', 'declutter', 'baseChart'
+  'theme', 'distUnit', 'fuelUnit', 'minuteMark', 'declutter', 'baseChart', 'chartDetail'
 ];
 
 /** Copy across only the allowed profile keys. Anything else - now or

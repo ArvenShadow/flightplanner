@@ -216,6 +216,10 @@ interface AircraftProfile {
   minuteMark?: number;
   declutter?: string;
   baseChart?: 'topo' | 'vfr';
+  /** How dense a chart raster to request. 'auto' keeps full detail at the
+   *  zooms the chart is read at and lightens the overview, where decoding a
+   *  dense tile costs about a second per screen. */
+  chartDetail?: 'auto' | 'sharp' | 'fast';
 }
 
 /**

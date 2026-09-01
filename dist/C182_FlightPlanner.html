@@ -994,6 +994,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       <div id="map"></div>
       <button id="chart-btn" class="no-print" title="Switch the base chart: Kartverket topo (offline-cached) or the official ICAO VFR 1:500 000 from Avinor (needs internet). Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
       <button id="chart-dl-btn" class="no-print" title="Download the ICAO VFR chart for this whole route so it works with no internet, and stops reloading as you pan. Needs the hosted version or localhost - a page opened straight from a file cannot store charts." onclick="downloadRouteChart()">⬇ Chart</button>
+      <button id="chart-detail-btn" class="no-print" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
       <div id="chart-label"></div>
       <button id="declutter-btn" class="no-print" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
     </div>
@@ -4386,7 +4387,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
     "fuelUnit",
     "minuteMark",
     "declutter",
-    "baseChart"
+    "baseChart",
+    "chartDetail"
   ];
   function pickProfileKeys(profile2) {
     const out = {};
@@ -4943,7 +4945,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.22';
+    const APP_VERSION = '16.23';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -5161,21 +5163,50 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // ratio drops to 1 instead of multiplying the bytes by 16 for nothing.
     // Floor is the screen's own density (a HiDPI panel needs those pixels
     // even where the chart has no more detail to give); ceiling is 4x.
-    function vfrPixelRatio(z, y, dpr) {
+    // How dense a raster to ask for. AUTO is the default and exists because
+    // of a measurement: decoding a tile costs time that no amount of caching
+    // can remove, and it scales with the pixel count. At z9 a source-matched
+    // 856 px tile takes 58 ms to decode, so a screenful is ~1.2 SECONDS of
+    // pure rasterising; the same screen at half the density takes 336 ms.
+    //
+    // But that cost is entirely at the OVERVIEW zooms. At z10-z11 - where you
+    // actually read frequencies, MEF and airspace limits - the CSS pixel is
+    // already at or finer than the 31.75 m source, so the ratio is 1 or 2 and
+    // a tile decodes in a few milliseconds. AUTO therefore halves the density
+    // at z9 and below, where you are orienting rather than reading, and
+    // leaves the zooms you read the chart at completely untouched.
+    const CHART_DETAIL_MODES = ['auto', 'sharp', 'fast'];
+    function chartDetail() {
+      const m = aircraftProfile.chartDetail;
+      return CHART_DETAIL_MODES.includes(m) ? m : 'auto';
+    }
+    function detailRatioCap(z, mode) {
+      if (mode === 'sharp') return 4;      // always match the source
+      if (mode === 'fast') return 1;       // always one raster pixel per CSS pixel
+      return z <= 9 ? 2 : 4;               // auto: light on the overview only
+    }
+    function vfrPixelRatio(z, y, dpr, mode) {
       const lat = tileCenterLat(z, y);
       const cssRes = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z);
       const floor = dpr > 0 ? dpr : 1;
-      return Math.min(4, Math.max(floor, cssRes / VFR_SOURCE_PS_M));
+      const cap = detailRatioCap(z, mode || 'auto');
+      // The detail setting caps how much of the SOURCE we ask for...
+      const wanted = Math.min(cssRes / VFR_SOURCE_PS_M, cap);
+      // ...but the screen's own density still raises it, or a HiDPI panel
+      // looks soft at the zoom you read the chart at. The absolute 4x
+      // ceiling holds regardless: beyond it the bytes and the decode cost
+      // grow for nothing.
+      return Math.min(4, Math.max(floor, wanted, 1));
     }
 
     // Export size for one 256 CSS px tile, rounded UP to a multiple of 8 so
     // the request never lands below the resolution the chart holds.
-    function vfrTilePx(z, y, dpr) {
-      return Math.ceil(256 * vfrPixelRatio(z, y, dpr) / 8) * 8;
+    function vfrTilePx(z, y, dpr, mode) {
+      return Math.ceil(256 * vfrPixelRatio(z, y, dpr, mode) / 8) * 8;
     }
 
     function vfrTileUrl(z, x, y) {
-      const px = vfrTilePx(z, y, typeof window !== 'undefined' ? window.devicePixelRatio : 1);
+      const px = vfrTilePx(z, y, typeof window !== 'undefined' ? window.devicePixelRatio : 1, chartDetail());
       // dpi is deliberately left at 96 whatever the pixel ratio: the mosaic
       // has no scale-dependent symbology (minScale/maxScale 0), and dpi=384
       // was verified to return a BYTE-IDENTICAL image to dpi=96 at the same
@@ -6434,6 +6465,24 @@ svg.leaflet-image-layer.leaflet-interactive path {
       }
     }
 
+    const CHART_DETAIL_LABELS = { auto: 'Auto', sharp: 'Sharp', fast: 'Fast' };
+    function updateChartDetailBtn() {
+      const b = document.getElementById('chart-detail-btn');
+      if (b) b.textContent = '🔍 Detail: ' + CHART_DETAIL_LABELS[chartDetail()];
+    }
+    function cycleChartDetail() {
+      const modes = CHART_DETAIL_MODES;
+      aircraftProfile.chartDetail = modes[(modes.indexOf(chartDetail()) + 1) % modes.length];
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      updateChartDetailBtn();
+      // new tile URLs, so the layer must refetch rather than reuse what it has
+      if (baseChart() === 'vfr') { vfrTiles.redraw(); }
+      const m = chartDetail();
+      say(m === 'sharp' ? 'Sharp: full chart detail at every zoom. The overview costs about a second per screen to draw.'
+        : m === 'fast' ? 'Fast: light tiles everywhere. Quickest to pan; the small print will not be readable.'
+        : 'Auto: full detail where you read the chart, lighter on the overview.', 'info', 6000);
+    }
+
     function chartCacheAvailable() {
       return typeof navigator !== 'undefined' && 'serviceWorker' in navigator &&
              !!navigator.serviceWorker.controller && typeof caches !== 'undefined';
@@ -7672,6 +7721,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     loadPlanningPrefs();
     populateRouteDropdown();
     applyZoomDeclutter();   // needs aircraftProfile, so it runs here, not at map setup
+    updateChartDetailBtn();
     applyBaseChart();       // also needs aircraftProfile (persisted chart choice)
     renderVersionBadge();
     checkForUpdate();       // one shot at startup; failure is shown, never fatal
