@@ -130,60 +130,138 @@ export function limitsText(f) {
 }
 
 /**
- * The civil VHF air band. A published airspace block often carries military
- * UHF alongside the VHF - Bardufoss CTR lists twelve frequencies including
- * 243.000 (guard), 257.800, 280.700 and 397.375 - and a hover card that
- * recites all of them buries the one a C182 would actually call on.
+ * WHICH FREQUENCIES A VFR PILOT ACTUALLY WANTS, and why the rest are hidden.
  *
- * NOTHING IS DISCARDED: every published frequency stays in `data/aip.js`, and
- * the card says how many it is not showing. This is a display decision, not a
- * data decision, and the AIP remains the reference.
+ * A published airspace block carries every ATS frequency the aerodrome has.
+ * Bardufoss CTR lists twelve, and reciting all twelve buries the three that
+ * matter. Shown: ATIS, Approach, Tower, and AFIS (the "Information" service
+ * at an AFIS field). Hidden: clearance delivery, surface movement, en-route
+ * ACC sectors and non-ATS radio stations - a C182 planning a VFR flight is
+ * not calling those.
+ *
+ * NOTHING IS DISCARDED FROM THE DATA. Every published service and frequency
+ * stays in `data/aip.js`; this is the display filter and the AIP remains the
+ * reference. There is deliberately no "+N hidden" remark - it was noise.
+ */
+export const SHOWN_SERVICES = ['ATIS', 'APP', 'TWR', 'AFIS'];
+
+/**
+ * Shown ONLY when an airspace has none of the above.
+ *
+ * Some TMAs have no local approach unit at all - Hammerfest, Helgeland and
+ * Lofoten TMA are worked by Polaris Control, and Salen TMA by Salen Control.
+ * Hiding the area-control frequency there would leave the card with no one to
+ * call for a piece of CONTROLLED airspace, which is worse than one extra row.
+ * A CTR that already has TWR and APP never gains a Polaris row.
+ */
+export const FALLBACK_SERVICES = ['ACC', 'RADIO', 'TFC'];
+
+/** Human tag per service code. @type {Record<string, string>} */
+const SERVICE_TAGS = {
+  ATIS: 'ATIS', APP: 'APP', TWR: 'TWR', AFIS: 'AFIS',
+  ACC: 'ACC', RADIO: 'RADIO', TFC: 'TFC'
+};
+
+/**
+ * The civil VHF air band, and the reason it - not the source's `MIL` flag -
+ * is what keeps military channels out.
+ *
+ * The eAIP marks SOME military frequencies with a `MIL` remark, but only six
+ * in the whole edition: Bardufoss TWR publishes 243.000 with no marker at all.
+ * So the band is the real filter (military air is UHF, 225-400 MHz) and the
+ * MIL flag is applied on top to catch a military VHF channel.
  */
 export const VHF_MIN_MHZ = 118;
 export const VHF_MAX_MHZ = 137;
 
-/** @param {{mhz: string}[]} freqs @returns {{vhf: string[], others: number}} */
-export function splitFrequencies(freqs) {
-  /** @type {string[]} */
-  const vhf = [];
-  let others = 0;
-  for (const q of freqs || []) {
-    const n = Number(String(q && q.mhz).trim());
-    if (!isFinite(n)) { continue; }
-    if (n >= VHF_MIN_MHZ && n < VHF_MAX_MHZ) vhf.push(q.mhz);
-    else others++;
-  }
-  return { vhf, others };
+/**
+ * Emergency frequencies. Never listed as a working frequency: every pilot
+ * knows 121.500, it appears under almost every service, and printing it four
+ * times per card crowds out the ones you actually need to dial.
+ */
+export const GUARD_MHZ = ['121.500', '243.000'];
+
+/** @param {{mhz: string, remarks?: string}} q @returns {boolean} */
+export function isUsableFrequency(q) {
+  const n = Number(String((q && q.mhz) || '').trim());
+  if (!isFinite(n)) return false;
+  if (n < VHF_MIN_MHZ || n >= VHF_MAX_MHZ) return false;          // UHF military
+  if (/\bMIL\b/i.test(String((q && q.remarks) || ''))) return false;  // flagged military
+  if (GUARD_MHZ.includes(String(q.mhz).trim())) return false;      // guard
+  return true;
 }
 
 /**
- * What hovering an airspace says. Plain text lines; the page wraps them.
+ * The service rows for the hover card: tag, frequencies, who you are calling.
  *
- * Order is what a pilot needs first: what it is, how high, what class, who to
- * call. The frequency is the reason this feature exists - reading a TMA's
- * boundary off the chart is easy, remembering its approach frequency is not.
+ * THE ATIS LABEL IS DELIBERATELY NOT THE PUBLISHED CALLSIGN. Norway publishes
+ * ENDU's ATIS callsign as "Bardufoss Information", which reads exactly like
+ * the AFIS service you would actually talk to at an uncontrolled field - and
+ * at Bardufoss there is no AFIS, there is a TWR. So an ATIS row is labelled
+ * "<ICAO> ATIS": you do not call an ATIS, you listen to it, and "Information"
+ * is reserved for the AFIS service where it means a station answering you.
+ * The published callsign is kept in the dataset either way.
  *
  * @param {AirspaceFeature} f
- * @returns {{title: string, lines: string[]}}
+ * @returns {{tag: string, freqs: string[], callsign: string|null}[]}
+ */
+export function serviceRows(f) {
+  const primary = collectServices(f, SHOWN_SERVICES);
+  return primary.length ? primary : collectServices(f, FALLBACK_SERVICES);
+}
+
+/** @param {AirspaceFeature} f @param {string[]} codes
+ *  @returns {{tag: string, freqs: string[], callsign: string|null}[]} */
+function collectServices(f, codes) {
+  /** @type {{tag: string, freqs: string[], callsign: string|null}[]} */
+  const rows = [];
+  for (const code of codes) {
+    /** @type {string[]} */
+    const freqs = [];
+    /** @type {string|null} */
+    let callsign = null;
+    for (const sv of f.services || []) {
+      if ((sv.code || '').toUpperCase() !== code) continue;
+      for (const q of sv.freqs || []) {
+        if (isUsableFrequency(q) && !freqs.includes(q.mhz)) freqs.push(q.mhz);
+      }
+      if (!callsign && sv.callsign) callsign = sv.callsign;
+    }
+    if (!freqs.length) continue;        // a service with nothing dialable
+    rows.push({
+      tag: SERVICE_TAGS[code] || code,
+      freqs,
+      callsign: code === 'ATIS' ? (f.icao ? `${f.icao} ATIS` : 'ATIS') : callsign
+    });
+  }
+  return rows;
+}
+
+/**
+ * Everything the hover card shows, as structured pieces. The page turns this
+ * into markup; this module stays DOM-free.
+ *
+ * @param {AirspaceFeature} f
+ * @returns {{name: string, kindLabel: string, cls: string|null, band: string,
+ *            services: {tag: string, freqs: string[], callsign: string|null}[],
+ *            notes: string[], color: string}}
  */
 export function airspaceInfo(f) {
   const style = airspaceStyle(f.kind);
-  const lines = [];
-  lines.push(style.label + (f.class ? ` · Class ${f.class}` : ' · class not published'));
-  lines.push(limitsText(f));
-  for (const cs of f.callsigns || []) lines.push(cs);
-  const { vhf, others } = splitFrequencies(f.freqs);
-  if (vhf.length) {
-    lines.push(vhf.join('  ') + ' MHz' + (others ? `  (+${others} non-VHF, see AIP)` : ''));
-  } else if (others) {
-    lines.push(`${others} published frequency(ies), none in the VHF band - see AIP`);
-  }
-  // A resolved national border is worth stating: the shape came from
-  // Kartverket, not from the AIP's own coordinate list.
-  if (f.borderSegments) {
-    lines.push(`boundary follows the national border (Kartverket)`);
-  }
-  return { title: f.name, lines };
+  const notes = [];
+  // A boundary that came from Kartverket rather than the AIP's own coordinate
+  // list is worth saying, because it is the one part of the shape the AIP did
+  // not state directly.
+  if (f.borderSegments) notes.push('boundary follows the national border');
+  return {
+    name: f.name,
+    kindLabel: style.label,
+    cls: f.class || null,
+    band: limitsText(f),
+    services: serviceRows(f),
+    notes,
+    color: style.color
+  };
 }
 
 /**

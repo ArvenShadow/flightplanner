@@ -785,8 +785,39 @@ svg.leaflet-image-layer.leaflet-interactive path {
     body.dark-mode #airspace-attribution { color: #e2e8f0; background: rgba(26,32,44,0.78); }
     /* Hover card for an airspace. Left-aligned because it is several lines of
    published values, not a caption. */
-    .airspace-tip { font-size: 10px; line-height: 1.4; text-align: left;
-      white-space: normal; width: max-content; max-width: 250px; }
+    /* The airspace hover card. `width: max-content` with a max-width is the
+       only combination that works here: Leaflet tooltips are nowrap, and
+       overriding to `normal` alone collapses the box to its minimum content
+       width (measured 64px wide by 392 tall). */
+    .airspace-tip { padding: 0; border: none; box-shadow: 0 3px 12px rgba(0,0,0,0.28);
+      background: transparent; white-space: normal; width: max-content; max-width: 290px; }
+    .airspace-tip::before { display: none; }        /* no callout arrow */
+    .as-card { font-size: 10.5px; line-height: 1.35; text-align: left; color: #1a202c;
+      background: #ffffff; border-radius: 5px; border-left: 3px solid var(--as-accent, #718096);
+      padding: 6px 9px 7px; }
+    .as-head { display: flex; align-items: baseline; gap: 6px; }
+    .as-name { font-weight: 800; font-size: 11.5px; letter-spacing: -0.1px; }
+    /* The ICAO class, as a chip in the airspace's own colour. */
+    .as-class { margin-left: auto; flex: none; font-weight: 800; font-size: 9px;
+      color: #ffffff; background: var(--as-accent, #718096);
+      padding: 1px 5px; border-radius: 3px; }
+    .as-kind { color: #5a6678; font-size: 9.5px; margin-top: 1px; }
+    /* The band decides whether this airspace is relevant at all, so it reads
+       ahead of everything below it. */
+    .as-band { font-weight: 700; font-size: 10.5px; margin-top: 3px; }
+    .as-svc { display: grid; grid-template-columns: auto auto 1fr; gap: 2px 7px;
+      align-items: baseline; margin-top: 5px; padding-top: 5px;
+      border-top: 1px solid #e2e8f0; }
+    .as-tag { font-weight: 800; font-size: 8.5px; letter-spacing: 0.4px; color: #ffffff;
+      background: #5a6678; border-radius: 2px; padding: 1px 4px; text-align: center; }
+    .as-freq { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .as-dot { color: #a0aec0; margin: 0 3px; }
+    .as-cs { color: #5a6678; font-size: 9.5px; }
+    .as-note { color: #5a6678; font-size: 9px; font-style: italic; margin-top: 4px; }
+    body.dark-mode .as-card { color: #e8edf4; background: #232b38; }
+    body.dark-mode .as-kind, body.dark-mode .as-cs, body.dark-mode .as-note { color: #a7b3c4; }
+    body.dark-mode .as-svc { border-top-color: #3a4557; }
+    body.dark-mode .as-tag { background: #4a5568; }
     #map { width: 100%; height: 100%; }
     #sidebar { flex: 1.55; display: flex; flex-direction: column; background: var(--bg-sidebar); overflow-y: auto; padding: 10px; gap: 10px; }
     

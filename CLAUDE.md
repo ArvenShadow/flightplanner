@@ -671,12 +671,44 @@ errors is the standard.
     intersection test, redrawn on moveend/zoomend. Largest drawn first so a
     CTR inside a TMA is not buried. Fill opacity 0.07 - the ICAO chart
     underneath is the thing being read.
-  - FREQUENCIES: the card shows the civil VHF band (118-137) and COUNTS the
-    rest. Bardufoss CTR publishes twelve including 243.000 (guard), 257.800
-    and 397.375; reciting all twelve buries the one a C182 would call. Nothing
-    is dropped from the DATA - it is a display decision and the card says
-    "+5 non-VHF, see AIP". (1ntray reached the same 118-137 conclusion
-    independently.)
+  - THE HOVER CARD IS A CARD, NOT A PARAGRAPH (v16.32, user request). Name +
+    class chip, the kind, the vertical band emphasised (it decides whether the
+    airspace is even relevant), then a 3-column grid: service tag, frequency,
+    callsign. The accent colour is the polygon's own so the card cannot be
+    mistaken for the airspace next to the one under the cursor.
+  - FREQUENCIES ARE PAIRED WITH THEIR SERVICE, and that needed an IMPORTER
+    change: v16.31 flattened every frequency in a block into one list, which
+    loses the only thing that makes them usable - which is the tower and which
+    is a military UHF channel. `TSERVICE;CODE_TYPE` (AD 2.18) gives the code
+    (APP / TWR / ATIS / AFIS / SMC / CLR / RADIO) and document order pairs it
+    with its callsign and frequencies. ENR 2.1 and 2.2 do NOT tag a service,
+    so the code is derived from the published callsign there ("Banak
+    Approach" -> APP, "Longyear Information" -> AFIS) and left null if it
+    matches nothing.
+  - WHAT THE CARD SHOWS: ATIS, APP, TWR, AFIS. Hidden: CLR, SMC, RADIO, TFC -
+    a C182 planning VFR is not calling clearance delivery or surface movement.
+    ACC is a FALLBACK, shown only when an airspace has none of the four:
+    Hammerfest, Helgeland and Lofoten TMA have no local approach and are worked
+    by Polaris Control, so hiding it would leave CONTROLLED airspace with
+    nobody to call. A CTR with TWR and APP never gains a Polaris row.
+  - MILITARY: the source's `MIL` remark is NOT sufficient - only six
+    frequencies in the whole edition carry it, and ENDU TWR publishes 243.000
+    with no marker at all. The civil VHF band (118-137) is the real filter,
+    because military air is UHF 225-400; the MIL flag is applied on top to
+    catch a military VHF channel. 121.500 and 243.000 are dropped as guard:
+    every pilot knows them and they appear under almost every service.
+  - THE ATIS LABEL IS DELIBERATELY NOT THE PUBLISHED CALLSIGN. Norway
+    publishes ENDU's ATIS as "Bardufoss Information", which reads exactly like
+    the AFIS service you would talk to - and Bardufoss has a TWR, not an AFIS.
+    An ATIS row is labelled `<ICAO> ATIS`: you listen to an ATIS, you do not
+    call it, and "Information" is reserved for AFIS where it means a station
+    that answers. The published callsign stays in the dataset.
+  - NO "+N hidden" REMARK (user request). It was noise. NOTHING is dropped
+    from the DATA - `services` carries every published service and frequency,
+    including CLR and the UHF - it is purely a display filter, and a test
+    asserts both halves of that.
+  - The flat `freqs`/`callsigns` arrays were REMOVED once `services` existed:
+    68 KB of pure duplication in a sidecar that ships in both deliveries.
   - TWO CSS TRAPS, both found by MEASURING a real tooltip: Leaflet tooltips
     are `white-space: nowrap`, so the frequency line ran off the card; and
     overriding to `normal` ALONE collapsed the card to 64px wide by 392 tall.
