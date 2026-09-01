@@ -26,10 +26,12 @@ import * as integrity from './lib/integrity.js';
 import * as exchange from './lib/exchange.js';
 import * as plotting from './lib/plotting.js';
 import * as metar from './lib/metar.js';
+import * as ofpform from './lib/ofpform.js';
 
 const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs,
     ...airspace, ...anchors,
-              ...daylight, ...winds, ...integrity, ...exchange, ...plotting, ...metar };
+              ...daylight, ...winds, ...integrity, ...exchange, ...plotting, ...metar,
+              ...ofpform };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {

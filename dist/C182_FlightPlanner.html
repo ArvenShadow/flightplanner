@@ -1084,14 +1084,97 @@ svg.leaflet-image-layer.leaflet-interactive path {
     /* 3-Min Plotting Ref Box */
     .tick-box { display: flex; gap: 8px; align-items: center; background: var(--highlight-bg); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 10px; color: var(--highlight-text); font-weight: 600; }
 
+    /* =====================================================================
+       THE COMPANY OFP FORM (v16.41)
+       A reproduction of page 1 of C182OFPMBv4.2.pdf. Hidden on screen; the
+       print rules below hide the app and show only this.
+       Column widths come from ofpform.js (measured off the real form), so
+       nothing here sets a column width - only type, rules and shading.
+       ===================================================================== */
+    #ofp-print { display: none; }
+
+    @page { size: A4 landscape; margin: 6mm; }
+
     @media print {
-      #header, #map-container, .toolbar, .no-print, .btn, .card-title span, .tick-box, .flight-actions, .mag-badge { display: none !important; }
-      #sidebar { display: flex !important; flex: 1; overflow: visible; padding: 0; }
-      body { height: auto; background: white !important; color: black !important; }
-      .flight-section { border: 1px solid #000 !important; break-inside: avoid; margin-bottom: 16px; background: white !important; }
-      .flight-header { background: #edf2f7 !important; color: #000 !important; border-bottom: 1px solid #000; }
-      table { font-size: 9px; color: black !important; }
-      th, td { border: 1px solid #4a5568 !important; background: white !important; color: black !important; }
+      /* HIDE EVERYTHING, THEN SHOW THE FORM. Enumerating what to hide is how
+         the first-run guide ended up printed ON TOP of the sheet, with its
+         backdrop tinting the whole page: dialogs, toasts and modals are
+         appended to <body> at runtime, so no fixed list can cover them. The
+         company form is the print output; the screen is untouched. */
+      body > * { display: none !important; }
+      body > #ofp-print { display: block !important; }
+      body { height: auto; background: white !important; color: black !important; display: block; }
+
+      #ofp-print { display: block; }
+      .ofp-sheet {
+        break-after: page; page-break-after: always;
+        font-family: "Helvetica Neue", Arial, sans-serif; color: #000;
+      }
+      .ofp-sheet:last-child { break-after: auto; page-break-after: auto; }
+
+      .ofp-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 2mm; }
+      .ofp-title { font-size: 15pt; font-weight: 400; letter-spacing: .2px; }
+      .ofp-page { font-size: 8pt; color: #444; }
+      .ofp-depdest { border-collapse: collapse; font-size: 7pt; }
+      .ofp-depdest th, .ofp-depdest td { border: .6pt solid #000; padding: .6mm 1.2mm; text-align: left; }
+      .ofp-depdest th { font-weight: 700; }
+      .ofp-depdest td { min-width: 16mm; }
+
+      /* THE GRID. table-layout:fixed is what makes the measured column widths
+         binding - without it the browser re-apportions them to fit content and
+         the sheet stops lining up with the paper form. */
+      .ofp-grid { width: 100%; table-layout: fixed; border-collapse: collapse; }
+      .ofp-grid th, .ofp-grid td {
+        border: .5pt solid #000;
+        padding: 0 .5mm;
+        font-size: 5.6pt;
+        line-height: 1.5;
+        height: 4.6mm;
+        text-align: center;
+        overflow: hidden;
+        white-space: nowrap;
+        /* A value that does not fit is SQUEEZED, never clipped or wrapped: a
+           half-visible number on a flight plan is worse than a narrow one. */
+        text-overflow: clip;
+      }
+      .ofp-grid thead th { font-size: 5.4pt; font-weight: 400; }
+      .ofp-grid .ofp-grp { font-size: 5.4pt; height: 3.4mm; }
+      .ofp-grid .ofp-blank { border-left: none; border-top: none; border-right: none; }
+      .ofp-grid td.ofp-first { text-align: left; font-weight: 600; padding-left: 1mm; }
+      /* The line number rides in the top-left of the From cell, as on the form. */
+      .ofp-grid .ofp-no { font-size: 3.8pt; color: #444; vertical-align: super; margin-right: .7mm; font-weight: 400; }
+      .ofp-grid tbody tr:nth-child(odd) td { background: #f2f2f2; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .ofp-total td { font-weight: 700; background: #fff; }
+      .ofp-total td.ofp-hatch {
+        background: repeating-linear-gradient(45deg, #000 0 .35mm, #fff .35mm .9mm);
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .ofp-alt td { background: #fff; }
+      .ofp-alt td:first-child { text-align: left; font-weight: 700; padding-left: 1mm; }
+
+      .ofp-foot { display: flex; gap: 3mm; margin-top: 2mm; align-items: flex-start; }
+      .ofp-admin, .ofp-crew { border-collapse: collapse; font-size: 6.5pt; }
+      .ofp-admin th, .ofp-admin td, .ofp-crew th, .ofp-crew td {
+        border: .6pt solid #000; padding: .7mm 1.2mm; text-align: left; height: 4.4mm;
+      }
+      .ofp-admin th { font-weight: 400; min-width: 14mm; }
+      .ofp-admin td { min-width: 22mm; }
+      .ofp-crew th {
+        background: #000; color: #fff; text-align: center; font-weight: 700;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .ofp-crew td { min-width: 30mm; }
+      .ofp-pic { font-style: italic; color: #555; }
+      .ofp-notes { display: flex; flex-direction: column; gap: 0; }
+      .ofp-clear { flex: 1; }
+      .ofp-note-box {
+        border: .6pt solid #000; font-size: 6.5pt; padding: .8mm 1.2mm;
+        height: 11mm; min-width: 62mm;
+        background: repeating-linear-gradient(to bottom, transparent 0 3.4mm, #bbb 3.4mm 3.5mm);
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .ofp-note-box + .ofp-note-box { border-top: none; }
+      .ofp-note-box.ofp-tall { height: 22.4mm; min-width: 78mm; }
     }
   </style>
 </head>
@@ -1419,7 +1502,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
           <ul style="margin-left:16px;">
             <li>Expand the <b>🗺 Chart Plotting List</b> under each flight: waypoint coordinates in <b>degrees + decimal minutes</b> (as on chart margins), editable names, and whole-leg TT/MT/distance — the lines you actually draw.</li>
             <li><b>📋 Copy List</b> puts it on your clipboard as aligned text.</li>
-            <li><b>Print OFP</b> outputs the nav log and the plotting lists together.</li>
+            <li><b>Print OFP</b> prints the <b>company "Operational flightplan" form</b> (page 1 of C182OFPMBv4.2), filled in from your plan — one sheet per sector, and a second sheet when a flight has more than the form's 16 lines. It is landscape A4.
+              <ul>
+                <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
+                <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>Reg, CREW, PASSENGERS and PIC</b> — the planner does not hold crew names or a tail number, and it never will.</li>
+                <li>The <b>Mass &amp; Balance</b> side of the form is not reproduced yet.</li>
+              </ul>
+            </li>
             <li>➕ <b>Add Next Flight Plan</b> chains sectors (touch &amp; go / next hop); fuel and time accumulate across the whole mission.</li>
           </ul>
         </div>
@@ -5682,6 +5771,184 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     return bits.join(" · ");
   }
 
+  // src/lib/ofpform.js
+  var ofpform_exports = {};
+  __export(ofpform_exports, {
+    COLUMN_EDGES_PCT: () => COLUMN_EDGES_PCT,
+    OFP_COLUMNS: () => OFP_COLUMNS,
+    OFP_ROWS_PER_SHEET: () => OFP_ROWS_PER_SHEET,
+    buildOfpSheets: () => buildOfpSheets,
+    columnWidthsPct: () => columnWidthsPct,
+    groupSpans: () => groupSpans,
+    ofpRowCells: () => ofpRowCells
+  });
+  var COLUMN_EDGES_PCT = [
+    3.61,
+    11.8,
+    15.34,
+    18.89,
+    22.43,
+    26.07,
+    30.66,
+    34.16,
+    37.8,
+    41.34,
+    44.75,
+    48.11,
+    51.57,
+    59.39,
+    62.43,
+    65.57,
+    68.7,
+    71.84,
+    74.84,
+    77.98,
+    81.07,
+    84.02,
+    87.2,
+    90.25,
+    93.3,
+    97.7
+  ];
+  var OFP_ROWS_PER_SHEET = 16;
+  var OFP_COLUMNS = [
+    { key: "from", label: "From", group: null, totalKey: "label" },
+    { key: "tas", label: "TAS", group: null, totalKey: null },
+    { key: "tt", label: "TT", group: null, totalKey: null },
+    { key: "var", label: "VAR", group: null, totalKey: null },
+    { key: "mt", label: "MT", group: null, totalKey: null },
+    { key: "wv", label: "Dir/Vel", group: "WIND", totalKey: null },
+    { key: "wca", label: "WCA", group: "WIND", totalKey: null },
+    { key: "accDist", label: "Dist", group: "ACC", totalKey: "dist" },
+    { key: "accTime", label: "Time", group: "ACC", totalKey: "time" },
+    { key: "ff", label: "FF", group: "Fuel", totalKey: null },
+    { key: "legBurn", label: "Int", group: "Fuel", totalKey: null },
+    { key: "accBurn", label: "Acc", group: "Fuel", totalKey: "burn" },
+    { key: "to", label: "To", group: null, totalKey: "label" },
+    { key: "msa", label: "MSA", group: "Altitude", totalKey: null },
+    { key: "pl", label: "PL", group: "Altitude", totalKey: null },
+    { key: "mh", label: "MH", group: null, totalKey: null },
+    { key: "gs", label: "GS", group: "Intermediate", totalKey: null },
+    { key: "dist", label: "Dist", group: "Intermediate", totalKey: null },
+    { key: "time", label: "Time", group: "Intermediate", totalKey: "time" },
+    { key: "eto", label: "ETO", group: "Time", totalKey: null },
+    { key: "ato", label: "ATO", group: "Time", totalKey: null },
+    { key: "diff", label: "Diff", group: "Time", totalKey: null },
+    { key: "estRem", label: "EST", group: "Fuel remaining", totalKey: "rem" },
+    { key: "actRem", label: "ACT", group: "Fuel remaining", totalKey: "act" },
+    { key: "freq", label: "Freq", group: null, totalKey: null }
+  ];
+  function columnWidthsPct() {
+    const span = COLUMN_EDGES_PCT[COLUMN_EDGES_PCT.length - 1] - COLUMN_EDGES_PCT[0];
+    const out = [];
+    for (let i = 1; i < COLUMN_EDGES_PCT.length; i++)
+      out.push((COLUMN_EDGES_PCT[i] - COLUMN_EDGES_PCT[i - 1]) / span * 100);
+    return out;
+  }
+  function groupSpans() {
+    const out = [];
+    for (const c of OFP_COLUMNS) {
+      const last = out[out.length - 1];
+      if (last && last.label === c.group && c.group !== null) last.span++;
+      else out.push({ label: c.group, span: 1 });
+    }
+    return out;
+  }
+  var BLANK = "";
+  var pad3 = (v) => String(Math.round(v)).padStart(3, "0");
+  var one = (v) => isFinite(v) ? Number(v).toFixed(1) : BLANK;
+  function ofpRowCells(row) {
+    if (!row) return {};
+    if (row.pattern) {
+      return {
+        from: row.from,
+        to: row.to + " ×" + row.laps,
+        accTime: row.accTime,
+        accBurn: row.accBurn,
+        ff: one(row.ff),
+        legBurn: one(row.legBurn),
+        pl: row.pl === null || row.pl === void 0 ? BLANK : String(row.pl),
+        time: row.time,
+        eto: row.eto || BLANK,
+        estRem: one(row.rem),
+        tas: BLANK,
+        tt: BLANK,
+        var: BLANK,
+        mt: BLANK,
+        wv: BLANK,
+        wca: BLANK,
+        accDist: row.accDist,
+        msa: BLANK,
+        mh: BLANK,
+        gs: BLANK,
+        dist: BLANK,
+        ato: BLANK,
+        diff: BLANK,
+        actRem: BLANK,
+        freq: BLANK
+      };
+    }
+    return {
+      from: row.from,
+      tas: String(Math.round(row.tas)),
+      tt: pad3(row.tt),
+      var: (row.var > 0 ? "+" : "") + Math.round(row.var),
+      mt: row.mt === null || row.mt === void 0 ? "---" : pad3(row.mt),
+      wv: pad3(row.wdir) + "/" + String(Math.round(row.wspd)).padStart(2, "0"),
+      wca: (row.wca > 0 ? "+" : "") + Math.round(row.wca),
+      accDist: one(row.accDist),
+      accTime: row.accTime,
+      ff: one(row.ff),
+      legBurn: one(row.legBurn),
+      accBurn: one(row.accBurn),
+      to: row.to,
+      msa: BLANK,
+      pl: String(Math.round(row.alt)),
+      mh: row.mh === null || row.mh === void 0 ? "---" : pad3(row.mh),
+      gs: String(Math.round(row.gs)),
+      dist: one(row.dist),
+      time: row.time,
+      eto: row.eto || BLANK,
+      ato: BLANK,
+      diff: BLANK,
+      estRem: one(row.rem),
+      actRem: BLANK,
+      freq: BLANK
+    };
+  }
+  function buildOfpSheets(meta, rows) {
+    const m = meta || {};
+    const list = Array.isArray(rows) ? rows : [];
+    const pages = Math.max(1, Math.ceil(list.length / OFP_ROWS_PER_SHEET));
+    const out = [];
+    for (let p = 0; p < pages; p++) {
+      const slice = list.slice(p * OFP_ROWS_PER_SHEET, (p + 1) * OFP_ROWS_PER_SHEET);
+      const isLast = p === pages - 1;
+      const t = m.totals || null;
+      out.push({
+        index: p + 1,
+        of: pages,
+        dep: m.dep || BLANK,
+        dest: m.dest || BLANK,
+        date: m.date || BLANK,
+        reg: m.reg || BLANK,
+        fuelDep: m.fuelDep || BLANK,
+        fuelRem: m.fuelRem || BLANK,
+        cells: slice.map(ofpRowCells),
+        lines: OFP_ROWS_PER_SHEET,
+        totals: isLast && t ? {
+          label: "Total",
+          dist: t.dist,
+          time: t.time,
+          burn: t.burn,
+          rem: t.rem,
+          act: BLANK
+        } : null
+      });
+    }
+    return out;
+  }
+
   // src/main.js
   var api = {
     ...magvar_exports,
@@ -5697,7 +5964,8 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     ...integrity_exports,
     ...exchange_exports,
     ...plotting_exports,
-    ...metar_exports
+    ...metar_exports,
+    ...ofpform_exports
   };
   for (const [name, value] of Object.entries(api)) {
     window[name] = value;
@@ -5938,7 +6206,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.40';
+    const APP_VERSION = '16.41';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6312,6 +6580,9 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     let activeFlightIndex = 0;
 
     let markers = [];
+    // Rows for the company OFP form, captured while the on-screen tables are
+    // rendered so the printed sheet cannot disagree with the screen.
+    let ofpPrintModel = [];
     let profileMarkers = [];
     let polylines = [];
     // Invisible fat lines drawn over the routes so the mouse can grab a leg
@@ -8598,6 +8869,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       const initialFuelRaw = Number(document.getElementById('fuel-dep').value);
       let runningFuelRemaining = isNaN(initialFuelRaw) ? 0 : initialFuelRaw;
       let taxiFuelApplied = false;
+      ofpPrintModel = [];
       let grandTotalDist = 0;
       let grandTotalTime = 0;
       let grandTotalBurn = 0;
@@ -8681,7 +8953,8 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
         container.appendChild(sectionDiv);
 
         const tbody = table.querySelector(`#tbody-flight-${fIdx}`);
-        let sectorDist = 0, sectorTime = 0, sectorBurn = 0;
+        let sectorDist = 0, sectorTime = 0, sectorBurn = 0, sectorAccDist = 0;
+        const printRows = [];
         const sched = computeFlightSchedule(fl);   // climbs/descents may span legs
 
         for (let i = 0; i < fl.waypoints.length - 1; i++) {
@@ -8702,6 +8975,12 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
             runningFuelRemaining = Number((runningFuelRemaining - patternBurn).toFixed(1));
             sectorTime += patternMinutes;
             sectorBurn += patternBurn;
+
+            printRows.push({ pattern: true, from: from.name, to: to.name, laps: patternLaps,
+              accDist: sectorAccDist ? sectorAccDist.toFixed(1) : '', pl: to.alt,
+              accTime: formatTimeHHMM(runningAccTime), accBurn: runningAccBurn,
+              ff: patternFFUnit, legBurn: patternBurn, time: formatTimeHHMM(patternMinutes),
+              eto: computeETO(runningAccTime) || '', rem: runningFuelRemaining });
 
             const isHighlighted = (isDoneMode && highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === (i+1));
             const tr = document.createElement('tr');
@@ -8774,6 +9053,16 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
 
           tbody.appendChild(createRowHTML(from.name, to.name, res.profileTag, altLabel, to.oat, res.dispTas, tt, to.var, varIndicator, mt, to.wdir, to.wspd, res.rowWCA, mh, res.effGS, dist, threeMinNM, legTime, runningAccTime, effFF, legBurn, runningAccBurn, runningFuelRemaining, fIdx, i, true));
 
+          // THE PRINTED FORM READS THESE, not a second computation (v16.41).
+          sectorAccDist += dist;
+          printRows.push({ from: from.name, to: to.name, tas: res.dispTas, tt,
+            var: Number(to.var), mt: mtNum, wdir: Number(to.wdir), wspd: Number(to.wspd),
+            wca: res.rowWCA, accDist: sectorAccDist, accTime: formatTimeHHMM(runningAccTime),
+            ff: effFF, legBurn, accBurn: runningAccBurn, alt: to.alt,
+            mh: mtNum === null ? null : Math.round((mtNum + res.rowWCA + 360) % 360),
+            gs: res.effGS, dist, time: formatTimeHHMM(legTime),
+            eto: computeETO(runningAccTime) || '', rem: runningFuelRemaining });
+
           const subTr = buildSubLegRow(from, to, res, distUnit, fuelUnit);
           if (subTr) tbody.appendChild(subTr);
         }
@@ -8785,6 +9074,28 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
         document.getElementById(`f-tot-burn-${fIdx}`).innerText = sectorBurn.toFixed(1);
         document.getElementById(`f-tot-accburn-${fIdx}`).innerText = runningAccBurn.toFixed(1);
         document.getElementById(`f-tot-rem-${fIdx}`).innerText = runningFuelRemaining.toFixed(1);
+
+        // The company form, filled from THIS pass (v16.41). One sheet per
+        // sector, exactly as the paper form is used: it has a DEP and a DEST.
+        const real = fl.waypoints.filter((w) => !w.isPattern);
+        ofpPrintModel.push({
+          meta: {
+            title: flightTitle(fl),
+            dep: real.length ? real[0].name : '',
+            dest: real.length ? real[real.length - 1].name : '',
+            date: (document.getElementById('def-date') || {}).value || '',
+            // Reg is left BLANK on purpose. The planner does not know which of
+            // LN-TRA..TRE is being flown, and a tail number identifies a
+            // MACHINE - PROFILE_KEYS must never carry one, so there is nothing
+            // to read. The pilot writes it, as they do on the paper form.
+            reg: '',
+            fuelDep: (Number((document.getElementById('fuel-dep') || {}).value) || 0).toFixed(1),
+            fuelRem: runningFuelRemaining.toFixed(1),
+            totals: { dist: sectorDist.toFixed(1), time: formatTimeHHMM(sectorTime),
+                      burn: runningAccBurn.toFixed(1), rem: runningFuelRemaining.toFixed(1) }
+          },
+          rows: printRows
+        });
 
         grandTotalDist += sectorDist;
         grandTotalTime += sectorTime;
@@ -8802,6 +9113,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
       remEl.classList.toggle('low-fuel', runningFuelRemaining < getReserveDisplayUnits());
 
       updateDaylightCard(runningAccTime, sectorTimeWindows);
+      renderOfpPrintSheets();
       runIntegrityCheck();
     }
 
@@ -9144,6 +9456,112 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     //     physically draw — since the OFP table splits legs at TOC/TOD.
     // =========================================================================
     const plottingOpen = {};   // flight id -> details open?
+
+    // =========================================================================
+    // 7b2. THE COMPANY OFP FORM (v16.41)
+    //
+    // A print-only reproduction of page 1 of C182OFPMBv4.2.pdf - the UiT
+    // "Operational flightplan" the school files - filled from the plan, so the
+    // printed sheet can go straight onto the company paperwork.
+    //
+    // The GRID lives in src/lib/ofpform.js: its column boundaries were MEASURED
+    // off a 200 dpi render of the form, because the PDF's table body is a
+    // raster with the text drawn over it. This function only turns that
+    // specification into markup.
+    //
+    // The MASS & BALANCE side (page 2 of the form) is deliberately NOT
+    // reproduced - it is a separate piece of work with its own data (arms,
+    // limits, the real sheet) that has not been done.
+    // =========================================================================
+    function ofpSheetHTML(sheet) {
+      const esc = (t) => String(t == null ? '' : t)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const widths = columnWidthsPct();
+      const cols = widths.map((w) => `<col style="width:${w.toFixed(3)}%">`).join('');
+      const groups = groupSpans().map((g) => g.label
+        ? `<th colspan="${g.span}" class="ofp-grp">${esc(g.label)}</th>`
+        : `<th colspan="${g.span}" class="ofp-grp ofp-blank"></th>`).join('');
+      const heads = OFP_COLUMNS.map((c) => `<th>${esc(c.label)}</th>`).join('');
+
+      let body = '';
+      for (let r = 0; r < sheet.lines; r++) {
+        const cells = sheet.cells[r];
+        const no = r + 1 + (sheet.index - 1) * sheet.lines;
+        // THE LINE NUMBER SITS INSIDE THE "From" CELL, exactly as it does on the
+        // paper form. Giving it a column of its own added a 26th column and
+        // squeezed every measured width, so the sheet stopped lining up.
+        body += '<tr>' + OFP_COLUMNS.map((c, ci) => {
+          const v = cells ? (cells[c.key] || '') : '';
+          return ci === 0
+            ? `<td class="ofp-first"><span class="ofp-no">${no}</span>${esc(v)}</td>`
+            : `<td class="${c.key === 'to' ? 'ofp-first' : ''}">${esc(v)}</td>`;
+        }).join('') + '</tr>';
+      }
+      // The Total line: the form HATCHES every cell it does not want filled,
+      // and ofpform.js records which those are, so the printed sheet asks for
+      // exactly what the paper asks for.
+      const totalRow = (label) => '<tr class="ofp-total">' +
+        OFP_COLUMNS.map((c) => {
+          if (!c.totalKey) return '<td class="ofp-hatch"></td>';
+          const v = c.totalKey === 'label' ? label
+            : (sheet.totals ? (sheet.totals[c.totalKey] || '') : '');
+          return `<td>${esc(v)}</td>`;
+        }).join('') + '</tr>';
+      // The ALTERNATE line is left empty: no alternate is planned here, and
+      // inventing one would be exactly the guess this project refuses.
+      const altRow = '<tr class="ofp-alt">' + OFP_COLUMNS.map((c, i) =>
+        `<td>${i === 0 ? 'Alt.' : ''}</td>`).join('') + '</tr>';
+
+      return `
+        <section class="ofp-sheet">
+          <header class="ofp-head">
+            <div class="ofp-title">Operational flightplan${sheet.of > 1
+              ? ` <span class="ofp-page">sheet ${sheet.index} of ${sheet.of}</span>` : ''}</div>
+            <table class="ofp-depdest"><tbody>
+              <tr><th>DEP</th><td>${esc(sheet.dep)}</td><th>Off block</th><td></td><th>Take-off</th><td></td></tr>
+              <tr><th>DEST</th><td>${esc(sheet.dest)}</td><th>On block</th><td></td><th>Landing</th><td></td></tr>
+            </tbody></table>
+          </header>
+          <table class="ofp-grid">
+            <colgroup>${cols}</colgroup>
+            <thead>
+              <tr>${groups}</tr>
+              <tr>${heads}</tr>
+            </thead>
+            <tbody>${body}</tbody>
+            <tfoot>${totalRow('Total')}${altRow}${totalRow('Total')}</tfoot>
+          </table>
+          <footer class="ofp-foot">
+            <table class="ofp-admin"><tbody>
+              <tr><th>Date</th><td>${esc(sheet.date)}</td><th>Flight time</th><td></td></tr>
+              <tr><th>Lesson</th><td></td><th>Block time</th><td></td></tr>
+              <tr><th>Reg:</th><td></td><th>Fuel Dep</th><td>${esc(sheet.fuelDep)}</td></tr>
+              <tr><th></th><td></td><th>Fuel Rem</th><td>${esc(sheet.fuelRem)}</td></tr>
+            </tbody></table>
+            <table class="ofp-crew"><tbody>
+              <tr><th>CREW</th><th>PASSENGERS</th></tr>
+              <tr><td class="ofp-pic">PIC:</td><td></td></tr>
+              <tr><td></td><td></td></tr>
+            </tbody></table>
+            <div class="ofp-notes">
+              <div class="ofp-note-box"><span>Dep. ATIS</span></div>
+              <div class="ofp-note-box"><span>Arr. ATIS</span></div>
+            </div>
+            <div class="ofp-notes ofp-clear">
+              <div class="ofp-note-box ofp-tall"><span>Clearances/Notes</span></div>
+            </div>
+          </footer>
+        </section>`;
+    }
+
+    function renderOfpPrintSheets() {
+      const host = document.getElementById('ofp-print');
+      if (!host) return;
+      let html = '';
+      for (const f of ofpPrintModel)
+        for (const sheet of buildOfpSheets(f.meta, f.rows)) html += ofpSheetHTML(sheet);
+      host.innerHTML = html;
+    }
 
     function renameWaypoint(fIdx, wpIdx, value) {
       const name = String(value).trim();
@@ -9669,5 +10087,7 @@ window.C182_AIP = {"schema":1,"provider":"Avinor","source":"eAIP","editionLabel"
     renderAllFlightTables();
     maybeShowFirstRunGuide();
   </script>
+  <!-- The company OFP form, print-only. Filled by renderOfpPrintSheets(). -->
+  <div id="ofp-print" aria-hidden="true"></div>
 </body>
 </html>

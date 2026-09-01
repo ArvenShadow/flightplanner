@@ -2262,12 +2262,13 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const exchModule = require('./src/lib/exchange.js');
   const plotModule = require('./src/lib/plotting.js');
   const metarModule = require('./src/lib/metar.js');
+  const ofpModule = require('./src/lib/ofpform.js');
   const airspaceModule = require('./src/lib/airspace.js');
   const anchorsModule = require('./src/lib/anchors.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
                     exch: exchModule, plot: plotModule, metar: metarModule,
-                    airspace: airspaceModule, anchors: anchorsModule };
+                    airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2425,6 +2426,12 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                         M.anchors.escapeText('a&b'),
                         M.anchors.patternAltitude({ icao: 'ENDU', elevFt: 254 }),
                         M.anchors.patternAltitudeAt(69.0, 18.5, [])],
+    'ofpform.js': () => [M.ofp.columnWidthsPct(), M.ofp.groupSpans(),
+                         M.ofp.ofpRowCells({ from: 'A', to: 'B', tas: 130, tt: 74, var: -11,
+                           mt: 63, wdir: 250, wspd: 20, wca: -5, accDist: 20, accTime: '00:08',
+                           ff: 13, legBurn: 3.4, accBurn: 3.4, alt: 2500, mh: 58, gs: 120,
+                           dist: 20, time: '00:08', eto: '', rem: 60 }),
+                         M.ofp.buildOfpSheets({}, [])],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -4298,6 +4305,131 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   console.log('        ' + legs + ' pinned legs: ' + withBoc + ' with a BOC, ' + withBod +
     ' with a BOD, ' + refused + ' pins refused, ' + missed + ' TOC targets missed, ' +
     continues + ' climbs continuing through a fix, 0 violations');
+});
+
+console.log('\n=== 62a1. The company OFP form (v16.41) ===');
+T('the form has its 25 measured columns, and the groups span the right ones', () => {
+  const F = moduleExports.ofp;
+  assert(F.OFP_COLUMNS.length === 25, 'the form has 25 columns, not ' + F.OFP_COLUMNS.length);
+  assert(F.COLUMN_EDGES_PCT.length === 26, '25 columns need 26 rules');
+  const w = F.columnWidthsPct();
+  assert(Math.abs(w.reduce((a, b) => a + b, 0) - 100) < 1e-9, 'the widths do not sum to 100%');
+  assert(w.every((x) => x > 2 && x < 10), 'an implausible column width: ' + w.join(' '));
+  // Measured off the form: "From" and "To" are the wide ones, everything else
+  // is a narrow figure box.
+  assert(w[0] > 8 && w[12] > 8, 'From/To are not the wide columns: ' + w[0] + '/' + w[12]);
+  // The group headers must tile the row exactly, or the two header rows
+  // drift apart and the printed sheet stops lining up with the paper.
+  const spans = F.groupSpans();
+  assert(spans.reduce((a, g) => a + g.span, 0) === 25,
+    'the group row does not cover all 25 columns');
+  const named = Object.fromEntries(spans.filter((g) => g.label).map((g) => [g.label, g.span]));
+  assert(JSON.stringify(named) === JSON.stringify(
+    { WIND: 2, ACC: 2, Fuel: 3, Altitude: 2, Intermediate: 3, Time: 3, 'Fuel remaining': 2 }),
+    'the measured group spans changed: ' + JSON.stringify(named));
+});
+T('the page builds the form from the SAME pass that renders the screen', () => {
+  // One computation, two outputs. If the print sheet recomputed anything it
+  // could quietly disagree with the table the pilot checked on screen.
+  ev(SEED);
+  const host = doc.getElementById('ofp-print');
+  assert(host, 'the print container is missing');
+  const rows = host.querySelectorAll('.ofp-grid tbody tr');
+  assert(rows.length === 16, 'the form did not draw its 16 lines: ' + rows.length);
+  const cells = [...rows[0].children].map((td) => td.textContent.trim());
+  assert(cells.length === 25, 'a printed row is not 25 cells: ' + cells.length);
+  assert(/ENDU/.test(cells[0]) && cells[12] === 'FINNSNES',
+    'the first line is not the first leg: ' + JSON.stringify([cells[0], cells[12]]));
+  // THE REAL CROSS-CHECK: the figure the screen shows as the sector total and
+  // the figure the form prints on its Total line are the same number, because
+  // they come from the same pass. Comparing them is what stops the printed
+  // sheet drifting from the table the pilot actually checked.
+  const screenBurn = txtOf('f-tot-accburn-0').trim();
+  const totalCells = [...host.querySelectorAll('.ofp-total')][0].children;
+  const printBurn = [...totalCells].map((td) => td.textContent.trim()).filter(Boolean);
+  assert(screenBurn && printBurn.includes(screenBurn),
+    'the form total does not match the screen total: screen ' + JSON.stringify(screenBurn) +
+    ' vs printed ' + JSON.stringify(printBurn));
+  assert(host.textContent.includes('Operational flightplan'), 'the form title is missing');
+  assert(/DEP/.test(host.textContent) && /Off block/.test(host.textContent),
+    'the DEP/DEST block is missing');
+});
+T('the printed form carries no personal data, and no registration', () => {
+  // The form has CREW, PASSENGERS, PIC and Reg boxes. The planner holds none of
+  // that: crew are people and a tail number identifies a machine, so both stay
+  // empty boxes for the pen. PROFILE_KEYS must never grow to carry either.
+  ev(SEED);
+  const host = doc.getElementById('ofp-print');
+  const crew = host.querySelector('.ofp-crew');
+  assert(crew, 'the crew block is missing from the form');
+  const filled = [...crew.querySelectorAll('td')].map((td) => td.textContent.trim())
+    .filter((t) => t && t !== 'PIC:');
+  assert(filled.length === 0, 'the crew block was filled in: ' + JSON.stringify(filled));
+  const keys = moduleExports.exch.PROFILE_KEYS || [];
+  for (const bad of ['reg', 'registration', 'tail', 'pic', 'crew', 'pilot'])
+    assert(!keys.includes(bad), 'PROFILE_KEYS gained "' + bad + '"');
+});
+T('a leg lands in the right cells, and what we do not know stays EMPTY', () => {
+  const F = moduleExports.ofp;
+  const c = F.ofpRowCells({ from: 'ENDU', to: 'FINNSNES', tas: 129.4, tt: 74, var: -11.6,
+    mt: 62, wdir: 285, wspd: 45, wca: -10, accDist: 20.6, accTime: '00:08', ff: 13.02,
+    legBurn: 3.44, accBurn: 3.44, alt: 2500, mh: 52, gs: 158.6, dist: 20.6, time: '00:08',
+    eto: '', rem: 84.56 });
+  assert(c.from === 'ENDU' && c.to === 'FINNSNES', 'the fixes are wrong');
+  assert(c.tt === '074' && c.mt === '062' && c.mh === '052',
+    'tracks and headings must be three digits: ' + [c.tt, c.mt, c.mh].join('/'));
+  assert(c.wv === '285/45', 'the wind cell is Dir/Vel: ' + c.wv);
+  assert(c.var === '-12' && c.wca === '-10', 'VAR/WCA: ' + c.var + ' ' + c.wca);
+  assert(c.accDist === '20.6' && c.dist === '20.6', 'ACC vs Intermediate distance');
+  assert(c.pl === '2500' && c.gs === '159', 'PL/GS: ' + c.pl + ' ' + c.gs);
+  assert(c.estRem === '84.6', 'fuel remaining: ' + c.estRem);
+  // NOTHING IS INVENTED. MSA needs terrain the planner deliberately has not
+  // got; ATO/Diff/ACT are actuals recorded in flight; Freq is per airspace,
+  // not per leg. Each must be an empty box for the pilot's pen - never a 0
+  // or a dash that could be mistaken for a planned figure.
+  for (const k of ['msa', 'ato', 'diff', 'actRem', 'freq'])
+    assert(c[k] === '', k + ' must be blank on the form, got ' + JSON.stringify(c[k]));
+});
+T('no variation means no magnetic heading on the printed form either', () => {
+  // The v16.20 defect in its worst form: a plausible heading a pilot could copy
+  // onto the OFP and fly. The form must show --- exactly as the screen does.
+  const F = moduleExports.ofp;
+  const c = F.ofpRowCells({ from: 'A', to: 'B', tas: 130, tt: 74, var: 0, mt: null, mh: null,
+    wdir: 250, wspd: 20, wca: -5, accDist: 20, accTime: '00:08', ff: 13, legBurn: 3,
+    accBurn: 3, alt: 2500, gs: 120, dist: 20, time: '00:08', eto: '', rem: 60 });
+  assert(c.mt === '---' && c.mh === '---', 'a missing variation printed a number: ' + c.mt + '/' + c.mh);
+});
+T('a flight longer than the form runs onto a second sheet, totals on the LAST', () => {
+  const F = moduleExports.ofp;
+  const row = (n) => ({ from: 'W' + n, to: 'W' + (n + 1), tas: 130, tt: 74, var: -11, mt: 63,
+    wdir: 250, wspd: 20, wca: -5, accDist: n, accTime: '00:0' + (n % 10), ff: 13, legBurn: 3,
+    accBurn: 3 * n, alt: 2500, mh: 58, gs: 120, dist: 5, time: '00:05', eto: '', rem: 60 });
+  const meta = { dep: 'ENDU', dest: 'ENEV',
+    totals: { dist: '95.0', time: '01:20', burn: '18.0', rem: '46.0' } };
+  const one = F.buildOfpSheets(meta, [row(1), row(2)]);
+  assert(one.length === 1 && one[0].of === 1, 'a short flight took more than one sheet');
+  assert(one[0].cells.length === 2 && one[0].lines === 16,
+    'the form always draws its 16 lines, filled or not');
+  assert(one[0].totals && one[0].totals.dist === '95.0', 'the single sheet lost its totals');
+
+  const many = F.buildOfpSheets(meta, Array.from({ length: 19 }, (_, i) => row(i + 1)));
+  assert(many.length === 2, '19 legs did not spill onto a second sheet: ' + many.length);
+  assert(many[0].cells.length === 16 && many[1].cells.length === 3, 'the split is wrong');
+  assert(many[0].totals === null, 'a running total was printed as the flight total on sheet 1');
+  assert(many[1].totals && many[1].totals.time === '01:20', 'the last sheet lost the totals');
+  assert(many.every((s) => s.dep === 'ENDU' && s.dest === 'ENEV' && s.of === 2),
+    'every sheet must carry the DEP/DEST and its sheet number');
+});
+T('a circuit stop prints as a circuit, not as a leg', () => {
+  const F = moduleExports.ofp;
+  const c = F.ofpRowCells({ pattern: true, from: 'ENDU', to: 'PATTERN', laps: 3, accDist: '20.6',
+    pl: 1500, accTime: '00:35', accBurn: 8.2, ff: 12, legBurn: 1.0, time: '00:15', eto: '', rem: 55 });
+  assert(/×3/.test(c.to), 'the lap count is not shown: ' + c.to);
+  assert(c.pl === '1500', 'the circuit altitude is not printed: ' + c.pl);
+  // A circuit is not a line on the ground: no track, no distance, no speed.
+  for (const k of ['tt', 'mt', 'mh', 'gs', 'dist', 'wv', 'wca', 'tas'])
+    assert(c[k] === '', k + ' must be blank for a circuit, got ' + JSON.stringify(c[k]));
+  assert(c.time === '00:15' && c.legBurn === '1.0', 'the circuit time/fuel is missing');
 });
 
 console.log('\n=== 62a2. Circuit altitude from the field elevation (v16.40) ===');

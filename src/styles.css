@@ -1072,12 +1072,95 @@ svg.leaflet-image-layer.leaflet-interactive path {
     /* 3-Min Plotting Ref Box */
     .tick-box { display: flex; gap: 8px; align-items: center; background: var(--highlight-bg); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 10px; color: var(--highlight-text); font-weight: 600; }
 
+    /* =====================================================================
+       THE COMPANY OFP FORM (v16.41)
+       A reproduction of page 1 of C182OFPMBv4.2.pdf. Hidden on screen; the
+       print rules below hide the app and show only this.
+       Column widths come from ofpform.js (measured off the real form), so
+       nothing here sets a column width - only type, rules and shading.
+       ===================================================================== */
+    #ofp-print { display: none; }
+
+    @page { size: A4 landscape; margin: 6mm; }
+
     @media print {
-      #header, #map-container, .toolbar, .no-print, .btn, .card-title span, .tick-box, .flight-actions, .mag-badge { display: none !important; }
-      #sidebar { display: flex !important; flex: 1; overflow: visible; padding: 0; }
-      body { height: auto; background: white !important; color: black !important; }
-      .flight-section { border: 1px solid #000 !important; break-inside: avoid; margin-bottom: 16px; background: white !important; }
-      .flight-header { background: #edf2f7 !important; color: #000 !important; border-bottom: 1px solid #000; }
-      table { font-size: 9px; color: black !important; }
-      th, td { border: 1px solid #4a5568 !important; background: white !important; color: black !important; }
+      /* HIDE EVERYTHING, THEN SHOW THE FORM. Enumerating what to hide is how
+         the first-run guide ended up printed ON TOP of the sheet, with its
+         backdrop tinting the whole page: dialogs, toasts and modals are
+         appended to <body> at runtime, so no fixed list can cover them. The
+         company form is the print output; the screen is untouched. */
+      body > * { display: none !important; }
+      body > #ofp-print { display: block !important; }
+      body { height: auto; background: white !important; color: black !important; display: block; }
+
+      #ofp-print { display: block; }
+      .ofp-sheet {
+        break-after: page; page-break-after: always;
+        font-family: "Helvetica Neue", Arial, sans-serif; color: #000;
+      }
+      .ofp-sheet:last-child { break-after: auto; page-break-after: auto; }
+
+      .ofp-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 2mm; }
+      .ofp-title { font-size: 15pt; font-weight: 400; letter-spacing: .2px; }
+      .ofp-page { font-size: 8pt; color: #444; }
+      .ofp-depdest { border-collapse: collapse; font-size: 7pt; }
+      .ofp-depdest th, .ofp-depdest td { border: .6pt solid #000; padding: .6mm 1.2mm; text-align: left; }
+      .ofp-depdest th { font-weight: 700; }
+      .ofp-depdest td { min-width: 16mm; }
+
+      /* THE GRID. table-layout:fixed is what makes the measured column widths
+         binding - without it the browser re-apportions them to fit content and
+         the sheet stops lining up with the paper form. */
+      .ofp-grid { width: 100%; table-layout: fixed; border-collapse: collapse; }
+      .ofp-grid th, .ofp-grid td {
+        border: .5pt solid #000;
+        padding: 0 .5mm;
+        font-size: 5.6pt;
+        line-height: 1.5;
+        height: 4.6mm;
+        text-align: center;
+        overflow: hidden;
+        white-space: nowrap;
+        /* A value that does not fit is SQUEEZED, never clipped or wrapped: a
+           half-visible number on a flight plan is worse than a narrow one. */
+        text-overflow: clip;
+      }
+      .ofp-grid thead th { font-size: 5.4pt; font-weight: 400; }
+      .ofp-grid .ofp-grp { font-size: 5.4pt; height: 3.4mm; }
+      .ofp-grid .ofp-blank { border-left: none; border-top: none; border-right: none; }
+      .ofp-grid td.ofp-first { text-align: left; font-weight: 600; padding-left: 1mm; }
+      /* The line number rides in the top-left of the From cell, as on the form. */
+      .ofp-grid .ofp-no { font-size: 3.8pt; color: #444; vertical-align: super; margin-right: .7mm; font-weight: 400; }
+      .ofp-grid tbody tr:nth-child(odd) td { background: #f2f2f2; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .ofp-total td { font-weight: 700; background: #fff; }
+      .ofp-total td.ofp-hatch {
+        background: repeating-linear-gradient(45deg, #000 0 .35mm, #fff .35mm .9mm);
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .ofp-alt td { background: #fff; }
+      .ofp-alt td:first-child { text-align: left; font-weight: 700; padding-left: 1mm; }
+
+      .ofp-foot { display: flex; gap: 3mm; margin-top: 2mm; align-items: flex-start; }
+      .ofp-admin, .ofp-crew { border-collapse: collapse; font-size: 6.5pt; }
+      .ofp-admin th, .ofp-admin td, .ofp-crew th, .ofp-crew td {
+        border: .6pt solid #000; padding: .7mm 1.2mm; text-align: left; height: 4.4mm;
+      }
+      .ofp-admin th { font-weight: 400; min-width: 14mm; }
+      .ofp-admin td { min-width: 22mm; }
+      .ofp-crew th {
+        background: #000; color: #fff; text-align: center; font-weight: 700;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .ofp-crew td { min-width: 30mm; }
+      .ofp-pic { font-style: italic; color: #555; }
+      .ofp-notes { display: flex; flex-direction: column; gap: 0; }
+      .ofp-clear { flex: 1; }
+      .ofp-note-box {
+        border: .6pt solid #000; font-size: 6.5pt; padding: .8mm 1.2mm;
+        height: 11mm; min-width: 62mm;
+        background: repeating-linear-gradient(to bottom, transparent 0 3.4mm, #bbb 3.4mm 3.5mm);
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .ofp-note-box + .ofp-note-box { border-top: none; }
+      .ofp-note-box.ofp-tall { height: 22.4mm; min-width: 78mm; }
     }
