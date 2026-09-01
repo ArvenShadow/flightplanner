@@ -909,13 +909,13 @@ T('vertical interpolation between pressure levels', () => {
 });
 T('sample points: 3 per non-pattern leg at leg altitude', () => {
   ev(SEED);
-  const pts = ev('buildWindSamplePoints()');
+  const pts = ev('buildWindSamplePoints(flights, legStartTimes)');
   assert(pts.length === 6, '2 legs x 3 samples expected, got ' + pts.length);
   assert(pts.every(p => p.altFt === 2500), 'wrong altitudes');
   assert(new Set(pts.map(p => p.legKey)).size === 2, 'leg grouping wrong');
 });
 T('request URL contains everything the docs require', () => {
-  const url = ev(`buildOpenMeteoUrl(buildWindSamplePoints(), '2026-08-24')`);
+  const url = ev(`buildOpenMeteoUrl(buildWindSamplePoints(flights, legStartTimes), '2026-08-24')`);
   ['api.open-meteo.com/v1/forecast', 'wind_speed_unit=kn', 'geopotential_height_925hPa',
    'wind_speed_700hPa', 'wind_direction_850hPa', 'temperature_925hPa', 'wind_speed_10m',
    'start_date=2026-08-24', 'timezone=auto'].forEach(k =>
@@ -941,7 +941,7 @@ TA('fetch fills the wind matrix from a mocked multi-location response', async ()
       });
     }
     return H; })() });
-  w.fetch = async (url) => ({ ok: true, json: async () => ev('buildWindSamplePoints()').map(() => mkLoc()) });
+  w.fetch = async (url) => ({ ok: true, json: async () => ev('buildWindSamplePoints(flights, legStartTimes)').map(() => mkLoc()) });
   w.openWindModal();
   doc.getElementById('wind-fetch-date').value = '2026-08-24';
   doc.getElementById('def-etd').value = '09:00';
@@ -978,7 +978,7 @@ TA('fetched values feed the normal Save & Apply path', async () => {
     const H = { wind_speed_10m: Array(24).fill(8), wind_direction_10m: Array(24).fill(300), temperature_2m: Array(24).fill(5) };
     ev('OM_LEVELS').forEach(L => { H['wind_speed_'+L+'hPa']=Array(24).fill(20); H['wind_direction_'+L+'hPa']=Array(24).fill(310); H['temperature_'+L+'hPa']=Array(24).fill(0); H['geopotential_height_'+L+'hPa']=Array(24).fill(L>=950?400:2000); });
     return H; })() });
-  w.fetch = async () => ({ ok: true, json: async () => ev('buildWindSamplePoints()').map(mk) });
+  w.fetch = async () => ({ ok: true, json: async () => ev('buildWindSamplePoints(flights, legStartTimes)').map(mk) });
   w.openWindModal();
   await w.fetchForecastWinds();
   w.saveWindModal();
@@ -991,7 +991,7 @@ TA('fetched values feed the normal Save & Apply path', async () => {
 console.log('\n=== 29. Model selection, time interpolation & Compare mode ===');
 T('URL carries the model only when explicitly selected', () => {
   ev(SEED);
-  const pts = 'buildWindSamplePoints()';
+  const pts = 'buildWindSamplePoints(flights, legStartTimes)';
   assert(ev(`buildOpenMeteoUrl(${pts}, '2026-08-24', 'ecmwf_ifs025')`).includes('&models=ecmwf_ifs025'), 'model missing');
   assert(!ev(`buildOpenMeteoUrl(${pts}, '2026-08-24', 'best_match')`).includes('&models='), 'best_match should omit models');
   assert(!ev(`buildOpenMeteoUrl(${pts}, '2026-08-24')`).includes('&models='), 'undefined should omit models');
@@ -1012,7 +1012,7 @@ TA('single-model fetch reports the model by name', async () => {
     const H = { wind_speed_10m: Array(24).fill(8), wind_direction_10m: Array(24).fill(300), temperature_2m: Array(24).fill(5) };
     ev('OM_LEVELS').forEach(L => { H['wind_speed_'+L+'hPa']=Array(24).fill(20); H['wind_direction_'+L+'hPa']=Array(24).fill(310); H['temperature_'+L+'hPa']=Array(24).fill(0); H['geopotential_height_'+L+'hPa']=Array(24).fill(L>=950?400:2000); });
     return H; })() });
-  w.fetch = async (url) => ({ ok: true, json: async () => ev('buildWindSamplePoints()').map(mk) });
+  w.fetch = async (url) => ({ ok: true, json: async () => ev('buildWindSamplePoints(flights, legStartTimes)').map(mk) });
   w.openWindModal();
   doc.getElementById('wind-model').value = 'ecmwf_ifs025';
   await w.fetchForecastWinds();
@@ -1030,7 +1030,7 @@ TA('Compare mode fills the 3-model mean and reports spread', async () => {
     return H; })() });
   w.fetch = async (url) => {
     const mk = url.includes('ecmwf') ? mkFor(260, 20) : url.includes('icon') ? mkFor(280, 24) : mkFor(300, 28);
-    return { ok: true, json: async () => ev('buildWindSamplePoints()').map(mk) };
+    return { ok: true, json: async () => ev('buildWindSamplePoints(flights, legStartTimes)').map(mk) };
   };
   w.openWindModal();
   doc.getElementById('wind-model').value = 'COMPARE3';
@@ -1053,7 +1053,7 @@ TA('Compare survives one model failing (mean of remaining two)', async () => {
   w.fetch = async (url) => {
     if (url.includes('gfs')) throw new Error('model down');
     const mk = url.includes('ecmwf') ? mkFor(270, 20) : mkFor(270, 22);
-    return { ok: true, json: async () => ev('buildWindSamplePoints()').map(mk) };
+    return { ok: true, json: async () => ev('buildWindSamplePoints(flights, legStartTimes)').map(mk) };
   };
   w.openWindModal();
   doc.getElementById('wind-model').value = 'COMPARE3';
@@ -2167,7 +2167,36 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const perfModule = require('./src/lib/performance.js');
   const fmtModule = require('./src/lib/format.js');
   const legsModule = require('./src/lib/legs.js');
-  moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule, legs: legsModule };
+  const dayModule = require('./src/lib/daylight.js');
+  const windsModule = require('./src/lib/winds.js');
+  moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
+                    legs: legsModule, day: dayModule, winds: windsModule };
+});
+T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
+  const D = moduleExports.day;
+  // SERA Art. 2(97): night runs from the END of evening civil twilight to
+  // the BEGINNING of morning civil twilight - sun centre 6 deg below the
+  // horizon. Flying between sunset and evening CT is still legal day VFR.
+  const r = D.computeDaylight('2026-09-01', 69.6832, 18.9186);
+  assert(r.kind === 'normal', 'Tromso on 1 Sep should be a normal day: ' + r.kind);
+  assert(r.mct < r.sunrise, 'morning civil twilight must precede sunrise');
+  assert(r.ect > r.sunset, 'evening civil twilight must follow sunset');
+  // the usable day-VFR window is therefore WIDER than sunrise..sunset
+  assert((r.ect - r.mct) > (r.sunset - r.sunrise), 'the day-VFR window is not wider than sunrise-to-sunset');
+});
+T('the polar regimes are distinguished, not collapsed (module, no DOM)', () => {
+  const D = moduleExports.day;
+  // Midnight sun: no rise or set at all, but day VFR for the full 24 h.
+  const mid = D.computeDaylight('2026-06-21', 69.6832, 18.9186);
+  assert(mid.kind === 'all-day' && mid.sunrise === null, 'midnight sun misread: ' + JSON.stringify(mid));
+  // Polar night at Tromso: the sun never rises, yet there IS a legal
+  // twilight window - the case that makes "sunset" the wrong rule.
+  const pn = D.computeDaylight('2026-01-05', 69.6832, 18.9186);
+  assert(pn.kind === 'no-sunrise' && pn.sunrise === null, 'polar night misread: ' + JSON.stringify(pn));
+  assert(pn.mct && pn.ect && pn.ect > pn.mct, 'polar night must still yield a day-VFR twilight window');
+  // Deep polar night: no window at all.
+  const deep = D.computeDaylight('2026-12-21', 78, 15);
+  assert(deep.mct === null && deep.ect === null, 'at 78N in December there is no day-VFR window: ' + JSON.stringify(deep));
 });
 // The leg engine carries two settled decisions. Both are asserted here in
 // bare Node - no jsdom, no globals - because they are what the fuel figure
@@ -2245,6 +2274,58 @@ T('the ETO clock never reads earlier than the departure it follows', () => {
   assert(F.formatTimeHHMM(undefined) === '-' && F.formatTimeHHMM(125) === '02:05', 'formatTimeHHMM broken');
   assert(F.toDMM(69.6805, true) === "69\u00b040.83'N", 'toDMM: ' + F.toDMM(69.6805, true));
 });
+// THE recurring trap, now guarded. A module that reads a page global -
+// toRad, aircraftProfile - still WORKS in the browser, because the page
+// script's top-level `let`/`function` land in the global lexical
+// environment that the bundle's IIFE shares. So every jsdom test passes
+// while `require()`ing the module in bare Node throws. Importing a module
+// does not execute its bodies either: the only thing that proves a slice
+// is self-contained is RUNNING it outside a browser. Every module must
+// therefore be exercised here with real arguments, not merely imported.
+T('every module RUNS standalone - no page globals resolved by accident', () => {
+  const M = moduleExports;
+  const wp = (lat, lng, alt) => ({ name: 'X', lat, lng, alt, oat: 0, wdir: 240, wspd: 18, var: 0 });
+  const exercises = {
+    'magvar.js': () => M.magvar.resolveMagVar(69.055, 18.544, 2026.6438).raw,
+    'geodesy.js': () => M.geodesy.calcDistanceNM(69.055, 18.545, 69.679, 18.911),
+    'performance.js': () => [M.perf.climbPerf(0, 6000, 15), M.perf.cruisePerf(6000, -5), M.perf.calcWCA(120, 20, 1)],
+    'format.js': () => [M.fmt.formatTimeHHMM(125), M.fmt.toDMM(69.68, true), M.fmt.clockFromMinutes('23:30', 90)],
+    'legs.js': () => [M.legs.computeLegTotals(wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500), null),
+                      M.legs.computeFlightSchedule({ waypoints: [wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500)] }),
+                      M.legs.computeLegMarkers(wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500), null)],
+    'daylight.js': () => [M.day.computeDaylight('2026-09-01', 69.68, 18.92), M.day.fmtLocalHM(Date.now())],
+    'winds.js': () => [M.winds.windToUV(260, 20), M.winds.uvToWind(-5, -12),
+                       M.winds.buildOpenMeteoUrl([{ lat: 69, lng: 18 }], '2026-09-01', 'best_match'),
+                       M.winds.buildWindSamplePoints([{ waypoints: [wp(69.0, 18.0, 254), wp(69.4, 18.0, 2500)] }], {})]
+  };
+  for (const [name, run] of Object.entries(exercises)) {
+    let out;
+    try { out = run(); } catch (e) {
+      throw new Error(name + ' does not run outside the browser: ' + e.message +
+        ' (it is reading a page global - take it as an argument or an explicit import)');
+    }
+    assert(out !== undefined && out !== null, name + ' returned nothing when run standalone');
+  }
+});
+T('the winds mean is speed-weighted, and survives the 000/360 wrap', () => {
+  const W = moduleExports.winds;
+  const mean = (list) => {
+    let u = 0, v = 0;
+    for (const [d, s] of list) { const c = W.windToUV(d, s); u += c[0]; v += c[1]; }
+    return W.uvToWind(u / list.length, v / list.length);
+  };
+  // averaging in u/v space weights by SPEED. The three-model mean of
+  // 260/20, 280/24, 300/28 is 282.3 - not the 280 a naive average of the
+  // degree numbers gives. A test once asserted 280 and was wrong.
+  const [dir3, spd3] = mean([[260, 20], [280, 24], [300, 28]]);
+  assert(Math.abs(dir3 - 282.3) < 0.1, 'three-model mean direction: ' + dir3.toFixed(2) + ', expected 282.3');
+  assert(Math.abs(spd3 - 23.1) < 0.1, 'three-model mean speed: ' + spd3.toFixed(2));
+  // and averaging degrees breaks across north: 350 and 010 would give 180,
+  // the exact reciprocal of the right answer.
+  const [dirN] = mean([[350, 20], [10, 20]]);
+  assert(dirN < 0.1 || dirN > 359.9, 'mean across north came out at ' + dirN.toFixed(1) + ', should be 000');
+  assert(W.angleDiff(350, 10) === 20, 'angleDiff across north: ' + W.angleDiff(350, 10));
+});
 T('every module export and the built page agree exactly', () => {
   const fixtures = [[69.055, 18.544], [69.683, 18.919], [60.202, 11.084]];
   for (const [lat, lng] of fixtures) {
@@ -2259,6 +2340,13 @@ T('every module export and the built page agree exactly', () => {
   // the whole schedule, module vs built page, on the suite's seed route
   ev(SEED);
   const seedFlight = `{ waypoints: flights[0].waypoints }`;
+  // the daylight card is a legal statement: module and page must not drift
+  for (const [d, lat, lng] of [['2026-03-20', 69.6832, 18.9186], ['2026-06-21', 69.6832, 18.9186],
+                               ['2026-12-21', 78, 15], ['2026-09-01', 59.9, 10.7]]) {
+    const m = JSON.stringify(moduleExports.day.computeDaylight(d, lat, lng));
+    const pg = ev(`JSON.stringify(computeDaylight('${d}', ${lat}, ${lng}))`);
+    assert(m === pg, `daylight mismatch on ${d} at ${lat},${lng}: ${m} vs ${pg}`);
+  }
   const pageSched = ev(`JSON.stringify(computeFlightSchedule(${seedFlight}))`);
   const modSched = JSON.stringify(moduleExports.legs.computeFlightSchedule(JSON.parse(ev('JSON.stringify({ waypoints: flights[0].waypoints })'))));
   assert(modSched === pageSched, 'the altitude schedule differs between module and page');
@@ -2372,7 +2460,11 @@ T('the page script no longer defines what the modules own', () => {
                     'calcWCA', 'formatTimeHHMM', 'toDMM',
                     'legPath', 'pathSegments', 'pointAlongSegments', 'distToSegmentNM', 'phaseGS',
                     'computeLegTotals', 'computeLegProfile', 'climbAltReached',
-                    'computeFlightSchedule', 'computeLegMarkers']) {
+                    'computeFlightSchedule', 'computeLegMarkers',
+                    'sunDeclEqTime', 'solarCrossingUTC', 'computeDaylight',
+                    'utcOffsetLabel', 'fmtLocalHM', 'localDateStrOf', 'firstPlottedWaypoint',
+                    'windToUV', 'uvToWind', 'buildWindSamplePoints', 'buildOpenMeteoUrl',
+                    'interpolateWindProfile', 'extractPointWeather', 'extractPointWeatherAt', 'angleDiff']) {
     assert(!new RegExp('function ' + fn + '\\s*\\(').test(src),
       fn + ' is still defined in the page script (duplicate of its module)');
   }

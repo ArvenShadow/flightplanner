@@ -18,8 +18,10 @@ import * as dialog from './lib/dialog.js';
 import * as performance from './lib/performance.js';
 import * as format from './lib/format.js';
 import * as legs from './lib/legs.js';
+import * as daylight from './lib/daylight.js';
+import * as winds from './lib/winds.js';
 
-const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs };
+const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs, ...daylight, ...winds };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {
