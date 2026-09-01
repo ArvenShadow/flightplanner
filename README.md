@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.30)
+# C182 Flight Planner (v16.31)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -35,6 +35,18 @@ panning is smoother, and that is all it is for.
 Cached chart tiles are keyed to the **AIRAC edition**, and the worker refuses
 to serve a tile from cache until the page has told it which cycle is live — a
 chart from a superseded cycle is a safety problem, not a stale asset.
+
+## Airspace overlay
+
+The **⬢ Airspace** button on the map draws the published airspace — CTR, TIZ,
+TMA, TIA, CTA and the mandatory zones. Hover any of them for its ICAO class,
+published vertical limits, station callsigns and VHF frequencies. Nothing draws
+below zoom 7, because at country zoom 228 polygons bury the chart. Clicking
+still adds a waypoint, so route building inside a TMA is unaffected.
+
+Limits are shown exactly as published: GND, UNL and flight levels stay as they
+are, and a flight level is never converted to an altitude. **A planning aid —
+verify against the current AIP and NOTAM.**
 
 ## Airspace data
 

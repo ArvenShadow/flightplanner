@@ -158,6 +158,37 @@ interface ScheduleLeg {
   exitAlt: number;
 }
 
+/** A published vertical limit, kept as its three source fields. GND/UNL are
+ *  codes and a flight level is not an altitude AMSL, so `ft` is filled in
+ *  only for a published measured altitude. */
+interface AirspaceLimit {
+  text: string;
+  ft: number | null;
+  datum: string | null;
+  kind: string;
+}
+
+/** One drawable airspace volume from the Avinor eAIP. */
+interface AirspaceFeature {
+  name: string;
+  kind: string;
+  /** Published ICAO class, or null when the source does not state one. */
+  class: string | null;
+  lower: AirspaceLimit;
+  upper: AirspaceLimit;
+  /** Outer ring, [lat, lng] pairs, not closed. */
+  ring: [number, number][];
+  /** How many stretches of the boundary came from Kartverket's border. */
+  borderSegments: number;
+  /** Largest distance a published corner sat from the surveyed border, NM. */
+  borderMaxSnapNM: number;
+  callsigns: string[];
+  freqs: { mhz: string, unit: string }[];
+  source: { section: string, url: string };
+  /** Cached bounding box (airspaceBounds); not part of the dataset. */
+  _bbox?: { south: number, west: number, north: number, east: number };
+}
+
 /** A TOC or TOD mark to draw on the map and list on the plotting sheet. */
 interface LegMarker {
   kind: string;

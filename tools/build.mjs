@@ -58,6 +58,12 @@ const STYLE_MARKER = /^([ \t]*)<!-- @STYLES:.*?-->[ \t]*\r?\n/m;
 // (git's core.autocrlf). A ZIP download does not, which is why this only
 // ever failed on a cloned repo.
 const MARKER = /^[ \t]*<!-- @BUNDLE:.*?-->[ \t]*\r?\n/m;
+// The AIP airspace dataset. It is INLINED into both deliveries rather than
+// loaded with <script src>: a file:// page can neither fetch() it nor load it
+// as a module, and keeping one code path means the hosted service worker needs
+// no extra shell asset to make the overlay work offline.
+const AIP_MARKER = /^([ \t]*)<!-- @AIPDATA:.*?-->[ \t]*\r?\n/m;
+const AIP_DATA = 'data/aip.js';
 
 const fail = (msg) => { console.error('BUILD FAILED: ' + msg); process.exit(1); };
 // Service-worker registration for the hosted build. Feature-detected on
@@ -119,6 +125,23 @@ export async function runBuild({ quiet = false } = {}) {
   let srcHtml = readFileSync(SRC_HTML, 'utf8');
   if (!MARKER.test(srcHtml)) fail('src/index.html has no @BUNDLE marker');
   if (!STYLE_MARKER.test(srcHtml)) fail('src/index.html has no @STYLES marker');
+
+  if (!AIP_MARKER.test(srcHtml)) fail('src/index.html has no @AIPDATA marker');
+  {
+    const indent = srcHtml.match(AIP_MARKER)[1];
+    let aip = '';
+    try { aip = readFileSync(AIP_DATA, 'utf8'); }
+    catch (err) {
+      // Not fatal: the planner hides the airspace control when the dataset is
+      // absent. Loud, though - shipping without it is a silent feature loss.
+      console.warn(`WARNING: ${AIP_DATA} is missing - the airspace overlay will be unavailable. Run: npm run build:aip`);
+      aip = 'window.C182_AIP = null;\n';
+    }
+    if (/<\/script/i.test(aip)) fail(`${AIP_DATA} contains a literal </script sequence`);
+    if (!/window\.C182_AIP\s*=/.test(aip)) fail(`${AIP_DATA} does not assign window.C182_AIP`);
+    srcHtml = srcHtml.replace(AIP_MARKER, indent + '<script>\n' + aip + indent + '</script>\n');
+    if (AIP_MARKER.test(srcHtml)) fail('the @AIPDATA marker was not replaced');
+  }
 
   const css = readFileSync(CSS_SRC, 'utf8');
   if (/<\/style/i.test(css)) fail('styles.css contains a literal </style sequence');

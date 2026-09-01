@@ -648,6 +648,50 @@ errors is the standard.
   guessed. NOTE this is the coordinate TABLE only - it does NOT georeference
   the chart raster, and the PDF carries no GeoPDF markers (/Measure, /GPTS,
   /Viewport all absent), so a chart overlay remains out of reach.
+- **Airspace OVERLAY (v16.31, roadmap item 4 COMPLETE)**: `src/lib/airspace.js`
+  (pure: culling, colours, hover text) plus the Leaflet layers in section 2d of
+  the page. 228 volumes available, ~11 drawn over Troms at z9.
+  - THE DATASET IS INLINED at an `@AIPDATA` marker into BOTH deliveries, not
+    loaded with `<script src>`: a file:// page can neither fetch() it nor load
+    a module, and one code path means the service worker needs no extra shell
+    asset for the overlay to work offline. dist is 533 KB -> 756 KB.
+  - PANE ORDER IS LOAD-BEARING. Airspace draws in its own pane at z-index 380,
+    BELOW Leaflet's overlayPane (400) which holds the route line. If it sat
+    above, a press meant for a leg would hit an airspace polygon first and
+    bubble to the map as "add a waypoint" instead of bending the line. Verified
+    in Chromium with a real drag: via created, waypoint count unchanged.
+  - HOVER, NOT CLICK, and this is the whole interaction design. Clicking the
+    map adds a waypoint and airspace covers most of the map, so a click
+    handler on the polygons would break route building inside every TMA. The
+    polygons carry a tooltip, have NO click handler, and leave
+    bubblingMouseEvents at its default so the click reaches the map untouched.
+    A test asserts all three.
+  - CULLING IS NOT OPTIONAL: nothing below zoom 7 (at country zoom 228
+    polygons are a wash that hides the CTRs that matter) plus a bbox
+    intersection test, redrawn on moveend/zoomend. Largest drawn first so a
+    CTR inside a TMA is not buried. Fill opacity 0.07 - the ICAO chart
+    underneath is the thing being read.
+  - FREQUENCIES: the card shows the civil VHF band (118-137) and COUNTS the
+    rest. Bardufoss CTR publishes twelve including 243.000 (guard), 257.800
+    and 397.375; reciting all twelve buries the one a C182 would call. Nothing
+    is dropped from the DATA - it is a display decision and the card says
+    "+5 non-VHF, see AIP". (1ntray reached the same 118-137 conclusion
+    independently.)
+  - TWO CSS TRAPS, both found by MEASURING a real tooltip: Leaflet tooltips
+    are `white-space: nowrap`, so the frequency line ran off the card; and
+    overriding to `normal` ALONE collapsed the card to 64px wide by 392 tall.
+    `width: max-content` with a `max-width` is the fix, and it is the same
+    pattern `.wp-label` already uses.
+  - The v16.x test guarding "the airspace overlay stays removed" was about
+    OPENAIP specifically - community data that lagged the chart. It now guards
+    the openAIP tile endpoint and key field, still asserts the old
+    localStorage purge is present, and additionally requires the replacement
+    to name its edition. Drawing airspace was never the objection; drawing
+    unofficial airspace was.
+  - jsdom's Leaflet stub needed createPane/getPane/getBounds/polygon/
+    bindTooltip/setStyle. It also kept only the LAST handler per map event, so
+    adding moveend/zoomend silently disabled the declutter tests - the stub now
+    keeps a list and `__fireMap(ev)` fires them all, like the real map.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
@@ -676,8 +720,12 @@ scoped. In the user's order:
    at v16.x for being community-sourced and stale (see "Airspace overlay"
    above); this must come from the official AIP Norge, and the licence and
    update path have to be verified BEFORE any of it is built.
-4. **More AIP: draw every airspace** with hoverable name, vertical limits,
-   class, and the frequencies plus station callsigns. **DATA DONE at v16.29**
+4. **DONE at v16.31** — More AIP: draw every airspace with hoverable name,
+   vertical limits, class, and the frequencies plus station callsigns.
+   (Data landed v16.29-v16.30; see the two AIP entries and the overlay entry
+   above.) What is NOT done: reporting points (item 3), and the 23 airspaces
+   still absent for stated structural reasons.
+   ~~**DATA DONE at v16.29**~~
    (see the AIP airspace entry above): 140 airspaces imported from the
    official eAIP with class, limits, callsigns and frequencies. What remains
    is the planner overlay itself — a Leaflet layer per airspace kind with
