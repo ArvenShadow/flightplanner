@@ -1722,7 +1722,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.17';
+    const APP_VERSION = '16.18';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4122,21 +4122,20 @@ svg.leaflet-image-layer.leaflet-interactive path {
       } catch (e) {}
     }
 
+    // The payload shape (and the profile whitelist that keeps personal data
+    // out of it) -> src/lib/exchange.js. Only the download stays here.
     function exportMissionFile() {
-      const exportData = {
-        formatVersion: 2,
+      const exportData = buildExportPayload({
         routes: getStoredSingleRoutes(),
         missions: getStoredMissions(),
-        currentFlights: flights,
-        // Without these, the same routes compute different times and fuel on
-        // another computer, because it would be running factory defaults.
+        flights: flights,
         profile: aircraftProfile,
         planningPrefs: {
           fuel: document.getElementById('fuel-dep').value,
           reserve: document.getElementById('fuel-reserve').value,
           etd: document.getElementById('def-etd').value
         }
-      };
+      });
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -4148,6 +4147,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       URL.revokeObjectURL(url);
     }
 
+    // defaultFlights / sanitiseFlights -> src/lib/exchange.js
     function importMissionFile(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -4182,13 +4182,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
           }
 
           if (parsed.profile && typeof parsed.profile === 'object') {
-            const allowed = ['mode','cruiseRpm','cruiseMp','cruiseTas','cruiseFf',
-                             'climbMode','ccRoc','ccKias','ccFf',
-                             'roc','climbTas','climbFf','rod','descTas','descFf',
-                             'patternTime','patternFf','taxiFuel','theme','distUnit','fuelUnit','minuteMark','declutter','baseChart'];
-            allowed.forEach(k => {
-              if (parsed.profile[k] !== undefined) aircraftProfile[k] = parsed.profile[k];
-            });
+            // ONE whitelist, shared with the export side -> src/lib/exchange.js
+            Object.assign(aircraftProfile, pickProfileKeys(parsed.profile));
             localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
             toggleTheme(aircraftProfile.theme || 'light');
             updateUnitLabels();
@@ -4239,33 +4234,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
     applyBaseChart();       // also needs aircraftProfile (persisted chart choice)
     renderVersionBadge();
     checkForUpdate();       // one shot at startup; failure is shown, never fatal
-    function defaultFlights() {
-      return [{ id: 1, title: "Flight Plan 1", depElev: 0, waypoints: [] }];
-    }
 
     // A saved value of "[]" or a partially-written object used to leave
     // flights[activeFlightIndex] undefined, so the very first map click threw.
-    function sanitiseFlights(candidate) {
-      if (!Array.isArray(candidate) || candidate.length === 0) return null;
-      const cleaned = candidate
-        .filter(f => f && typeof f === 'object')
-        .map((f, i) => ({
-          id: f.id || (i + 1),
-          title: f.title || `Flight Plan ${i + 1}`,
-          depElev: Number(f.depElev) || 0,
-          waypoints: Array.isArray(f.waypoints)
-            ? f.waypoints.filter(w => w && isFinite(w.lat) && isFinite(w.lng))
-                .map(w => {
-                  if (Array.isArray(w.via)) {
-                    w.via = w.via.filter(v => v && isFinite(v.lat) && isFinite(v.lng));
-                    if (w.via.length === 0) delete w.via;
-                  }
-                  return w;
-                })
-            : []
-        }));
-      return cleaned.length ? cleaned : null;
-    }
 
     const savedActive = localStorage.getItem('c182_active_mission');
     if (savedActive) {
