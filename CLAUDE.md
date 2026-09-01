@@ -1370,6 +1370,26 @@ asserts nothing M&B appears on the sheet.
   must never carry either, so there is nothing to read - which is why adding a
   registration setting to fill the Reg box was rejected. A test asserts the crew
   block prints empty and that PROFILE_KEYS has not grown a reg/pic/crew key.
+- **SOLID BLACK ON WHITE, and getting there needed a BLUNT rule** (v16.41, the
+  pilot's correction: "the OFP looks greyed and the texting is also greyed").
+  The app's theme variables reach the form's cells through the global table
+  styles, so `--bg-calc` (#f7fafc) filled the boxes and `--text-main` (#2d3748)
+  wrote the figures - a sheet that reads grey on paper. `#ofp-print, #ofp-print *`
+  forces colour, background and border-colour, and the alternating row band was
+  dropped with it.
+  - **AN ID-LEVEL BLANKET RULE OUT-RANKS A CLASS**, `!important` on both sides or
+    not, and that silently erased the Total line's hatching, the black CREW bar
+    and the ATIS writing lines. The three deliberate fills carry `#ofp-print` in
+    their own selectors now. The verifier measures both halves: every rule and
+    character computes to black on white, AND those three fills survive.
+- ROW HEIGHT IS MEASURED TOO: the form's 16 lines span 10.03%-55.62% of the
+  sheet, which is 95.7 mm on A4 landscape, i.e. 6 mm a line. At the first
+  attempt's 4.6 mm the grid filled half the page and the sheet looked cramped.
+- **HOW A SECTOR READS DOWN THE SHEET** (the pilot's rule): line 1 leaves the
+  DEPARTURE aerodrome for the first waypoint, the last flown leg ARRIVES at the
+  destination, and a circuit hangs off the arrival aerodrome - `ENTC ->
+  PATTERN x3` - carrying its time and fuel but no track, distance or speed,
+  because it is not a line on the ground. Asserted end to end.
 - **THE PRINT RULE HIDES EVERYTHING AND THEN SHOWS THE FORM** (`body > *` then
   `body > #ofp-print`). The first attempt listed what to hide, and the first-run
   Feature Guide printed straight over the sheet with its backdrop tinting the

@@ -116,6 +116,38 @@ const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).lengt
 check(pages === 2, 'the printed PDF is one page per sheet: ' + pages);
 if (process.env.OUT) { const { writeFileSync } = await import('fs'); writeFileSync(process.env.OUT, pdf); }
 
+// ---- SOLID BLACK ON WHITE -------------------------------------------------
+// The first sheet printed GREY: the app's theme variables (--bg-calc #f7fafc,
+// --text-main #2d3748) reach these cells through the global table styles, so
+// the boxes were pale blue-grey and the text dark slate instead of ink. Measure
+// the computed colours rather than trusting the stylesheet.
+const ink = await page.evaluate(() => {
+  const bad = [];
+  const cells = [...document.querySelectorAll('#ofp-print .ofp-grid td, #ofp-print .ofp-grid th, #ofp-print .ofp-admin td, #ofp-print .ofp-depdest td')];
+  for (const el of cells) {
+    const cs = getComputedStyle(el);
+    if (cs.color !== 'rgb(0, 0, 0)') { bad.push('text ' + cs.color); continue; }
+    // The Total line's hatch is a gradient and is allowed; a flat grey is not.
+    const bg = cs.backgroundColor;
+    if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'rgb(255, 255, 255)') bad.push('fill ' + bg);
+    if (!/rgb\(0, 0, 0\)/.test(cs.borderTopColor)) bad.push('rule ' + cs.borderTopColor);
+  }
+  return { checked: cells.length, bad: [...new Set(bad)] };
+});
+check(ink.checked > 400, 'enough cells were measured for ink: ' + ink.checked);
+check(ink.bad.length === 0, 'every rule and every character is solid black on white' +
+  (ink.bad.length ? ', found: ' + ink.bad.slice(0, 5).join(', ') : ''));
+// ...and the few deliberate fills must SURVIVE that. An id-level blanket rule
+// out-ranks a class, which silently erased all three the first time.
+const fills = await page.evaluate(() => ({
+  hatch: getComputedStyle(document.querySelector('#ofp-print .ofp-total td.ofp-hatch')).backgroundImage,
+  crew: getComputedStyle(document.querySelector('#ofp-print .ofp-crew th')).backgroundColor,
+  note: getComputedStyle(document.querySelector('#ofp-print .ofp-note-box')).backgroundImage
+}));
+check(/gradient/.test(fills.hatch), 'the Total line keeps its hatching: ' + fills.hatch.slice(0, 30));
+check(fills.crew === 'rgb(0, 0, 0)', 'the CREW bar keeps its black fill: ' + fills.crew);
+check(/gradient/.test(fills.note), 'the ATIS/notes boxes keep their writing lines');
+
 // ---- ONE SECTOR PER OFP ---------------------------------------------------
 // A sheet must carry ONE departure and ONE arrival. Three sectors, the last
 // long enough to need a continuation sheet, and every sheet is checked: its own

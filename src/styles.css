@@ -1094,6 +1094,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
       body { height: auto; background: white !important; color: black !important; display: block; }
 
       #ofp-print { display: block; }
+      /* SOLID BLACK ON WHITE, and this rule has to come first and be blunt.
+         The app's theme variables (--bg-calc #f7fafc, --text-main #2d3748) reach
+         these cells through the global table styles, which is what made the
+         printed sheet read grey: pale blue-grey boxes and dark-slate text
+         instead of ink. Everything below re-applies the few real fills. */
+      #ofp-print, #ofp-print * {
+        color: #000 !important;
+        background: #fff !important;
+        border-color: #000 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
       .ofp-sheet {
         break-after: page; page-break-after: always;
         font-family: "Helvetica Neue", Arial, sans-serif; color: #000;
@@ -1101,10 +1112,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
       .ofp-sheet:last-child { break-after: auto; page-break-after: auto; }
 
       .ofp-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 2mm; }
-      .ofp-title { font-size: 15pt; font-weight: 400; letter-spacing: .2px; }
-      .ofp-page { font-size: 8pt; color: #444; }
-      .ofp-depdest { border-collapse: collapse; font-size: 7pt; }
-      .ofp-depdest th, .ofp-depdest td { border: .6pt solid #000; padding: .6mm 1.2mm; text-align: left; }
+      .ofp-title { font-size: 16pt; font-weight: 400; letter-spacing: .2px; white-space: nowrap; padding-right: 4mm; }
+      .ofp-page { font-size: 8pt; }
+      .ofp-depdest { border-collapse: collapse; font-size: 7.5pt; }
+      .ofp-depdest th, .ofp-depdest td { border: .75pt solid #000; padding: 1mm 1.5mm; text-align: left; height: 5mm; }
       .ofp-depdest th { font-weight: 700; }
       .ofp-depdest td { min-width: 16mm; }
 
@@ -1113,11 +1124,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
          the sheet stops lining up with the paper form. */
       .ofp-grid { width: 100%; table-layout: fixed; border-collapse: collapse; }
       .ofp-grid th, .ofp-grid td {
-        border: .5pt solid #000;
+        border: .75pt solid #000;
         padding: 0 .5mm;
-        font-size: 5.6pt;
-        line-height: 1.5;
-        height: 4.6mm;
+        font-size: 6.2pt;
+        line-height: 1.4;
+        /* 6 mm: the form's own 16 lines span 10.03%-55.62% of the sheet, which
+           is 95.7 mm on A4 landscape. At 4.6 mm the grid filled half the page
+           and left the sheet looking cramped. */
+        height: 6mm;
         text-align: center;
         overflow: hidden;
         white-space: nowrap;
@@ -1125,42 +1139,42 @@ svg.leaflet-image-layer.leaflet-interactive path {
            half-visible number on a flight plan is worse than a narrow one. */
         text-overflow: clip;
       }
-      .ofp-grid thead th { font-size: 5.4pt; font-weight: 400; }
-      .ofp-grid .ofp-grp { font-size: 5.4pt; height: 3.4mm; }
+      .ofp-grid thead th { font-size: 5.8pt; font-weight: 400; height: 4.2mm; }
+      .ofp-grid .ofp-grp { font-size: 5.8pt; font-weight: 400; height: 3.8mm; }
       .ofp-grid .ofp-blank { border-left: none; border-top: none; border-right: none; }
       .ofp-grid td.ofp-first { text-align: left; font-weight: 600; padding-left: 1mm; }
       /* The line number rides in the top-left of the From cell, as on the form. */
-      .ofp-grid .ofp-no { font-size: 3.8pt; color: #444; vertical-align: super; margin-right: .7mm; font-weight: 400; }
-      .ofp-grid tbody tr:nth-child(odd) td { background: #f2f2f2; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .ofp-total td { font-weight: 700; background: #fff; }
-      .ofp-total td.ofp-hatch {
-        background: repeating-linear-gradient(45deg, #000 0 .35mm, #fff .35mm .9mm);
-        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      .ofp-grid .ofp-no { font-size: 4.2pt; vertical-align: super; margin-right: .7mm; font-weight: 400; }
+      /* No alternating band: the pilot asked for solid black on white, and the
+         banding was most of what made the sheet read grey. */
+      .ofp-total td { font-weight: 700; height: 5mm; }
+      #ofp-print .ofp-total td.ofp-hatch {
+        background: repeating-linear-gradient(45deg, #000 0 .35mm, #fff .35mm .9mm) !important;
       }
-      .ofp-alt td { background: #fff; }
+      .ofp-alt td { height: 5mm; }
       .ofp-alt td:first-child { text-align: left; font-weight: 700; padding-left: 1mm; }
 
       .ofp-foot { display: flex; gap: 3mm; margin-top: 2mm; align-items: flex-start; }
-      .ofp-admin, .ofp-crew { border-collapse: collapse; font-size: 6.5pt; }
+      .ofp-admin, .ofp-crew { border-collapse: collapse; font-size: 7.5pt; }
       .ofp-admin th, .ofp-admin td, .ofp-crew th, .ofp-crew td {
-        border: .6pt solid #000; padding: .7mm 1.2mm; text-align: left; height: 4.4mm;
+        border: .75pt solid #000; padding: 1mm 1.5mm; text-align: left; height: 7mm;
       }
       .ofp-admin th { font-weight: 400; min-width: 14mm; }
       .ofp-admin td { min-width: 22mm; }
-      .ofp-crew th {
-        background: #000; color: #fff; text-align: center; font-weight: 700;
-        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      #ofp-print .ofp-crew th {
+        background: #000 !important; color: #fff !important; text-align: center; font-weight: 700;
       }
-      .ofp-crew td { min-width: 30mm; }
-      .ofp-pic { font-style: italic; color: #555; }
+      .ofp-crew td { min-width: 34mm; }
+      .ofp-pic { font-style: italic; }
       .ofp-notes { display: flex; flex-direction: column; gap: 0; }
       .ofp-clear { flex: 1; }
       .ofp-note-box {
-        border: .6pt solid #000; font-size: 6.5pt; padding: .8mm 1.2mm;
-        height: 11mm; min-width: 62mm;
-        background: repeating-linear-gradient(to bottom, transparent 0 3.4mm, #bbb 3.4mm 3.5mm);
-        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        border: .75pt solid #000; font-size: 7.5pt; padding: 1mm 1.5mm;
+        height: 15mm; min-width: 66mm;
+      }
+      #ofp-print .ofp-note-box {
+        background: repeating-linear-gradient(to bottom, transparent 0 4.9mm, #000 4.9mm 5mm) !important;
       }
       .ofp-note-box + .ofp-note-box { border-top: none; }
-      .ofp-note-box.ofp-tall { height: 22.4mm; min-width: 78mm; }
+      .ofp-note-box.ofp-tall { height: 31mm; min-width: 82mm; }
     }
