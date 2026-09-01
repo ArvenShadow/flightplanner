@@ -1112,6 +1112,70 @@ errors is the standard.
   NO CORS header, so it is genuinely unusable from a browser - MET Norway
   is used instead, and is the authoritative source for Norway anyway.
 
+## DEFERRED: known nits and small bugs (v16.38)
+
+The user's instruction: "we will iron out all the small bugs and nitpicks
+later, make sure you keep track of all the small details that can be ironed
+out." This is that list. Everything here is OBSERVED, not speculative - each
+line says what was measured or reproduced. Nothing here is urgent; nothing here
+is forgotten.
+
+### Real bugs, in rough order of how wrong they are
+
+1. **A SPILLED DESCENT MISREPORTS THE LEG ALTITUDES.** Reproduced on
+   `ENDU(254) -> A(8000) -> B(2000)` with a 3.6 NM final leg: the descent backs
+   up 20.4 NM onto leg 0, so the aircraft actually crosses A at roughly 2900 ft,
+   but leg 0 reports `exitAlt 8000` and leg 1 reports `entryAlt 8000`. Time,
+   fuel and the TOD position are all correct - only the entry/exit figures are
+   the PLANNED values rather than the flown ones. Pre-existing since v16.5, and
+   it is why v16.38 chose "raise the previous fix" over spilling a climb
+   backwards rather than adding a second place where the altitude column lies.
+   Fixing it means deciding what an OFP row should say when the plan is only
+   flyable by crossing a fix off its stated altitude.
+2. **SPLITTING A PINNED LEG LEAVES THE PIN ON THE SECOND HALF, MEASURED FROM A
+   NEW FIX.** `insertWaypointOnLeg` copies alt/OAT/wind from the waypoint it
+   inserts before (correct) but does not touch `bocNM`/`bodNM`/`tocNM`.
+   Reproduced: a 12 NM BOC set on a 54 NM ENDU->MID leg becomes a 12 NM BOC on
+   the 27.1 NM NEW->MID leg - the same number now means something the pilot did
+   not ask for. The v16.27 via-splitting rule (`via.slice`) is the precedent:
+   decide which half each pin belongs to, or clear them and say so.
+3. **A PIN IS CLAMPED ON READ, NOT ON EDIT.** `pinNM` clamps to the leg length
+   every time, so shortening a leg by dragging a waypoint quietly caps the pin -
+   and lengthening it again restores the original value. Defensible, but the
+   pilot is never told the pin moved.
+4. **A `tocNM` on a leg with NO climb is silently ignored** (the else branch in
+   the forward pass). It should say so, the way a refused BOD does.
+
+### Absent data, each for a stated reason (need a new source, not a fix)
+
+5. **The Skagerrak maritime boundary** is not in Kartverket's LAND Riksgrense,
+   so these stay refused: `Polaris CTA (FL 115 - FL 660)`,
+   `Polaris CTA (FL 155 - FL 660)`, Farris TMA (3 volumes), Bohus C, Koster,
+   and Polaris ACC Sectors 3 and 4 (so the hover card names no sector over the
+   Oslofjord). Needs a maritime-boundary dataset; all of it is southern Norway.
+6. **Halti** cites the Finland-Sweden border, which is not in Norwegian data.
+7. **18 offshore HTZ/ADS are published as a circle radius**, not a polygon
+   (`insufficient-coordinates`). Needs arc/circle support in `ringOf`.
+8. **29 of 53 aerodromes publish their reporting points on the chart face
+   only.** Needs Avinor's AIXM 5.1 export, or per-aerodrome VAC transcription.
+   ENSG additionally prints ONE stray coordinate, refused as `not-a-table`.
+
+### Cosmetic and UX
+
+9. **BOC/BOD map chips share the TOC/TOD colours** - a pinned BOC is the same
+   green as the TOC, a BOD the same orange as the TOD. The chip text
+   distinguishes them; a hollow tick for the pinned corners would read faster.
+   (The plotting text already uses hollow glyphs: `▲ TOC / △ BOC`.)
+10. **The leg panel's "Insert one where I right-clicked" discards unapplied
+    pins** - it closes the panel to open the naming dialog.
+11. **"Save & Recalculate"** is aircraft-centric wording for a button that now
+    also saves the Map page.
+12. **The fix-style preview background** is a beige gradient standing in for
+    chart paper; it reads as a strip in light mode.
+13. **`verify-visual.mjs` always reports 2 problems on a version bump** (the
+    8x8 badge). It could accept a known badge region rather than needing the
+    diff read by hand every time.
+
 ## Roadmap (the user's list, v16.28 - NOT yet agreed in detail)
 
 Written down so it is not lost. NOTHING here is built, and none of it is
