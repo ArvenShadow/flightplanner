@@ -1,27 +1,36 @@
-# C182 Flight Planner (v16.25)
+# C182 Flight Planner (v16.26)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
 **No git, no Node, nothing to install:** open the hosted URL. That is the
 whole story for everyday use — it is always the current version, and after
-the first visit it works offline.
+the first visit the planner itself works offline.
 
 **Three ways to run it**, from the same source:
 
-| | how | offline chart tiles |
+| | how | app works offline |
 |---|---|---|
 | Hosted | the GitHub Pages URL | yes — service worker |
 | Local server | `npm run serve`, then `http://localhost:8182` | yes — localhost is a secure context |
 | Same, from a phone | `npm run serve`, then `http://<your-ip>:8182` over wifi or a hotspot | no — see below |
-| Double-click | open `dist/C182_FlightPlanner.html` | no — `file://` cannot register a worker |
+| Double-click | open `dist/C182_FlightPlanner.html` | yes — it is one self-contained file |
 
 Browsers only allow a service worker on a **secure context** — HTTPS or
 `localhost`. A plain-http LAN address is not one, so the phone/tablet case
-runs the planner fine but streams every chart tile live. Nothing breaks; the
-registration is feature-detected.
+runs the planner fine but reloads the app from the server each time. Nothing
+breaks; the registration is feature-detected.
 
 The double-click file remains the fallback that needs no server, no install
 and no network. On Windows, `build.cmd` rebuilds it and opens it in one go.
+
+**The MAP always needs internet.** Waypoints, tracks, distances, headings,
+fuel and times all work with no connection, but both base charts are streamed
+and neither can be relied on offline. There is no chart download, and that is
+a settled decision: Avinor sends no CORS header, so a chart tile is an opaque
+response, and browsers charge megabytes of storage quota for one whatever its
+real size — a route's worth filled the quota and got the browser to evict
+everything for the site. The service worker keeps a small tile cache so
+panning is smoother, and that is all it is for.
 
 Cached chart tiles are keyed to the **AIRAC edition**, and the worker refuses
 to serve a tile from cache until the page has told it which cycle is live — a
@@ -51,7 +60,6 @@ module, with no DOM, and is tested in plain Node:
 | `exchange.js` | export/import, and the whitelist that keeps personal data out |
 | `plotting.js` | the copyable chart plotting text |
 | `metar.js` | METAR/TAF from MET Norway, and the little of it that is decoded |
-| `tiles.js` | which chart tiles cover a route, and what storing them really costs |
 | `format.js` | times, coordinates, unit conversion |
 | `dialog.js` | in-app popups and toasts |
 

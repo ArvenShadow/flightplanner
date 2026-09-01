@@ -27,9 +27,11 @@ let knownEdition = null;
  *
  *  - TILES: ICAO VFR chart tiles from Avinor, keyed by the CHART EDITION
  *    (the AIRAC cycle in the mosaic layer name, e.g. AIRAC_19MAR26) and NOT
- *    by app version. An app release must not throw away a chart the pilot
- *    already downloaded, and a new AIRAC cycle MUST throw it away. A stale
+ *    by app version. An app release must not throw away tiles the pilot has
+ *    already looked at, and a new AIRAC cycle MUST throw them away. A stale
  *    chart is a safety problem; a stale app is an inconvenience.
+ *    This is a PANNING CONVENIENCE, not offline chart storage - see
+ *    TILE_LIMIT for why the chart cannot be relied on without internet.
  *
  * THE STALE-CHART RULE: tile URLs do not carry the edition - the same URL
  * returns whatever cycle Avinor currently publishes. So a cached tile is
@@ -49,13 +51,16 @@ const SHELL_ASSETS = ['./', './index.html', './app.js'];
 const TILE_HOST = 'avigis.avinor.no';
 
 // A cap so panning cannot fill the origin's storage quota and get the whole
-// cache evicted, shell included. Raised from 400 in v16.22: a deliberate
-// route download stores a whole corridor at once (the Bardufoss-Tromso
-// corridor is ~280 tiles across z7-z11), and a limit that evicted it as
-// soon as you panned would defeat the point. The page shows a size estimate
-// and checks the browser's storage quota before downloading, so this is a
-// backstop rather than the real bound.
-const TILE_LIMIT = 2500;
+// cache evicted, shell included. It was raised to 2500 in v16.22 to hold a
+// whole downloaded route corridor; that download was removed in v16.26 and
+// the cap is back to 400, which is the point. Avinor sends no CORS header,
+// so a tile is an OPAQUE response and the browser charges MEGABYTES for it
+// whatever its real size (8.46 MB measured for a 68-byte tile). A big limit
+// therefore does not hold more chart - it fills the quota, and the browser
+// then discards everything for this origin, the app shell included. That is
+// what made a "downloaded" chart disappear after zooming out and back in.
+// This cache is a panning convenience only; nothing offline depends on it.
+const TILE_LIMIT = 400;
 
 // knownEdition is declared at the top: null = we do not yet know which AIRAC
 // cycle is live, so no tile may be read from or written to a cache.

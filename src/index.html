@@ -58,9 +58,8 @@
            invisible - which is exactly what happened to the two below. -->
       <div id="map-controls" class="no-print">
         <button id="declutter-btn" class="map-ctl" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
-        <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo (offline-cached) or the official ICAO VFR 1:500 000 from Avinor (needs internet). Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
+        <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo or the official ICAO VFR 1:500 000 from Avinor. Both are streamed and need internet. Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
         <button id="chart-detail-btn" class="map-ctl" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
-        <button id="chart-dl-btn" class="map-ctl" title="Download the ICAO VFR chart for this whole route so it works with no internet, and stops reloading as you pan. Needs the hosted version or localhost - a page opened straight from a file cannot store charts." onclick="downloadRouteChart()">⬇ Chart</button>
       </div>
       <div id="chart-label"></div>
     </div>
@@ -311,7 +310,7 @@
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
             <li><b>Climbs and descents are planned across leg boundaries</b>: a climb that doesn't fit its leg simply continues on the next (the ▲ TOC lands on the leg where the altitude is actually reached), and a descent that doesn't fit its leg <b>backs up onto earlier legs</b> — the ▼ TOD names the low waypoint it serves (e.g. "TOD · 7.2 NM before B → 200' at C") — so you always cross a waypoint AT its planned altitude, never above it. A circuit (pattern) stop breaks the chain. If even all the preceding distance can't absorb the descent, the red integrity banner says so instead of letting you plan an arrival that's too high.</li>
             <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
-            <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service (needs internet; topo is the offline choice). The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
+            <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service. <b>Both charts need internet</b> — neither is stored on your machine. The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
             <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (their exact-position dots remain); zoomed further out only dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
           </ul>
         </div>
@@ -353,7 +352,9 @@
         <div class="setting-section">
           <h3>📡 Offline</h3>
           <ul style="margin-left:16px;">
-            <li>The whole app is one self-contained file — with no internet, only the background map tiles go blank; planning, routes and calculations keep working, and tiles reload automatically when the connection returns.</li>
+            <li><b>The planner works with no internet; the map does not.</b> Waypoints, tracks, distances, headings, fuel and times all keep working — only the background chart goes blank, and it reloads automatically when the connection returns. Winds aloft, METAR/TAF and the update check need a connection too.</li>
+            <li>Opened from the hosted address, the app itself is stored by your browser after the first visit and opens offline. The double-click file needs nothing at all — it is one self-contained file.</li>
+            <li><b>There is no chart download, on purpose.</b> A version of this existed and was removed: Avinor's chart tiles come without the header a browser needs to measure them, so the browser charges megabytes of storage for each one whatever its real size. A route's worth filled the storage allowance, and the browser then threw away everything for the site — the chart worked for a while and then vanished. A button promising an offline chart that quietly loses it is worse than no button. <b>Plan on the paper chart being your offline chart.</b></li>
           </ul>
         </div>
 
@@ -848,7 +849,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.25';
+    const APP_VERSION = '16.26';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1142,16 +1143,13 @@
       const note = document.createElement('div');
       note.id = 'offline-tile-note';
       note.style.cssText = 'position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:1000; background:#c05621; color:white; font-size:11px; font-weight:600; padding:6px 12px; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.4); max-width:90%; text-align:center;';
-      // Do NOT promise an offline topo map: the service worker caches only
-      // this app's own files and Avinor chart tiles. Kartverket tiles are
-      // held by the ordinary browser cache, which may or may not still have
-      // them. Saying otherwise sent a pilot looking for a map that was never
-      // stored.
-      note.innerHTML = '📡 No chart tiles - the chart is streamed and needs internet. ' +
-        'Waypoints, tracks, fuel and times all still work offline. ' +
-        (chartCacheAvailable()
-          ? 'Only areas you downloaded with \u2b07 Chart, at the same Detail setting, are held offline.'
-          : 'This page cannot store charts offline; open the hosted version or localhost for that.');
+      // Do NOT promise an offline map of any kind. Neither base chart is
+      // available without internet: Kartverket tiles are held only by the
+      // ordinary browser cache, which may or may not still have them, and
+      // Avinor tiles are evicted freely (see 2c). Saying otherwise sent a
+      // pilot looking for a map that was never reliably stored.
+      note.innerHTML = '📡 No chart tiles - both charts are streamed and need internet. ' +
+        'Waypoints, tracks, fuel and times all still work offline.';
       document.getElementById('map-container').appendChild(note);
       setTimeout(() => { const n = document.getElementById('offline-tile-note'); if (n) n.remove(); }, 12000);
     });
@@ -2342,18 +2340,18 @@
     // =========================================================================
 
     // =========================================================================
-    // 2c. DOWNLOAD THE CHART FOR THIS ROUTE
+    // 2c. CHART DETAIL SETTING
     //
-    // Avinor serves tiles with `must-revalidate, max-age=0`, so the browser
-    // may never reuse one without asking the server first - which is why
-    // panning the VFR chart feels like it reloads constantly. A service
-    // worker is not bound by that: once a tile is in its cache we serve it
-    // outright. Panning already fills that cache tile by tile; this fetches
-    // the whole route corridor in one go, so the chart then works with no
-    // network at all.
+    // What makes the VFR chart feel slow is DECODING, not the network: an
+    // 856 px tile takes 58.1 ms to rasterise against 2.6 ms for a 256 px
+    // one, so a zoom-9 screenful is over a second of pure decode. No amount
+    // of caching removes that. The setting caps the requested resolution on
+    // the overview zooms, where the extra detail is not read anyway, and
+    // leaves z10-z11 - where frequencies, MEF and airspace limits are
+    // actually read - untouched.
     //
-    // Only possible on a secure context (the hosted URL, or localhost) -
-    // a file:// page cannot register a worker, and the button says so.
+    // There is NO offline chart download, and this is a settled decision -
+    // see the note further down for why it cannot be made to work.
     // =========================================================================
 
     const CHART_DETAIL_LABELS = { auto: 'Auto', sharp: 'Sharp', fast: 'Fast' };
@@ -2368,135 +2366,26 @@
       updateChartDetailBtn();
       // new tile URLs, so the layer must refetch rather than reuse what it has
       if (baseChart() === 'vfr') { vfrTiles.redraw(); }
-      // A downloaded chart is tied to the mode it was fetched at, because the
-      // mode changes the tile URL. Say so rather than letting the pilot find
-      // out when the map is blank and the wifi is off.
-      try {
-        const dl = JSON.parse(localStorage.getItem('c182_chart_download') || 'null');
-        if (dl && dl.mode && dl.mode !== chartDetail()) {
-          say('The chart you downloaded was stored at Detail: ' + (CHART_DETAIL_LABELS[dl.mode] || dl.mode) +
-              '. At this setting the planner asks Avinor for different tiles, so the offline copy will ' +
-              'not be used. Switch back, or download again.', 'warn', 9000);
-        }
-      } catch (e) { /* advisory only */ }
       const m = chartDetail();
       say(m === 'sharp' ? 'Sharp: full chart detail at every zoom. The overview costs about a second per screen to draw.'
         : m === 'fast' ? 'Fast: light tiles everywhere. Quickest to pan; the small print will not be readable.'
         : 'Auto: full detail where you read the chart, lighter on the overview.', 'info', 6000);
     }
 
-    function chartCacheAvailable() {
-      return typeof navigator !== 'undefined' && 'serviceWorker' in navigator &&
-             !!navigator.serviceWorker.controller && typeof caches !== 'undefined';
-    }
-
-    async function downloadRouteChart() {
-      const btn = document.getElementById('chart-dl-btn');
-      if (!chartCacheAvailable()) {
-        await ask({
-          title: 'Offline charts need the hosted version',
-          message: 'A page opened straight from a file cannot store charts - the browser only ' +
-                   'allows that on a secure address.\n\nOpen the planner from your GitHub Pages ' +
-                   'URL, or run serve.cmd and use http://localhost:8182, and this button will ' +
-                   'download the chart for the whole route.',
-          buttons: [{ id: 'ok', label: 'OK', variant: 'primary' }]
-        });
-        return;
-      }
-      if (!vfrEdition) {
-        await ask({
-          title: 'Chart edition not known yet',
-          message: 'The planner has not yet read which AIRAC cycle Avinor is publishing, and it ' +
-                   'will not store chart tiles until it has - a cached chart of unknown vintage ' +
-                   'is worse than none.\n\nSwitch to the ICAO VFR chart, wait a moment, and try again.',
-          buttons: [{ id: 'ok', label: 'OK', variant: 'primary' }]
-        });
-        return;
-      }
-
-      const bounds = routeBounds(flights);
-      if (!bounds) { say('Add some waypoints first.', 'warn'); return; }
-
-      // NO storage prediction. The obvious way to size this - store a probe
-      // entry and watch navigator.storage.estimate() - does not work: browsers
-      // RANDOMISE the padding on opaque entries precisely so a page cannot
-      // measure them, and the usage figure updates asynchronously. Six
-      // consecutive probes of the same operation measured 0.38 MB to 10.15 MB.
-      // A number that swings 27x is worse than no number, and refusing a
-      // download on the strength of it is worse still.
-      //
-      // So: state the download size (which IS known), state honestly that
-      // browser storage costs several MB per tile for reasons outside our
-      // control, then attempt it and report what actually stored.
-      const zMin = 8, zMax = 11;
-      const { tiles, capped } = tilesForBounds(bounds, zMin, zMax);
-      const wire = estimateBytes(tiles, (z, y) => vfrTilePx(z, y, window.devicePixelRatio, chartDetail()));
-      const mode = chartDetail();
-
-      const r = await ask({
-        title: 'Download the chart for this route?',
-        message: tiles.length + ' tiles, zoom ' + zMin + '-' + zMax + ' over the route corridor - about ' +
-                 formatBytes(wire) + ' to download.' +
-                 (capped ? '\n\nThe area is large and the list was capped; only part will be stored.' : '') +
-                 '\n\nIt will occupy MUCH more than that in browser storage - Avinor does not send the ' +
-                 'header that would let the browser read the tiles, so each is stored as an opaque ' +
-                 'response and charged several megabytes whatever its real size. That is a browser ' +
-                 'privacy rule and cannot be measured or worked around; expect a few GB for a route ' +
-                 'this size, and free disk space if it fails.' +
-                 '\n\nDownloaded for chart edition ' + vfrEdition + ' at Detail: ' +
-                 CHART_DETAIL_LABELS[mode] + '. Changing either means downloading again, because both ' +
-                 'change what is requested from Avinor.',
-        buttons: [
-          { id: 'go', label: 'Download', variant: 'primary' },
-          { id: 'cancel', label: 'Cancel', variant: 'ghost' }
-        ]
-      });
-      if (r.id !== 'go') return;
-
-      if (btn) btn.disabled = true;
-      let done = 0, failed = 0;
-      const report = () => { if (btn) btn.textContent = '⬇ ' + Math.round(100 * done / tiles.length) + '%'; };
-      report();
-      // A few at a time: enough to be quick, not so many that the planner
-      // stops responding or Avinor is hammered.
-      const QUEUE = 6;
-      let next = 0;
-      async function worker() {
-        while (next < tiles.length) {
-          const t = tiles[next++];
-          try {
-            const resp = await fetch(vfrTileUrl(t.z, t.x, t.y), { mode: 'no-cors' });
-            if (!resp || (resp.status && resp.status >= 400)) failed++;
-          } catch (e) { failed++; }
-          done++;
-          if (done % 5 === 0 || done === tiles.length) report();
-        }
-      }
-      await Promise.all(Array.from({ length: QUEUE }, worker));
-      if (btn) { btn.disabled = false; btn.textContent = '⬇ Chart'; }
-      try {
-        localStorage.setItem('c182_chart_download', JSON.stringify({ edition: vfrEdition, mode: mode }));
-      } catch (e) { /* remembering is a convenience */ }
-      // Report what is actually HELD, not what was requested: a fetch can
-      // succeed while the browser refuses to store it, which is precisely
-      // the case that made an earlier version claim success and then show a
-      // blank chart offline.
-      let held = 0;
-      try {
-        const c = await caches.open('c182-tiles-' + String(vfrEdition).replace(/[^A-Za-z0-9_-]/g, ''));
-        held = (await c.keys()).length;
-      } catch (e) { held = -1; }
-      const ok = tiles.length - failed;
-      say(held >= 0 && held < ok * 0.9
-        ? 'Fetched ' + ok + ' tiles but the browser only kept ' + held + '. It is out of storage for ' +
-          'this site - free disk space, or plan a shorter route. The chart will NOT work offline.'
-        : failed
-          ? 'Stored ' + ok + ' of ' + tiles.length + ' tiles; ' + failed + ' could not be fetched. ' +
-            'Try again on a better connection.'
-          : 'Chart downloaded (' + tiles.length + ' tiles, held ' + held + '). Offline at Detail: ' +
-            CHART_DETAIL_LABELS[mode] + '.',
-        (held >= 0 && held < ok * 0.9) ? 'bad' : failed ? 'warn' : 'good', 9000);
-    }
+    // THE OFFLINE CHART DOWNLOAD WAS REMOVED IN v16.26, and must not come
+    // back without a tile source that sends CORS headers.
+    //
+    // Avinor sends no Access-Control-Allow-Origin, so every chart tile is an
+    // OPAQUE response, and browsers deliberately PAD the storage cost of
+    // those so a page cannot measure cross-origin resources by watching its
+    // own quota. Chromium charged 8.46 MB for a single 68-byte tile, and
+    // randomised the padding so it could not even be measured (six probes of
+    // the same operation: 0.38 to 10.15 MB). A route corridor therefore cost
+    // gigabytes of quota, and the browser resolved that the only way it can -
+    // by evicting the whole origin. That is exactly what the pilot saw: a
+    // chart that worked for a while, then vanished after zooming out and back
+    // in. A download button that silently loses what it downloaded is worse
+    // than no button.
 
     function metarStatus(msg, isError) {
       const el = document.getElementById('metar-status');
