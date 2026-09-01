@@ -15,6 +15,25 @@ claude.ai; this repo is the continuation point for Claude Code.
    feature is not built — an honest "no" beats a plausible wrong answer.
    When data may be outdated or unofficial, say so in the UI and the guide.
 
+## Licence constraint (v16.29 — NEW, and it binds the whole project)
+
+The AIP airspace data comes from Avinor's eAIP, which is **copyright Avinor
+AS**: GEN 0.1 states that any use outside copyright law is inadmissible
+without permission. **The user HOLDS that permission, conditional on the
+software not being used commercially.**
+
+That condition is now a constraint on the project, not a footnote:
+
+- The planner MUST NOT be commercialised while `data/aip.js` ships with it.
+  If commercial use is ever wanted, the AIP dataset comes out first.
+- The attribution and the non-commercial condition are stated in the dataset
+  itself, in `tools/build-aip.mjs`, and in the app (guide + attribution line).
+  A test asserts the dataset carries them.
+- This is a PERMISSION, not an open licence. It does not transfer to anyone
+  who forks the repo, and it cannot be widened by assumption. Kartverket
+  (topo tiles, and the national-border WFS if that is ever wired in) is
+  separately NLOD; MET Norway is NLOD 2.0. Do not conflate the three.
+
 ## Architecture (deliberate, do not "modernize")
 
 - **v16.14 (user decision, premise changed AGAIN): the planner is now
@@ -493,6 +512,75 @@ errors is the standard.
   width for nothing. `legMidpoint` stays in legs.js (tested, cheap) in case
   a positioned insert is wanted again. The right-click gesture and the
   leg-splitting rules are unchanged.
+- **AIP airspace (v16.29, roadmap item 4 — the DATA half is built)**: 140
+  drawable airspaces (53 TMA volumes, 33 TIZ, 19 CTR, 17 TIA, 6 ADS, 5 CTA,
+  2 RMZ/TMZ, 2 HTZ, 1 RMZ) with class, published vertical limits, callsigns
+  and frequencies, from the official Avinor eAIP. Permission held — see the
+  Licence constraint at the top. The planner OVERLAY is not built yet; this
+  is the importer and the dataset.
+  - THE SOURCE IS NOT PROSE, AND THIS IS THE WHOLE TRICK. The eAIP is
+    generated from Avinor's AIP database and carries the DATABASE FIELD
+    NAMES in hidden spans:
+      `<span class="SD">4500</span><span class="sdParams">TAIRSPACE_VOLUME;VAL_DIST_VER_UPPER;1058</span>`
+    The vocabulary is AIXM-derived. So every value we need is individually
+    identified at source and NOTHING is inferred from English wording: a
+    vertical limit arrives as three separate fields (VAL / UOM / CODE), a
+    frequency arrives with its unit, a class arrives as a code, and a
+    national-border reference arrives as `TGEO_BORDER;TXT_NAME`. A parser
+    that read the sentence would be guessing.
+  - EDITION DISCOVERY: GET `/no/AIP` and follow the redirect to
+    `/View/Index/<N>`; do NOT hardcode the index, or a superseded edition is
+    served silently. Then probe AIRAC dates backwards from today (28-day
+    series) and read `effectiveDateStart` from AD 1.3's meta. Verified Sep
+    2026: index 154, edition 2026-06-11-AIRAC, and that IS current — an eAIP
+    edition is republished per AIP AMDT, not per 28-day cycle, so a June
+    edition being current in September is normal, not stale.
+  - THREE STRUCTURAL TRAPS, each of which broke a first attempt and each of
+    which is now a test:
+    1. AN EMPTY VALUE IS A SELF-CLOSING SPAN (`<span class="SD" id="X"/>`).
+       A `>...</span>` regex runs straight past it and captures the NEXT
+       field's marker as this field's value. Empty is also MEANINGFUL: GND as
+       a lower limit has no UOM and no CODE, which is exactly how a code-only
+       limit is distinguished from a measured altitude.
+    2. A `sdParams` SPAN IS SOMETIMES NESTED INSIDE ITS `SD` SPAN (12 times
+       in ENR 2.1), so a flat previous-sibling walk mis-assigns those. The
+       scan is nesting-aware.
+    3. ENR 2.1 PUBLISHES THE AIRSPACE TYPE AS UNTAGGED TEXT after the name
+       (`<span class="SD">Alta</span><span class="sdParams">…CUSTOM_ATT24…</span>
+       <span>TMA</span>`), where AD 2 tags it as `TXT_LOCAL_TYPE`. Without
+       reading the trailing text, 114 of 197 ENR 2.1 entries were
+       unclassified blobs.
+  - VERTICAL LIMITS ARE NEVER COLLAPSED TO A NUMBER. GND/SFC/UNL are codes
+    and a flight level is not an altitude AMSL, so `ft` is filled in ONLY for
+    a published measured altitude and the datum is kept beside it. Metres are
+    shown as published and left numerically unresolved rather than converted.
+    FL is published as VAL=105 UOM=FL and must render "FL 105", not "105 FL".
+  - WHAT IS DELIBERATELY ABSENT, and it is reported, never approximated:
+    22 volumes whose boundary references the NATIONAL BORDER, and 18 offshore
+    HTZ/ADS published as a circle radius rather than a polygon. Joining the
+    published points with straight lines would draw a boundary that does not
+    exist. Resolving border references needs Kartverket's official boundary
+    (their `wfs.geonorge.no` administrative-units WFS publishes `Riksgrense`
+    under NLOD) prepared offline and snapped with a tolerance; that is the
+    next upgrade, not a guess to make now.
+    FIR/UIR/OCA and the Polaris ACC sectors are excluded on purpose: the FIR
+    is the whole country and an ACC sector is an en-route division far above
+    a C182 — drawing them buries the CTRs and TMAs that matter.
+  - The eAIP restates 22 volumes verbatim; drawing them twice double-darkens
+    the polygon and shows two airspaces where there is one. Deduplicated on
+    (name, band, ring), and a test asserts no polygon is drawn twice.
+  - 140 features = 152 KB raw, 12.8 KB gzipped, shipped as `data/aip.js`
+    assigning `window.C182_AIP`. A SIDECAR, not JSON, for the same reason the
+    bundle is a classic script: `fetch()` and ES modules are both blocked on
+    a file:// page. `.aip-cache/` holds the fetched pages so a re-run and a
+    parser change need no network; it is gitignored, `data/` is committed.
+  - REPORTING POINTS ARE NOT IN THE eAIP HTML. There is no reporting-point
+    marker on an AD 2 page — verified against the full 189-marker vocabulary
+    for ENDU. They exist only on the VAC chart. Either transcribe the VAC's
+    printed coordinate table per aerodrome (which is what 1ntray did, for 23
+    of them, and 23 more VACs publish their points graphically only) or get
+    Avinor's AIXM 5.1 export, which likely carries DesignatedPoints properly.
+    Do NOT read coordinates off a chart image.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
@@ -522,9 +610,14 @@ scoped. In the user's order:
    above); this must come from the official AIP Norge, and the licence and
    update path have to be verified BEFORE any of it is built.
 4. **More AIP: draw every airspace** with hoverable name, vertical limits,
-   class, and the frequencies plus station callsigns. Same sourcing rule as
-   3, and the same reason the old overlay was deleted: a chart that lags the
-   current VFR chart is a plausible wrong answer.
+   class, and the frequencies plus station callsigns. **DATA DONE at v16.29**
+   (see the AIP airspace entry above): 140 airspaces imported from the
+   official eAIP with class, limits, callsigns and frequencies. What remains
+   is the planner overlay itself — a Leaflet layer per airspace kind with
+   min-zoom and viewport culling (140 polygons drawn at once will choke the
+   map), hover for the name, click for the detail, a layer toggle in
+   PROFILE_KEYS, and the attribution line. Sourcing rule satisfied: it is
+   AIP Norge, it names its edition, and permission is held.
 5. **Mass & Balance from the Excel sheet.** NOTE: CLAUDE.md currently
    records M&B as explicitly OUT OF SCOPE at the user's own decision. That
    entry is now superseded by this roadmap item, but the work needs the

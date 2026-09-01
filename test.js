@@ -2583,6 +2583,110 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
     'the card does not tell the pilot to get a real briefing');
 });
 
+console.log('\n=== 64. AIP airspace import (Avinor eAIP, v16.29) ===');
+T('the eAIP field extractor survives the source structure', () => {
+  const aip = require('./tools/aip-fields.mjs');
+  const html = fs.readFileSync('test-fixtures/eaip-snippet.html', 'utf8');
+  const fields = aip.extractFields(html);
+  assert(fields.length === 15, 'expected 15 tagged fields, got ' + fields.length);
+
+  // The airspace TYPE is untagged text after the name in ENR 2.1. Without
+  // reading it, every ENR 2.1 entry is an unclassified blob.
+  const name = fields.find(f => f.field === 'CUSTOM_ATT24');
+  assert(name.value === 'Alta' && name.after === 'TMA',
+    'name/type: ' + JSON.stringify([name.value, name.after]));
+
+  const rec = aip.groupRecords(fields);
+  const vol = rec.get('TAIRSPACE_VOLUME').get('1058').fields;
+  // AN EMPTY VALUE IS A SELF-CLOSING SPAN. A greedy regex runs past it and
+  // steals the next field's marker, which is how GND acquired a bogus unit.
+  assert(vol.UOM_DIST_VER_LOWER === '' && vol.CODE_DIST_VER_LOWER === '',
+    'the self-closing empty span was mis-read: ' + JSON.stringify(vol));
+  assert(vol.VAL_DIST_VER_UPPER === '4500' && vol.UOM_DIST_VER_UPPER === 'FT'
+    && vol.CODE_DIST_VER_UPPER === 'AMSL', 'upper limit fields: ' + JSON.stringify(vol));
+
+  // A sdParams span is SOMETIMES NESTED INSIDE its SD span (12 times in
+  // ENR 2.1). It describes the enclosing value, not the preceding one.
+  assert(rec.get('TAIRSPACE_VOLUME').get('1300').fields.UOM_DIST_VER_UPPER === '105',
+    'a nested marker was attributed to the wrong value');
+});
+T('a vertical limit is never collapsed into a bare number', () => {
+  const aip = require('./tools/aip-fields.mjs');
+  // GND / SFC / UNL are codes, not altitudes.
+  const gnd = aip.verticalLimit('GND', '', '');
+  assert(gnd.text === 'GND' && gnd.ft === null && gnd.kind === 'code', JSON.stringify(gnd));
+  // A flight level is published VAL=105 UOM=FL. It reads "FL 105", and it is
+  // NOT comparable with an AMSL altitude without a QNH, so ft stays null.
+  const fl = aip.verticalLimit('105', 'FL', '');
+  assert(fl.text === 'FL 105' && fl.ft === null && fl.kind === 'flight-level', JSON.stringify(fl));
+  // Only a real measured altitude gets a number, and it keeps its datum.
+  const alt = aip.verticalLimit('4500', 'FT', 'AMSL');
+  assert(alt.ft === 4500 && alt.datum === 'AMSL' && alt.kind === 'altitude', JSON.stringify(alt));
+  // Metres are NOT silently converted - the published text stands and the
+  // number is left unresolved.
+  const m = aip.verticalLimit('300', 'M', 'AMSL');
+  assert(m.ft === null && /300 M AMSL/.test(m.text), JSON.stringify(m));
+});
+T('a malformed coordinate yields null, never a plausible position', () => {
+  const aip = require('./tools/aip-fields.mjs');
+  assert(Math.abs(aip.parseDms('691500N') - 69.25) < 1e-9, 'lat');
+  assert(Math.abs(aip.parseDms('0175300E') - 17.8833333333) < 1e-6, 'lng');
+  assert(aip.parseDms('0175300W') < 0, 'west must be negative');
+  for (const bad of ['nonsense', '696500N', '691575N', '', '9999999E', '691500X']) {
+    assert(aip.parseDms(bad) === null, 'accepted a malformed coordinate: ' + bad);
+  }
+});
+T('the generated dataset is present, current, and states its permission', () => {
+  assert(fs.existsSync('data/aip.js'), 'data/aip.js is missing - run npm run build:aip');
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  assert(set.provider === 'Avinor' && set.source === 'eAIP', 'provenance lost');
+  assert(/permission/i.test(set.attribution) && /non-commercial/i.test(set.attribution),
+    'the dataset does not carry the permission it depends on: ' + set.attribution);
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(set.effectiveFrom), 'no effective date: ' + set.effectiveFrom);
+
+  // Every feature must carry a published class or an explicit null, published
+  // limits as TEXT, a ring of at least three points, and its AIP section.
+  assert(set.features.length > 100, 'only ' + set.features.length + ' airspaces');
+  for (const f of set.features) {
+    assert(f.ring.length >= 3, f.name + ' has ' + f.ring.length + ' points');
+    assert(f.ring.every(p => Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180), f.name + ' has an off-globe point');
+    assert(typeof f.lower.text === 'string' && typeof f.upper.text === 'string', f.name + ' lost its limit text');
+    assert(f.source && f.source.section && /aim-prod\.avinor\.no/.test(f.source.url), f.name + ' has no traceable source');
+    assert('class' in f, f.name + ' has no class field');
+  }
+  // Spot-check against the printed chart: Bardufoss CTR is class D, GND to
+  // 4500 ft AMSL, and Tromso CTR likewise to 4500 ft.
+  const byName = (n) => set.features.find(f => f.name === n);
+  const endu = byName('Bardufoss CTR');
+  assert(endu && endu.class === 'D' && endu.lower.text === 'GND' && endu.upper.text === '4500 FT AMSL',
+    'Bardufoss CTR: ' + JSON.stringify(endu && [endu.class, endu.lower.text, endu.upper.text]));
+  assert(endu.freqs.some(f => f.mhz === '118.105'), 'Bardufoss TWR 118.105 missing');
+  assert(endu.callsigns.includes('Bardufoss Tower'), 'callsign missing: ' + endu.callsigns);
+  const tma = set.features.filter(f => /^Bardufoss TMA/.test(f.name));
+  assert(tma.length === 3, 'expected 3 Bardufoss TMA volumes, got ' + tma.length);
+  assert(tma.every(f => f.class === 'C'), 'Bardufoss TMA class: ' + tma.map(f => f.class));
+  assert(new Set(tma.map(f => f.lower.text)).size === 3, 'the three TMA floors collapsed');
+});
+T('nothing is approximated: every omission is reported with a reason', () => {
+  const report = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  assert(report.skipped.length > 0, 'no omissions recorded at all - suspicious');
+  for (const s of report.skipped) {
+    assert(s.reason && s.name, 'an omission has no reason: ' + JSON.stringify(s));
+  }
+  // A boundary that references the national border cannot be drawn from the
+  // published points alone; joining them with straight lines would invent a
+  // boundary. Those airspaces are absent and named, not guessed.
+  assert(report.skippedByReason['national-border-reference'] > 0,
+    'border-referenced airspaces are no longer being reported - are they being approximated?');
+  const src = fs.readFileSync('tools/build-aip.mjs', 'utf8');
+  assert(/never approximated/i.test(src), 'the reason for skipping is undocumented');
+  // and no two drawn features may be the same polygon twice
+  const set = JSON.parse((() => { const s = fs.readFileSync('data/aip.js', 'utf8'); return s.slice(s.indexOf('{'), s.lastIndexOf(';')); })());
+  const keys = set.features.map(f => f.name + '|' + f.lower.text + '|' + f.upper.text + '|' + JSON.stringify(f.ring));
+  assert(new Set(keys).size === keys.length, 'the dataset draws the same airspace twice');
+});
+
 console.log('\n=== 62b. TOC/TOD marks (the vanishing TOD, v16.28) ===');
 T('a TOD that lands ON a waypoint is still drawn (v16.28 bug fix)', () => {
   const L2 = moduleExports.legs;

@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.28)
+# C182 Flight Planner (v16.29)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -35,6 +35,24 @@ panning is smoother, and that is all it is for.
 Cached chart tiles are keyed to the **AIRAC edition**, and the worker refuses
 to serve a tile from cache until the page has told it which cycle is live — a
 chart from a superseded cycle is a safety problem, not a stale asset.
+
+## Airspace data
+
+`data/aip.js` holds 140 Norwegian airspaces — CTR, TMA, TIZ, TIA, CTA and the
+offshore zones — with their published class, vertical limits, callsigns and
+frequencies, imported from the **official Avinor eAIP** by
+`npm run build:aip`. The import runs at build time only: the planner never
+contacts Avinor and never parses eAIP HTML.
+
+**Used with permission from Avinor AS, for non-commercial use only.** That is
+a permission granted to this project, not an open licence — it does not travel
+to a fork, and the planner must not be commercialised while this dataset ships
+with it.
+
+Airspaces whose published boundary follows the national border, or is a circle
+around an offshore platform, are **absent rather than approximated**, and
+`data/aip-report.json` names every one and why. Drawing a straight line
+between the published points would invent a boundary that does not exist.
 
 **To work on it:** edit `src/`, then rebuild.
 
