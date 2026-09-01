@@ -31,10 +31,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { extractFields, parseDms, verticalLimit } from './aip-fields.mjs';
+import { borderPath, isForeignBorder, SNAP_TOLERANCE_NM } from './aip-border.mjs';
 
 const CACHE = '.aip-cache';
 const OUT_DATA = 'data/aip.js';
 const OUT_REPORT = 'data/aip-report.json';
+const BORDER_FILE = 'tools/prepared/norway-border.json';
 const ROOT = 'https://aim-prod.avinor.no';
 const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning; permission held)';
 
@@ -98,40 +100,84 @@ async function page(edition, name) {
 }
 
 /**
- * Split one page's field stream into airspace blocks.
+ * Split one page's field stream into airspace blocks, and each block into its
+ * SUB-VOLUMES.
  *
- * Document order IS the structure: the published table states an airspace's
- * name, then its lateral limits, then its vertical limits, class, unit and
- * frequencies, before the next airspace begins. So a new block starts at
- * every `TAIRSPACE;CUSTOM_ATT24` (the name) and everything until the next one
- * belongs to it. The numeric record ids are pairing keys within a block, not
- * identities across the document - the same id can recur - so they are never
- * used as feature ids.
+ * THE STRUCTURE, read off the source rather than assumed (this is what a first
+ * version got wrong, and it produced 71 self-crossing polygons): a stepped
+ * TMA is published as several sub-volumes, and EACH ONE HAS ITS OWN LATERAL
+ * RING as well as its own vertical band and class. Document order is:
+ *
+ *   Alta  TMA                        <- TAIRSPACE;CUSTOM_ATT24 + untagged type
+ *     <vertices of sub-volume 1>
+ *     TAIRSPACE_VOLUME;...;1411      <- band of sub-volume 1
+ *     TAIRSPACE_LAYER_CLASS;...      <- class of sub-volume 1
+ *     <vertices of sub-volume 2>
+ *     TAIRSPACE_VOLUME;...;1007
+ *     ...
+ *
+ * So the vertices accumulated since the previous volume belong to the volume
+ * that closes them. Concatenating a block's vertices into one ring merges
+ * several separate lateral areas into a bow tie - the polygon crosses itself
+ * and the airspace it draws does not exist.
+ *
+ * Frequencies, units and callsigns are stated once per block, after the
+ * volumes, and apply to all of them.
+ *
+ * The numeric record ids are pairing keys within a block, not identities
+ * across the document - the same id can recur - so they are never used as
+ * feature ids.
  */
 function airspaceBlocks(fields) {
   const blocks = [];
   let cur = null;
+  /** vertices/border refs seen since the last volume closed */
+  let pending = [];
+  let volume = null;
+
+  const closeVolume = () => { volume = null; };
+
   for (const f of fields) {
     if (f.record === 'TAIRSPACE' && f.field === 'CUSTOM_ATT24') {
-      cur = { name: f.value, type: (f.after || '').trim(), vertices: [], volumes: new Map(), classes: [], borders: [], freqs: new Map(), units: [] };
+      cur = { name: f.value, type: (f.after || '').trim(), volumes: [], outline: [], freqs: new Map(), units: [] };
       blocks.push(cur);
+      pending = []; volume = null;
       continue;
     }
     if (!cur) continue;
+
     if (f.record === 'TAIRSPACE' && f.field === 'TXT_LOCAL_TYPE') { cur.type = f.value || cur.type; continue; }
-    if (f.record === 'TGEO_BORDER') { cur.borders.push(f.value); continue; }
+
+    if (f.record === 'TGEO_BORDER' && f.field === 'TXT_NAME') {
+      pending.push({ kind: 'border', name: f.value });
+      cur.outline.push(pending[pending.length - 1]);
+      continue;
+    }
     if (f.record === 'TAIRSPACE_VERTEX') {
-      const last = cur.vertices[cur.vertices.length - 1];
-      if (f.field === 'GEO_LAT') cur.vertices.push({ id: f.id, lat: f.value, lng: null });
-      else if (f.field === 'GEO_LONG' && last && last.lng === null) last.lng = f.value;
+      // A vertex after a volume closed starts the NEXT sub-volume's ring.
+      if (volume) closeVolume();
+      const last = pending[pending.length - 1];
+      if (f.field === 'GEO_LAT') {
+        pending.push({ kind: 'vertex', id: f.id, lat: f.value, lng: null });
+        cur.outline.push(pending[pending.length - 1]);   // same objects, block order
+      }
+      else if (f.field === 'GEO_LONG' && last && last.kind === 'vertex' && last.lng === null) last.lng = f.value;
       continue;
     }
     if (f.record === 'TAIRSPACE_VOLUME') {
-      if (!cur.volumes.has(f.id)) cur.volumes.set(f.id, {});
-      cur.volumes.get(f.id)[f.field] = f.value;
+      if (!volume || volume.id !== f.id) {
+        volume = { id: f.id, outline: pending, fields: {}, class: null };
+        cur.volumes.push(volume);
+        pending = [];
+      }
+      volume.fields[f.field] = f.value;
       continue;
     }
-    if (f.record === 'TAIRSPACE_LAYER_CLASS' && f.field === 'CODE_CLASS') { cur.classes.push(f.value); continue; }
+    if (f.record === 'TAIRSPACE_LAYER_CLASS' && f.field === 'CODE_CLASS') {
+      // The class row follows the volume it belongs to.
+      if (volume && volume.class === null) volume.class = f.value;
+      continue;
+    }
     if (f.record === 'TUNIT' && f.field === 'TXT_NAME') { cur.units.push(f.value); continue; }
     if (f.record === 'TCALLSIGN_DETAIL' && f.field === 'CUSTOM_ATT7') { cur.units.push(f.value); continue; }
     if (f.record === 'TFREQUENCY') {
@@ -143,26 +189,76 @@ function airspaceBlocks(fields) {
   return blocks;
 }
 
-/** A published ring, or a reason it cannot be drawn. */
-function ringOf(block) {
-  if (block.borders.length) {
-    return { skip: 'national-border-reference', detail: block.borders.join(', ') };
-  }
+/**
+ * The published ring, with any national-border stretch expanded from
+ * Kartverket's prepared boundary - or a reason it cannot be drawn.
+ *
+ * A border reference means "from the previous published fix, ALONG THIS
+ * BORDER, to the next one". So the outline is walked in order: a vertex
+ * contributes its point, a border item contributes the boundary between its
+ * two neighbours. Nothing is ever joined with a straight line to stand in for
+ * a border - if the border cannot be resolved the whole airspace is refused.
+ */
+function ringOf(outline, label, border, report) {
   const pts = [];
-  for (const v of block.vertices) {
-    const lat = parseDms(v.lat), lng = parseDms(v.lng || '');
-    if (lat === null || lng === null) return { skip: 'unparsable-coordinate', detail: `${v.lat} ${v.lng}` };
-    // The published ring repeats its first point to close; drop the repeat.
+  /** @type {{name: string, snapFromNM: number, snapToNM: number, lengthNM: number}[]} */
+  const resolved = [];
+  const push = (p) => {
     const prev = pts[pts.length - 1];
-    if (prev && prev[0] === lat && prev[1] === lng) continue;
-    pts.push([Number(lat.toFixed(6)), Number(lng.toFixed(6))]);
+    if (prev && prev[0] === p[0] && prev[1] === p[1]) return;
+    pts.push(p);
+  };
+  const at = (i) => {
+    const item = outline[i];
+    if (!item || item.kind !== 'vertex') return null;
+    const lat = parseDms(item.lat), lng = parseDms(item.lng || '');
+    if (lat === null || lng === null) return null;
+    return [Number(lat.toFixed(6)), Number(lng.toFixed(6))];
+  };
+
+  for (let i = 0; i < outline.length; i++) {
+    const item = outline[i];
+    if (item.kind === 'vertex') {
+      const p = at(i);
+      if (!p) return { skip: 'unparsable-coordinate', detail: `${item.lat} ${item.lng}` };
+      push(p);
+      continue;
+    }
+    // a border stretch between the fix before it and the fix after it
+    const from = at(i - 1), to = at(i + 1);
+    if (!from || !to) {
+      return { skip: 'border-reference-without-two-fixes', detail: item.name };
+    }
+    if (isForeignBorder(item.name)) {
+      // Kartverket publishes NORWAY's border. A Finland-Sweden stretch is not
+      // in it, and snapping to the nearest Norwegian border instead would be
+      // a silent, confident error.
+      return { skip: 'foreign-border-reference', detail: `${item.name} is not in Norway's national-border dataset` };
+    }
+    if (!border) {
+      return { skip: 'national-border-reference', detail: `${item.name} (no prepared boundary - run npm run build:border)` };
+    }
+    const path = borderPath(border.line, from, to);
+    if ('refuse' in path) {
+      return { skip: path.refuse, detail: `${item.name}: ${path.detail}` };
+    }
+    // borderPath returns from..to inclusive; `from` is already pushed and the
+    // loop will push `to` when it reaches that vertex.
+    for (const p of path.points.slice(1, -1)) push(p);
+    resolved.push({ name: item.name, snapFromNM: path.snapFromNM, snapToNM: path.snapToNM, lengthNM: path.lengthNM });
   }
+
   if (pts.length > 1) {
     const a = pts[0], z = pts[pts.length - 1];
     if (a[0] === z[0] && a[1] === z[1]) pts.pop();
   }
   if (pts.length < 3) return { skip: 'insufficient-coordinates', detail: pts.length + ' points' };
-  return { ring: pts };
+  const maxSnap = resolved.length
+    ? Math.max(...resolved.map((r) => Math.max(r.snapFromNM, r.snapToNM))) : 0;
+  if (resolved.length) {
+    report.borderResolved.push({ name: label, maxSnapNM: Number(maxSnap.toFixed(3)), segments: resolved });
+  }
+  return { ring: pts, borderSegments: resolved.length, maxSnapNM: Number(maxSnap.toFixed(3)) };
 }
 
 const KINDS = [
@@ -188,51 +284,114 @@ function kindOf(type, name) {
   return (type || '').toUpperCase() || 'OTHER';
 }
 
-function buildFeatures(blocks, source, report) {
+/**
+ * Split an outline into closed rings.
+ *
+ * A PUBLISHED RING CLOSES BY REPEATING ITS OWN FIRST VERTEX - that repeat is
+ * the source's own delimiter, not a heuristic. Verified across the whole
+ * edition: for 143 of 144 airspace blocks, splitting on closure yields exactly
+ * as many rings as the block has volumes.
+ *
+ * This is needed because AD 2.17 uses the OPPOSITE layout to ENR 2.1: it lists
+ * every ring first and then every volume, so the per-volume association below
+ * leaves all but the first volume with no vertices at all. Notodden TIZ is the
+ * case that exposed it - 21 vertices and 3 volumes, which without this rule
+ * became one ring crossing itself 35 times.
+ *
+ * @param {{kind: string, lat?: string, lng?: string|null, name?: string}[]} items
+ * @returns {typeof items[]}
+ */
+function splitRings(items) {
+  const rings = [];
+  let cur = [], first = null;
+  for (const it of items) {
+    if (it.kind !== 'vertex') { cur.push(it); continue; }
+    const key = `${it.lat} ${it.lng}`;
+    if (!cur.length) { first = key; cur.push(it); continue; }
+    if (key === first) { rings.push(cur); cur = []; first = null; continue; }
+    cur.push(it);
+  }
+  if (cur.length) rings.push(cur);
+  return rings;
+}
+
+function buildFeatures(blocks, source, report, border) {
   const out = [];
-  // The eAIP restates some volumes (23 of them in this edition), so the same
-  // name, band and ring can arrive twice. Drawing it twice double-darkens the
-  // polygon and shows the pilot two airspaces where there is one.
+  // The eAIP restates a few volumes verbatim. Drawing one twice double-darkens
+  // the polygon and shows two airspaces where there is one.
   const seen = new Set();
+
   for (const b of blocks) {
     const kind = kindOf(b.type, b.name);
-    if (NOT_DRAWN.has(kind)) { report.skipped.push({ name: `${b.name} ${b.type}`.trim(), kind, reason: 'not-a-vfr-planning-airspace', source }); continue; }
-    if (!b.volumes.size) { report.skipped.push({ name: b.name, kind, reason: 'no-published-vertical-limits', source }); continue; }
-
-    const geom = ringOf(b);
-    if (geom.skip) {
-      report.skipped.push({ name: `${b.name} ${b.type}`.trim(), kind, reason: geom.skip, detail: geom.detail, source });
+    const label = `${b.name} ${b.type}`.trim();
+    if (NOT_DRAWN.has(kind)) {
+      report.skipped.push({ name: label, kind, reason: 'not-a-vfr-planning-airspace', source });
+      continue;
+    }
+    if (!b.volumes.length) {
+      report.skipped.push({ name: label, kind, reason: 'no-published-vertical-limits', source });
       continue;
     }
 
-    const freqs = [...b.freqs.values()]
-      .map(f => ({ mhz: (f.VAL_FREQ_TRANS || '').trim(), unit: (f.UOM_FREQ || '').trim() }))
-      .filter(f => f.mhz);
-    const callsigns = [...new Set(b.units.filter(Boolean))];
-    const volumes = [...b.volumes.values()];
+    // AD 2.17 layout: every ring is listed before any volume, so the
+    // per-volume walk gave volume 1 everything and the rest nothing. Recover
+    // by splitting the block's outline on ring closure - but ONLY when a
+    // volume really came back empty, so the ENR 2.1 layout (which states each
+    // volume's own vertices, and is the document's own association) is never
+    // second-guessed.
+    if (b.volumes.length > 1 && b.volumes.some((v) => !v.outline.length)) {
+      const rings = splitRings(b.outline);
+      if (rings.length === b.volumes.length) {
+        b.volumes.forEach((v, i) => { v.outline = rings[i]; });
+      } else {
+        report.skipped.push({
+          name: label, kind, reason: 'rings-do-not-match-volumes',
+          detail: `${rings.length} published ring(s) for ${b.volumes.length} volume(s) - not guessing which is which`,
+          source
+        });
+        continue;
+      }
+    }
 
-    volumes.forEach((v, i) => {
-      const lower = verticalLimit(v.VAL_DIST_VER_LOWER, v.UOM_DIST_VER_LOWER, v.CODE_DIST_VER_LOWER);
-      const upper = verticalLimit(v.VAL_DIST_VER_UPPER, v.UOM_DIST_VER_UPPER, v.CODE_DIST_VER_UPPER);
-      if (!lower.text && !upper.text) return;
+    const freqs = [...b.freqs.values()]
+      .map((f) => ({ mhz: (f.VAL_FREQ_TRANS || '').trim(), unit: (f.UOM_FREQ || '').trim() }))
+      .filter((f) => f.mhz);
+    const callsigns = [...new Set(b.units.filter(Boolean))];
+    const multi = b.volumes.length > 1;
+
+    for (const v of b.volumes) {
+      const lower = verticalLimit(v.fields.VAL_DIST_VER_LOWER, v.fields.UOM_DIST_VER_LOWER, v.fields.CODE_DIST_VER_LOWER);
+      const upper = verticalLimit(v.fields.VAL_DIST_VER_UPPER, v.fields.UOM_DIST_VER_UPPER, v.fields.CODE_DIST_VER_UPPER);
+      if (!lower.text && !upper.text) continue;
       const band = [lower.text, upper.text].filter(Boolean).join(' - ');
-      const name = `${b.name} ${b.type}`.trim() + (volumes.length > 1 && band ? ` (${band})` : '');
+      const name = label + (multi && band ? ` (${band})` : '');
+
+      // EACH sub-volume has its own lateral ring.
+      const geom = ringOf(v.outline, name, border, report);
+      if (geom.skip) {
+        report.skipped.push({ name, kind, reason: geom.skip, detail: geom.detail, source });
+        continue;
+      }
+
       const key = name + '|' + band + '|' + JSON.stringify(geom.ring);
-      if (seen.has(key)) { report.duplicatesDropped = (report.duplicatesDropped || 0) + 1; return; }
+      if (seen.has(key)) { report.duplicatesDropped = (report.duplicatesDropped || 0) + 1; continue; }
       seen.add(key);
+
       out.push({
         name,
         kind,
-        // The class is published per layer; when one class is published for
-        // the whole airspace it applies to every volume.
-        class: b.classes.length === volumes.length ? (b.classes[i] || null) : (b.classes[0] || null),
+        class: v.class || null,
         lower, upper,
         ring: geom.ring,
+        borderSegments: geom.borderSegments || 0,
+        // How far the published corner sat from Kartverket's surveyed border.
+        // Recorded so the shape can be audited instead of trusted.
+        borderMaxSnapNM: geom.maxSnapNM || 0,
         callsigns,
         freqs,
         source
       });
-    });
+    }
   }
   return out;
 }
@@ -240,6 +399,15 @@ function buildFeatures(blocks, source, report) {
 async function main() {
   const edition = await discoverEdition();
   console.log(`edition ${edition.editionLabel}  index ${edition.index}  effective ${edition.effectiveFrom}  ${edition.revision || ''}`);
+
+  /** The prepared Kartverket boundary. Absent is not fatal - the airspaces
+   *  that need it are then reported as absent, exactly as before. */
+  const border = await readFile(BORDER_FILE, 'utf8').then(JSON.parse).catch(() => null);
+  if (border) {
+    console.log(`border: ${border.points} points, ${border.provider}, retrieved ${border.retrievedAtUtc.slice(0, 10)}`);
+  } else {
+    console.log('border: NOT PREPARED - run `npm run build:border`; border-referenced airspaces will be omitted');
+  }
 
   const report = {
     provider: 'Avinor', source: 'eAIP',
@@ -249,7 +417,12 @@ async function main() {
     indexUrl: edition.indexUrl,
     retrievedAtUtc: new Date().toISOString(),
     permission: 'Used with permission from Avinor AS. Non-commercial use only.',
-    counts: {}, skipped: [], pages: []
+    border: border ? {
+      provider: border.provider, attribution: border.attribution,
+      retrievedAtUtc: border.retrievedAtUtc, points: border.points,
+      snapToleranceNM: SNAP_TOLERANCE_NM
+    } : null,
+    counts: {}, skipped: [], borderResolved: [], pages: []
   };
 
   const features = [];
@@ -269,7 +442,7 @@ async function main() {
     const fields = extractFields(html);
     const blocks = airspaceBlocks(fields);
     const url = `${edition.base}/${file}-en-GB.html`;
-    const built = buildFeatures(blocks, { section: label, url }, report);
+    const built = buildFeatures(blocks, { section: label, url }, report, border);
     features.push(...built);
     report.pages.push({ page: label, blocks: blocks.length, features: built.length });
     process.stdout.write(`  ${label}: ${built.length} volume(s) from ${blocks.length} block(s)\n`);
@@ -290,7 +463,8 @@ async function main() {
     editionLabel: edition.editionLabel,
     effectiveFrom: edition.effectiveFrom,
     revision: edition.revision,
-    attribution: 'Airspace data © Avinor eAIP, used with permission. Non-commercial use only.',
+    attribution: 'Airspace data © Avinor eAIP, used with permission. Non-commercial use only.' +
+      (border ? ' National border © Kartverket (NLOD).' : ''),
     features
   };
 
@@ -305,6 +479,7 @@ async function main() {
 
   console.log(`\nwrote ${OUT_DATA}  ${features.length} airspace volumes`, byKind);
   console.log(`skipped ${report.skipped.length}:`, reasons);
+  console.log(`border-resolved airspaces: ${report.borderResolved.length}`);
 }
 
 main().catch((err) => { console.error(err); process.exitCode = 1; });

@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.29)
+# C182 Flight Planner (v16.30)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -49,10 +49,20 @@ a permission granted to this project, not an open licence — it does not travel
 to a fork, and the planner must not be commercialised while this dataset ships
 with it.
 
-Airspaces whose published boundary follows the national border, or is a circle
-around an offshore platform, are **absent rather than approximated**, and
-`data/aip-report.json` names every one and why. Drawing a straight line
-between the published points would invent a boundary that does not exist.
+Where a published boundary **follows the national border**, the real border is
+used: `npm run build:border` takes it from Kartverket's official
+administrative-units WFS (`Riksgrense`, under **NLOD**) and
+`tools/prepared/norway-border.json` is committed so the airspace build is
+reproducible. Each resolved airspace records how far its published corner sat
+from Kartverket's surveyed line, so the shape can be audited rather than
+trusted.
+
+What still cannot be resolved is **absent rather than approximated**, and
+`data/aip-report.json` names every one with the reason: offshore zones
+published as a circle radius, the *maritime* stretch of the Norway–Sweden
+boundary in the Skagerrak (a land border dataset does not contain it), and one
+airspace citing the Finland–Sweden border. Drawing a straight line between the
+published points would invent a boundary that does not exist.
 
 **To work on it:** edit `src/`, then rebuild.
 

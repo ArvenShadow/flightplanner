@@ -556,13 +556,10 @@ errors is the standard.
     shown as published and left numerically unresolved rather than converted.
     FL is published as VAL=105 UOM=FL and must render "FL 105", not "105 FL".
   - WHAT IS DELIBERATELY ABSENT, and it is reported, never approximated:
-    22 volumes whose boundary references the NATIONAL BORDER, and 18 offshore
-    HTZ/ADS published as a circle radius rather than a polygon. Joining the
-    published points with straight lines would draw a boundary that does not
-    exist. Resolving border references needs Kartverket's official boundary
-    (their `wfs.geonorge.no` administrative-units WFS publishes `Riksgrense`
-    under NLOD) prepared offline and snapped with a tolerance; that is the
-    next upgrade, not a guess to make now.
+    18 offshore HTZ/ADS published as a circle radius rather than a polygon,
+    4 volumes referencing the MARITIME Norway-Sweden boundary in the
+    Skagerrak, and 1 referencing the Finland-Sweden border. See the border
+    entry below - the land-border cases are now RESOLVED.
     FIR/UIR/OCA and the Polaris ACC sectors are excluded on purpose: the FIR
     is the whole country and an ACC sector is an en-route division far above
     a C182 — drawing them buries the CTRs and TMAs that matter.
@@ -581,6 +578,76 @@ errors is the standard.
     of them, and 23 more VACs publish their points graphically only) or get
     Avinor's AIXM 5.1 export, which likely carries DesignatedPoints properly.
     Do NOT read coordinates off a chart image.
+- **National-border resolution (v16.30)**: 22 airspaces whose published
+  boundary follows the national border are now DRAWN, from Kartverket's
+  official line rather than a straight-line guess. Dataset: 140 -> 228
+  volumes.
+  - SOURCE: Kartverket's administrative-units WFS
+    (`wfs.geonorge.no/skwms1/wfs.administrative_enheter`, `app:Grense`
+    filtered server-side to `avgrensningstype = Riksgrense`), under **NLOD**.
+    That is a SEPARATE grant from the Avinor permission - the airspace
+    dataset now depends on both, and each keeps its own attribution.
+  - MEASURED: 329 LineString fragments, 18 763 points, which stitch by EXACT
+    shared endpoint into exactly ONE chain of 18 435 points (lat 58.88-70.09,
+    lng 11.45-30.95) - the whole land border with Sweden, Finland and Russia.
+    `tools/build-border.mjs` FAILS if a future run yields more than one chain:
+    resolving airspace against a broken border would invent boundary.
+    Committed to `tools/prepared/` so the airspace build is reproducible and
+    cannot change because a WFS moved underneath it.
+  - THE WALK HAS NO FREE CHOICES. The chain is a single OPEN polyline, so
+    between the point nearest fix A and the point nearest fix B there is
+    exactly one path along it - no "which way round" to get wrong. The
+    PUBLISHED fixes replace the snapped endpoints, because the AIP is the
+    authority for where the corner is and Kartverket for the shape between.
+  - THE TOLERANCE IS MEASURED, NOT PICKED. Over every border-referenced
+    airspace in the edition the population splits cleanly: corners genuinely
+    on the land border are 0.00-1.16 NM off Kartverket's line; everything
+    else is 8.44 NM or more. 2 NM sits in that 7x gap. Every resolved
+    airspace records its actual `borderMaxSnapNM` so this is auditable.
+  - THREE REFUSALS THAT MUST STAY REFUSALS: the Skagerrak (south of ~58.88N
+    the Norway-Sweden boundary is MARITIME and Kartverket's Riksgrense is a
+    LAND boundary that stops there, so Farris TMA / Koster / Bohus C snap
+    8-25 NM away and no tolerance can fix it); a FOREIGN border (Halti cites
+    the Finland-Sweden border, which is not in Norwegian data - snapping it
+    to the nearest Norwegian border would be a silent, confident error, and
+    `isForeignBorder` refuses it by name); and an implausible path (>6x the
+    direct distance means a bad snap).
+  - Simplification is Douglas-Peucker at 0.02 NM (37 m, 0.07 mm on a
+    1:500 000 chart), so it cannot move a boundary anywhere a pilot could see.
+- **STEPPED AIRSPACE: EACH BAND HAS ITS OWN RING (v16.30 bug fix)**. This was
+  wrong in v16.29 and it is the worst kind of wrong - 71 of 164 polygons
+  crossed themselves, each drawing an airspace that does not exist.
+  - ENR 2.1 states, per airspace: vertices, volume, class, THEN the next
+    volume's vertices, volume, class. A stepped TMA is several sub-volumes and
+    EACH HAS ITS OWN LATERAL RING as well as its own band and class (Flesland
+    TMA has 11). Concatenating a block's vertices into one ring merges those
+    separate areas into a bow tie.
+  - AD 2.17 USES THE OPPOSITE LAYOUT: every ring first, then every volume. So
+    the per-volume walk gives volume 1 everything and the rest nothing.
+    Recovered by the source's OWN delimiter: A PUBLISHED RING CLOSES BY
+    REPEATING ITS FIRST VERTEX. Verified corpus-wide - for 143 of 144 blocks,
+    splitting on closure yields exactly as many rings as volumes. The closure
+    split is applied ONLY when a volume came back empty, so ENR 2.1's explicit
+    per-volume association is never second-guessed; a block where ring count
+    and volume count disagree is refused and reported, not paired by guess.
+  - A test now checks EVERY ring for self-intersection. It is 0 of 228. The
+    v16.29 "duplicate volumes" dedupe was masking this bug: those were not
+    duplicates, they were distinct sub-volumes all given the same wrong ring.
+- **VFR REPORTING POINTS ARE MACHINE-READABLE AFTER ALL (v16.30 finding, not
+  yet built)**: they are absent from the eAIP HTML (verified against ENDU's
+  full 189-marker vocabulary), but the VAC PDF has a TEXT LAYER, not a scan.
+  `AD 2 <ICAO> 6-1 "Visual Approach Chart - ICAO"` in the AD 2.24 table gives
+  the graphic id; the PDF is at `<edition>/graphics/<id>.pdf` (NOT under
+  `html/`). pypdfium2 pulls a clean `NAME 690200N 0183820E` list - all 20
+  ENDU points, matching 1ntray's hand transcription exactly, plus the note
+  "SIG POINTS ELLA END WERA HEL ONLY" (those two are helicopter-only).
+  So no transcription is needed and it scales to every aerodrome whose VAC
+  carries a text layer. CAUTION: some VAC text uses a custom font encoding
+  that extracts as mojibake ("CHANGES: 0$*9$5"), so every name and coordinate
+  must be validated before use, and anything that fails reported rather than
+  guessed. NOTE this is the coordinate TABLE only - it does NOT georeference
+  the chart raster, and the PDF carries no GeoPDF markers (/Measure, /GPTS,
+  /Viewport all absent), so a chart overlay remains out of reach.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
   georeferenced VFR charts (licensing), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends

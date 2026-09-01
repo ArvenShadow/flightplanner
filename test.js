@@ -2674,17 +2674,156 @@ T('nothing is approximated: every omission is reported with a reason', () => {
   for (const s of report.skipped) {
     assert(s.reason && s.name, 'an omission has no reason: ' + JSON.stringify(s));
   }
-  // A boundary that references the national border cannot be drawn from the
-  // published points alone; joining them with straight lines would invent a
-  // boundary. Those airspaces are absent and named, not guessed.
-  assert(report.skippedByReason['national-border-reference'] > 0,
-    'border-referenced airspaces are no longer being reported - are they being approximated?');
+  // A boundary that references the national border must either be RESOLVED
+  // from Kartverket's authoritative line or refused with a stated reason.
+  // What it must never be is joined with straight lines between the published
+  // points, which would invent a boundary.
+  const borderReasons = ['national-border-reference', 'foreign-border-reference',
+    'fix-not-on-border', 'implausible-border-path', 'border-reference-without-two-fixes'];
+  const refusedForBorder = borderReasons.reduce((n, r) => n + (report.skippedByReason[r] || 0), 0);
+  assert(report.borderResolved.length + refusedForBorder > 0,
+    'no border reference was either resolved or refused - are they being approximated?');
+  const build = fs.readFileSync('tools/build-aip.mjs', 'utf8');
+  assert(/never joined with a straight line to stand in for\s*\n?\s*\* a border|Nothing is ever joined with a straight line/.test(build),
+    'the no-straight-line-for-a-border rule is undocumented');
   const src = fs.readFileSync('tools/build-aip.mjs', 'utf8');
   assert(/never approximated/i.test(src), 'the reason for skipping is undocumented');
   // and no two drawn features may be the same polygon twice
   const set = JSON.parse((() => { const s = fs.readFileSync('data/aip.js', 'utf8'); return s.slice(s.indexOf('{'), s.lastIndexOf(';')); })());
   const keys = set.features.map(f => f.name + '|' + f.lower.text + '|' + f.upper.text + '|' + JSON.stringify(f.ring));
   assert(new Set(keys).size === keys.length, 'the dataset draws the same airspace twice');
+});
+
+console.log('\n=== 65. AIP national-border resolution (v16.30) ===');
+T('border fragments stitch into one continuous chain', () => {
+  const b = require('./tools/aip-border.mjs');
+  // Kartverket serves the border in arbitrary order and arbitrary direction,
+  // so a fragment's end may join another's start OR its end.
+  const forward = [[[0, 0], [1, 1]], [[2, 2], [3, 3]], [[1, 1], [2, 2]]];
+  let chains = b.stitchFragments(forward);
+  assert(chains.length === 1 && chains[0].length === 4, 'forward: ' + JSON.stringify(chains));
+  const reversed = [[[0, 0], [1, 1]], [[3, 3], [2, 2]], [[2, 2], [1, 1]]];
+  chains = b.stitchFragments(reversed);
+  assert(chains.length === 1 && chains[0].length === 4, 'reversed: ' + JSON.stringify(chains));
+  // two genuinely separate stretches must stay separate, not be joined
+  chains = b.stitchFragments([[[0, 0], [1, 1]], [[50, 50], [51, 51]]]);
+  assert(chains.length === 2, 'unrelated fragments were joined: ' + JSON.stringify(chains));
+});
+T('the border walk has no free choices, and refuses what it cannot resolve', () => {
+  const b = require('./tools/aip-border.mjs');
+  // a straight north-south "border" at lng 10
+  const chain = [];
+  for (let i = 0; i <= 100; i++) chain.push([60 + i * 0.01, 10]);
+
+  const ok = b.borderPath(chain, [60.1, 10], [60.5, 10]);
+  assert(!('refuse' in ok), 'a clean case was refused: ' + JSON.stringify(ok));
+  assert(ok.points[0][0] === 60.1 && ok.points[ok.points.length - 1][0] === 60.5,
+    'the PUBLISHED fixes must be the path endpoints, not the snapped ones');
+  assert(ok.snapFromNM < 0.01 && ok.snapToNM < 0.01, 'snap distances: ' + JSON.stringify(ok));
+
+  // walking the other way must also work and must come back in that order
+  const back = b.borderPath(chain, [60.5, 10], [60.1, 10]);
+  assert(back.points[0][0] === 60.5, 'the reverse walk did not start at the first fix');
+
+  // a fix nowhere near the border is REFUSED, not snapped
+  const far = b.borderPath(chain, [60.1, 10], [60.5, 14]);
+  assert('refuse' in far && far.refuse === 'fix-not-on-border', JSON.stringify(far));
+  // ...and an empty border is refused rather than treated as a straight line
+  assert('refuse' in b.borderPath([], [60, 10], [61, 10]), 'an empty border resolved anyway');
+});
+T('a foreign border is refused rather than snapped to a Norwegian one', () => {
+  const b = require('./tools/aip-border.mjs');
+  // Halti references the Finland-Sweden border, which is not in Kartverket's
+  // Riksgrense. Snapping it to the nearest Norwegian border instead would be
+  // a silent, confident error.
+  assert(b.isForeignBorder('Finland and Sweden'), 'Finland-Sweden was treated as Norwegian');
+  assert(!b.isForeignBorder('Norway and Sweden'), 'Norway-Sweden was treated as foreign');
+  assert(!b.isForeignBorder('Finland and Norway'), 'Finland-Norway was treated as foreign');
+  assert(b.isForeignBorder(''), 'an unnamed border was treated as Norwegian');
+});
+T('simplification cannot move a boundary anywhere visible', () => {
+  const b = require('./tools/aip-border.mjs');
+  const pts = [];
+  for (let i = 0; i <= 200; i++) pts.push([60 + i * 0.001, 10 + Math.sin(i / 7) * 0.0002]);
+  const thin = b.simplify(pts, 0.02);
+  assert(thin.length < pts.length, 'nothing was simplified');
+  assert(thin[0][0] === pts[0][0] && thin[thin.length - 1][0] === pts[pts.length - 1][0],
+    'simplification moved an endpoint');
+  // every dropped point must lie within the tolerance of the kept line
+  const kept = new Set(thin.map((p) => p.join(',')));
+  for (const p of pts) {
+    if (kept.has(p.join(','))) continue;
+    let best = Infinity;
+    for (let i = 1; i < thin.length; i++) {
+      const [ax, ay] = [thin[i - 1][1] * 30, thin[i - 1][0] * 60.04];
+      const [bx, by] = [thin[i][1] * 30, thin[i][0] * 60.04];
+      const [px, py] = [p[1] * 30, p[0] * 60.04];
+      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+      best = Math.min(best, Math.hypot(px - (ax + t * dx), py - (ay + t * dy)));
+    }
+    assert(best <= 0.021, 'simplification moved a point ' + best.toFixed(4) + ' NM off the line');
+  }
+});
+T('NO airspace polygon crosses itself', () => {
+  // THE BUG THIS EXISTS FOR: a stepped TMA publishes a separate lateral ring
+  // per vertical band. Concatenating a block's vertices into one ring merged
+  // them into a bow tie - 71 of 164 polygons, each drawing an airspace that
+  // does not exist. Rings are now split by the source's own delimiter (a ring
+  // closes by repeating its first vertex) and paired with their volume.
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  const side = (a, b, c) => {
+    const v = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]);
+    return Math.abs(v) < 1e-12 ? 0 : (v > 0 ? 1 : -1);
+  };
+  const offenders = [];
+  for (const f of set.features) {
+    const r = f.ring, n = r.length;
+    let hits = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (j === i || (j + 1) % n === i || j === (i + 1) % n) continue;
+        const a = r[i], b2 = r[(i + 1) % n], c = r[j], d = r[(j + 1) % n];
+        if (side(a, b2, c) !== side(a, b2, d) && side(c, d, a) !== side(c, d, b2)) hits++;
+      }
+    }
+    if (hits) offenders.push(f.name + ' (' + hits + ')');
+  }
+  assert(offenders.length === 0, offenders.length + ' self-crossing polygons: ' + offenders.slice(0, 5).join(', '));
+});
+T('a stepped TMA gets one ring per band, not one ring shared', () => {
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  for (const stem of ['Bardufoss TMA', 'Evenes TMA', 'Notodden TIZ']) {
+    const vols = set.features.filter((f) => f.name.startsWith(stem));
+    assert(vols.length > 1, stem + ' has only ' + vols.length + ' volume(s)');
+    const rings = new Set(vols.map((f) => JSON.stringify(f.ring)));
+    assert(rings.size === vols.length,
+      stem + ': ' + vols.length + ' bands but only ' + rings.size + ' distinct ring(s)');
+    const bands = new Set(vols.map((f) => f.lower.text + '-' + f.upper.text));
+    assert(bands.size === vols.length, stem + ': the bands collapsed to ' + bands.size);
+  }
+});
+T('border-resolved airspaces record how far the published corner sat off', () => {
+  const report = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  assert(report.border && report.border.provider === 'Kartverket', 'the border source is not recorded');
+  assert(/NLOD/i.test(report.border.attribution), 'Kartverket NLOD attribution missing');
+  assert(report.borderResolved.length > 10,
+    'only ' + report.borderResolved.length + ' airspaces resolved against the border');
+  for (const r of report.borderResolved) {
+    assert(r.maxSnapNM <= report.border.snapToleranceNM,
+      r.name + ' resolved with a ' + r.maxSnapNM + ' NM snap, beyond the tolerance');
+    assert(r.segments.length > 0 && r.segments.every((sg) => sg.lengthNM > 0), r.name + ' has an empty border segment');
+  }
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  assert(/Kartverket/.test(set.attribution), 'the dataset does not credit Kartverket for the border');
+  // Evenes TMA is border-resolved and in the user's own region: it must exist
+  // and it must carry its snap distance.
+  const evenes = set.features.filter((f) => f.name.startsWith('Evenes TMA'));
+  assert(evenes.length >= 3, 'Evenes TMA is missing: ' + evenes.length + ' volumes');
+  assert(evenes.some((f) => f.borderSegments > 0), 'Evenes TMA lost its border stretch');
 });
 
 console.log('\n=== 62b. TOC/TOD marks (the vanishing TOD, v16.28) ===');
