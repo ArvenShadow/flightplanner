@@ -49,7 +49,10 @@ const OUT_DIR = join(ROOT, 'dist');
 const OUT_HTML = join(OUT_DIR, 'C182_FlightPlanner.html');
 const SITE_DIR = join(ROOT, 'site');
 const SW_SRC = join(ROOT, 'src', 'sw.js');
-const MARKER = /^[ \t]*<!-- @BUNDLE:.*-->[ \t]*\n/m;
+// \r? because a Windows clone checks the source out with CRLF endings
+// (git's core.autocrlf). A ZIP download does not, which is why this only
+// ever failed on a cloned repo.
+const MARKER = /^[ \t]*<!-- @BUNDLE:.*?-->[ \t]*\r?\n/m;
 
 const fail = (msg) => { console.error('BUILD FAILED: ' + msg); process.exit(1); };
 // Service-worker registration for the hosted build. Feature-detected on
@@ -127,8 +130,14 @@ export async function runBuild({ quiet = false } = {}) {
   checkDuplicateIds(html);
   const version = checkVersion(html);
 
+  // Always emit LF, whatever the working tree uses. A Windows clone has the
+  // source checked out as CRLF, and without this the rebuilt dist/ would
+  // differ from the committed one on every build - which then blocks the
+  // next `git pull` with "local changes would be overwritten".
+  const lf = (t) => t.replace(/\r\n/g, '\n');
+
   mkdirSync(OUT_DIR, { recursive: true });
-  writeFileSync(OUT_HTML, html);
+  writeFileSync(OUT_HTML, lf(html));
 
   // ---- hosted build -------------------------------------------------
   // Same page, bundle split out to app.js and a service worker attached.
@@ -147,9 +156,9 @@ export async function runBuild({ quiet = false } = {}) {
   const sw = readFileSync(SW_SRC, 'utf8').replace('self.__APP_VERSION__ || \'dev\'', JSON.stringify(version));
   checkSyntax(sw, 'service worker (src/sw.js)');
   mkdirSync(SITE_DIR, { recursive: true });
-  writeFileSync(join(SITE_DIR, 'index.html'), siteHtml);
-  writeFileSync(join(SITE_DIR, 'app.js'), code);
-  writeFileSync(join(SITE_DIR, 'sw.js'), sw);
+  writeFileSync(join(SITE_DIR, 'index.html'), lf(siteHtml));
+  writeFileSync(join(SITE_DIR, 'app.js'), lf(code));
+  writeFileSync(join(SITE_DIR, 'sw.js'), lf(sw));
   // Pages would otherwise run the upload through Jekyll, which skips files
   // and folders beginning with an underscore.
   writeFileSync(join(SITE_DIR, '.nojekyll'), '');
