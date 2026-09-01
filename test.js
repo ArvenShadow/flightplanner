@@ -4420,6 +4420,54 @@ T('a flight longer than the form runs onto a second sheet, totals on the LAST', 
   assert(many.every((s) => s.dep === 'ENDU' && s.dest === 'ENEV' && s.of === 2),
     'every sheet must carry the DEP/DEST and its sheet number');
 });
+T('ONE SECTOR PER OFP: two flights never share a sheet', () => {
+  // The user's rule: a sheet has ONE departure and ONE arrival. The only reason
+  // a sector may span more than one sheet is running out of the form's 16 lines,
+  // and then both sheets carry that sector's own DEP/DEST.
+  const F = moduleExports.ofp;
+  const row = (n) => ({ from: 'W' + n, to: 'W' + (n + 1), tas: 130, tt: 74, var: -11, mt: 63,
+    wdir: 250, wspd: 20, wca: -5, accDist: n, accTime: '00:05', ff: 13, legBurn: 3,
+    accBurn: 3 * n, alt: 2500, mh: 58, gs: 120, dist: 5, time: '00:05', eto: '', rem: 60 });
+  const a = F.buildOfpSheets({ dep: 'ENDU', dest: 'ENTC' }, [row(1), row(2)]);
+  const b = F.buildOfpSheets({ dep: 'ENTC', dest: 'ENSR' }, [row(1), row(2)]);
+  assert(a.length === 1 && b.length === 1, 'a two-leg sector took more than one sheet');
+  assert(a[0].dep === 'ENDU' && a[0].dest === 'ENTC', 'sector 1 lost its aerodromes');
+  assert(b[0].dep === 'ENTC' && b[0].dest === 'ENSR', 'sector 2 lost its aerodromes');
+  // THE BOUNDARY: 16 legs still fit one sheet; the 17th starts a second, and it
+  // carries the SAME sector's DEP/DEST - not the next flight's.
+  const full = F.buildOfpSheets({ dep: 'ENDU', dest: 'ENEV' },
+    Array.from({ length: 16 }, (_, i) => row(i + 1)));
+  assert(full.length === 1, '16 legs must fit the form exactly: ' + full.length + ' sheets');
+  const over = F.buildOfpSheets({ dep: 'ENDU', dest: 'ENEV' },
+    Array.from({ length: 17 }, (_, i) => row(i + 1)));
+  assert(over.length === 2 && over[1].cells.length === 1, 'the 17th leg did not start a sheet 2');
+  assert(over.every((s) => s.dep === 'ENDU' && s.dest === 'ENEV'),
+    'a continuation sheet changed aerodromes');
+});
+TA('the page prints one OFP per flight plan, each with its own DEP and DEST', async () => {
+  // Built end to end: three sectors, the third long enough to need two sheets.
+  ev(`flights = [
+    { id: 1, title: 'A', depElev: 254, waypoints: [
+      { lat: 68.5, lng: 18.5, name: 'ENDU', alt: 254, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.2, lng: 18.5, name: 'MID',  alt: 3500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 }] },
+    { id: 2, title: 'B', depElev: 31, waypoints: [
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.2, lng: 18.5, name: 'SKJ',  alt: 4500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.6, lng: 18.5, name: 'ENSR', alt: 10,  oat: 0, wdir: 250, wspd: 20, var: -11 }] }];
+    activeFlightIndex = 0; renderAllFlightTables();`);
+  const sheets = [...doc.querySelectorAll('#ofp-print .ofp-sheet')];
+  assert(sheets.length === 2, 'two flight plans made ' + sheets.length + ' sheets, not 2');
+  const pair = (s) => { const td = s.querySelectorAll('.ofp-depdest td');
+                        return td[0].textContent + '->' + td[3].textContent; };
+  assert(pair(sheets[0]) === 'ENDU->ENTC', 'sheet 1: ' + pair(sheets[0]));
+  assert(pair(sheets[1]) === 'ENTC->ENSR', 'sheet 2: ' + pair(sheets[1]));
+  // ...and no sheet may show a fix belonging to the other sector.
+  assert(!/SKJ|ENSR/.test(sheets[0].querySelector('.ofp-grid').textContent),
+    'sector 2 fixes leaked onto sector 1\'s sheet');
+  assert(!/\bMID\b/.test(sheets[1].querySelector('.ofp-grid').textContent),
+    'sector 1 fixes leaked onto sector 2\'s sheet');
+});
 T('a circuit stop prints as a circuit, not as a leg', () => {
   const F = moduleExports.ofp;
   const c = F.ofpRowCells({ pattern: true, from: 'ENDU', to: 'PATTERN', laps: 3, accDist: '20.6',

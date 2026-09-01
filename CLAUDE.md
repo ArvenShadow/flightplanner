@@ -1382,10 +1382,17 @@ asserts nothing M&B appears on the sheet.
 - THE LINE NUMBER RIDES INSIDE THE "From" CELL, as it does on the form. Giving
   it a column of its own added a 26th column and squeezed all 25 measured
   widths.
-- A flight longer than the form's 16 lines runs onto a second sheet, and the
-  Total line is printed on the LAST one only - a running total printed half way
-  through would read as the flight's total. One sheet per SECTOR, because the
-  form has a DEP and a DEST.
+- **ONE SECTOR PER OFP, and this is a rule the user stated explicitly**: a sheet
+  carries ONE departure and ONE arrival, because that is what the form's DEP/DEST
+  block means. Each flight plan gets its own sheet - ENDU-ENTC and ENTC-ENSR are
+  two OFPs, never two halves of one - and its own printed page. The ONLY reason a
+  sector spans more than one sheet is running out of the form's 16 lines, and
+  then the continuation sheet repeats that sector's OWN aerodromes and says
+  "sheet 2 of 2". Asserted twice: in the module (the 16/17-leg boundary) and in
+  Chromium (three sectors, one of them long -> four sheets, four pages, no
+  sheet showing another sector's fixes).
+- The Total line is printed on the LAST sheet of a sector only - a running total
+  printed half way through would read as the flight's total.
 - jsdom has no layout, so it cannot tell whether a value fits its cell - and
   "make sure the text is sized properly to fit into the cells" is the whole
   requirement. `tools/verify-ofp-print.mjs` drives Chromium with print media

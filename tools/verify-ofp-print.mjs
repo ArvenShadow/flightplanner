@@ -116,6 +116,48 @@ const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).lengt
 check(pages === 2, 'the printed PDF is one page per sheet: ' + pages);
 if (process.env.OUT) { const { writeFileSync } = await import('fs'); writeFileSync(process.env.OUT, pdf); }
 
+// ---- ONE SECTOR PER OFP ---------------------------------------------------
+// A sheet must carry ONE departure and ONE arrival. Three sectors, the last
+// long enough to need a continuation sheet, and every sheet is checked: its own
+// aerodromes, its own fixes, and its own page.
+await page.emulateMedia({ media: 'screen' });
+await page.evaluate(() => {
+  const wp = (lat, name, alt) => ({ lat, lng: 18.5, name, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
+  flights = [
+    { id: 1, title: 'A', depElev: 254, waypoints: [wp(68.5, 'ENDU', 254), wp(69.2, 'MID', 3500), wp(69.7, 'ENTC', 31)] },
+    { id: 2, title: 'B', depElev: 31, waypoints: [wp(69.7, 'ENTC', 31), wp(70.2, 'SKJ', 4500), wp(70.6, 'ENSR', 10)] },
+    { id: 3, title: 'C', depElev: 10, waypoints: Array.from({ length: 19 },
+        (_, i) => wp(68.4 + i * 0.1, 'P' + i, i ? 800 + i * 300 : 10)) }
+  ];
+  activeFlightIndex = 0; renderAllFlightTables();
+});
+await page.waitForTimeout(400);
+await page.emulateMedia({ media: 'print' });
+await page.waitForTimeout(300);
+const sectors = await page.evaluate(() => [...document.querySelectorAll('#ofp-print .ofp-sheet')].map((s) => {
+  const td = s.querySelectorAll('.ofp-depdest td');
+  return { dep: td[0].textContent.trim(), dest: td[3].textContent.trim(),
+           depBoxes: s.querySelectorAll('.ofp-depdest tr').length,
+           grid: s.querySelector('.ofp-grid').textContent,
+           page: s.querySelector('.ofp-page') ? s.querySelector('.ofp-page').textContent.trim() : '' };
+}));
+check(sectors.length === 4, 'three sectors (one of them long) make four sheets: ' + sectors.length);
+check(sectors.every((s) => s.depBoxes === 2),
+  'every sheet carries exactly one DEP row and one DEST row');
+check(sectors[0].dep === 'ENDU' && sectors[0].dest === 'ENTC' &&
+      sectors[1].dep === 'ENTC' && sectors[1].dest === 'ENSR',
+  'each sector kept its own aerodromes: ' + sectors.slice(0, 2).map((s) => s.dep + '->' + s.dest).join(', '));
+check(sectors[2].dep === sectors[3].dep && sectors[2].dest === sectors[3].dest &&
+      /sheet 1 of 2/.test(sectors[2].page) && /sheet 2 of 2/.test(sectors[3].page),
+  'a sector too long for one sheet continues under the SAME aerodromes: ' +
+  sectors.slice(2).map((s) => s.dep + '->' + s.dest + ' ' + s.page).join(', '));
+check(!/SKJ|ENSR/.test(sectors[0].grid) && !/\bMID\b/.test(sectors[1].grid),
+  'no sheet shows another sector\'s fixes');
+const pdf3 = await page.pdf({ format: 'A4', landscape: true, printBackground: true,
+  margin: { top: '6mm', bottom: '6mm', left: '6mm', right: '6mm' } });
+const pages3 = (pdf3.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+check(pages3 === 4, 'each sheet gets its own printed page: ' + pages3);
+
 // The M&B side is explicitly NOT reproduced yet - guard that we did not half
 // do it, which would be worse than not doing it.
 const mb = await page.evaluate(() => document.getElementById('ofp-print').textContent);
