@@ -3983,36 +3983,137 @@ T('a BOD pin is REFUSED, not half-applied, when the leg is still descending ther
   assert(!L2.computeLegMarkers(L1.from, L1.to, L1).some((m) => m.kind === 'BOD'),
     'a refused BOD was still marked on the map');
 });
-T('a TOC request is a TARGET that is checked, never a climb rate that is invented', () => {
+T('"be level by" SETS the bottom of climb, working backwards at the profile\'s rate', () => {
   const L2 = moduleExports.legs;
   const W = (n, lat, alt, x) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 0, wspd: 0, var: -11, ...x });
   const route = (x) => L2.computeFlightSchedule({ id: 1,
     waypoints: [W('ENDU', 68.3, 254), W('A', 69.5, 6500, x)] })[0];
   const base = route({});
-  // A target BEYOND where the climb tops out is met, and changes nothing.
-  const easy = route({ tocNM: base.tocAlongNM + 5 });
-  assert(easy.tocTargetMet === true, 'a comfortable target was reported as missed');
-  assert(Math.abs(easy.climbMin - base.climbMin) < 1e-9 && Math.abs(easy.climbFuelGal - base.climbFuelGal) < 1e-9,
-    'a met target changed the climb - it must never touch performance');
-  assert(Math.abs(easy.tocAlongNM - base.tocAlongNM) < 1e-9, 'a met target moved the TOC');
-  // A target EARLIER than the profile can manage is MISSED, and the leg reports
-  // the rate it would actually need. THIS IS THE POINT: the POH tables say
-  // nothing about the fuel flow or TAS at that rate, so the schedule stays on
-  // the profile's performance and hands the pilot the number instead.
-  const hard = route({ tocNM: base.tocAlongNM / 2 });
-  assert(hard.tocTargetMet === false, 'an impossible target was reported as met');
-  assert(Math.abs(hard.climbMin - base.climbMin) < 1e-9, 'a missed target changed the climb time');
-  assert(Math.abs(hard.climbFuelGal - base.climbFuelGal) < 1e-9, 'a missed target changed the climb fuel');
-  assert(Math.abs(hard.tocAlongNM - base.tocAlongNM) < 1e-9, 'a missed target moved the TOC');
-  assert(hard.climbRateReqFpm > 0 && isFinite(hard.climbRateReqFpm),
-    'no required rate reported: ' + hard.climbRateReqFpm);
-  // roughly double the distance halved => roughly double the rate
-  const derivedRate = (6500 - 254) / base.climbMin;
-  assert(hard.climbRateReqFpm > derivedRate * 1.5,
-    'the required rate is not higher than the profile: ' + hard.climbRateReqFpm + ' vs ' + derivedRate);
-  // With no request there is no target and no rate to report.
-  assert(base.tocTargetNM === null && base.climbRateReqFpm === null && base.tocTargetMet === true,
-    JSON.stringify({ t: base.tocTargetNM, r: base.climbRateReqFpm, m: base.tocTargetMet }));
+  assert(base.tocAlongNM > 5 && base.tocAlongNM < base.distNM, 'unexpected baseline TOC: ' + base.tocAlongNM);
+
+  // A target LATER than the derived TOC is a delay: the climb starts later so
+  // that it tops out exactly where asked.
+  const later = route({ tocNM: base.tocAlongNM + 20 });
+  assert(later.tocTargetMet, 'a reachable target was reported as missed');
+  assert(later.tocDerivedBoc, 'the bottom of climb was not derived from the target');
+  assert(Math.abs(later.tocAlongNM - (base.tocAlongNM + 20)) < 0.05,
+    'the TOC did not land on the target: ' + later.tocAlongNM);
+  assert(Math.abs(later.climbStartNM - 20) < 0.05, 'the derived BOC is wrong: ' + later.climbStartNM);
+  // THE AIRCRAFT IS UNTOUCHED. Only the climb's position moved, so its time,
+  // fuel and TAS are still the profile's - nothing steeper is invented.
+  assert(Math.abs(later.climbMin - base.climbMin) < 1e-6, 'the climb time changed: ' + later.climbMin);
+  assert(Math.abs(later.climbFuelGal - base.climbFuelGal) < 1e-6, 'the climb fuel changed');
+  assert(Math.abs(later.climbTas - base.climbTas) < 1e-6, 'the climb TAS changed');
+  assert(later.climbRateReqFpm === null, 'a met target reported a required rate');
+
+  // A target the profile cannot reach even climbing from the FIRST fix of the
+  // flight is refused, and only then is a rate the useful thing to report -
+  // there is no earlier leg to start the climb on.
+  const impossible = route({ tocNM: 4 });
+  assert(!impossible.tocTargetMet, 'an unreachable target was reported as met');
+  assert(impossible.tocNeedsEntryAlt === null,
+    'the first leg was told to raise a fix that does not exist: ' + impossible.tocNeedsEntryAlt);
+  assert(impossible.climbRateReqFpm > 0 && isFinite(impossible.climbRateReqFpm),
+    'no required rate on the one case where it is the only answer');
+  assert(Math.abs(impossible.climbMin - base.climbMin) < 1e-6, 'a refused target changed the climb');
+  assert(Math.abs(impossible.tocAlongNM - base.tocAlongNM) < 1e-6, 'a refused target moved the TOC');
+
+  // With no target there is nothing to report.
+  assert(base.tocTargetNM === null && base.climbRateReqFpm === null && base.tocTargetMet === true
+    && base.tocDerivedBoc === false && base.tocNeedsEntryAlt === null, JSON.stringify(base.tocTargetNM));
+});
+T('when the climb will not fit, the ALTITUDE the previous fix needs is computed - and it works', () => {
+  // THE USER'S POINT, and it is the right design: rather than reporting a rate
+  // nobody can fly, work out what crossing the previous fix higher would take.
+  // That keeps the altitude column the single source of truth for what is flown
+  // where, instead of the schedule quietly doing something the column denies.
+  const L2 = moduleExports.legs;
+  const W = (n, lat, alt, x) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 0, wspd: 0, var: -11, ...x });
+  const route = (aAlt, x) => L2.computeFlightSchedule({ id: 1,
+    waypoints: [W('ENDU', 68.3, 254), W('A', 69.0, aAlt), W('B', 69.7, 6500, x)] });
+
+  for (const target of [3, 5, 8, 11]) {
+    const asked = route(2500, { tocNM: target })[1];
+    assert(!asked.tocTargetMet, 'target ' + target + ' NM was somehow met from 2500 ft');
+    assert(asked.tocNeedsEntryAlt > 2500 && asked.tocNeedsEntryAlt <= 6500,
+      'implausible advice for ' + target + ' NM: ' + asked.tocNeedsEntryAlt);
+    // TAKING THE ADVICE MUST WORK. It did not at first: the required altitude
+    // was bisected against a time budget computed at the ORIGINAL climb TAS,
+    // but a higher entry altitude raises the TAS and so shortens the time
+    // available - the recommendation missed by 0.11 NM. Both sides move
+    // together now, which is why entryAltForClimbBy takes a callback.
+    const after = route(asked.tocNeedsEntryAlt, { tocNM: target })[1];
+    assert(after.tocTargetMet,
+      'taking the advice (' + asked.tocNeedsEntryAlt + ' ft) still missed the ' + target + ' NM target: ' +
+      'TOC at ' + after.tocAlongNM.toFixed(3));
+    assert(Math.abs(after.tocAlongNM - target) < 0.05,
+      'the TOC did not land on the target after taking the advice: ' + after.tocAlongNM);
+    // ...and so must rounding it UP to the next hundred, which is what the
+    // panel offers, because a pilot flies round numbers.
+    const rounded = Math.ceil(asked.tocNeedsEntryAlt / 100) * 100;
+    const afterRound = route(rounded, { tocNM: target })[1];
+    assert(afterRound.tocTargetMet, 'rounding up to ' + rounded + ' ft missed the target');
+  }
+
+  // The advice is the MINIMUM: one hundred feet lower must NOT be enough, or it
+  // is not the answer to "what does this need".
+  const asked5 = route(2500, { tocNM: 5 })[1];
+  const tooLow = route(asked5.tocNeedsEntryAlt - 100, { tocNM: 5 })[1];
+  assert(!tooLow.tocTargetMet, 'the advice is not the minimum - 100 ft lower also worked');
+});
+T('advice is only offered if it actually WORKS', () => {
+  // The per-leg figure alone is not enough: raising a fix also changes the leg
+  // BEFORE it, and if those earlier legs cannot climb that high by then the
+  // target is missed all over again. Measured over 20 000 generated routes, the
+  // unverified figure was wrong 382 times in 947 - so every candidate is tried
+  // on a copy of the flight and dropped unless the target is really met.
+  const L2 = moduleExports.legs;
+  const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
+  const rnd = (() => { let s = 987654; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
+  let given = 0, works = 0, noneHelps = 0, firstLeg = 0;
+  for (let iter = 0; iter < 3000; iter++) {
+    const nWp = 3 + Math.floor(rnd() * 2);
+    const wps = []; let lat = 68.5 + rnd() * 1.0;
+    for (let k = 0; k < nWp; k++) {
+      lat += 0.05 + rnd() * 0.6;
+      wps.push(W('W' + k, lat, 18.0 + (rnd() - 0.5) * 0.8,
+        k === 0 ? 254 : Math.round((500 + rnd() * 9000) / 100) * 100));
+    }
+    const li = 1 + Math.floor(rnd() * (nWp - 1));
+    const base = L2.computeFlightSchedule({ id: 1, waypoints: wps.map((w) => ({ ...w })) });
+    const legDist = base[li - 1] ? base[li - 1].distNM : 0;
+    const pin = wps.map((w, k) => k === li ? { ...w, tocNM: +(rnd() * legDist).toFixed(2) } : { ...w });
+    const S = L2.computeFlightSchedule({ id: 1, waypoints: pin })[li - 1];
+    if (!S || S.tocTargetNM == null || S.tocTargetMet) continue;
+    if (S.tocNeedsEntryAlt === null) { if (S.i === 0) firstLeg++; else if (S.tocNoAltHelps) noneHelps++; continue; }
+    given++;
+    const fixed = pin.map((w, k) => k === S.i ? { ...w, alt: S.tocNeedsEntryAlt } : { ...w });
+    const again = L2.computeFlightSchedule({ id: 1, waypoints: fixed })[S.i];
+    if (again && again.tocTargetMet) works++;
+  }
+  assert(given > 30, 'the sweep produced only ' + given + ' pieces of advice');
+  assert(works === given, works + ' of ' + given + ' suggestions actually satisfied the target');
+  // ...and the honest third state must occur: sometimes NO altitude helps.
+  assert(noneHelps > 0, 'the "no altitude helps" case never came up, so it is untested');
+  assert(firstLeg > 0, 'the first-leg refusal never came up');
+  console.log('        ' + given + ' suggestions, all verified | ' + noneHelps +
+    ' where no altitude helps | ' + firstLeg + ' first-leg refusals');
+});
+T('a "be level by" target overrides a bottom-of-climb pin on the same leg', () => {
+  // Two settings for one corner is how a contradiction arises. The target owns
+  // the corner and the panel disables the BOC box to say so.
+  const L2 = moduleExports.legs;
+  const W = (n, lat, alt, x) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 0, wspd: 0, var: -11, ...x });
+  const base = L2.computeFlightSchedule({ id: 1,
+    waypoints: [W('ENDU', 68.3, 254), W('A', 69.5, 6500)] })[0];
+  const both = L2.computeFlightSchedule({ id: 1, waypoints: [W('ENDU', 68.3, 254),
+    W('A', 69.5, 6500, { bocNM: 3, tocNM: base.tocAlongNM + 20 })] })[0];
+  assert(both.tocDerivedBoc && Math.abs(both.climbStartNM - 20) < 0.05,
+    'the BOC pin won over the target: ' + both.climbStartNM);
+  assert(both.tocTargetMet, 'the target was not met');
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  assert(/leg-boc-note/.test(raw) && /syncLegBocState/.test(raw),
+    'the panel does not tell the pilot the BOC is derived');
 });
 T('pins never produce impossible geometry - swept over generated routes', () => {
   // THE SWEEP IS THE TEST, the same way the v16.28 vanishing-TOD fix was

@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.37)
+# C182 Flight Planner (v16.38)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -192,7 +192,7 @@ npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
 npm run typecheck  # TypeScript checks every module (0 errors required)
-npm test           # typecheck, build, then the suite against dist (360 tests)
+npm test           # typecheck, build, then the suite against dist (363 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
 npm run verify:hover           # Chromium check of the position-dependent
                                # Polaris sector frequency on the hover card
