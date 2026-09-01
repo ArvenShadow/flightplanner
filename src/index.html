@@ -52,11 +52,17 @@
   <div id="main">
     <div id="map-container">
       <div id="map"></div>
-      <button id="chart-btn" class="no-print" title="Switch the base chart: Kartverket topo (offline-cached) or the official ICAO VFR 1:500 000 from Avinor (needs internet). Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
-      <button id="chart-dl-btn" class="no-print" title="Download the ICAO VFR chart for this whole route so it works with no internet, and stops reloading as you pan. Needs the hosted version or localhost - a page opened straight from a file cannot store charts." onclick="downloadRouteChart()">⬇ Chart</button>
-      <button id="chart-detail-btn" class="no-print" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
+      <!-- Map controls stack themselves. They used to be positioned one by
+           one by id with hardcoded top offsets, so a button added without a
+           matching CSS rule silently fell to the bottom of the page and was
+           invisible - which is exactly what happened to the two below. -->
+      <div id="map-controls" class="no-print">
+        <button id="declutter-btn" class="map-ctl" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
+        <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo (offline-cached) or the official ICAO VFR 1:500 000 from Avinor (needs internet). Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
+        <button id="chart-detail-btn" class="map-ctl" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
+        <button id="chart-dl-btn" class="map-ctl" title="Download the ICAO VFR chart for this whole route so it works with no internet, and stops reloading as you pan. Needs the hosted version or localhost - a page opened straight from a file cannot store charts." onclick="downloadRouteChart()">⬇ Chart</button>
+      </div>
       <div id="chart-label"></div>
-      <button id="declutter-btn" class="no-print" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
     </div>
 
     <div id="sidebar">
@@ -842,7 +848,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.23';
+    const APP_VERSION = '16.24';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 

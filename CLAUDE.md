@@ -347,6 +347,17 @@ errors is the standard.
     asserts the worker never learns the weather host.
   - Aerodromes are the first and last real waypoint of EVERY flight (the
     daylight card's rule); non-ICAO names like FINNSNES are excluded.
+- **Map controls stack themselves (v16.24)**: the ⬇ Chart and 🔍 Detail
+  buttons shipped INVISIBLE in v16.22 and v16.23. The map controls were
+  each positioned by id with a hardcoded `top` (10px, 40px), so a button
+  added without its own CSS rule fell into normal flow at the bottom of
+  the page - present in the DOM, off the bottom of the screen. They are
+  now one `#map-controls` flex column with a shared `.map-ctl` class, so
+  adding a control needs no CSS at all. A test asserts every control is
+  inside the stack and that none is positioned by id again.
+  THE LESSON: markup that LOOKS right is not verified. A grep for the id
+  in the built file passed; only measuring getBoundingClientRect in a real
+  browser showed it at y=900 on a 900px viewport.
 - **Chart detail setting (v16.23)**: the thing that actually made the VFR
   chart feel slow was never the network. MEASURED with img.decode() on real
   tiles: one 856 px tile takes 58.1 ms to rasterise against 2.6 ms for a

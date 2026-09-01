@@ -772,14 +772,18 @@ svg.leaflet-image-layer.leaflet-interactive path {
        (From, To, Alt, MT, W/V, MH, GS, Dist, Time, AccT, Burn, Rem) */
     body.compact-cols .cc { display: none; }
     #map-container { flex: 1.05; position: relative; border-right: 2px solid var(--border-color); }
-    #declutter-btn { position: absolute; top: 10px; right: 10px; z-index: 1000; font-size: 11px; font-weight: 700;
-      padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
-      color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
-    #declutter-btn:hover { background: var(--highlight-bg); }
-    #chart-btn { position: absolute; top: 40px; right: 10px; z-index: 1000; font-size: 11px; font-weight: 700;
-      padding: 4px 9px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card);
-      color: var(--text-main); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
-    #chart-btn:hover { background: var(--highlight-bg); }
+    /* Map controls. ONE rule for all of them, stacked by the container, so
+       adding a button needs no new CSS. They were previously positioned
+       individually by id with hardcoded top offsets (10px, 40px, ...), and a
+       button added without its own rule fell into normal flow at the bottom
+       of the page where nobody could see it. */
+    #map-controls { position: absolute; top: 10px; right: 10px; z-index: 1000;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .map-ctl { font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 4px;
+      border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main);
+      cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); white-space: nowrap; }
+    .map-ctl:hover { background: var(--highlight-bg); }
+    .map-ctl:disabled { opacity: 0.6; cursor: default; }
     #chart-label { position: absolute; bottom: 2px; left: 6px; z-index: 1000; font-size: 9px;
       color: #333; background: rgba(255,255,255,0.65); padding: 1px 6px; border-radius: 3px;
       pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -992,11 +996,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
   <div id="main">
     <div id="map-container">
       <div id="map"></div>
-      <button id="chart-btn" class="no-print" title="Switch the base chart: Kartverket topo (offline-cached) or the official ICAO VFR 1:500 000 from Avinor (needs internet). Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
-      <button id="chart-dl-btn" class="no-print" title="Download the ICAO VFR chart for this whole route so it works with no internet, and stops reloading as you pan. Needs the hosted version or localhost - a page opened straight from a file cannot store charts." onclick="downloadRouteChart()">⬇ Chart</button>
-      <button id="chart-detail-btn" class="no-print" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
+      <!-- Map controls stack themselves. They used to be positioned one by
+           one by id with hardcoded top offsets, so a button added without a
+           matching CSS rule silently fell to the bottom of the page and was
+           invisible - which is exactly what happened to the two below. -->
+      <div id="map-controls" class="no-print">
+        <button id="declutter-btn" class="map-ctl" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
+        <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo (offline-cached) or the official ICAO VFR 1:500 000 from Avinor (needs internet). Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
+        <button id="chart-detail-btn" class="map-ctl" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
+        <button id="chart-dl-btn" class="map-ctl" title="Download the ICAO VFR chart for this whole route so it works with no internet, and stops reloading as you pan. Needs the hosted version or localhost - a page opened straight from a file cannot store charts." onclick="downloadRouteChart()">⬇ Chart</button>
+      </div>
       <div id="chart-label"></div>
-      <button id="declutter-btn" class="no-print" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
     </div>
 
     <div id="sidebar">
@@ -4945,7 +4955,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.23';
+    const APP_VERSION = '16.24';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
