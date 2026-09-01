@@ -8,6 +8,9 @@ site/
 # Screenshots written by tools/verify-visual.mjs when it finds a difference
 vis_*.png
 
-# eAIP pages cached by tools/build-aip.mjs so a re-run needs no network.
-# The generated data/aip.js IS committed - both deliveries need it on disk.
+# eAIP pages and VAC chart PDFs cached by tools/build-aip.mjs and
+# tools/build-vac.mjs so a re-run needs no network. The generated data/aip.js
+# and the prepared snapshots in tools/prepared/ ARE committed - both deliveries
+# need the data on disk, and a committed snapshot is what makes the build
+# reproducible.
 .aip-cache/

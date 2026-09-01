@@ -783,6 +783,41 @@ svg.leaflet-image-layer.leaflet-interactive path {
       color: #333; background: rgba(255,255,255,0.72); padding: 1px 6px; border-radius: 3px;
       max-width: 74%; line-height: 1.35; pointer-events: none; }
     body.dark-mode #airspace-attribution { color: #e2e8f0; background: rgba(26,32,44,0.78); }
+    /* The fixes layer's attribution. Stacked ABOVE the airspace one so both
+   are readable when both layers are on; one grant only here (Avinor, by
+   permission, non-commercial) - Kartverket is not involved in the reporting
+   points, and the three licences in this project must not be conflated. */
+    #fixes-attribution { position: absolute; bottom: 32px; left: 6px; z-index: 1000; font-size: 9px;
+      color: #333; background: rgba(255,255,255,0.72); padding: 1px 6px; border-radius: 3px;
+      max-width: 74%; line-height: 1.35; pointer-events: none; }
+    body.dark-mode #fixes-attribution { color: #e2e8f0; background: rgba(26,32,44,0.78); }
+
+    /* AIP FIXES. Deliberately quieter than a route waypoint: these are
+   available fixes, not part of the plan, and the chart underneath is what is
+   being read. An aerodrome gets a filled square and its ICAO; a reporting
+   point gets a hollow triangle, because that is the symbol the VAC itself
+   uses for one. The label is click-through (pointer-events: none) so only the
+   symbol takes the click - a wide text label would otherwise swallow clicks
+   meant for the map or the route line. */
+    .fix-icon { background: none; border: none; }
+    .fix-dot { width: 9px; height: 9px; box-sizing: border-box; }
+    .fix-dot.ad { background: #2b6cb0; border: 1.5px solid #fff; border-radius: 2px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.45); }
+    .fix-dot.rp { width: 0; height: 0; background: none; border-left: 5px solid transparent;
+      border-right: 5px solid transparent; border-bottom: 9px solid #2f855a;
+      filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1.5px rgba(0,0,0,0.5)); }
+    .fix-label { position: absolute; left: 12px; top: -3px; white-space: nowrap;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.2px; pointer-events: none;
+      color: #1a365d; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff; }
+    .fix-label.rp { color: #22543d; font-weight: 600; }
+    body.dark-mode .fix-label { color: #bee3f8; text-shadow: 0 0 2px #10151f, 0 0 3px #10151f, 0 0 4px #10151f; }
+    body.dark-mode .fix-label.rp { color: #9ae6b4; }
+    /* Hover card for a fix: the published coordinate is the point of the
+   feature, so it is what the card leads with. */
+    .fix-tip { white-space: normal; width: max-content; max-width: 260px; font-size: 10.5px;
+      line-height: 1.45; }
+    .fix-tip b { font-size: 11.5px; }
+    .fix-tip .fix-pub { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 10px; }
     /* Hover card for an airspace. Left-aligned because it is several lines of
    published values, not a caption. */
     /* The airspace hover card. `width: max-content` with a max-width is the

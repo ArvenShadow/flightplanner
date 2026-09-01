@@ -32,6 +32,7 @@ const leafletStub = `
   window.L = {
     map: function(){ return {
       setView: function(){ return this; },
+      getCenter: function(){ var c = window.__stubCenter || { lat: 69.3, lng: 19.0 }; return c; },
       on: function(ev, fn){
         (window.__mapHandlerList[ev] = window.__mapHandlerList[ev] || []).push(fn);
         window.__mapHandlers[ev] = fn;      // last registered, for old tests
@@ -2259,10 +2260,11 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const plotModule = require('./src/lib/plotting.js');
   const metarModule = require('./src/lib/metar.js');
   const airspaceModule = require('./src/lib/airspace.js');
+  const anchorsModule = require('./src/lib/anchors.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
                     exch: exchModule, plot: plotModule, metar: metarModule,
-                    airspace: airspaceModule };
+                    airspace: airspaceModule, anchors: anchorsModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2406,6 +2408,13 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                           M.airspace.pointInRing([[0, 0], [0, 1], [1, 1]], [0.4, 0.5]),
                           M.airspace.sectorsAt([], [69, 18]),
                           M.airspace.sectorLabel({ name: 'Polaris ACC Sector 26' })],
+    'anchors.js': () => [M.anchors.buildAnchors({ aerodromes: [] }),
+                        M.anchors.foldName('S\u00d8RKJOSEN'),
+                        M.anchors.searchAnchors([], 'ENDU'),
+                        M.anchors.visibleAnchors([], { south: 68, west: 17, north: 70, east: 20 }, 10),
+                        M.anchors.anchorCoverage({ aerodromes: [] }),
+                        M.anchors.anchorAttribution(null),
+                        M.anchors.roughNM([69, 18], [69.5, 18.5])],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -3157,7 +3166,14 @@ T('airspace draws in its own pane, BELOW the route line', () => {
 });
 T('airspace takes hover but NOT clicks - the map click still adds a waypoint', () => {
   const raw = fs.readFileSync(APP_HTML, 'utf8');
-  const seg = raw.slice(raw.indexOf('function drawAirspace'), raw.indexOf('function metarStatus'));
+  // Bounded by the AIRSPACE section's own last line, not by whatever function
+  // happens to follow it: section 2e (AIP fixes) was added in between, and its
+  // markers DO take clicks - deliberately, because a 9 px symbol is not a
+  // polygon covering the map. Slicing to the next function swept that in and
+  // failed this test for the wrong reason.
+  const start = raw.indexOf('function drawAirspace');
+  const seg = raw.slice(start, raw.indexOf("map.on('zoomend', drawAirspace)", start));
+  assert(seg.length > 500 && seg.length < 6000, 'the airspace section slice looks wrong: ' + seg.length + ' chars');
   assert(/bindTooltip/.test(seg), 'the airspace polygons carry no hover information');
   assert(/mouseover/.test(seg) && /mouseout/.test(seg), 'no hover emphasis');
   // The whole point: no click handler, and bubblingMouseEvents left default,
@@ -3201,6 +3217,280 @@ T('the map control is in the stack and reports its state', () => {
   assert(/Off/.test(btn.textContent), 'button does not report Off: ' + btn.textContent);
   ev('aircraftProfile.airspaceOn = true; updateAirspaceBtn();');
   assert(/On/.test(btn.textContent), 'button does not report On: ' + btn.textContent);
+});
+
+console.log('\n=== 64b. AIP fixes: aerodromes and VFR reporting points (v16.34) ===');
+T('reporting points come off the VAC table, validated, and nothing is invented', () => {
+  const V = require('./tools/aip-vac.mjs');
+  // THE PARSE RULE IS A COLUMN AND A FONT. Reading the nearest item left of a
+  // coordinate is wrong: the chart's artwork overlaps the table, so spot
+  // heights, tick glyphs and symbol-font mojibake sit between the name and the
+  // latitude. This fixture is the real shape of that failure.
+  const items = [
+    // the table: name at x 67 in font T, coordinates at 107 and 136
+    { str: 'ELLA',      x: 67,  y: 355, page: 1, font: 'T' },
+    { str: '690200N',   x: 107, y: 355, page: 1, font: 'C' },
+    { str: '0183820E',  x: 136, y: 355, page: 1, font: 'C' },
+    { str: 'REINELV',   x: 67,  y: 294, page: 1, font: 'T' },
+    { str: '355',       x: 89,  y: 294, page: 1, font: 'S' },   // a spot height IN BETWEEN
+    { str: '691227N',   x: 107, y: 294, page: 1, font: 'C' },
+    { str: '0181437E',  x: 136, y: 294, page: 1, font: 'C' },
+    { str: 'S\u00d8RREISA',  x: 67,  y: 212, page: 1, font: 'T' },
+    { str: '\u00f3\u00f3',        x: 82,  y: 212, page: 1, font: 'SYM' }, // symbol-font mojibake
+    { str: '690735N',   x: 107, y: 212, page: 1, font: 'C' },
+    { str: '0181145E',  x: 137, y: 212, page: 1, font: 'C' },  // 1 pt column jitter is real
+    // the graticule, drawn elsewhere on the sheet
+    { str: "69\u00b000'N", x: 20, y: 500, page: 1, font: 'G' },
+    { str: "68\u00b050'N", x: 20, y: 100, page: 1, font: 'G' },
+    { str: "018\u00b000'E", x: 200, y: 20, page: 1, font: 'G' },
+    { str: "019\u00b000'E", x: 400, y: 20, page: 1, font: 'G' }
+  ];
+  const { tables, refused } = V.reportingPointTables(items);
+  assert(tables.length === 1, tables.length + ' tables found');
+  assert(!refused.length, JSON.stringify(refused));
+  const t = tables[0];
+  assert(!t.unnamed.length, 'unnamed rows: ' + JSON.stringify(t.unnamed));
+  assert(t.points.map(p => p.name).join(',') === 'ELLA,REINELV,S\u00d8RREISA',
+    'names: ' + JSON.stringify(t.points.map(p => p.name)));
+  assert(t.font === 'T', 'the name column resolved to font ' + t.font + ' - the artwork won');
+  // The coordinate is the PUBLISHED one, to the second.
+  const ella = t.points[0];
+  assert(Math.abs(ella.lat - (69 + 2 / 60)) < 1e-9, 'lat ' + ella.lat);
+  assert(Math.abs(ella.lng - (18 + 38 / 60 + 20 / 3600)) < 1e-9, 'lng ' + ella.lng);
+  assert(ella.rawLat === '690200N' && ella.rawLng === '0183820E', 'the printed form was lost');
+
+  // A single stray coordinate on the chart face is NOT a table: with one row
+  // there is no column consensus, so whatever sits left of it would become a
+  // reporting point. ENSG's VAC does exactly this.
+  const stray = V.reportingPointTables([
+    { str: 'MAX', x: 40, y: 300, page: 1, font: 'S' },
+    { str: '601234N', x: 107, y: 300, page: 1, font: 'C' },
+    { str: '0101234E', x: 136, y: 300, page: 1, font: 'C' }
+  ]);
+  assert(!stray.tables.length && stray.refused.length === 1 && stray.refused[0].reason === 'not-a-table',
+    JSON.stringify(stray));
+
+  // Validation refuses what a broken text layer produces, rather than shipping
+  // a misspelt fix. A minute or second of 60 is a misread, not a coordinate.
+  assert(V.isPlausibleName('BJ\u00d8RN\u00d8Y LIGHT') && V.isPlausibleName('RCF E') && V.isPlausibleName('COZIP'));
+  assert(!V.isPlausibleName('\u00f3\u00f3') && !V.isPlausibleName('Ansnes') && !V.isPlausibleName('CHANGES: 0$*9$5'));
+  assert(V.parsePrintedDms('690200N') !== null, 'a real coordinate was refused');
+  assert(V.parsePrintedDms('696000N') === null, '60 minutes was accepted');
+  assert(V.parsePrintedDms('690060N') === null, '60 seconds was accepted');
+  assert(V.parsePrintedDms('69020N') === null, 'a short coordinate was accepted');
+  const g = V.graticuleRange(items);
+  assert(g && Math.abs(g.south - (68 + 50 / 60 - 0.5)) < 1e-9, 'graticule: ' + JSON.stringify(g));
+});
+T('every shipped reporting point is corroborated by the chart it came from', () => {
+  // TWO INDEPENDENT CHECKS, both asserted at build time and re-asserted here
+  // on the shipped data. The graticule one matters most: the chart labels its
+  // own lat/lng grid in a different part of the document from the table, so a
+  // point inside that range was read correctly - a corrupted digit lands off
+  // the sheet.
+  const rep = JSON.parse(fs.readFileSync('tools/prepared/vac-report.json', 'utf8'));
+  assert(rep.checks.graticule === rep.checks.total,
+    rep.checks.graticule + '/' + rep.checks.total + ' points inside their chart graticule');
+  assert(!rep.refusedPoints.length, 'refused points shipped: ' + JSON.stringify(rep.refusedPoints));
+  assert(!rep.unnamedRows.length, 'unnamed rows: ' + JSON.stringify(rep.unnamedRows));
+  // The name check is a corroboration, not a gate: a point on the sheet edge
+  // is tabulated here and DRAWN on the neighbouring aerodrome's chart.
+  assert(rep.checks.nameEchoed / rep.checks.total > 0.95,
+    rep.checks.nameEchoed + '/' + rep.checks.total + ' names also drawn as a chart label');
+  console.log('        ' + rep.checks.total + ' points: ' + rep.checks.graticule +
+    ' inside their own graticule, ' + rep.checks.nameEchoed + ' also drawn as a chart label');
+
+  const set = aipDataset();
+  const V = require('./tools/aip-vac.mjs');
+  let n = 0;
+  for (const a of set.aerodromes) {
+    assert(/^EN[A-Z]{2}$/.test(a.icao), 'bad ICAO ' + a.icao);
+    for (const p of a.points) {
+      n++;
+      assert(V.isPlausibleName(p.name), a.icao + ' ships an implausible name ' + JSON.stringify(p.name));
+      // The stored decimal must agree with the printed DMS it came from.
+      const [rl, rg] = String(p.published).split(' ');
+      assert(Math.abs(V.parsePrintedDms(rl) - p.lat) < 2e-6
+          && Math.abs(V.parsePrintedDms(rg) - p.lng) < 2e-6,
+        a.icao + ' ' + p.name + ': ' + p.published + ' does not match ' + p.lat + '/' + p.lng);
+      assert(V.roughNM([a.lat, a.lng], [p.lat, p.lng]) <= V.MAX_ARP_NM,
+        a.icao + ' ' + p.name + ' is beyond the corruption bound');
+    }
+  }
+  assert(n > 200, 'only ' + n + ' reporting points shipped');
+});
+T('an aerodrome with no published table has NO points, and that is said', () => {
+  // 29 aerodromes publish their reporting points on the chart face only, with
+  // no coordinate table to read. Reading them off the chart image is exactly
+  // the plausible wrong answer this project refuses - so they ship with no
+  // points, and the coverage is reported so a pilot is not left assuming the
+  // list is complete.
+  const A = moduleExports.anchors;
+  const set = aipDataset();
+  const cov = A.anchorCoverage(set);
+  assert(cov.total === set.aerodromes.length, 'coverage miscounts aerodromes');
+  assert(cov.withoutPoints > 0 && cov.withPoints > 0, JSON.stringify(cov));
+  assert(cov.points === set.aerodromes.reduce((s, a) => s + a.points.length, 0), 'point count disagrees');
+  // Every aerodrome still ANCHORS: the ARP is a tagged field on every AD 2
+  // page, so an aerodrome with no VAC table is still a usable waypoint.
+  const anchors = A.buildAnchors(set);
+  for (const a of set.aerodromes) {
+    assert(anchors.some((x) => x.kind === 'AD' && x.icao === a.icao),
+      a.icao + ' has no aerodrome anchor');
+  }
+  // And the attribution names the ONE grant that applies - Kartverket is not
+  // involved in the reporting points and must not be implied.
+  const attr = A.anchorAttribution(set);
+  assert(/Avinor/.test(attr) && /non-commercial/i.test(attr), attr);
+  assert(!/Kartverket/.test(attr), 'the fixes attribution wrongly credits Kartverket: ' + attr);
+  assert(/[Nn]ot for navigation/.test(attr), attr);
+});
+T('a fix is found by ICAO, by name, and without Norwegian letters', () => {
+  const A = moduleExports.anchors;
+  const anchors = A.buildAnchors(aipDataset());
+  const names = (q, near) => A.searchAnchors(anchors, q, { near: near || [69.3, 19.0] })
+    .map((a) => a.kind + ':' + a.name);
+  // An ICAO typed in full is the aerodrome, outright.
+  assert(names('ENDU')[0] === 'AD:ENDU', JSON.stringify(names('ENDU')));
+  // ...and so is the aerodrome's NAME, which is the only spelling a pilot who
+  // does not know the code has. SORKJOSEN must find it without the Ø.
+  assert(names('SORKJOSEN')[0] === 'AD:ENSR', JSON.stringify(names('SORKJOSEN')));
+  assert(names('S\u00d8RKJOSEN')[0] === 'AD:ENSR', JSON.stringify(names('S\u00d8RKJOSEN')));
+  assert(names('BARDUFOSS')[0] === 'AD:ENDU', JSON.stringify(names('BARDUFOSS')));
+  // A reporting point by name, and the nearer one first when two share it:
+  // BREIVIKA exists at both Troms\u00f8 and Evenes.
+  const br = A.searchAnchors(anchors, 'BREIVIKA', { near: [69.68, 18.91] });
+  assert(br.length === 2 && br[0].icao === 'ENTC', JSON.stringify(br.map((a) => a.icao)));
+  const brSouth = A.searchAnchors(anchors, 'BREIVIKA', { near: [68.49, 16.68] });
+  assert(brSouth[0].icao === 'ENEV', 'nearest-first ignored the map centre');
+  // A prefix beats a mere substring, and the list is bounded.
+  assert(names('STOR').every((n) => /:STOR|:ENSO/.test(n)), JSON.stringify(names('STOR')));
+  assert(A.searchAnchors(anchors, 'S', { limit: 9 }).length === 9, 'the result list is unbounded');
+  assert(!A.searchAnchors(anchors, '').length && !A.searchAnchors(anchors, '   ').length,
+    'an empty query returned matches');
+  assert(!A.searchAnchors(anchors, 'ZZZZQQ').length, 'a nonsense query returned matches');
+});
+T('an anchored waypoint carries the PUBLISHED coordinate, unrounded', () => {
+  const A = moduleExports.anchors;
+  const set = aipDataset();
+  const anchors = A.buildAnchors(set);
+  const endu = anchors.find((a) => a.kind === 'AD' && a.icao === 'ENDU');
+  const ad = set.aerodromes.find((a) => a.icao === 'ENDU');
+  const wp = A.anchorWaypoint(endu, { alt: 3500, oat: 5, wdir: 240, wspd: 18 });
+  assert(wp.lat === ad.lat && wp.lng === ad.lng, 'the coordinate was altered on the way through');
+  assert(wp.name === 'ENDU', wp.name);
+  // An AERODROME anchor uses its PUBLISHED elevation, not the caller's default
+  // altitude: that is the number a departure or arrival waypoint needs.
+  assert(wp.alt === ad.elevFt && wp.alt === 254, 'aerodrome altitude: ' + wp.alt);
+  assert(wp.anchor === 'AIP-AD', wp.anchor);
+  // A reporting point publishes NO elevation, so it takes the default rather
+  // than being given an invented one.
+  const rp = anchors.find((a) => a.kind === 'RP' && a.name === 'SODA');
+  const rwp = A.anchorWaypoint(rp, { alt: 3500, oat: 5 });
+  assert(rwp.alt === 3500 && rwp.anchor === 'AIP-RP', JSON.stringify(rwp));
+  // Nothing personal rides along: the waypoint carries only the fix.
+  assert(!/benjamin|@|licen|email/i.test(JSON.stringify(wp)), 'a waypoint leaked identifying data');
+});
+T('fixes are culled by zoom, aerodromes before reporting points', () => {
+  const A = moduleExports.anchors;
+  const anchors = A.buildAnchors(aipDataset());
+  const troms = { south: 68.8, west: 17.2, north: 69.9, east: 19.6 };
+  const at = (z) => A.visibleAnchors(anchors, troms, z);
+  assert(!at(6).length, 'something was drawn below the aerodrome zoom');
+  const ads = at(A.AERODROME_MIN_ZOOM);
+  assert(ads.length && ads.every((a) => a.kind === 'AD'),
+    'reporting points appear at the aerodrome zoom already');
+  const both = at(A.REPORTING_POINT_MIN_ZOOM);
+  assert(both.some((a) => a.kind === 'RP'), 'no reporting points at their own zoom');
+  assert(both.length > ads.length, 'the point zoom drew no more than the aerodrome zoom');
+  // Culling is not optional: the whole dataset is far bigger than one viewport.
+  assert(both.length < anchors.length / 2,
+    both.length + ' of ' + anchors.length + ' drawn for one viewport - culling is not working');
+  // The bbox really is a bbox: nothing outside it survives.
+  assert(both.every((a) => a.lat >= troms.south && a.lat <= troms.north
+    && a.lng >= troms.west && a.lng <= troms.east), 'an anchor outside the viewport was drawn');
+});
+T('the fixes layer draws clickable markers and keeps its own attribution', () => {
+  ev(SEED);
+  ev("window.__stubZoom = 10; window.__stubBounds = { south: 68.8, west: 17.2, north: 69.9, east: 19.6 };");
+  ev('aircraftProfile.fixesOn = true; drawFixes();');
+  const n = ev('fixLayers.length');
+  assert(n > 0, 'nothing drawn over Troms at zoom 10');
+  assert(n < 120, n + ' markers for one viewport - culling is not working');
+  // A fix TAKES clicks - the opposite choice from the airspace layer, and for
+  // a reason: a 9 px symbol is unambiguous where a polygon covering the map is
+  // not. Leaflet markers do not bubble clicks to the map, so the map's own
+  // add-waypoint handler does not also fire.
+  assert(ev('fixLayers.every(l => !!(l._h && l._h.click))'), 'a fix marker takes no click');
+  assert(ev('fixLayers.every(l => !!l._tip)'), 'a fix marker has no hover card');
+  assert(ev("fixLayers.every(l => l._opts.zIndexOffset < 0)"),
+    'fixes are drawn above the route markers - the plan must stay on top');
+  const attr = doc.getElementById('fixes-attribution');
+  assert(attr && attr.style.display !== 'none', 'the fixes attribution is hidden while the layer is on');
+  assert(/Avinor/.test(attr.textContent) && /non-commercial/i.test(attr.textContent), attr.textContent);
+
+  // Clicking one adds a waypoint AT THE PUBLISHED COORDINATE - no dialog,
+  // because the fix already has its published name.
+  const before = ev('flights[activeFlightIndex].waypoints.length');
+  ev("(function(){ var l = fixLayers.find(function(x){ return x._tip.indexOf('SODA') >= 0; }); l._h.click(); })()");
+  assert(ev('flights[activeFlightIndex].waypoints.length') === before + 1, 'the click added nothing');
+  const added = ev('JSON.stringify(flights[activeFlightIndex].waypoints.slice(-1)[0])');
+  const wp = JSON.parse(added);
+  const soda = aipDataset().aerodromes.find((a) => a.icao === 'ENDU').points.find((p) => p.name === 'SODA');
+  assert(wp.name === 'SODA' && wp.lat === soda.lat && wp.lng === soda.lng, added);
+  assert(typeof wp.var === 'number' && wp.varSource, 'the anchored waypoint got no magnetic variation');
+  // and it is undoable like every other edit
+  ev('undoLast(true);');
+  assert(ev('flights[activeFlightIndex].waypoints.length') === before, 'adding a fix was not undoable');
+
+  ev('aircraftProfile.fixesOn = false; drawFixes();');
+  assert(ev('fixLayers.length') === 0, 'turning the layer off left markers behind');
+  assert(attr.style.display === 'none', 'the attribution outlived the layer');
+});
+T('the fixes controls are in the stack and report their state', () => {
+  for (const id of ['fixes-btn', 'fix-search-btn']) {
+    const btn = doc.getElementById(id);
+    assert(btn, 'no ' + id);
+    assert(btn.parentElement === doc.getElementById('map-controls'),
+      id + ' is outside the control stack - it will be invisible');
+    assert(btn.classList.contains('map-ctl'), id + ' lacks the shared class');
+  }
+  ev('aircraftProfile.fixesOn = false; updateFixesBtn();');
+  assert(/Off/.test(doc.getElementById('fixes-btn').textContent), 'button does not report Off');
+  ev('aircraftProfile.fixesOn = true; updateFixesBtn();');
+  assert(/On/.test(doc.getElementById('fixes-btn').textContent), 'button does not report On');
+  // The layer choice persists with the profile, and is on the ONE whitelist.
+  assert(moduleExports.exch.PROFILE_KEYS.includes('fixesOn'), 'fixesOn is not a persisted profile key');
+});
+TA('the fix search finds a point by name and places it on the published coordinate', async () => {
+  ev(SEED);
+  const before = ev('flights[activeFlightIndex].waypoints.length');
+  const p = ev('searchFixes()');
+  await tick();
+  typeInDialog('STORSLETT');
+  answerDialog('Search');
+  await tick();
+  answerDialog('STORSLETT');
+  await p;
+  assert(ev('flights[activeFlightIndex].waypoints.length') === before + 1, 'the search added nothing');
+  const wp = JSON.parse(ev('JSON.stringify(flights[activeFlightIndex].waypoints.slice(-1)[0])'));
+  const pub = aipDataset().aerodromes.find((a) => a.icao === 'ENSR').points.find((x) => x.name === 'STORSLETT');
+  assert(wp.name === 'STORSLETT' && wp.lat === pub.lat && wp.lng === pub.lng, JSON.stringify(wp));
+});
+TA('a nonsense search says WHY there is no match, and adds nothing', async () => {
+  ev(SEED);
+  const before = ev('flights[activeFlightIndex].waypoints.length');
+  const p = ev('searchFixes()');
+  await tick();
+  typeInDialog('ZZZZQQ');
+  answerDialog('Search');
+  await tick();
+  const title = doc.querySelector('#app-dialog .dlg-title');
+  assert(title && /No published fix matches/.test(title.textContent), title && title.textContent);
+  const msg = doc.querySelector('#app-dialog .dlg-msg');
+  assert(msg && /chart face only/.test(msg.textContent), msg && msg.textContent);
+  answerDialog('OK');
+  await p;
+  assert(ev('flights[activeFlightIndex].waypoints.length') === before, 'a failed search changed the route');
 });
 
 console.log('\n=== 65. AIP national-border resolution (v16.30) ===');
