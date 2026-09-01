@@ -80,9 +80,12 @@ claude.ai; this repo is the continuation point for Claude Code.
     stayed in the page: it mutates app state and drives the UI, so it
     belongs with the map interactions, not the engine. legs.js takes the
     aircraft profile from performance.js (`activeAircraftProfile()`), so
-    there is still exactly ONE injected copy. Still inline: map setup,
-    base chart, map interactions, winds, table rendering, modals,
-    integrity check, plotting list, storage.
+    there is still exactly ONE injected copy. v16.16 added `daylight.js`
+    (the SERA solar math) and `winds.js` (u/v vector maths + the
+    Open-Meteo request/response shapes), taking the page to 4338. Still
+    inline: map setup, base chart, map interactions, the wind fetch and
+    matrix fill, table rendering, modals, integrity check, plotting list,
+    storage.
   - HIDDEN GLOBALS ARE THE TRAP when extracting. `performance.js` read
     `aircraftProfile`, which is declared `let` at the top level of the
     page script: that is a global LEXICAL binding, shared with the
@@ -91,7 +94,17 @@ claude.ai; this repo is the continuation point for Claude Code.
     takes what it needs as an argument or through an explicit injector
     (`setAircraftProfile(ref)`, called once where the page declares the
     object), never off the ambient scope. Grepping for `document.` is
-    NOT enough to prove a slice is pure; requiring it in bare Node is. `src/main.js` puts every export
+    NOT enough to prove a slice is pure; requiring it in bare Node is.
+    IMPORTING IS NOT ENOUGH EITHER - `require()` does not execute function
+    bodies, so a free identifier inside one only throws when CALLED. The
+    winds extraction proved it: the module imported cleanly and all 261
+    tests passed while it silently depended on THREE page globals
+    (`toRad`, `OM_LEVELS`, `flights`). test.js now has a standalone-run
+    guard that CALLS at least one export of every module with real
+    arguments; it found all three immediately. Add every new module to it.
+    Where the dependency is genuine app state (`flights`,
+    `legStartTimes`), the fix is an explicit ARGUMENT, not an injector:
+    `buildWindSamplePoints(flights, legStartTimes)`. `src/main.js` puts every export
     on `window` (and `window.C182`) so not-yet-migrated inline code and
     the test suite keep working during the move.
   - Bundling made real libraries possible; prefer an authoritative one
