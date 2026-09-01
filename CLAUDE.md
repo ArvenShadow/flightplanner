@@ -164,7 +164,8 @@ That condition is now a constraint on the project, not a footnote:
   name, an email, a licence number and coordinates through
   buildExportPayload and asserts none of it appears in the JSON. Add new
   aircraft settings to PROFILE_KEYS; never widen it to anything that
-  identifies a person, a machine or a place.
+  identifies a person, a machine or a place. (v16.34 added `fixesOn`, a
+  boolean layer toggle.)
 
 ## Phase 2: types (v16.20)
 
@@ -633,21 +634,100 @@ errors is the standard.
   - A test now checks EVERY ring for self-intersection. It is 0 of 228. The
     v16.29 "duplicate volumes" dedupe was masking this bug: those were not
     duplicates, they were distinct sub-volumes all given the same wrong ring.
-- **VFR REPORTING POINTS ARE MACHINE-READABLE AFTER ALL (v16.30 finding, not
-  yet built)**: they are absent from the eAIP HTML (verified against ENDU's
-  full 189-marker vocabulary), but the VAC PDF has a TEXT LAYER, not a scan.
-  `AD 2 <ICAO> 6-1 "Visual Approach Chart - ICAO"` in the AD 2.24 table gives
-  the graphic id; the PDF is at `<edition>/graphics/<id>.pdf` (NOT under
-  `html/`). pypdfium2 pulls a clean `NAME 690200N 0183820E` list - all 20
-  ENDU points, matching 1ntray's hand transcription exactly, plus the note
-  "SIG POINTS ELLA END WERA HEL ONLY" (those two are helicopter-only).
-  So no transcription is needed and it scales to every aerodrome whose VAC
-  carries a text layer. CAUTION: some VAC text uses a custom font encoding
-  that extracts as mojibake ("CHANGES: 0$*9$5"), so every name and coordinate
-  must be validated before use, and anything that fails reported rather than
-  guessed. NOTE this is the coordinate TABLE only - it does NOT georeference
-  the chart raster, and the PDF carries no GeoPDF markers (/Measure, /GPTS,
-  /Viewport all absent), so a chart overlay remains out of reach.
+- **AIP FIXES: AERODROMES AND REPORTING POINTS (v16.34, roadmap item 3 —
+  BUILT)**: 53 aerodromes and 243 VFR reporting points, clickable on the map
+  and searchable by name. `src/lib/anchors.js` (pure: search, culling, the
+  waypoint an anchor becomes), section 2e of the page, `tools/aip-vac.mjs`
+  (pure parse) and `tools/build-vac.mjs` (fetch + validate + report).
+  - REPORTING POINTS ARE NOT IN THE eAIP HTML — verified against ENDU's full
+    189-marker vocabulary. They exist only on the VAC, whose PDF has a TEXT
+    LAYER, not a scan. `AD 2 <ICAO> 6-1 "Visual Approach Chart - ICAO"` in the
+    AD 2.24 chart table gives the graphic id; the PDF is at
+    `<edition>/graphics/<id>.pdf` (NOT under `html/`). Read from the AD 2.24
+    ROW TITLE, not by scanning links: an AD 2 page links 4 to 103 charts.
+  - **THE PARSE RULE IS A COLUMN AND A FONT, NEVER PROXIMITY.** This is the
+    whole trick. Reading the nearest text item left of a coordinate is WRONG:
+    the chart's artwork overlaps the table, so spot heights ("355", "1388"),
+    tick glyphs and symbol-font mojibake sit BETWEEN a point's name and its
+    latitude. Measured: nearest-left lost the name on 30 of 244 rows and
+    returned chart symbology for 8 more. Instead coordinate pairs are clustered
+    by page and x, and the name column is the (x, fontName) combination
+    appearing on the most rows of that cluster. One column, one font, one table
+    — 244 of 244 rows named, 0 suspect.
+  - THAT ALSO DISPOSES OF THE MOJIBAKE the v16.30 survey warned about
+    ("CHANGES: 0$*9$5"). Some VACs draw symbols with a custom font encoding
+    that extracts as garbage, but it is always a DIFFERENT font from the
+    table's, so the font consensus excludes it STRUCTURALLY rather than by
+    blacklisting characters that happen to look wrong today.
+  - TWO INDEPENDENT CROSS-CHECKS, both asserted at build time and re-asserted
+    on the shipped data:
+    1. **GRATICULE: 244 of 244.** The VAC labels its own lat/long grid on the
+       sheet border — a different part of the document from the table — so a
+       coordinate inside that range was read correctly. A corrupted digit lands
+       off the sheet. This is the real coordinate check.
+    2. **NAME ECHO: 237 of 244** names appear a second time in the same PDF as
+       a drawn chart label. Of the 7 that do not, 5 are shared coastal points
+       (FLATHOLMEN, TUNGENES, BOKN VEST/ØST, SKUDE) tabulated on one sheet and
+       DRAWN on the neighbouring aerodrome's — corroborated across two charts.
+       This is a corroboration, not a gate, precisely because a sheet-edge
+       point legitimately has no label.
+  - THE ARP BOUND IS A CORRUPTION GUARD, NOT A MEASURED TOLERANCE, and the
+    difference matters. The border could pick 2 NM because its population split
+    with a 7x gap; here all 244 points lie 0.7-30.0 NM from their ARP on a
+    SMOOTH distribution (p50 8.3, p90 14.6) — that is just what a VAC covers,
+    with no outlier group to cut off. So MAX_ARP_NM is 60, twice the observed
+    max: it cannot reject real data and still catches the failure it exists for
+    (a misread digit moves a point a whole degree). Each aerodrome records its
+    own `maxPointNM` so this is auditable.
+  - WHAT IS ABSENT IS SAID, NOT APPROXIMATED. **29 of 53 aerodromes publish
+    their reporting points on the chart face only**, with no coordinate table:
+    24 VACs carry no table, 7 aerodromes have no VAC, and ENSG prints ONE
+    stray coordinate which is refused as `not-a-table` (with a single row there
+    is no column consensus, so whatever sits left of it would become a
+    reporting point). Those aerodromes still ANCHOR — the ARP is a tagged field
+    on every AD 2 page — they simply have no points, and `anchorCoverage`
+    reports the split so a pilot is not left assuming the list is complete.
+    Reading coordinates off a chart image stays refused.
+  - CLICK, NOT HOVER — the OPPOSITE choice from the airspace overlay, for a
+    stated reason. An airspace polygon covers most of the map, so a click
+    handler there would break route building; a fix is a 9 px symbol, so a
+    click is unambiguous and IS the useful gesture. Leaflet markers do not
+    bubble clicks to the map the way paths do, so the map's own add-waypoint
+    handler never also fires — verified in Chromium: one click, one waypoint,
+    no naming dialog. The LABEL is `pointer-events: none`; a wide text label
+    beside the symbol would otherwise swallow clicks meant for the map or the
+    route line.
+  - NO DIALOG ON ADD, deliberately: clicking bare map must ask for a name
+    because there is nothing to name the point after, but a fix ALREADY has its
+    published name. An AERODROME as the first waypoint also sets the flight's
+    `depElev` to its published field elevation — leaving the two disagreeing
+    would put the climb profile on the wrong datum. (ENDU publishes 254 ft,
+    which is what the seed route already used.)
+  - SEARCH FOLDS Æ Ø Å ONTO ASCII, both sides, so SORKJOSEN finds SØRKJOSEN.
+    An aerodrome answers to its ICAO **and** its published name (`folds[]`),
+    because a pilot who does not know the code has only the name. Ranking:
+    exact ICAO/name, then prefix, then substring, aerodromes ahead of points at
+    equal strength, and within a rank NEAREST THE MAP CENTRE first — BREIVIKA
+    exists at both Tromsø and Evenes.
+  - THE CHART RASTER IS STILL NOT GEOREFERENCED. The PDFs carry no GeoPDF
+    markers (/Measure, /GPTS, /Viewport all absent), so a VAC overlay remains
+    out of reach. This is the coordinate TABLE only.
+  - `pdfjs-dist` is a devDependency — needed to PREPARE the data, never to run
+    the planner. `tools/prepared/vac-points.json` is COMMITTED, same
+    arrangement as the border, so `npm run build:aip` reads a snapshot and a
+    re-run cannot silently change a published coordinate. build-aip WARNS if
+    the snapshot's edition differs from the airspace edition.
+  - jsdom cannot prove a marker is visible or that a click does not bubble.
+    `tools/verify-fixes.mjs` drives real Chromium offline and MEASURES:
+    every map control's rect (the v16.22 lesson — two buttons once shipped at
+    y=900 on a 900 px viewport), every symbol on-screen, every label
+    click-through, one click adding exactly one waypoint on the published
+    coordinate with no dialog, the hover card's size and content, the zoom
+    thresholds (aerodromes at 7, points at 9, nothing at 6), and that bare-map
+    clicking still works. NOTE its zoom checks MUST use
+    `setView(..., {animate: false})` and settle: with the default animation
+    `getZoom()` reports the OLD zoom for a frame, which made the first run read
+    15 fixes at zoom 6 and 0 at zoom 7 — exactly inverted.
 - **Airspace OVERLAY (v16.31, roadmap item 4 COMPLETE)**: `src/lib/airspace.js`
   (pure: culling, colours, hover text) plus the Leaflet layers in section 2d of
   the page. 228 volumes available, ~11 drawn over Troms at z9.
@@ -812,11 +892,11 @@ scoped. In the user's order:
    line for "insert a waypoint here"; that gesture would have to move.
 2. **An editable radius ring (default 1 NM) around the whole track**, for
    MSA planning - a corridor buffer drawn along the route.
-3. **AIP reimplementation with anchored waypoints**: aerodromes with their
-   reporting points and the information for each. Airspace data was REMOVED
-   at v16.x for being community-sourced and stale (see "Airspace overlay"
-   above); this must come from the official AIP Norge, and the licence and
-   update path have to be verified BEFORE any of it is built.
+3. **DONE at v16.34** — AIP reimplementation with anchored waypoints:
+   aerodromes with their reporting points and the information for each. See
+   "AIP FIXES" above. 53 aerodromes, 243 reporting points, clickable and
+   searchable; 29 aerodromes publish their points graphically only and are
+   reported as carrying none.
 4. **DONE at v16.31** — More AIP: draw every airspace with hoverable name,
    vertical limits, class, and the frequencies plus station callsigns.
    (Data landed v16.29-v16.30; see the two AIP entries and the overlay entry

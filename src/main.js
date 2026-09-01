@@ -19,6 +19,7 @@ import * as performance from './lib/performance.js';
 import * as format from './lib/format.js';
 import * as legs from './lib/legs.js';
 import * as airspace from './lib/airspace.js';
+import * as anchors from './lib/anchors.js';
 import * as daylight from './lib/daylight.js';
 import * as winds from './lib/winds.js';
 import * as integrity from './lib/integrity.js';
@@ -27,7 +28,7 @@ import * as plotting from './lib/plotting.js';
 import * as metar from './lib/metar.js';
 
 const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs,
-    ...airspace,
+    ...airspace, ...anchors,
               ...daylight, ...winds, ...integrity, ...exchange, ...plotting, ...metar };
 
 // Named globals for the not-yet-migrated inline code and the test suite.

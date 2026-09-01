@@ -37,6 +37,7 @@ const CACHE = '.aip-cache';
 const OUT_DATA = 'data/aip.js';
 const OUT_REPORT = 'data/aip-report.json';
 const BORDER_FILE = 'tools/prepared/norway-border.json';
+const VAC_FILE = 'tools/prepared/vac-points.json';
 const ROOT = 'https://aim-prod.avinor.no';
 const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning; permission held)';
 
@@ -594,6 +595,33 @@ async function main() {
     console.log('border: NOT PREPARED - run `npm run build:border`; border-referenced airspaces will be omitted');
   }
 
+  /**
+   * The prepared aerodromes and their VFR reporting points.
+   *
+   * Same arrangement as the border: a COMMITTED snapshot, prepared by
+   * `npm run build:vac`, so this build reads a fixed file rather than
+   * downloading 48 chart PDFs and needing a PDF library. Absent is not fatal -
+   * the dataset then ships with no anchors and the planner says so.
+   *
+   * Reporting points are NOT in the eAIP HTML at all (verified against ENDU's
+   * full 189-marker vocabulary); they exist only on the VAC. See
+   * tools/aip-vac.mjs for how they are read and what is refused.
+   */
+  const vac = await readFile(VAC_FILE, 'utf8').then(JSON.parse).catch(() => null);
+  if (vac) {
+    if (vac.editionLabel !== edition.editionLabel) {
+      // A mismatch is not fatal, but it MUST be said: reporting points from a
+      // superseded edition next to current airspace is exactly the kind of
+      // quietly-stale mix this project refuses to ship silently.
+      console.log(`vac: WARNING - prepared from edition ${vac.editionLabel}, ` +
+        `airspace is ${edition.editionLabel}. Re-run \`npm run build:vac\`.`);
+    }
+    console.log(`vac: ${vac.points} reporting points at ${vac.aerodromesWithPoints} of ` +
+      `${vac.aerodromes} aerodromes, retrieved ${String(vac.retrievedAtUtc).slice(0, 10)}`);
+  } else {
+    console.log('vac: NOT PREPARED - run `npm run build:vac`; the dataset will carry no aerodrome anchors');
+  }
+
   const report = {
     provider: 'Avinor', source: 'eAIP',
     editionLabel: edition.editionLabel,
@@ -662,7 +690,17 @@ async function main() {
     attribution: 'Airspace data © Avinor eAIP, used with permission. Non-commercial use only.' +
       (border ? ' National border © Kartverket (NLOD).' : ''),
     features,
-    sectors
+    sectors,
+    /** Aerodromes as ANCHORS: the published ARP, elevation and variation, plus
+     *  the VFR reporting points read off the VAC. This is what lets a pilot
+     *  put a waypoint on a named fix at its published coordinate instead of
+     *  clicking an approximate spot on the map. */
+    aerodromes: vac ? vac.data : [],
+    aerodromeSource: vac ? {
+      source: vac.source, attribution: vac.attribution,
+      editionLabel: vac.editionLabel, effectiveFrom: vac.effectiveFrom,
+      points: vac.points, aerodromesWithPoints: vac.aerodromesWithPoints
+    } : null
   };
 
   await mkdir('data', { recursive: true });
@@ -678,6 +716,8 @@ async function main() {
   console.log(`skipped ${report.skipped.length}:`, reasons);
   console.log(`border-resolved airspaces: ${report.borderResolved.length}`);
   console.log(`ACC sectors: ${sectors.length} usable, ${report.sectorsUnresolved.length} not`);
+  console.log(`aerodrome anchors: ${dataset.aerodromes.length} aerodromes, ` +
+    `${dataset.aerodromes.reduce((n, a) => n + a.points.length, 0)} reporting points`);
   delete report._border;
 }
 

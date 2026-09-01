@@ -1,0 +1,153 @@
+{
+  "noVac": [
+    {
+      "icao": "ENAS",
+      "reason": "AD 2.24 lists no Visual Approach Chart"
+    },
+    {
+      "icao": "ENBH",
+      "reason": "no AD 2 page: EN-AD-2.ENBH -> HTTP 404"
+    },
+    {
+      "icao": "ENEG",
+      "reason": "AD 2.24 lists no Visual Approach Chart"
+    },
+    {
+      "icao": "ENKJ",
+      "reason": "AD 2.24 lists no Visual Approach Chart"
+    },
+    {
+      "icao": "ENRY",
+      "reason": "AD 2.24 lists no Visual Approach Chart"
+    },
+    {
+      "icao": "ENSB",
+      "reason": "AD 2.24 lists no Visual Approach Chart"
+    },
+    {
+      "icao": "ENVR",
+      "reason": "no AD 2 page: EN-AD-2.ENVR -> HTTP 404"
+    }
+  ],
+  "noTable": [
+    {
+      "icao": "ENBL",
+      "chart": "AD 2 ENBL 6 - 1"
+    },
+    {
+      "icao": "ENBN",
+      "chart": "AD 2 ENBN 6 - 1"
+    },
+    {
+      "icao": "ENBS",
+      "chart": "AD 2 ENBS 6 - 1"
+    },
+    {
+      "icao": "ENBV",
+      "chart": "AD 2 ENBV 6 - 1"
+    },
+    {
+      "icao": "ENFL",
+      "chart": "AD 2 ENFL 6 - 1"
+    },
+    {
+      "icao": "ENHF",
+      "chart": "AD 2 ENHF 6 - 1"
+    },
+    {
+      "icao": "ENHK",
+      "chart": "AD 2 ENHK 6 - 1"
+    },
+    {
+      "icao": "ENHV",
+      "chart": "AD 2 ENHV 6 - 1"
+    },
+    {
+      "icao": "ENLK",
+      "chart": "AD 2 ENLK 6 - 1"
+    },
+    {
+      "icao": "ENMH",
+      "chart": "AD 2 ENMH 6 - 1"
+    },
+    {
+      "icao": "ENML",
+      "chart": "AD 2 ENML 6 - 1"
+    },
+    {
+      "icao": "ENMS",
+      "chart": "AD 2 ENMS 6 - 1"
+    },
+    {
+      "icao": "ENNM",
+      "chart": "AD 2 ENNM 6 - 1"
+    },
+    {
+      "icao": "ENRA",
+      "chart": "AD 2 ENRA 6 - 1"
+    },
+    {
+      "icao": "ENRM",
+      "chart": "AD 2 ENRM 6 - 1"
+    },
+    {
+      "icao": "ENRS",
+      "chart": "AD 2 ENRS 6 - 1"
+    },
+    {
+      "icao": "ENSD",
+      "chart": "AD 2 ENSD 6 - 1"
+    },
+    {
+      "icao": "ENSG",
+      "chart": "AD 2 ENSG 6 - 1"
+    },
+    {
+      "icao": "ENSH",
+      "chart": "AD 2 ENSH 6 - 1"
+    },
+    {
+      "icao": "ENSK",
+      "chart": "AD 2 ENSK 6 - 1"
+    },
+    {
+      "icao": "ENSS",
+      "chart": "AD 2 ENSS 6 - 1"
+    },
+    {
+      "icao": "ENST",
+      "chart": "AD 2 ENST 6 - 1"
+    },
+    {
+      "icao": "ENVA",
+      "chart": "AD 2 ENVA 6 - 1"
+    },
+    {
+      "icao": "ENVD",
+      "chart": "AD 2 ENVD 6 - 1"
+    }
+  ],
+  "refusedTables": [
+    {
+      "icao": "ENSG",
+      "chart": "AD 2 ENSG 6 - 1",
+      "reason": "not-a-table",
+      "detail": "1 coordinate(s) at x 89.9 on page 1 - fewer than 2, so there is no column to read a name from"
+    }
+  ],
+  "unnamedRows": [],
+  "refusedPoints": [],
+  "duplicates": [
+    {
+      "icao": "ENBR",
+      "name": "SUNOS"
+    }
+  ],
+  "checks": {
+    "nameEchoed": 237,
+    "nameOnly": 7,
+    "graticule": 244,
+    "noGraticule": 0,
+    "total": 244
+  }
+}

@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.33)
+# C182 Flight Planner (v16.34)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -66,14 +66,38 @@ Limits are shown exactly as published: GND, UNL and flight levels stay as they
 are, and a flight level is never converted to an altitude. **A planning aid —
 verify against the current AIP and NOTAM.**
 
+## AIP fixes: aerodromes and reporting points
+
+The **⌖ Fixes** button draws the published **aerodromes** (from zoom 7) and
+**VFR reporting points** (from zoom 9). **Click one and it becomes a waypoint
+at its published coordinate** — no dialog, because the fix already has its
+published name — so a leg to SØRREISA is drawn to the point the chart states
+rather than to wherever you managed to click. An aerodrome brings its published
+field elevation with it, and as the first waypoint it sets the flight's
+departure elevation. **🔎 Find fix** searches by name or ICAO; the Norwegian
+letters are optional (SORKJOSEN finds SØRKJOSEN) and matches are ordered by
+strength, then by distance from the middle of your map.
+
+Reporting points come from the **coordinate table printed on each aerodrome's
+Visual Approach Chart**, read from the PDF's text layer at build time
+(`npm run build:vac`). 243 points at 24 aerodromes.
+
+**29 of the 53 aerodromes publish their points on the chart face only**, with
+no table to read. Those aerodromes still anchor on their ARP but carry **no
+points**, and the coverage is reported rather than quietly implied — nothing is
+taken off a chart image. Every coordinate that does ship is checked against the
+chart's *own* printed lat/long graticule first, and a name that fails to decode
+is refused rather than shipped misspelt. The chart raster is not georeferenced,
+so there is no VAC overlay.
+
 ## Airspace data
 
 `data/aip.js` holds 227 Norwegian airspace volumes — CTR, TMA, TIZ, TIA, CTA
-and the offshore zones — plus the 28 Polaris ACC sectors, with their published
-class, vertical limits, callsigns and frequencies, imported from the
-**official Avinor eAIP** by
-`npm run build:aip`. The import runs at build time only: the planner never
-contacts Avinor and never parses eAIP HTML.
+and the offshore zones — plus the 28 Polaris ACC sectors and 53 aerodromes with
+their 243 VFR reporting points, all with their published class, vertical
+limits, callsigns and frequencies, imported from the **official Avinor eAIP**
+by `npm run build:aip`. The import runs at build time only: the planner never
+contacts Avinor, never parses eAIP HTML and never opens a PDF.
 
 **Used with permission from Avinor AS, for non-commercial use only.** That is
 a permission granted to this project, not an open licence — it does not travel
@@ -119,6 +143,8 @@ module, with no DOM, and is tested in plain Node:
 | `integrity.js` | the rules behind the red DO-NOT-USE banner |
 | `exchange.js` | export/import, and the whitelist that keeps personal data out |
 | `plotting.js` | the copyable chart plotting text |
+| `airspace.js` | the airspace overlay: culling, colours, the hover card, the Polaris sector lookup |
+| `anchors.js` | AIP fixes: aerodrome and reporting-point search, culling, and the waypoint one becomes |
 | `metar.js` | METAR/TAF from MET Norway, and the little of it that is decoded |
 | `format.js` | times, coordinates, unit conversion |
 | `dialog.js` | in-app popups and toasts |
@@ -143,10 +169,13 @@ npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
 npm run typecheck  # TypeScript checks every module (0 errors required)
-npm test           # typecheck, build, then the suite against dist (332 tests)
+npm test           # typecheck, build, then the suite against dist (342 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
 npm run verify:hover           # Chromium check of the position-dependent
                                # Polaris sector frequency on the hover card
+npm run verify:fixes           # Chromium check of the AIP fixes layer: every
+                               # control measured on screen, one click = one
+                               # waypoint on the published coordinate
 node tools/verify-hosted.mjs   # Chromium check of the service-worker rules
 node tools/verify-visual.mjs   # pixel + computed-style diff vs a reference build
                                # (all three need `npm install --no-save playwright`)

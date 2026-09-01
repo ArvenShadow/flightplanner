@@ -30,7 +30,7 @@ export const PROFILE_KEYS = [
   'roc', 'climbTas', 'climbFf', 'rod', 'descTas', 'descFf',
   'patternTime', 'patternFf', 'taxiFuel',
   'theme', 'distUnit', 'fuelUnit', 'minuteMark', 'declutter', 'baseChart', 'chartDetail',
-  'airspaceOn'
+  'airspaceOn', 'fixesOn'
 ];
 
 /** Copy across only the allowed profile keys. Anything else - now or
