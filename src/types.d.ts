@@ -60,11 +60,12 @@ interface Waypoint {
    */
   bodNM?: number | null;
   /**
-   * TOP OF CLIMB TARGET for the leg ending here: "be at the planned altitude
-   * by this many NM after the start fix". A CHECK, NOT A PIN - honouring it
-   * would mean climbing at a rate the POH tables say nothing about, so the
-   * schedule stays on the profile's performance and the leg reports whether
-   * the target was met and what rate it would need. See pinNM in legs.js.
+   * TOP OF CLIMB for the leg ending here: "be level at the planned altitude by
+   * this many NM after the start fix". It SETS the bottom of climb, worked
+   * backwards at the profile's own rate, so the aircraft's performance is never
+   * invented - only the climb's position moves. When it cannot be reached even
+   * climbing from the start fix, the leg reports the altitude that fix would
+   * have to be crossed at instead. Overrides bocNM on the same leg.
    */
   tocNM?: number | null;
   /** Intermediate points that BEND the path to this waypoint without
@@ -192,13 +193,26 @@ interface ScheduleLeg {
    *  lower fix already runs through this leg's tail - the aircraft is still
    *  going down there, so "be level before this fix" cannot be true. */
   bodRefused: boolean;
-  /** The pilot's "be level by here", or null. A target, never a pin. */
+  /** The pilot's "be level by here", or null. It SETS the bottom of climb by
+   *  working backwards at the profile's own rate - see climbStartForToc. */
   tocTargetNM: number | null;
-  /** False only when a tocTargetNM was asked for and the profile's climb does
-   *  not reach the altitude by then. */
+  /** False only when the climb does not fit before the target even starting at
+   *  the leg's first fix. */
   tocTargetMet: boolean;
-  /** The rate of climb the tocTargetNM would actually need, feet per minute -
-   *  reported so the pilot can judge it, never used to recompute the climb. */
+  /** True when climbStartNM was derived from tocTargetNM rather than pinned
+   *  directly, so a bocNM on the same leg was ignored. */
+  tocDerivedBoc: boolean;
+  /** What this leg's START fix would have to be crossed at for the target to
+   *  be reachable at the profile's climb rate. Null on the first leg (there is
+   *  no earlier fix to raise) and null when the figure was TRIED and did not
+   *  work because the earlier legs cannot climb that high by then. */
+  tocNeedsEntryAlt: number | null;
+  /** True when a candidate altitude was computed, tried, and did not help -
+   *  so no altitude at the previous fix makes the target reachable. */
+  tocNoAltHelps: boolean;
+  /** The rate of climb the target would need from this leg's first fix, feet
+   *  per minute - reported so the pilot can judge it, never used to recompute
+   *  the climb. */
   climbRateReqFpm: number | null;
 }
 

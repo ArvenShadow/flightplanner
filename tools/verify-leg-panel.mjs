@@ -104,25 +104,27 @@ const warned = await page.evaluate(() => {
 check(!!warned && /ft\/min/.test(warned.text) && warned.h > 10,
   'an impossible "be level by" is warned about, with the rate it would need: ' + (warned ? warned.text : 'no warning'));
 
-// Contradictory pins must SAY they contradict, not report a rate of nothing.
-await page.evaluate(() => {
-  document.getElementById('leg-boc').value = '20';
-  document.getElementById('leg-toc').value = '3';
-  updateLegPreview();
-});
-await page.waitForTimeout(150);
-const clash = await page.evaluate(() => {
-  const w = document.querySelector('#leg-preview .leg-warn');
-  return w ? w.innerText : '';
-});
-check(/contradict/i.test(clash), 'contradictory pins are named as such: ' + JSON.stringify(clash));
+// A "be level by" target OWNS the bottom of climb, so the BOC box must stop
+// taking input and say so - two settings for one corner is how a contradiction
+// arises in the first place.
+const owned = await page.evaluate(() => ({
+  disabled: document.getElementById('leg-boc').disabled,
+  note: getComputedStyle(document.getElementById('leg-boc-note')).display
+}));
+check(owned.disabled && owned.note !== 'none',
+  'the BOC box is derived and says so while a target is set: ' + JSON.stringify(owned));
 
-// back to just the BOC for the rest of the run
+// back to just the BOC for the rest of the run. updateLegPreview() must run
+// BEFORE the click: it is what re-enables the button, and clicking a disabled
+// one silently does nothing.
 await page.evaluate(() => {
   document.getElementById('leg-toc').value = '';
+  updateLegPreview();
   document.getElementById('leg-boc-here').click();
   updateLegPreview();
 });
+check(await page.evaluate(() => !document.getElementById('leg-boc').disabled),
+  'clearing the target hands the BOC box back');
 
 await page.evaluate(() => saveLegSettings());   // Apply - the button is
 // wired to this; the GESTURE is what this file is testing, not the click target.
@@ -136,23 +138,75 @@ check(applied.closed, 'Apply closed the panel');
 check(applied.boc > 1 && Math.abs(applied.boc - applied.climbStart) < 1e-6,
   'the pin reached the schedule: pin ' + applied.boc + ', climb starts ' + applied.climbStart);
 
-// ---- the pinned corners are PAINTED ---------------------------------------
-// Pin a BOD on the last leg too, so all four marks exist at once.
-at = await ptOf(69.75, 18.5);
-await page.mouse.click(at[0], at[1], { button: 'right' });
-await page.waitForTimeout(350);
-await page.evaluate(() => document.getElementById('leg-bod-here').click());
+// ---- the ALTITUDE advice, and the one-click fix ---------------------------
+// A target on a LATER leg that does not fit must offer the altitude the
+// previous fix needs - and pressing the button must actually satisfy it.
+await page.evaluate(async () => {
+  flights = [{ id: 1, title: 'F2', depElev: 254, waypoints: [
+    { lat: 68.40, lng: 18.50, name: 'ENDU', alt: 254,  oat: 5, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.20, lng: 18.50, name: 'MID',  alt: 2500, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.95, lng: 18.50, name: 'ENTC', alt: 7500, oat: 0, wdir: 0, wspd: 0, var: -12 }] }];
+  activeFlightIndex = 0;
+  map.setView([69.58, 18.5], 8, { animate: false });
+  await new Promise((r) => setTimeout(r, 320));
+  applyZoomDeclutter(); refreshMap(); renderAllFlightTables();
+});
+await page.waitForTimeout(320);
+const mid2 = await page.evaluate(() => {
+  const b = map.getBounds();
+  const p = map.latLngToContainerPoint([(b.getSouth() + b.getNorth()) / 2, 18.5]);
+  const r = document.getElementById('map').getBoundingClientRect();
+  return [r.left + p.x, r.top + p.y];
+});
+await page.mouse.click(mid2[0], mid2[1], { button: 'right' });
+await page.waitForTimeout(320);
+const onMid = await page.evaluate(() => document.getElementById('leg-modal-title').textContent);
+check(/MID/.test(onMid), 'the panel opened on the MID leg: ' + onMid);
+await page.evaluate(() => { document.getElementById('leg-toc').value = '5'; updateLegPreview(); });
+await page.waitForTimeout(200);
+const advice = await page.evaluate(() => {
+  const w = document.querySelector('#leg-preview .leg-warn');
+  return { text: w ? w.innerText : '', hasButton: !!document.querySelector('#leg-preview .leg-warn button') };
+});
+check(/Cross MID at/.test(advice.text) && advice.hasButton,
+  'it offers the altitude MID needs, with a button: ' + JSON.stringify(advice.text));
+await page.evaluate(() => document.querySelector('#leg-preview .leg-warn button').click());
+await page.waitForTimeout(400);
+// The button raises the fix straight away (it is a route edit, and undoable);
+// the target itself is still only in the form until Apply, so the PREVIEW is
+// what shows whether the advice worked.
+const afterFix = await page.evaluate(() => ({
+  midAlt: flights[0].waypoints[1].alt,
+  warn: !!document.querySelector('#leg-preview .leg-warn'),
+  preview: document.getElementById('leg-preview').innerText.replace(/\n+/g, ' | ')
+}));
+check(afterFix.midAlt > 2500, 'the button raised MID: ' + afterFix.midAlt + ' ft');
+check(!afterFix.warn, 'the warning is gone once the advice is taken: ' + afterFix.preview);
+// Now commit the target and confirm the schedule really lands on it.
 await page.evaluate(() => saveLegSettings());
 await page.waitForTimeout(320);
+const committed = await page.evaluate(() => {
+  const S = computeFlightSchedule(flights[0])[1];
+  return { pin: flights[0].waypoints[2].tocNM, met: S.tocTargetMet, toc: S.tocAlongNM };
+});
+check(committed.pin === 5, 'the target was stored: ' + committed.pin);
+check(committed.met && Math.abs(committed.toc - 5) < 0.05,
+  'the schedule lands on the target - TOC at ' + (committed.toc && committed.toc.toFixed(3)) + ' NM against 5');
 
-// ZOOM IN BEFORE MEASURING THE MARKS. The declutter feature hides the TOC/TOD
-// chips and ticks at far zoom on purpose (`#map.zoom-far .toc-label`), so
-// measuring them at zoom 7 reads display:none and says nothing about whether
-// they were drawn where they belong.
+// ---- the pinned corners are PAINTED ---------------------------------------
+// Rebuild the route with BOTH pins set, so all four marks exist at once, and
+// ZOOM IN: the declutter feature hides the TOC/TOD chips and ticks at far zoom
+// on purpose (`#map.zoom-far .toc-label`), so measuring them at zoom 7 reads
+// display:none and says nothing about whether they were drawn where they belong.
 await page.evaluate(async () => {
+  flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+    { lat: 68.40, lng: 18.50, name: 'ENDU', alt: 254,  oat: 5, wdir: 250, wspd: 15, var: -11 },
+    { lat: 69.30, lng: 18.50, name: 'MID',  alt: 7500, oat: 0, wdir: 250, wspd: 20, var: -11, bocNM: 20 },
+    { lat: 70.05, lng: 18.50, name: 'ENTC', alt: 1500, oat: 2, wdir: 260, wspd: 18, var: -12, bodNM: 6 }] }];
+  activeFlightIndex = 0;
   map.setView([69.0, 18.5], 9, { animate: false });
-  await new Promise((r) => setTimeout(r, 300));
-  applyZoomDeclutter(); refreshMap();
+  await new Promise((r) => setTimeout(r, 320));
+  applyZoomDeclutter(); refreshMap(); renderAllFlightTables();
 });
 await page.waitForTimeout(320);
 const zoomCls = await page.evaluate(() => document.getElementById('map').className);

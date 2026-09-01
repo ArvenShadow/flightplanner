@@ -302,17 +302,47 @@ errors is the standard.
   now place the BOTTOM of climb and the BOTTOM of descent on a leg. Right-click
   the track opens the leg panel (section 2g of the page); `pinNM` and the
   extended `computeFlightSchedule` are in `src/lib/legs.js`.
-  - **ONLY TWO OF THE FOUR CORNERS ARE PINNABLE, and that is the NO
-    GUESSTIMATES rule doing real work.** BOC ("hold this altitude for 12 NM,
-    then climb") and BOD ("be level 5 NM before the fix, then run in level")
-    are pure GEOMETRY: the climb and descent are unchanged, they only move, so
-    they are always flyable and the existing spillover/back-up machinery
-    handles them. "Be at 6500 by this point" is different - it implies a RATE
-    OF CLIMB, and if that rate is steeper than the profile's, the POH tables
-    say NOTHING about the fuel flow or the TAS at it. So a TOC request is a
-    TARGET, not a pin: the schedule stays on the profile's performance and the
-    leg reports whether the target was met and what rate it would need. A
-    number the pilot can act on beats a fabricated climb.
+  - **THREE CORNERS ARE NAMEABLE; THE AIRCRAFT IS NEVER INVENTED.** BOC ("hold
+    this altitude for 12 NM, then climb") and BOD ("be level 5 NM before the
+    fix, then run in level") are pure GEOMETRY: the climb and descent are
+    unchanged, they only move, so they are always flyable and the existing
+    spillover/back-up machinery handles them.
+  - **v16.38 (user's correction, and they were right): "be level by X" SETS THE
+    BOC** by working backwards at the profile's own rate, instead of being a
+    check that reported an unflyable rate. v16.37 shipped it as a target only,
+    reasoning that a TOC pin implies a rate of climb the POH cannot price. That
+    was the wrong conclusion from a correct premise: you do not need a steeper
+    climb to top out earlier, you need to START EARLIER. `climbStartForToc`
+    bisects the start position so the POH climb ends exactly on the target -
+    same minutes, same fuel, same TAS, only the position moves. A target LATER
+    than the derived TOC is just a delay; the pilot gets the corner they
+    actually care about and the BOC box becomes a derived read-only display.
+  - **WHEN IT WILL NOT FIT, THE ANSWER IS AN ALTITUDE, NOT A RATE.** If the
+    climb cannot finish by the target even starting at the leg's first fix,
+    `entryAltForClimbBy` computes what the PREVIOUS fix would have to be crossed
+    at, and the panel offers a one-click "Do that". That keeps the altitude
+    column the single source of truth for what is flown where, rather than the
+    schedule quietly doing something the column denies - which is what a
+    spill-the-climb-onto-the-previous-leg implementation would have done (the
+    descent's own spill-back already has that flaw: leg 0 reports exit 8000 ft
+    while a backed-up descent actually crosses that fix ~5000 ft lower).
+  - **BOTH SIDES OF THAT BISECTION MOVE**, which is why `entryAltForClimbBy`
+    takes a callback rather than a minutes budget. A higher entry altitude
+    shortens the climb but also raises its TAS, covering the target distance in
+    LESS time; comparing against a budget computed at the ORIGINAL TAS missed
+    by 0.11 NM.
+  - **ADVICE IS TRIED BEFORE IT IS OFFERED.** Raising a fix also changes the leg
+    BEFORE it, and if those earlier legs cannot climb that high by then the
+    target is missed all over again. Measured over 20 000 generated routes: the
+    per-leg figure alone was wrong 382 times in 947. Each candidate is now run
+    through `computeFlightSchedule` on a copy (one level deep, guarded by
+    `opts.verifyAdvice`) and dropped unless the target is really met - after
+    which it is 565 of 565. A failed candidate means NO altitude helps, because
+    a higher one is strictly harder for the earlier legs to reach, so verifying
+    once is enough and there is nothing to search. `tocNoAltHelps` says which.
+  - THE FIRST LEG IS THE ONE HONEST REFUSAL: there is no earlier fix to raise
+    because you cannot climb before takeoff. Only there is the required rate the
+    useful thing to report, and only there is it reported.
   - PINS LIVE ON THE LEG'S **TO** WAYPOINT (`bocNM`, `bodNM`, `tocNM`), where
     alt, OAT and wind already do. Distances are along the FLOWN path, stated
     the way a pilot says them: BOC and TOC after the start fix, BOD before the

@@ -106,16 +106,21 @@ export function collectIntegrityProblems(flights, signals) {
       const SL = schedI[i];
       if (SL && SL.tocTargetNM != null && !SL.tocTargetMet) {
         const need = SL.climbRateReqFpm;
-        // Two pins can contradict each other: "be level by 3 NM" cannot be met
-        // if the climb is also pinned not to start until 20 NM. Say WHICH,
-        // rather than reporting a rate of infinity or none at all.
-        const conflict = SL.climbStartNM > SL.tocTargetNM - 0.05;
-        add(`Leg ${from.name} \u2192 ${to.name}: NOT level at ${to.alt} ft by ${SL.tocTargetNM.toFixed(1)} NM after ${from.name} as asked` +
-          (conflict
-            ? ` - the climb is pinned not to start until ${SL.climbStartNM.toFixed(1)} NM, so those two settings contradict each other.`
-            : (SL.tocAlongNM != null ? ` - the climb tops out at ${SL.tocAlongNM.toFixed(1)} NM` : ' - the climb does not finish on this leg') +
-              (need ? `, and reaching it by then needs about ${need} ft/min` : '') +
-              `. The schedule is still flown at YOUR profile's climb, not at that rate.`));
+        // The target SETS the bottom of climb, so it is only unmet when the
+        // climb does not fit even starting at the leg's first fix. Then the
+        // useful thing is not the rate - it is the altitude the previous fix
+        // would have to be crossed at, which the pilot can actually change.
+        add(`Leg ${from.name} \u2192 ${to.name}: cannot be level at ${to.alt} ft by ` +
+          `${SL.tocTargetNM.toFixed(1)} NM after ${from.name} - the climb would have to begin before ` +
+          `${from.name}` +
+          (SL.tocNeedsEntryAlt !== null
+            ? `. Cross ${from.name} at about ${SL.tocNeedsEntryAlt} ft instead of ${Math.round(SL.entryAlt)} ft and it fits.`
+            : SL.tocNoAltHelps
+              ? `, and crossing ${from.name} higher does not help either - the earlier legs cannot climb that high by then.` +
+                (need ? ` Reaching it from ${from.name} would need about ${need} ft/min.` : '')
+              : ` and there is no earlier leg to start it on` +
+                (need ? ` - reaching it from ${from.name} would need about ${need} ft/min` : '') + '.') +
+          ` The climb is always flown at YOUR profile's rate; nothing steeper is invented.`);
       }
       if (SL && SL.bodRefused)
         add(`Leg ${from.name} \u2192 ${to.name}: cannot be level ${SL.bodPinNM.toFixed(1)} NM before ${to.name} - a descent for a later, lower fix already runs through that stretch, so the aircraft is still going down there. The pin was NOT applied.`);
