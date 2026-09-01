@@ -2092,26 +2092,46 @@ T('tile raster density asks for exactly what the chart holds, never more', () =>
   // tile carries 2.1x the detail of the old 256 px one and 0.4% LESS than a
   // 1024 px one that costs 32% more bytes. At z11 the CSS pixel is already
   // 26.5 m - finer than the source - so the ratio bottoms out at 1.
-  assert(Math.abs(ev('vfrPixelRatio(9, 115, 1)') - 3.328) < 0.01, 'z9 ratio: ' + ev('vfrPixelRatio(9, 115, 1)'));
-  assert(Math.abs(ev('vfrPixelRatio(10, 231, 1)') - 1.664) < 0.01, 'z10 ratio: ' + ev('vfrPixelRatio(10, 231, 1)'));
-  assert(ev('vfrPixelRatio(11, 462, 1)') === 1, 'z11 oversampled: ' + ev('vfrPixelRatio(11, 462, 1)'));
-  assert(ev('vfrPixelRatio(6, 14, 1)') === 4, 'z6 must clamp to 4x, got ' + ev('vfrPixelRatio(6, 14, 1)'));
-  // the ratio must fall as you zoom in - the source stops giving
-  assert(ev('vfrPixelRatio(8, 57, 1)') > ev('vfrPixelRatio(9, 115, 1)'), 'ratio must decrease with zoom');
+  // SHARP asks for exactly what the source holds, at every zoom
+  assert(Math.abs(ev("vfrPixelRatio(9, 115, 1, 'sharp')") - 3.328) < 0.01, 'z9 sharp');
+  assert(Math.abs(ev("vfrPixelRatio(10, 231, 1, 'sharp')") - 1.664) < 0.01, 'z10 sharp');
+  assert(ev("vfrPixelRatio(11, 462, 1, 'sharp')") === 1, 'z11 oversampled');
+  assert(ev("vfrPixelRatio(6, 14, 1, 'sharp')") === 4, 'z6 must clamp to 4x');
+  assert(ev("vfrPixelRatio(8, 57, 1, 'sharp')") > ev("vfrPixelRatio(9, 115, 1, 'sharp')"), 'ratio must decrease with zoom');
 });
 T('a HiDPI screen floors the density, and 4x is never exceeded', () => {
-  assert(ev('vfrPixelRatio(11, 462, 2)') === 2, 'dpr 2 ignored at z11: ' + ev('vfrPixelRatio(11, 462, 2)'));
-  // dpr 3 at z9 changes nothing - the chart itself already justifies 3.33x
-  assert(Math.abs(ev('vfrPixelRatio(9, 115, 3)') - 3.328) < 0.01, 'dpr below the useful ratio must not bind: ' + ev('vfrPixelRatio(9, 115, 3)'));
-  assert(ev('vfrPixelRatio(11, 462, 5)') === 4, 'an absurd dpr must still cap at 4x: ' + ev('vfrPixelRatio(11, 462, 5)'));
-  assert(ev('vfrPixelRatio(6, 14, 8)') === 4, 'ceiling must hold when both inputs exceed it');
-  assert(ev('vfrPixelRatio(11, 462, 0)') === 1, 'a bogus devicePixelRatio must fall back to 1');
-  assert(ev('vfrTilePx(11, 462, 1)') === 256, 'z11 must not drop below the display grid');
-  assert(ev('vfrTilePx(11, 462, 2)') === 512, 'HiDPI z11 px: ' + ev('vfrTilePx(11, 462, 2)'));
+  assert(ev("vfrPixelRatio(11, 462, 2, 'sharp')") === 2, 'dpr 2 ignored at z11');
+  assert(Math.abs(ev("vfrPixelRatio(9, 115, 3, 'sharp')") - 3.328) < 0.01, 'dpr below the useful ratio must not bind');
+  assert(ev("vfrPixelRatio(11, 462, 5, 'sharp')") === 4, 'an absurd dpr must still cap at 4x');
+  assert(ev("vfrPixelRatio(6, 14, 8, 'sharp')") === 4, 'ceiling must hold when both inputs exceed it');
+  assert(ev("vfrPixelRatio(11, 462, 0, 'sharp')") === 1, 'a bogus devicePixelRatio must fall back to 1');
+  assert(ev("vfrTilePx(11, 462, 1, 'sharp')") === 256, 'z11 must not drop below the display grid');
+  assert(ev("vfrTilePx(11, 462, 2, 'sharp')") === 512, 'HiDPI z11 px');
+  // a detail setting must never make a HiDPI screen blurry at reading zoom
+  assert(ev("vfrPixelRatio(11, 462, 2, 'fast')") === 2, 'Fast made a HiDPI screen blurry where the chart is read');
+  assert(ev("vfrPixelRatio(9, 115, 3, 'auto')") === 3, 'the dpr floor was ignored by Auto');
+});
+T('chart detail trades decode time only where the chart is not read', () => {
+  // MEASURED: one 856 px tile decodes in ~58 ms, so a z9 screenful is about
+  // 1.2 SECONDS of pure rasterising, which no cache can remove. Half the
+  // density is ~3.5x faster. At z10-z11 - where frequencies, MEF and airspace
+  // limits are read - the ratio is already 1-2 and costs nothing, so Auto
+  // must leave those completely alone.
+  const at = (z, y, m2) => ev(`vfrPixelRatio(${z}, ${y}, 1, '${m2}')`);
+  assert(at(9, 115, 'auto') === 2, 'Auto should halve the overview density, got ' + at(9, 115, 'auto'));
+  assert(at(8, 57, 'auto') === 2, 'Auto should cap z8 too, got ' + at(8, 57, 'auto'));
+  assert(at(10, 231, 'auto') === at(10, 231, 'sharp'), 'Auto changed z10, a reading zoom');
+  assert(at(11, 462, 'auto') === at(11, 462, 'sharp'), 'Auto changed z11, a reading zoom');
+  assert(at(9, 115, 'fast') === 1 && at(11, 462, 'fast') === 1, 'Fast is not light at every zoom');
+  assert(at(9, 115, 'sharp') > 3, 'Sharp stopped matching the source');
+  assert(ev("pickProfileKeys({ chartDetail: 'sharp' }).chartDetail") === 'sharp',
+    'chartDetail is dropped by the profile whitelist');
 });
 T('the export request asks for the higher-resolution raster in a lossless format', () => {
+  ev("aircraftProfile.chartDetail = 'sharp'");
   const lo = ev('vfrTileUrl(9, 282, 115)'), hi = ev('vfrTileUrl(11, 1129, 462)');
-  assert(lo.includes('size=856,856'), 'z9 not requested at source resolution: ' + lo);
+  ev("delete aircraftProfile.chartDetail");
+  assert(lo.includes('size=856,856'), 'z9 not requested at source resolution in Sharp: ' + lo);
   assert(hi.includes('size=256,256'), 'z11 wastefully oversampled: ' + hi);
   // dpi stays 96 at every density: verified byte-identical output, and the
   // mosaic has no scale-dependent symbology.

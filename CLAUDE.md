@@ -347,6 +347,26 @@ errors is the standard.
     asserts the worker never learns the weather host.
   - Aerodromes are the first and last real waypoint of EVERY flight (the
     daylight card's rule); non-ICAO names like FINNSNES are excluded.
+- **Chart detail setting (v16.23)**: the thing that actually made the VFR
+  chart feel slow was never the network. MEASURED with img.decode() on real
+  tiles: one 856 px tile takes 58.1 ms to rasterise against 2.6 ms for a
+  256 px one, so a z9 screenful is ~1.2 SECONDS of pure decoding. NO amount
+  of caching removes that - it is paid from the browser cache, the service
+  worker, a local disk or GitHub alike. That cost arrived with the v16.12
+  resolution work and is the price of the legibility it bought.
+  - The whole cost is at the OVERVIEW zooms. At z10-z11, where frequencies,
+    MEF and airspace limits are actually read, the CSS pixel is already at
+    or finer than the 31.75 m source, so the ratio is 1-2 and a tile
+    decodes in single-digit ms.
+  - `chartDetail` (auto | sharp | fast, a map button, persisted, in
+    PROFILE_KEYS) therefore caps the ratio at 2 for z<=9 in AUTO and leaves
+    z10-z11 untouched: ~3.5x less rasterising on the overview, nothing lost
+    where the chart is read. Sharp restores v16.22 behaviour everywhere.
+  - The devicePixelRatio floor still wins over the cap, or a HiDPI screen
+    would be made soft at reading zoom; the absolute 4x ceiling still wins
+    over the floor.
+  - Do not "fix" perceived map slowness with more caching again without
+    measuring decode first.
 - **Offline chart download (v16.22)**: a button pre-fetches every tile
   along the route corridor into the service-worker cache.
   - WHY PANNING FELT LIKE RELOADING: Avinor sends
