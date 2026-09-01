@@ -381,3 +381,40 @@ export function remarkNote(remark) {
   const note = m ? m[1].trim() : '';
   return note || null;
 }
+
+/**
+ * The country pair from a border reference written as PROSE on a vertex.
+ *
+ * THE eAIP STATES A BORDER REFERENCE IN TWO DIFFERENT WAYS, and this is the
+ * second one. The first is a properly typed field:
+ *
+ *     <span class="SD">Norway and Sweden</span>
+ *     <span class="sdParams">TGEO_BORDER;TXT_NAME;123</span>
+ *
+ * The second carries the whole English sentence as a REMARK ON THE PRECEDING
+ * VERTEX, under a marker that says nothing about borders at all:
+ *
+ *     <span class="SD">westwards along the border between Norway and Sweden to</span>
+ *     <span class="sdParams">TAIRSPACE_VERTEX;CUSTOM_ATT27;7860</span>
+ *
+ * Both mean the same thing - from the previous published fix, follow that
+ * border to the next one - and the second form was missed entirely until
+ * v16.36. Measured over the 2026-06-11 edition: 40 fields of the first form
+ * and 27 of the second, and ALL 27 of the second were being dropped, so the
+ * Polaris CTA was drawn with a straight line across the whole eastern border.
+ *
+ * THE DIRECTION WORD IS DELIBERATELY IGNORED. "southwards" / "westwards" is
+ * confirmation, not information: the prepared border is a single open
+ * polyline, so between the point nearest A and the point nearest B there is
+ * exactly one path along it and no way round to choose. Parsing the direction
+ * would add a second thing that can disagree with the geometry.
+ *
+ * Returns null for a remark that is not a border reference, so a future
+ * edition can put anything else in CUSTOM_ATT27 without being misread as one.
+ *
+ * @param {string} text @returns {string|null} e.g. 'Norway and Sweden'
+ */
+export function borderNameFromRemark(text) {
+  const m = /\bborder between\s+([A-Za-zÆØÅæøå]+)\s+and\s+([A-Za-zÆØÅæøå]+)/i.exec(String(text || ''));
+  return m ? `${m[1]} and ${m[2]}` : null;
+}

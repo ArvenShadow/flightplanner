@@ -615,6 +615,71 @@ errors is the standard.
     direct distance means a bad snap).
   - Simplification is Douglas-Peucker at 0.02 NM (37 m, 0.07 mm on a
     1:500 000 chart), so it cannot move a boundary anywhere a pilot could see.
+- **A BORDER REFERENCE IS PUBLISHED TWO WAYS, AND ONE OF THEM WAS BEING
+  DROPPED (v16.36 bug fix, user-spotted)**. The user looked at the ICAO chart
+  and said the CTA south-east of ENDU did not match the FIR border. It did not:
+  between Treriksrøset (the Norway/Sweden/Finland tripoint, 690336N 0203255E)
+  and 683212N 0180734E we drew a 60 NM STRAIGHT LINE where the AIP says
+  "westwards along the border between Norway and Sweden to", cutting off the
+  whole Abisko salient - a boundary that does not exist, which is the exact
+  failure this project is built to refuse.
+  - THE TWO FORMS. One is a properly typed field, which was handled:
+    `<span class="SD">Norway and Sweden</span>` + `TGEO_BORDER;TXT_NAME`.
+    The other carries the whole ENGLISH SENTENCE as a REMARK ON THE PRECEDING
+    VERTEX, under a marker that says nothing about borders at all:
+    `<span class="SD">westwards along the border between Norway and Sweden to</span>`
+    + `TAIRSPACE_VERTEX;CUSTOM_ATT27`. Measured on the 2026-06-11 edition: 40 of
+    the first form, 27 of the second, and ALL 27 were silently ignored.
+    `borderNameFromRemark` in `tools/aip-fields.mjs` reads it; every
+    CUSTOM_ATT27 on a vertex in the edition turned out to be a border phrase.
+  - Border-resolved airspaces 25 -> 41, resolved stretches -> 51. The Polaris
+    CTA over the whole eastern border (Russia, Finland, Sweden) now follows the
+    surveyed line: 58 ring points -> 1261, worst snap 0.236 NM.
+  - THE DIRECTION WORD IS DELIBERATELY NOT PARSED. "southwards"/"westwards" is
+    confirmation, not information - the prepared border is a single OPEN
+    polyline, so between the fix nearest A and the fix nearest B there is
+    exactly one path and no way round to choose. Parsing it would add a second
+    thing that can disagree with the geometry.
+  - **THE INVARIANT THAT WOULD HAVE CAUGHT IT ON DAY ONE, and it is now a build
+    error, not a warning**: count every border reference the SOURCE states, in
+    both forms, and require `resolved + refused + notDrawn == published`. It
+    reconciles at 67 = 51 + 11 + 5. Every count in the old report looked
+    healthy precisely because nothing knew to expect the missing 27. Two things
+    it immediately exposed while being written: references in airspace that is
+    never drawn (the FIR cites three borders) need their own bucket, and a
+    refusal returns from `ringOf` IMMEDIATELY - so the references AFTER the
+    failing one are never visited. Halti states two and only the first was ever
+    seen; `refuse()` now books `refsHere - resolved.length`.
+  - A COST, and it is the right one: `Polaris CTA (FL 115 - FL 660)` is now
+    REFUSED (`fix-not-on-border`, 19.44 NM) because its border reference is the
+    Skagerrak maritime stretch. It used to be drawn with a wrong straight line.
+    Absent for a stated reason beats present and wrong.
+  - Drawing cost measured in Chromium after the change: 2-22 ms per redraw at
+    z7-z11, ~1400 ring points on screen. Culling is what makes a 1261-point
+    polygon a non-issue; do not "optimise" the 0.02 NM simplification instead.
+- **ATS DELEGATION AREAS ARE NOT AIRSPACE (v16.36, user-spotted)**. The user
+  asked why a "FIR" called Silver 1 / Silver 2 was on their map when they have
+  no use for non-Norwegian airspace. They were right twice over.
+  - WHAT THEY ARE: ENR 2.2 **section 5** publishes the areas where Norway and a
+    neighbour have agreed, by bilateral letter, to transfer WHO PROVIDES THE
+    SERVICE. The airspace itself is unchanged and already drawn. Silver 1 and 2
+    are inside **SWEDEN FIR**; Halti and Manto inside HELSINKI FIR; Area II
+    inside SCOTTISH FIR. **13 of the 17 are inside a foreign FIR.**
+  - Drawing them as class-C volumes with a vertical band made them look like
+    controlled airspace to clear. Their bands are mostly FL 95 and above, which
+    a C182 never sees, so they were pure noise even where Norwegian.
+  - **THE DISCRIMINATOR IS THE SOURCE'S OWN MARKER, NOT THE NAME.** A
+    delegation row carries `TORG_AUTH` - the organisation authority - twice:
+    the FIR the area lies WITHIN (`TXT_NAME` whose trailing text is "FIR") and
+    the responsible state. Measured: `TORG_AUTH` appears on exactly 17 rows in
+    exactly one page, and they are exactly the 17 delegation areas. No name
+    matching, no section-offset arithmetic.
+  - THE CONFIRMATION THAT IT IS COMPLETE: the `OTHER` catch-all kind is now
+    **empty**. Every unclassified blob in the edition was one of these, which is
+    why they had no type to classify in the first place.
+  - Nothing is discarded: `report.delegations` keeps all 17 with `withinFir`
+    and `atsBy`, and each is reported in `skipped` with the reason
+    `ats-delegation-not-airspace` and that detail. Features 227 -> 212.
 - **STEPPED AIRSPACE: EACH BAND HAS ITS OWN RING (v16.30 bug fix)**. This was
   wrong in v16.29 and it is the worst kind of wrong - 71 of 164 polygons
   crossed themselves, each drawing an airspace that does not exist.

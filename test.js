@@ -3645,6 +3645,124 @@ TA('a nonsense search says WHY there is no match, and adds nothing', async () =>
   assert(ev('flights[activeFlightIndex].waypoints.length') === before, 'a failed search changed the route');
 });
 
+console.log('\n=== 64c. Border references in BOTH published forms (v16.36) ===');
+T('a border reference stated as prose on a vertex is read, not dropped', () => {
+  const F = require('./tools/aip-fields.mjs');
+  // THE BUG: the eAIP states a border reference two ways. The typed field
+  // (TGEO_BORDER;TXT_NAME = "Norway and Sweden") was handled; the SENTENCE
+  // carried as a remark on the preceding vertex (TAIRSPACE_VERTEX;CUSTOM_ATT27
+  // = "westwards along the border between Norway and Sweden to") was not, and
+  // all 27 of them in the edition were silently ignored - which drew the
+  // Polaris CTA as a straight line across the whole eastern border.
+  assert(F.borderNameFromRemark('westwards along the border between Norway and Sweden to')
+    === 'Norway and Sweden', 'the western form was not read');
+  assert(F.borderNameFromRemark('southwards along the border between Norway and Russia to')
+    === 'Norway and Russia');
+  assert(F.borderNameFromRemark('along the border between Norway and Finland, then')
+    === 'Norway and Finland', 'the ", then" continuation form was not read');
+  assert(F.borderNameFromRemark('along the border between Norway and Sweden to') === 'Norway and Sweden');
+  // The DIRECTION word is deliberately not parsed: the prepared border is one
+  // open polyline, so there is exactly one path between two fixes and no way
+  // round to choose. Both directions must yield the same country pair.
+  assert(F.borderNameFromRemark('southwards along the border between Norway and Sweden')
+    === F.borderNameFromRemark('westwards along the border between Norway and Sweden to'),
+    'the direction word changed the answer');
+  // A remark that is NOT a border reference must stay unread, so a future
+  // edition can put anything else in that field without being misread.
+  assert(F.borderNameFromRemark('') === null);
+  assert(F.borderNameFromRemark('MIL') === null);
+  assert(F.borderNameFromRemark('Northern Part REF AIP SWEDEN') === null);
+  assert(F.borderNameFromRemark('along the coastline to') === null, 'a coastline became a border');
+});
+T('EVERY published border reference is accounted for - the invariant that caught this', () => {
+  // This is the check that would have found the bug on the day it shipped:
+  // count what the SOURCE states, and require that every one of them became
+  // geometry, was refused for a stated reason, or belongs to airspace that is
+  // deliberately never drawn. Nothing may simply go missing, because a missing
+  // reference is a boundary drawn where none exists.
+  const r = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  const b = r.borderRefs;
+  assert(b, 'the report carries no border-reference accounting');
+  const published = b.tagged + b.onVertexRemark;
+  const handled = b.resolved + b.refused + b.notDrawn;
+  assert(published === handled,
+    published + ' references published but ' + handled + ' handled: ' + JSON.stringify(b));
+  // Both forms must actually be present, or this test is passing vacuously
+  // because the parser stopped seeing one of them.
+  assert(b.tagged > 20 && b.onVertexRemark > 20,
+    'one of the two published forms has vanished: ' + JSON.stringify(b));
+  console.log('        ' + published + ' border references: ' + b.resolved + ' resolved, ' +
+    b.refused + ' refused, ' + b.notDrawn + ' in never-drawn airspace');
+});
+T('the Polaris CTA follows the national border south-east of ENDU', () => {
+  // The user spotted this on the chart: between Treriksrøset (the Norway /
+  // Sweden / Finland tripoint, 690336N 0203255E) and 683212N 0180734E the AIP
+  // says "westwards along the border between Norway and Sweden to", and we drew
+  // a 60 NM straight line - cutting off the whole Abisko salient.
+  const set = aipDataset();
+  const cta = set.features.filter((f) => f.kind === 'CTA' && /^Polaris CTA/.test(f.name))
+    .find((f) => f.ring.some((p) => Math.abs(p[0] - 69.06) < 0.01 && Math.abs(p[1] - 20.5486) < 0.01));
+  assert(cta, 'no Polaris CTA volume starts at the tripoint any more');
+  assert(cta.borderSegments >= 4, cta.name + ' has ' + cta.borderSegments + ' border segments');
+  // The border bulges EAST to about 20.23E around 68.5N. A straight line from
+  // the tripoint to 68.53N/18.13E never goes east of 20.55E at 69.06N and is
+  // well west of 20E by 68.5N, so a vertex out there proves the border was
+  // walked rather than cut across.
+  const salient = cta.ring.filter((p) => p[0] > 68.35 && p[0] < 68.75 && p[1] > 20.0);
+  assert(salient.length >= 3,
+    'the boundary still cuts the corner: ' + salient.length + ' vertices east of 20E between 68.35N and 68.75N');
+  // and it is a real snap, not a wild one
+  assert(cta.borderMaxSnapNM <= 2, cta.name + ' snapped ' + cta.borderMaxSnapNM + ' NM from the border');
+});
+T('every border-resolved ring still snaps within the measured tolerance', () => {
+  const B = require('./tools/aip-border.mjs');
+  const r = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  // Resolving 16 more airspaces must not have widened the population: the 2 NM
+  // tolerance was chosen because real corners sat 0.00-1.16 NM out and every
+  // failure was 8.44 NM or more. If a new resolution lands in that gap the
+  // tolerance is no longer measured, it is a guess.
+  assert(r.borderResolved.length > 35, 'only ' + r.borderResolved.length + ' airspaces resolved');
+  const worst = Math.max(...r.borderResolved.map((x) => x.maxSnapNM));
+  assert(worst <= B.SNAP_TOLERANCE_NM, 'worst snap ' + worst + ' NM exceeds the tolerance');
+  assert(worst < 2, 'worst snap ' + worst + ' NM - the clean population now reaches the tolerance');
+  console.log('        ' + r.borderResolved.length + ' border-resolved airspaces, worst snap ' + worst + ' NM');
+});
+T('ATS delegation areas are NOT drawn, and the data says what they are', () => {
+  // Silver 1 and Silver 2 are inside SWEDEN FIR. They are not airspace: ENR 2.2
+  // section 5 publishes areas where two states have agreed by letter to
+  // transfer WHO PROVIDES THE SERVICE. Drawing them as class-C volumes made
+  // them look like controlled airspace to clear, and 13 of the 17 are inside a
+  // foreign FIR entirely.
+  const set = aipDataset();
+  const r = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  const names = ['Silver 1', 'Silver 2', 'Bohus A', 'Bohus B', 'Borge', 'Norli', 'Oslob',
+                 'Nor2', 'Finnskogen 1', 'Manto', 'Halti', 'Koster', 'Ørje 1', 'Ørje 2',
+                 'Area I', 'Area II'];
+  for (const n of names) {
+    assert(!set.features.some((f) => f.name === n || f.name.startsWith(n + ' ')),
+      n + ' is still drawn as an airspace');
+  }
+  assert(r.delegations.length === 17, r.delegations.length + ' delegation areas recorded, expected 17');
+  // Nothing is discarded: each keeps the two fields that make it meaningful,
+  // and both are tagged at source rather than read out of the prose.
+  const silver = r.delegations.find((x) => x.name === 'Silver 1');
+  assert(silver && silver.withinFir === 'SWEDEN' && silver.atsBy === 'NORWAY', JSON.stringify(silver));
+  assert(silver.lower === 'FL 125' && silver.upper === 'FL 660', JSON.stringify(silver));
+  assert(r.delegations.every((x) => x.withinFir && x.atsBy),
+    'a delegation area lost its FIR or its responsible state');
+  const foreign = r.delegations.filter((x) => x.withinFir !== 'POLARIS').length;
+  assert(foreign === 13, foreign + ' delegation areas inside a foreign FIR, expected 13');
+  // Every one is reported as skipped for the stated reason, not silently gone.
+  const skipped = r.skipped.filter((x) => x.reason === 'ats-delegation-not-airspace');
+  assert(skipped.length === 17, skipped.length + ' reported as delegation skips');
+  assert(skipped.every((x) => /within .* FIR, ATS by/.test(x.detail || '')), 'a skip lost its detail');
+  // And the OTHER catch-all bucket is now EMPTY: every unclassified blob in the
+  // edition was one of these, which is what confirms the discriminator is right.
+  assert(!set.features.some((f) => f.kind === 'OTHER'),
+    'unclassified airspace is being drawn: ' +
+    set.features.filter((f) => f.kind === 'OTHER').map((f) => f.name).join(', '));
+});
+
 console.log('\n=== 65. AIP national-border resolution (v16.30) ===');
 T('border fragments stitch into one continuous chain', () => {
   const b = require('./tools/aip-border.mjs');

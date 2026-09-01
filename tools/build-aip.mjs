@@ -30,7 +30,8 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { extractFields, parseDms, verticalLimit, remarkDesignators, remarkNote, designatorTokens } from './aip-fields.mjs';
+import { extractFields, parseDms, verticalLimit, remarkDesignators, remarkNote, designatorTokens,
+         borderNameFromRemark } from './aip-fields.mjs';
 import { borderPath, isForeignBorder, SNAP_TOLERANCE_NM } from './aip-border.mjs';
 
 const CACHE = '.aip-cache';
@@ -205,7 +206,9 @@ function parseBlock(nameField, own) {
   const block = {
     name: nameField ? nameField.value : '',
     type: nameField ? (nameField.after || '').trim() : '',
-    volumes: [], outline: [], services: []
+    volumes: [], outline: [], services: [],
+    // Set from the source's own TORG_AUTH marker - see the handler below.
+    isDelegation: false, withinFir: '', atsBy: ''
   };
   let pending = [];
   let volume = null;
@@ -227,7 +230,35 @@ function parseBlock(nameField, own) {
         block.outline.push(pending[pending.length - 1]);
       } else if (f.field === 'GEO_LONG' && last && last.kind === 'vertex' && last.lng === null) {
         last.lng = f.value;
+      } else if (f.field === 'CUSTOM_ATT27') {
+        // THE SECOND FORM OF A BORDER REFERENCE, and it is not tagged as one:
+        // the eAIP puts the whole sentence "westwards along the border between
+        // Norway and Sweden to" in a REMARK ON THE PRECEDING VERTEX. It means
+        // exactly what TGEO_BORDER;TXT_NAME means, and all 27 of them in this
+        // edition were being dropped - which drew the Polaris CTA as a straight
+        // line across the entire eastern border. See borderNameFromRemark.
+        const name = borderNameFromRemark(f.value);
+        if (name) {
+          pending.push({ kind: 'border', name });
+          block.outline.push(pending[pending.length - 1]);
+        }
       }
+      continue;
+    }
+    // ATS DELEGATION AREAS are marked by the source itself: a row that names an
+    // organisation authority (TORG_AUTH) is stating which FIR the area lies
+    // WITHIN and which country provides the service there. Measured: 17 rows in
+    // the edition carry it, and they are exactly the 17 delegation areas of
+    // ENR 2.2 section 5 - so this is the source's own discriminator, not a
+    // guess from the name.
+    if (f.record === 'TORG_AUTH') {
+      if (f.field === 'TXT_NAME') {
+        // The FIR comes first ("SWEDEN" followed by the untagged word "FIR"),
+        // the responsible state second.
+        if (/^FIR/.test(f.after || '') && !block.withinFir) block.withinFir = f.value;
+        else if (!block.atsBy) block.atsBy = f.value;
+      }
+      block.isDelegation = true;
       continue;
     }
     if (f.record === 'TAIRSPACE_VOLUME') {
@@ -344,6 +375,17 @@ function ringOf(outline, label, border, report) {
   const pts = [];
   /** @type {{name: string, snapFromNM: number, snapToNM: number, lengthNM: number}[]} */
   const resolved = [];
+  // Every border reference this outline states. Needed for the accounting, and
+  // it must be the WHOLE count rather than "the one that failed": refusing an
+  // airspace returns immediately, so the references after the failing one are
+  // never visited - Halti states two and only the first was ever seen. An
+  // uncounted reference is precisely the bug this invariant exists to catch.
+  const refsHere = (outline || []).filter((i) => i && i.kind === 'border').length;
+  /** @param {string} skip @param {string} detail */
+  const refuse = (skip, detail) => {
+    if (report.borderRefs) report.borderRefs.refused += refsHere - resolved.length;
+    return { skip, detail };
+  };
   const push = (p) => {
     const prev = pts[pts.length - 1];
     if (prev && prev[0] === p[0] && prev[1] === p[1]) return;
@@ -361,27 +403,27 @@ function ringOf(outline, label, border, report) {
     const item = outline[i];
     if (item.kind === 'vertex') {
       const p = at(i);
-      if (!p) return { skip: 'unparsable-coordinate', detail: `${item.lat} ${item.lng}` };
+      if (!p) return refuse('unparsable-coordinate', `${item.lat} ${item.lng}`);
       push(p);
       continue;
     }
     // a border stretch between the fix before it and the fix after it
     const from = at(i - 1), to = at(i + 1);
     if (!from || !to) {
-      return { skip: 'border-reference-without-two-fixes', detail: item.name };
+      return refuse('border-reference-without-two-fixes', item.name);
     }
     if (isForeignBorder(item.name)) {
       // Kartverket publishes NORWAY's border. A Finland-Sweden stretch is not
       // in it, and snapping to the nearest Norwegian border instead would be
       // a silent, confident error.
-      return { skip: 'foreign-border-reference', detail: `${item.name} is not in Norway's national-border dataset` };
+      return refuse('foreign-border-reference', `${item.name} is not in Norway's national-border dataset`);
     }
     if (!border) {
-      return { skip: 'national-border-reference', detail: `${item.name} (no prepared boundary - run npm run build:border)` };
+      return refuse('national-border-reference', `${item.name} (no prepared boundary - run npm run build:border)`);
     }
     const path = borderPath(border.line, from, to);
     if ('refuse' in path) {
-      return { skip: path.refuse, detail: `${item.name}: ${path.detail}` };
+      return refuse(path.refuse, `${item.name}: ${path.detail}`);
     }
     // borderPath returns from..to inclusive; `from` is already pushed and the
     // loop will push `to` when it reaches that vertex.
@@ -393,11 +435,12 @@ function ringOf(outline, label, border, report) {
     const a = pts[0], z = pts[pts.length - 1];
     if (a[0] === z[0] && a[1] === z[1]) pts.pop();
   }
-  if (pts.length < 3) return { skip: 'insufficient-coordinates', detail: pts.length + ' points' };
+  if (pts.length < 3) return refuse('insufficient-coordinates', pts.length + ' points');
   const maxSnap = resolved.length
     ? Math.max(...resolved.map((r) => Math.max(r.snapFromNM, r.snapToNM))) : 0;
   if (resolved.length) {
     report.borderResolved.push({ name: label, maxSnapNM: Number(maxSnap.toFixed(3)), segments: resolved });
+    if (report.borderRefs) report.borderRefs.resolved += resolved.length;
   }
   return { ring: pts, borderSegments: resolved.length, maxSnapNM: Number(maxSnap.toFixed(3)) };
 }
@@ -477,6 +520,15 @@ function splitRings(items) {
   return rings;
 }
 
+/** How many border references a block's own outline states, across every
+ *  sub-volume plus the block-level list. Used only to keep the accounting
+ *  honest for blocks that are never turned into geometry. */
+function borderRefsIn(b) {
+  const inOne = (/** @type {any[]} */ list) => (list || []).filter((i) => i && i.kind === 'border').length;
+  const vols = (b.volumes || []).reduce((n, v) => n + inOne(v.outline), 0);
+  return vols || inOne(b.outline);
+}
+
 function buildFeatures(blocks, source, report, border, pageServices) {
   const out = [];
   // The eAIP restates a few volumes verbatim. Drawing one twice double-darkens
@@ -486,6 +538,43 @@ function buildFeatures(blocks, source, report, border, pageServices) {
   for (const b of blocks) {
     const kind = kindOf(b.type, b.name);
     const label = `${b.name} ${b.type}`.trim();
+
+    // ATS DELEGATION AREAS ARE NOT AIRSPACE, and drawing them was wrong.
+    //
+    // ENR 2.2 section 5 publishes the areas where Norway and a neighbour have
+    // agreed, by bilateral letter, to transfer WHO PROVIDES THE SERVICE - the
+    // airspace itself is unchanged and is already drawn (or belongs to another
+    // state). Ten of the seventeen sit INSIDE a foreign FIR: Silver 1 and
+    // Silver 2 are in SWEDEN FIR, Halti and Manto in HELSINKI FIR, Area II in
+    // SCOTTISH FIR. Drawing them as class-C volumes with a vertical band made
+    // them look like controlled airspace a VFR pilot must clear, when they are
+    // a statement about which unit answers - and mostly at FL 95 and above,
+    // which a C182 never sees.
+    //
+    // They stay in the DATA (nothing is discarded) with the two fields that
+    // make them meaningful, both tagged at source: which FIR the area lies
+    // WITHIN, and which state is responsible for ATS inside it.
+    if (b.isDelegation) {
+      const geom = ringOf(b.volumes.length ? b.volumes[0].outline : b.outline, label, border, report);
+      const vol = b.volumes[0];
+      report.delegations.push({
+        name: b.name,
+        withinFir: b.withinFir || null,
+        atsBy: b.atsBy || null,
+        lower: vol ? verticalLimit(vol.fields.VAL_DIST_VER_LOWER, vol.fields.UOM_DIST_VER_LOWER, vol.fields.CODE_DIST_VER_LOWER).text : '',
+        upper: vol ? verticalLimit(vol.fields.VAL_DIST_VER_UPPER, vol.fields.UOM_DIST_VER_UPPER, vol.fields.CODE_DIST_VER_UPPER).text : '',
+        class: vol ? vol.class : null,
+        drawable: !geom.skip,
+        skip: geom.skip || null
+      });
+      report.skipped.push({
+        name: label, kind, source,
+        reason: 'ats-delegation-not-airspace',
+        detail: `within ${b.withinFir || '?'} FIR, ATS by ${b.atsBy || '?'} - ENR 2.2 section 5`
+      });
+      continue;
+    }
+
     if (NOT_DRAWN.has(kind)) {
       // ACC sectors are not DRAWN - they tile the whole country and would bury
       // everything - but their geometry is exactly what answers "which Polaris
@@ -495,11 +584,16 @@ function buildFeatures(blocks, source, report, border, pageServices) {
       if (kind === 'ACC' && collectSector(b, label, report)) {
         report.skipped.push({ name: label, kind, reason: 'kept-as-acc-sector', source });
       } else {
+        // The FIR references the Russian, Finnish and Swedish borders and is
+        // deliberately never drawn, so its references become geometry nowhere.
+        // Counted so the published total still reconciles.
+        report.borderRefs.notDrawn += borderRefsIn(b);
         report.skipped.push({ name: label, kind, reason: 'not-a-vfr-planning-airspace', source });
       }
       continue;
     }
     if (!b.volumes.length) {
+      report.borderRefs.notDrawn += borderRefsIn(b);
       report.skipped.push({ name: label, kind, reason: 'no-published-vertical-limits', source });
       continue;
     }
@@ -546,7 +640,7 @@ function buildFeatures(blocks, source, report, border, pageServices) {
     for (const v of b.volumes) {
       const lower = verticalLimit(v.fields.VAL_DIST_VER_LOWER, v.fields.UOM_DIST_VER_LOWER, v.fields.CODE_DIST_VER_LOWER);
       const upper = verticalLimit(v.fields.VAL_DIST_VER_UPPER, v.fields.UOM_DIST_VER_UPPER, v.fields.CODE_DIST_VER_UPPER);
-      if (!lower.text && !upper.text) continue;
+      if (!lower.text && !upper.text) { report.borderRefs.notDrawn += borderRefsIn({ volumes: [v] }); continue; }
       const band = [lower.text, upper.text].filter(Boolean).join(' - ');
       const name = label + (multi && band ? ` (${band})` : '');
 
@@ -623,6 +717,11 @@ async function main() {
   }
 
   const report = {
+    delegations: [],
+    /** Border references PUBLISHED, in both forms, versus what became geometry.
+     *  tagged + onVertexRemark must equal resolved + refused, or a reference
+     *  was dropped on the floor. */
+    borderRefs: { tagged: 0, onVertexRemark: 0, resolved: 0, refused: 0, notDrawn: 0 },
     provider: 'Avinor', source: 'eAIP',
     editionLabel: edition.editionLabel,
     effectiveFrom: edition.effectiveFrom,
@@ -657,6 +756,19 @@ async function main() {
     try { html = await page(edition, file); }
     catch (err) { report.pages.push({ page: label, error: String(err.message || err) }); continue; }
     const fields = extractFields(html);
+
+    // COUNT EVERY BORDER REFERENCE THE SOURCE STATES, in both of its forms, so
+    // the invariant below can be asserted: resolved + refused must equal what
+    // was published. That invariant is what catches the v16.36 bug class - the
+    // second form (a border sentence carried as a remark on the preceding
+    // vertex) was silently dropped for 27 references, and every count in the
+    // report still looked healthy because nothing knew to expect them.
+    for (const f of fields) {
+      if (f.record === 'TGEO_BORDER' && f.field === 'TXT_NAME') report.borderRefs.tagged++;
+      else if (f.record === 'TAIRSPACE_VERTEX' && f.field === 'CUSTOM_ATT27'
+               && borderNameFromRemark(f.value)) report.borderRefs.onVertexRemark++;
+    }
+
     const { blocks, pageServices } = airspaceBlocks(fields);
     const url = `${edition.base}/${file}-en-GB.html`;
     const built = buildFeatures(blocks, { section: label, url, icao: icao || null }, report, border, pageServices);
@@ -718,6 +830,20 @@ async function main() {
   console.log(`ACC sectors: ${sectors.length} usable, ${report.sectorsUnresolved.length} not`);
   console.log(`aerodrome anchors: ${dataset.aerodromes.length} aerodromes, ` +
     `${dataset.aerodromes.reduce((n, a) => n + a.points.length, 0)} reporting points`);
+  console.log(`ATS delegation areas (not drawn): ${report.delegations.length}` +
+    ` - ${report.delegations.filter((x) => x.withinFir && x.withinFir !== 'POLARIS').length} inside a foreign FIR`);
+  const br = report.borderRefs;
+  const published = br.tagged + br.onVertexRemark;
+  const handled = br.resolved + br.refused + br.notDrawn;
+  console.log(`border references: ${published} published (${br.tagged} tagged, ${br.onVertexRemark} on a vertex remark)` +
+    ` -> ${br.resolved} resolved, ${br.refused} refused, ${br.notDrawn} in airspace that is never drawn`);
+  if (handled !== published) {
+    // NOT a warning. A reference the importer never saw is a boundary drawn as
+    // a straight line where the AIP says it follows a border, which is exactly
+    // the failure this project refuses to ship.
+    throw new Error(`${published - handled} border reference(s) unaccounted for: ` +
+      `published ${published}, handled ${handled}. A dropped reference draws a boundary that does not exist.`);
+  }
   delete report._border;
 }
 
