@@ -2174,9 +2174,10 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const integrityModule = require('./src/lib/integrity.js');
   const exchModule = require('./src/lib/exchange.js');
   const plotModule = require('./src/lib/plotting.js');
+  const metarModule = require('./src/lib/metar.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
-                    exch: exchModule, plot: plotModule };
+                    exch: exchModule, plot: plotModule, metar: metarModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -2309,7 +2310,11 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
     'exchange.js': () => [M.exch.buildExportPayload({ flights: [], profile: { mode: 'C182T' } }),
                           M.exch.sanitiseFlights([{ waypoints: [wp(69, 18, 0)] }]),
                           M.exch.defaultFlights(), M.exch.pickProfileKeys({ theme: 'dark' })],
-    'plotting.js': () => M.plot.buildPlottingText({ id: 1, waypoints: [wp(69.055, 18.545, 254), wp(69.679, 18.911, 2500)] }, 'NM')
+    'plotting.js': () => M.plot.buildPlottingText({ id: 1, waypoints: [wp(69.055, 18.545, 254), wp(69.679, 18.911, 2500)] }, 'NM'),
+    'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
+                       M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
+                       M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
+                       M.metar.routeAerodromes([{ waypoints: [wp(69, 18, 0)] }])]
   };
   for (const [name, run] of Object.entries(exercises)) {
     let out;
@@ -2451,6 +2456,81 @@ T('tracks and headings are three digits everywhere, as they are spoken', () => {
   const plot = ev('plottingTextFor(0)');
   assert(/TT 036\s+MT 024/.test(plot), 'the plotting list disagrees with the OFP row:\n' + plot);
 });
+console.log('\n=== 61. METAR & TAF (MET Norway) ===');
+T('only real ICAO aerodromes are asked about', () => {
+  const W = moduleExports.metar;
+  // a route is mostly not aerodromes - FINNSNES is a town, not a station
+  const ic = W.routeAerodromes([{ waypoints: [
+    { name: 'ENDU' }, { name: 'FINNSNES' }, { name: 'ENTC' }] },
+    { waypoints: [{ name: 'ENTC' }, { name: 'ENEV' }] }]);
+  assert(JSON.stringify(ic) === JSON.stringify(['ENDU', 'ENTC', 'ENEV']),
+    'wrong aerodromes, or duplicated: ' + JSON.stringify(ic));
+  // every takeoff and every landing, like the daylight card - not just the ends
+  assert(ic.includes('ENEV'), 'the second sector\u2019s destination was missed');
+  assert(!W.isIcao('FINNSNES') && !W.isIcao('') && W.isIcao('ENDU'), 'ICAO detection is wrong');
+  assert(W.buildTafMetarUrl(['ENDU', 'FINNSNES'], 'metar') ===
+    'https://api.met.no/weatherapi/tafmetar/1.0/metar?icao=ENDU', 'non-aerodromes must not reach the URL');
+  assert(W.buildTafMetarUrl([], 'metar') === '', 'an empty route must not produce a request');
+  assert(W.buildTafMetarUrl(['ENTC'], 'taf').includes('/taf?'), 'the TAF endpoint is wrong');
+});
+T('the latest report wins, and a NIL report is not data', () => {
+  const W = moduleExports.metar;
+  // the service returns 24 h oldest-first; the last line is the current one
+  const body = ['ENTC 010050Z 05006KT 9999 10/08 Q1006=',
+                'ENTC 010120Z 09012KT 9999 11/07 Q1004=',
+                'ENDU 010120Z NIL='].join('\n');
+  const latest = W.latestPerStation(body);
+  assert(latest.ENTC.includes('09012KT'), 'an older report won: ' + latest.ENTC);
+  assert(latest.ENDU === undefined, 'a NIL report was treated as an observation');
+});
+T('only the unambiguous fields are read out - the rest stays raw', () => {
+  const W = moduleExports.metar;
+  const p = W.parseReport('ENTC 011220Z 27015G28KT 9999 -DZRA OVC015 M05/M08 Q0998 RMK WIND 2600FT 03005KT');
+  assert(p.wind.dir === 270 && p.wind.speedKt === 15 && p.wind.gustKt === 28, 'wind misread: ' + JSON.stringify(p.wind));
+  assert(p.tempC === -5 && p.dewC === -8, 'negative temperatures misread: ' + p.tempC + '/' + p.dewC);
+  assert(p.qnhHpa === 998, 'QNH misread: ' + p.qnhHpa);
+  // the weather itself is NOT decoded, and the raw report is kept whole
+  assert(p.raw.includes('-DZRA') && p.raw.includes('OVC015'), 'the raw report was altered');
+  assert(W.summariseReport(p).indexOf('DZRA') === -1, 'the summary is trying to decode weather');
+  // calm and variable are distinct from a direction of zero
+  assert(W.parseReport('ENTC 011220Z 00000KT 9999 05/02 Q1013').wind.calm === true, 'calm not recognised');
+  assert(W.parseReport('ENTC 011220Z VRB03KT 9999 05/02 Q1013').wind.variable === true, 'VRB not recognised');
+  // a US inHg altimeter must NOT be converted into a hectopascal QNH
+  assert(W.parseReport('KJFK 011220Z 27008KT 10SM CLR 12/05 A2992').qnhHpa === null,
+    'an inHg altimeter was silently treated as QNH');
+  // a TAF has no observed temperature; its validity group must not be read as one
+  const taf = W.parseReport('ENTC 312300Z 0100/0124 04009KT 9999 FEW008 TEMPO 0100/0104 BKN009');
+  assert(taf.isTaf === true, 'TAF not recognised');
+  assert(taf.tempC === null, 'a TAF validity group was misread as a temperature: ' + taf.tempC);
+});
+T('an observation states its age, and says when it is too old to trust', () => {
+  const W = moduleExports.metar;
+  const at = (d, h, m) => ({ day: d, hour: h, minute: m });
+  const now = Date.UTC(2026, 8, 1, 12, 20);
+  assert(W.reportAgeMinutes(at(1, 11, 50), now) === 30, 'age: ' + W.reportAgeMinutes(at(1, 11, 50), now));
+  // across a month boundary the day number is BIGGER than today's
+  assert(W.reportAgeMinutes(at(31, 23, 50), Date.UTC(2026, 8, 1, 0, 20)) === 30, 'month rollover broken');
+  assert(W.formatAge(30) === '30 min ago' && W.formatAge(185) === '3 h 05 min ago', 'age wording: ' + W.formatAge(185));
+  assert(W.formatAge(null) === null, 'an unknown age must not be dressed up as a number');
+  // METARs come half-hourly; hours old is not current weather
+  assert(!W.isStale(45) && W.isStale(120), 'staleness threshold is wrong');
+  assert(!W.isStale(null), 'an unknown age must not be reported as stale');
+});
+T('weather is never cached - a cached observation is a wrong observation', () => {
+  const sw = fs.readFileSync('site/sw.js', 'utf8');
+  assert(!sw.includes('api.met.no'), 'the service worker mentions the weather host - it must pass straight through');
+  assert(/a cached forecast is a wrong forecast/.test(sw), 'the no-cached-weather rule is undocumented');
+  // and the page must ask the browser not to cache it either
+  const page = fs.readFileSync('src/index.html', 'utf8');
+  assert(/cache: 'no-store'/.test(page), 'the METAR fetch does not disable the HTTP cache');
+  // the licence MET Norway requires must be on screen
+  const built = fs.readFileSync(APP_HTML, 'utf8');
+  assert(built.includes('NLOD 2.0') && /Norwegian Meteorological Institute/.test(built),
+    'MET Norway attribution is missing');
+  assert(/obtain an official briefing before flight/i.test(built),
+    'the card does not tell the pilot to get a real briefing');
+});
+
 T('the whole source type-checks, and the checker cannot be quietly dropped', () => {
   // Phase 2: the real TypeScript compiler checks these files; the types live
   // in JSDoc so the modules stay plain .js that Node can require directly -

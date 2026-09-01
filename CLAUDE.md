@@ -325,9 +325,33 @@ errors is the standard.
   under transparent=false) at 10% fewer bytes. png8 and jpg are BANNED -
   measured to shift chart ink by 71 and 37 levels, and the small print
   (frequencies, MEF, airspace limits) is the entire point of the feature.
+- **METAR & TAF (v16.21)**: MET Norway,
+  `api.met.no/weatherapi/tafmetar/1.0/{metar,taf}?icao=ENDU,ENTC`. Verified
+  before building: sends `access-control-allow-origin: *` (so a browser
+  may read it), accepts comma-separated ICAOs so a route costs ONE
+  request per kind, returns the last 24 h oldest-first with each line
+  prefixed by its station, and accepts a normal browser User-Agent -
+  which mattered, because fetch() CANNOT set User-Agent (forbidden
+  header) and MET returns 403 for bad ones. Licence NLOD 2.0, credit
+  "The Norwegian Meteorological Institute"; the card carries it.
+  - THE DECODING RULE: the RAW report is always shown in full, and only
+    report time, wind, temperature/dew point and QNH are read out. A
+    METAR carries RVR, wind shear, runway state, CAVOK, vertical
+    visibility...; a decoder that silently misreads one is exactly the
+    plausible wrong answer this project refuses to give. A US inHg
+    altimeter (A2992) is deliberately NOT converted to a QNH.
+  - Observation AGE is computed and shown, and >90 min is flagged "not
+    current" - a three-hour-old METAR is not the weather.
+  - NEVER CACHED, like the winds: the SW only touches same-origin files
+    and Avinor tiles, the fetch sends `cache: 'no-store'`, and a test
+    asserts the worker never learns the weather host.
+  - Aerodromes are the first and last real waypoint of EVERY flight (the
+    daylight card's rule); non-ICAO names like FINNSNES are excluded.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
-  georeferenced VFR charts (licensing), traffic (needs receivers),
-  auto-METAR from aviationweather.gov (browser CORS never verified).
+  georeferenced VFR charts (licensing), traffic (needs receivers).
+  auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
+  NO CORS header, so it is genuinely unusable from a browser - MET Norway
+  is used instead, and is the authoritative source for Norway anyway.
 
 ## Dialogs (v16.11)
 

@@ -292,6 +292,34 @@ interface WindAtPoint {
   temp: number | null;
 }
 
+/**
+ * The few fields of a METAR or TAF that can be read out without risk.
+ * Everything else stays in `raw`, which is what a pilot reads - a decoder
+ * that silently misreads a report is the failure mode this avoids.
+ */
+interface WeatherReport {
+  /** The report exactly as published, always present. */
+  raw: string;
+  icao: string | null;
+  /** Day of month, hour, minute - always UTC. */
+  timeUTC: { day: number; hour: number; minute: number } | null;
+  wind: {
+    /** Degrees true; null when the direction is variable. */
+    dir: number | null;
+    variable: boolean;
+    calm: boolean;
+    speedKt: number;
+    gustKt: number | null;
+  } | null;
+  /** Null on a TAF, which carries no observed temperature. */
+  tempC: number | null;
+  dewC: number | null;
+  /** Hectopascals. Null for an inHg (A-prefixed) altimeter, which is NOT
+   *  converted - a wrong altimeter setting is not worth the convenience. */
+  qnhHpa: number | null;
+  isTaf: boolean;
+}
+
 /** A choice offered in a dialog. */
 interface DialogButton {
   id: string;
