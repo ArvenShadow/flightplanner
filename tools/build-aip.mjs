@@ -30,7 +30,7 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { extractFields, parseDms, verticalLimit } from './aip-fields.mjs';
+import { extractFields, parseDms, verticalLimit, remarkDesignators, remarkNote, designatorTokens } from './aip-fields.mjs';
 import { borderPath, isForeignBorder, SNAP_TOLERANCE_NM } from './aip-border.mjs';
 
 const CACHE = '.aip-cache';
@@ -103,121 +103,231 @@ async function page(edition, name) {
  * Split one page's field stream into airspace blocks, and each block into its
  * SUB-VOLUMES.
  *
- * THE STRUCTURE, read off the source rather than assumed (this is what a first
- * version got wrong, and it produced 71 self-crossing polygons): a stepped
- * TMA is published as several sub-volumes, and EACH ONE HAS ITS OWN LATERAL
- * RING as well as its own vertical band and class. Document order is:
+ * THE GROUPING KEY IS THE TABLE ROW, not the name marker. ENR 2.1 states an
+ * airspace's name in the FIRST cell of its row; ENR 2.2 states it in the LAST,
+ * after the geometry, callsign and frequency. So "a block starts at the name"
+ * shifted every ENR 2.2 sector's data by one row - Polaris ACC Sector 1 came
+ * out holding Sector 2's frequency, which is exactly the kind of confident
+ * wrong answer this project exists to avoid. Measured: no row in any page
+ * names more than one airspace, so the row IS the airspace.
  *
- *   Alta  TMA                        <- TAIRSPACE;CUSTOM_ATT24 + untagged type
+ * WITHIN a row, a stepped airspace is several sub-volumes and EACH HAS ITS OWN
+ * LATERAL RING as well as its own band and class:
+ *
  *     <vertices of sub-volume 1>
  *     TAIRSPACE_VOLUME;...;1411      <- band of sub-volume 1
  *     TAIRSPACE_LAYER_CLASS;...      <- class of sub-volume 1
  *     <vertices of sub-volume 2>
- *     TAIRSPACE_VOLUME;...;1007
  *     ...
  *
- * So the vertices accumulated since the previous volume belong to the volume
- * that closes them. Concatenating a block's vertices into one ring merges
- * several separate lateral areas into a bow tie - the polygon crosses itself
- * and the airspace it draws does not exist.
+ * so the vertices accumulated since the previous volume belong to the volume
+ * that closes them. Concatenating them merges separate areas into a bow tie.
  *
- * Frequencies, units and callsigns are stated once per block, after the
- * volumes, and apply to all of them.
+ * SERVICES: a row that names an airspace AND carries frequencies states that
+ * airspace's own services (ENR 2.1 and 2.2). An AD 2 page keeps its airspace
+ * in AD 2.17 and its communication in AD 2.18, different rows entirely, so
+ * services from rows that name no airspace go into a page-level pool and are
+ * used only for airspaces that have none of their own - at an aerodrome page
+ * those ARE the aerodrome's services.
  *
- * The numeric record ids are pairing keys within a block, not identities
- * across the document - the same id can recur - so they are never used as
- * feature ids.
+ * The numeric record ids are pairing keys within a row, not identities across
+ * the document - the same id can recur - so they are never used as feature ids.
  */
 function airspaceBlocks(fields) {
+  const names = fields.filter((f) => f.record === 'TAIRSPACE' && f.field === 'CUSTOM_ATT24');
+
+  // WHICH SIDE OF ITS DATA DOES THE NAME SIT ON? Decided per entry, from the
+  // entry's own row, because ENR 2.2 mixes both layouts: 'F' = name first
+  // (ENR 2.1, AD 2, and most of ENR 2.2), 'L' = name last, which is exactly
+  // the Polaris ACC Sector table. Measured on this edition: the L entries are
+  // one contiguous run of 30 and each keeps ALL its data in its own row, so an
+  // L block is that row and nothing else - which is also what stops an L claim
+  // and the preceding F claim from overlapping.
+  const firstVertexRow = new Map();
+  for (const f of fields) {
+    if (f.record === 'TAIRSPACE_VERTEX' && f.field === 'GEO_LAT' && !firstVertexRow.has(f.row)) {
+      firstVertexRow.set(f.row, f.order);
+    }
+  }
+  const entries = names.map((n) => {
+    const v = firstVertexRow.get(n.row);
+    return { name: n, side: (v !== undefined && v < n.order) ? 'L' : 'F' };
+  });
+  const lastRows = new Set(entries.filter((e) => e.side === 'L').map((e) => e.name.row));
+
+  /** @type {any[]} */
   const blocks = [];
-  let cur = null;
-  /** vertices/border refs seen since the last volume closed */
+  const pageServices = [];
+
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    let own;
+    if (e.side === 'L') {
+      own = fields.filter((f) => f.row === e.name.row);
+    } else {
+      const next = entries[i + 1] ? entries[i + 1].name.order : Infinity;
+      own = fields.filter((f) => f.order > e.name.order && f.order < next && !lastRows.has(f.row));
+    }
+    blocks.push(parseBlock(e.name, own));
+  }
+
+  // Rows that name no airspace at all: at an AD 2 page these are AD 2.18, the
+  // aerodrome's communication table, which the AD 2.17 airspace row needs.
+  const claimed = new Set();
+  for (const e of entries) claimed.add(e.name.row);
+  for (const e of entries.filter((x) => x.side === 'F')) {
+    // an F block's span may cover unnamed rows; those are its own, not the pool
+    const i = entries.indexOf(e);
+    const next = entries[i + 1] ? entries[i + 1].name.order : Infinity;
+    for (const f of fields) if (f.order > e.name.order && f.order < next) claimed.add(f.row);
+  }
+  const orphan = fields.filter((f) => !claimed.has(f.row));
+  const pool = parseBlock(null, orphan);
+  pageServices.push(...pool.services);
+
+  return { blocks, pageServices };
+}
+
+/**
+ * Parse one airspace's fields into sub-volumes and services.
+ *
+ * A stepped airspace is several sub-volumes and EACH HAS ITS OWN LATERAL RING
+ * as well as its own band and class, stated as: vertices, volume, class,
+ * vertices, volume, class... So the vertices accumulated since the previous
+ * volume belong to the volume that closes them. Concatenating a block's
+ * vertices into one ring merges separate areas into a bow tie.
+ *
+ * @param {any} nameField the TAIRSPACE;CUSTOM_ATT24 field, or null for the pool
+ * @param {any[]} own the fields belonging to this entry, in document order
+ */
+function parseBlock(nameField, own) {
+  const block = {
+    name: nameField ? nameField.value : '',
+    type: nameField ? (nameField.after || '').trim() : '',
+    volumes: [], outline: [], services: []
+  };
   let pending = [];
   let volume = null;
+  let svc = null;
 
-  const closeVolume = () => { volume = null; };
-
-  for (const f of fields) {
-    if (f.record === 'TAIRSPACE' && f.field === 'CUSTOM_ATT24') {
-      cur = { name: f.value, type: (f.after || '').trim(), volumes: [], outline: [], services: [] };
-      blocks.push(cur);
-      pending = []; volume = null;
-      continue;
-    }
-    if (!cur) continue;
-
-    if (f.record === 'TAIRSPACE' && f.field === 'TXT_LOCAL_TYPE') { cur.type = f.value || cur.type; continue; }
-
+  for (const f of own) {
+    if (f.record === 'TAIRSPACE' && f.field === 'TXT_LOCAL_TYPE') { block.type = f.value || block.type; continue; }
+    if (f.record === 'TAIRSPACE' && f.field === 'CUSTOM_ATT24') { continue; }   // the name itself
     if (f.record === 'TGEO_BORDER' && f.field === 'TXT_NAME') {
       pending.push({ kind: 'border', name: f.value });
-      cur.outline.push(pending[pending.length - 1]);
+      block.outline.push(pending[pending.length - 1]);
       continue;
     }
     if (f.record === 'TAIRSPACE_VERTEX') {
-      // A vertex after a volume closed starts the NEXT sub-volume's ring.
-      if (volume) closeVolume();
+      if (volume) volume = null;        // a vertex after a volume starts the next ring
       const last = pending[pending.length - 1];
       if (f.field === 'GEO_LAT') {
         pending.push({ kind: 'vertex', id: f.id, lat: f.value, lng: null });
-        cur.outline.push(pending[pending.length - 1]);   // same objects, block order
+        block.outline.push(pending[pending.length - 1]);
+      } else if (f.field === 'GEO_LONG' && last && last.kind === 'vertex' && last.lng === null) {
+        last.lng = f.value;
       }
-      else if (f.field === 'GEO_LONG' && last && last.kind === 'vertex' && last.lng === null) last.lng = f.value;
       continue;
     }
     if (f.record === 'TAIRSPACE_VOLUME') {
       if (!volume || volume.id !== f.id) {
         volume = { id: f.id, outline: pending, fields: {}, class: null };
-        cur.volumes.push(volume);
+        block.volumes.push(volume);
         pending = [];
       }
       volume.fields[f.field] = f.value;
       continue;
     }
     if (f.record === 'TAIRSPACE_LAYER_CLASS' && f.field === 'CODE_CLASS') {
-      // The class row follows the volume it belongs to.
       if (volume && volume.class === null) volume.class = f.value;
       continue;
     }
 
     // ---- ATS communication, kept AS SERVICES rather than a flat list ----
-    //
-    // The source publishes service, then callsign, then that service's
-    // frequencies, then the next service. AD 2.18 tags the service explicitly
-    // (TSERVICE;CODE_TYPE = APP / TWR / ATIS / AFIS / SMC / CLR / RADIO);
-    // ENR 2.1 and 2.2 do NOT - they give only a callsign, which is
-    // self-describing ("Banak Approach", "Longyear Information"), so the code
-    // is derived from it there and left null if it does not match.
-    //
-    // Flattening these into one frequency list, as v16.31 did, loses the one
-    // thing that makes them usable: which frequency is the tower and which is
-    // a military UHF channel.
+    // AD 2.18 tags the service (TSERVICE;CODE_TYPE); ENR 2.1 and 2.2 do not
+    // and give only a callsign, which is self-describing, so the code is
+    // derived from it there and left null if it matches nothing.
     if (f.record === 'TSERVICE' && f.field === 'CODE_TYPE') {
-      cur.services.push({ code: f.value.toUpperCase(), callsign: null, freqs: [] });
+      svc = { code: f.value.toUpperCase(), callsign: null, freqs: [] };
+      block.services.push(svc);
       continue;
     }
     if (f.record === 'TCALLSIGN_DETAIL' && f.field === 'CUSTOM_ATT7') {
-      const open = cur.services[cur.services.length - 1];
-      if (open && open.callsign === null && !open.freqs.length) open.callsign = f.value;
-      else cur.services.push({ code: null, callsign: f.value, freqs: [] });
+      if (svc && svc.callsign === null && !svc.freqs.length) svc.callsign = f.value;
+      else { svc = { code: null, callsign: f.value, freqs: [] }; block.services.push(svc); }
       continue;
     }
     if (f.record === 'TFREQUENCY') {
-      let svc = cur.services[cur.services.length - 1];
-      if (!svc) { svc = { code: null, callsign: null, freqs: [] }; cur.services.push(svc); }
+      if (!svc) { svc = { code: null, callsign: null, freqs: [] }; block.services.push(svc); }
       if (f.field === 'VAL_FREQ_TRANS') { svc.freqs.push({ id: f.id, mhz: f.value, unit: '', remarks: '' }); continue; }
-      // UOM and the remark arrive after the value, keyed by the same id.
       const q = svc.freqs.find((x) => x.id === f.id);
       if (!q) continue;
       if (f.field === 'UOM_FREQ') q.unit = f.value;
-      // CUSTOM_ATT27 is the published remark. It carries 'MIL' on a military
-      // channel - though NOT on every one of them, so the VHF band is what
-      // actually keeps military UHF out; see src/lib/airspace.js.
+      // CUSTOM_ATT27 is the published remark: 'MIL' on a military channel, and
+      // the SECTOR NAME on a Polaris Control frequency.
       else if (f.field === 'CUSTOM_ATT27') q.remarks = f.value;
       continue;
     }
   }
-  return blocks;
+  return block;
 }
+
+/**
+ * An ACC sector: its ring, its band, and the ONE frequency published for it.
+ *
+ * The sector's own row states its frequency with the sector name in the remark
+ * (`118.830`, remark "Sector 1"), so the pairing comes from the source and is
+ * cross-checked against the airspace name below - a mismatch is reported
+ * rather than trusted, because an off-by-one here would put the wrong
+ * frequency on the wrong piece of sky. That is not hypothetical: reading the
+ * eAIP by name marker instead of by row produced exactly that error.
+ *
+ * @returns {boolean} true when the sector was usable and stored
+ */
+function collectSector(b, label, report) {
+  const geom = ringOf(b.volumes.length ? b.volumes[0].outline : b.outline, label, report._border, report);
+  if (geom.skip) {
+    report.sectorsUnresolved.push({ name: label, reason: geom.skip, detail: geom.detail });
+    return false;
+  }
+  const vol = b.volumes[0];
+  const lower = vol ? verticalLimit(vol.fields.VAL_DIST_VER_LOWER, vol.fields.UOM_DIST_VER_LOWER, vol.fields.CODE_DIST_VER_LOWER)
+                    : { text: '', ft: null, datum: null, kind: 'unknown' };
+  const upper = vol ? verticalLimit(vol.fields.VAL_DIST_VER_UPPER, vol.fields.UOM_DIST_VER_UPPER, vol.fields.CODE_DIST_VER_UPPER)
+                    : { text: '', ft: null, datum: null, kind: 'unknown' };
+
+  const svc = b.services.find((sv) => sv.freqs.length) || null;
+  const q = svc ? svc.freqs[0] : null;
+  if (!q) { report.sectorsUnresolved.push({ name: label, reason: 'no-published-frequency' }); return false; }
+
+  // The remark names the sector the frequency serves. It must agree with the
+  // airspace it was found on, or the pairing is not trustworthy.
+  const remark = String(q.remarks || '').trim();
+  const nameTail = label.replace(/^.*ACC\s+/i, '').trim();      // "Sector 1"
+  const said = remarkDesignators(remark);
+  const mine = designatorTokens(nameTail);
+  if (said.length && mine.length && !said.some((d) => mine.includes(d))) {
+    report.sectorsUnresolved.push({
+      name: label, reason: 'sector-frequency-mismatch',
+      detail: `airspace "${nameTail}" carries a frequency remarked "${remark}"`
+    });
+    return false;
+  }
+
+  report.sectors.push({
+    name: label,
+    lower, upper,
+    callsign: svc.callsign || null,
+    mhz: q.mhz,
+    remark,
+    designators: said,
+    note: remarkNote(remark),
+    ring: geom.ring,
+    borderSegments: geom.borderSegments || 0
+  });
+  return true;
+}
+
 
 /**
  * The published ring, with any national-border stretch expanded from
@@ -366,7 +476,7 @@ function splitRings(items) {
   return rings;
 }
 
-function buildFeatures(blocks, source, report, border) {
+function buildFeatures(blocks, source, report, border, pageServices) {
   const out = [];
   // The eAIP restates a few volumes verbatim. Drawing one twice double-darkens
   // the polygon and shows two airspaces where there is one.
@@ -376,7 +486,16 @@ function buildFeatures(blocks, source, report, border) {
     const kind = kindOf(b.type, b.name);
     const label = `${b.name} ${b.type}`.trim();
     if (NOT_DRAWN.has(kind)) {
-      report.skipped.push({ name: label, kind, reason: 'not-a-vfr-planning-airspace', source });
+      // ACC sectors are not DRAWN - they tile the whole country and would bury
+      // everything - but their geometry is exactly what answers "which Polaris
+      // frequency applies here". ENR 2.1 lists all eight sector frequencies
+      // against Polaris CTA with no way to tell which is yours; the sector
+      // polygon is the way to tell. Collected separately.
+      if (kind === 'ACC' && collectSector(b, label, report)) {
+        report.skipped.push({ name: label, kind, reason: 'kept-as-acc-sector', source });
+      } else {
+        report.skipped.push({ name: label, kind, reason: 'not-a-vfr-planning-airspace', source });
+      }
       continue;
     }
     if (!b.volumes.length) {
@@ -404,7 +523,12 @@ function buildFeatures(blocks, source, report, border) {
       }
     }
 
-    const services = b.services
+    // A row that names an airspace and carries frequencies states its own
+    // services. An AD 2.17 airspace row carries none - the aerodrome's
+    // communication is in AD 2.18, a different table - so it falls back to
+    // the page pool, which at an aerodrome page IS that aerodrome's services.
+    const rowServices = b.services.length ? b.services : (pageServices || []);
+    const services = rowServices
       .map((sv) => ({
         code: sv.code || codeFromCallsign(sv.callsign),
         callsign: sv.callsign || null,
@@ -483,7 +607,11 @@ async function main() {
       retrievedAtUtc: border.retrievedAtUtc, points: border.points,
       snapToleranceNM: SNAP_TOLERANCE_NM
     } : null,
-    counts: {}, skipped: [], borderResolved: [], pages: []
+    counts: {}, skipped: [], borderResolved: [], pages: [],
+    sectors: [], sectorsUnresolved: [],
+    // ringOf needs the boundary; collectSector reaches it through the report
+    // rather than threading another argument through buildFeatures.
+    _border: border
   };
 
   const features = [];
@@ -501,9 +629,9 @@ async function main() {
     try { html = await page(edition, file); }
     catch (err) { report.pages.push({ page: label, error: String(err.message || err) }); continue; }
     const fields = extractFields(html);
-    const blocks = airspaceBlocks(fields);
+    const { blocks, pageServices } = airspaceBlocks(fields);
     const url = `${edition.base}/${file}-en-GB.html`;
-    const built = buildFeatures(blocks, { section: label, url, icao: icao || null }, report, border);
+    const built = buildFeatures(blocks, { section: label, url, icao: icao || null }, report, border, pageServices);
     features.push(...built);
     report.pages.push({ page: label, blocks: blocks.length, features: built.length });
     process.stdout.write(`  ${label}: ${built.length} volume(s) from ${blocks.length} block(s)\n`);
@@ -517,6 +645,13 @@ async function main() {
   for (const s of report.skipped) reasons[s.reason] = (reasons[s.reason] || 0) + 1;
   report.skippedByReason = reasons;
 
+  // ACC sectors ship alongside the airspace: not drawn, but used to answer
+  // which area-control frequency applies at a given position.
+  const sectors = report.sectors.map((x) => ({
+    name: x.name, lower: x.lower, upper: x.upper,
+    callsign: x.callsign, mhz: x.mhz, ring: x.ring, borderSegments: x.borderSegments
+  }));
+
   const dataset = {
     schema: 1,
     provider: 'Avinor',
@@ -526,7 +661,8 @@ async function main() {
     revision: edition.revision,
     attribution: 'Airspace data © Avinor eAIP, used with permission. Non-commercial use only.' +
       (border ? ' National border © Kartverket (NLOD).' : ''),
-    features
+    features,
+    sectors
   };
 
   await mkdir('data', { recursive: true });
@@ -541,6 +677,8 @@ async function main() {
   console.log(`\nwrote ${OUT_DATA}  ${features.length} airspace volumes`, byKind);
   console.log(`skipped ${report.skipped.length}:`, reasons);
   console.log(`border-resolved airspaces: ${report.borderResolved.length}`);
+  console.log(`ACC sectors: ${sectors.length} usable, ${report.sectorsUnresolved.length} not`);
+  delete report._border;
 }
 
 main().catch((err) => { console.error(err); process.exitCode = 1; });

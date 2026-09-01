@@ -1,4 +1,4 @@
-# C182 Flight Planner (v16.32)
+# C182 Flight Planner (v16.33)
 
 VFR flight planner for the Cessna 182T — ground planning only.
 
@@ -42,7 +42,7 @@ The **⬢ Airspace** button on the map draws the published airspace — CTR, TIZ
 TMA, TIA, CTA and the mandatory zones. Hover any of them for a card with its
 ICAO class, published vertical limits, and one row per service you would
 actually use: **ATIS, Approach, Tower**, or **Information** at an AFIS field.
-Nothing draws below zoom 7, because at country zoom 228 polygons bury the
+Nothing draws below zoom 7, because at country zoom 227 polygons bury the
 chart. Clicking still adds a waypoint, so route building inside a TMA is
 unaffected.
 
@@ -52,15 +52,26 @@ and never 121.500. An airspace worked only by an area control centre still
 shows that frequency, or there would be nobody to call. Every published
 service and frequency stays in the data regardless.
 
+**Polaris CTA names the sector your cursor is in.** It is one airspace over the
+whole country, so the AIP lists all 26 Polaris sector frequencies against it —
+reciting them tells you nothing. ENR 2.2 publishes each sector as its own
+volume, so the card looks up which one you are over, and only ever shows a
+frequency the hovered airspace itself also publishes. Where the AIP stacks
+sectors vertically you get one row per sector, labelled with the band it works.
+Where a sector cannot be drawn — Sectors 3 and 4 follow the *maritime*
+Norway–Sweden boundary — the card says so and shows nothing rather than
+guessing.
+
 Limits are shown exactly as published: GND, UNL and flight levels stay as they
 are, and a flight level is never converted to an altitude. **A planning aid —
 verify against the current AIP and NOTAM.**
 
 ## Airspace data
 
-`data/aip.js` holds 140 Norwegian airspaces — CTR, TMA, TIZ, TIA, CTA and the
-offshore zones — with their published class, vertical limits, callsigns and
-frequencies, imported from the **official Avinor eAIP** by
+`data/aip.js` holds 227 Norwegian airspace volumes — CTR, TMA, TIZ, TIA, CTA
+and the offshore zones — plus the 28 Polaris ACC sectors, with their published
+class, vertical limits, callsigns and frequencies, imported from the
+**official Avinor eAIP** by
 `npm run build:aip`. The import runs at build time only: the planner never
 contacts Avinor and never parses eAIP HTML.
 
@@ -81,7 +92,8 @@ What still cannot be resolved is **absent rather than approximated**, and
 `data/aip-report.json` names every one with the reason: offshore zones
 published as a circle radius, the *maritime* stretch of the Norway–Sweden
 boundary in the Skagerrak (a land border dataset does not contain it), and one
-airspace citing the Finland–Sweden border. Drawing a straight line between the
+airspace citing the Finland–Sweden border, and Polaris ACC Sectors 3 and 4,
+which follow that same maritime stretch. Drawing a straight line between the
 published points would invent a boundary that does not exist.
 
 **To work on it:** edit `src/`, then rebuild.
@@ -131,10 +143,13 @@ npm install        # esbuild + jsdom
 npm run build      # src/ -> dist/C182_FlightPlanner.html
 npm run watch      # rebuild on every save
 npm run typecheck  # TypeScript checks every module (0 errors required)
-npm test           # typecheck, build, then the suite against dist (286 tests)
+npm test           # typecheck, build, then the suite against dist (332 tests)
 npm run serve      # build + serve site/ on localhost and the LAN
+npm run verify:hover           # Chromium check of the position-dependent
+                               # Polaris sector frequency on the hover card
 node tools/verify-hosted.mjs   # Chromium check of the service-worker rules
-                               # (needs `npm install --no-save playwright`)
+node tools/verify-visual.mjs   # pixel + computed-style diff vs a reference build
+                               # (all three need `npm install --no-save playwright`)
 claude             # start Claude Code here; it reads CLAUDE.md automatically
 ```
 

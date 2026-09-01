@@ -1,5 +1,5 @@
 /**
- * AIP airspace overlay - src/lib/airspace.js (v16.31)
+ * AIP airspace overlay - src/lib/airspace.js (v16.31, sectors v16.33)
  *
  * The pure half of roadmap item 4: which airspaces to draw for a given
  * viewport, how to colour them, and what to say about one on hover. The
@@ -192,6 +192,155 @@ export function isUsableFrequency(q) {
 }
 
 /**
+ * Is a point inside a ring? Ray casting, on lat/lng directly.
+ *
+ * Good enough because the rings here are small relative to the globe and the
+ * question is only "which published sector is the cursor in" - it is never
+ * used for a distance, a track or a fuel figure. A vertex-exact answer on the
+ * boundary is not needed either: two adjacent sectors both claiming the seam
+ * would simply show two rows, which is what a seam means anyway.
+ *
+ * @param {[number, number][]} ring @param {[number, number]} at
+ * @returns {boolean}
+ */
+export function pointInRing(ring, at) {
+  if (!ring || ring.length < 3 || !at) return false;
+  const lat = at[0], lng = at[1];
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const yi = ring[i][0], xi = ring[i][1], yj = ring[j][0], xj = ring[j][1];
+    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * Rough altitude for ORDERING sector rows only.
+ *
+ * Deliberately never used to decide whether a sector applies - that would mean
+ * comparing a flight level against an altitude AMSL, which needs a QNH the
+ * planner does not have. It only puts the lower band first, because a C182
+ * reads the bottom of the stack. A wrong order is untidy; a wrong exclusion
+ * would hide the frequency the pilot needs.
+ *
+ * @param {{ft: number|null, text: string, kind?: string}|null} lim
+ * @returns {number}
+ */
+function orderingFt(lim) {
+  if (!lim) return 0;
+  if (typeof lim.ft === 'number') return lim.ft;
+  const fl = /FL\s*(\d+)/i.exec(String(lim.text || ''));
+  if (fl) return Number(fl[1]) * 100;
+  if (/UNL/i.test(String(lim.text || ''))) return Infinity;
+  return 0;
+}
+
+/**
+ * The published ACC sectors containing a point, lowest band first.
+ *
+ * @param {AirspaceSector[]} sectors @param {[number, number]|null} at
+ * @returns {AirspaceSector[]}
+ */
+export function sectorsAt(sectors, at) {
+  if (!at || !sectors) return [];
+  return sectors.filter((s) => pointInRing(s.ring, at))
+    .slice()
+    .sort((a, b) => orderingFt(a.lower) - orderingFt(b.lower));
+}
+
+/** The sector designator as it is worth printing: "Polaris ACC Sector 26" is
+ *  "Sector 26" once the card already says Polaris Control.
+ *  @param {AirspaceSector} s @returns {string} */
+export function sectorLabel(s) {
+  return String((s && s.name) || '').replace(/^.*\bACC\s+/i, '').trim() || String((s && s.name) || '');
+}
+
+/**
+ * WHY THE AREA-CONTROL ROW NEEDS THE CURSOR POSITION.
+ *
+ * Polaris CTA is ONE airspace covering the whole country, so its published
+ * block lists every Polaris sector frequency there is - 26 of them on the VHF
+ * band alone. Reciting all 26 tells a pilot planning past Sorkjosen nothing:
+ * the answer they need is the ONE sector that works that piece of sky.
+ *
+ * ENR 2.2 publishes each sector as its own airspace with its own lateral
+ * boundary, so the sector under the cursor is a lookup, not a guess.
+ *
+ * AND THE GEOMETRY IS ONLY ALLOWED TO SELECT, NEVER TO ASSERT. A resolved
+ * sector's frequency is shown only if it also appears in the hovered
+ * airspace's OWN published frequency list - so the card can never state
+ * something that airspace does not itself state. Measured over a grid of
+ * every point inside a Polaris CTA volume: 1648 of 1648 sector hits were
+ * corroborated that way, and the same lookup reproduces the AIP's own
+ * per-airspace pairing at 24 of the 31 airspaces that publish exactly one
+ * sector frequency (the other 7 are vertical stacks and multi-part airspaces
+ * whose own pairing wins anyway, because it is only ever consulted when the
+ * airspace lists MORE than one).
+ *
+ * When nothing resolves - over the Oslofjord, where Sectors 3 and 4 could not
+ * be drawn because their boundary follows the MARITIME Norway-Sweden line
+ * that Kartverket's land-border dataset does not contain - the card says so
+ * and shows no frequency. Listing 26 would be worse than saying "look it up".
+ *
+ * @param {AirspaceFeature} f
+ * @param {{sectors?: AirspaceSector[], at?: [number, number]|null}} [opts]
+ * @returns {{rows: {tag: string, freqs: string[], callsign: string|null}[], note: string|null}}
+ */
+function accSectorRows(f, opts) {
+  /** @type {{mhz: string, remarks?: string}[]} */
+  const usable = [];
+  /** @type {string|null} */
+  let callsign = null;
+  for (const sv of f.services || []) {
+    if ((sv.code || '').toUpperCase() !== 'ACC') continue;
+    if (!callsign && sv.callsign) callsign = sv.callsign;
+    for (const q of sv.freqs || []) if (isUsableFrequency(q)) usable.push(q);
+  }
+  const mhz = [...new Set(usable.map((q) => q.mhz))];
+  // One frequency: the airspace's own block already answers the question, and
+  // no geometry is consulted. This is the normal case - Sorkjosen TIA and
+  // Hammerfest TMA each publish exactly their own sector.
+  if (mhz.length <= 1) return { rows: [], note: null };
+
+  // No cursor position yet - the tooltip's initial content, bound before the
+  // pointer has entered the polygon. Say what the card is waiting for rather
+  // than claiming the sector is missing, which is a different thing entirely.
+  const at = (opts && opts.at) || null;
+  if (!at) {
+    return { rows: [], note: 'area control frequency depends on the position within this airspace' };
+  }
+
+  const hits = sectorsAt((opts && opts.sectors) || [], at);
+  const published = new Set(mhz);
+  /** @type {{tag: string, freqs: string[], callsign: string|null}[]} */
+  const rows = [];
+  const seen = new Set();
+  /** @type {string[]} */
+  const notes = [];
+  for (const s of hits) {
+    if (!published.has(s.mhz) || seen.has(s.mhz)) continue;   // selector, not source
+    seen.add(s.mhz);
+    const band = hits.length > 1 && s.lower && s.upper ? ` (${s.lower.text} – ${s.upper.text})` : '';
+    rows.push({
+      tag: 'ACC',
+      freqs: [s.mhz],
+      callsign: `${callsign || 'Area control'} · ${sectorLabel(s)}${band}`
+    });
+    if (s.note && !notes.includes(s.note)) notes.push(s.note);
+  }
+  if (!rows.length) {
+    return {
+      rows: [],
+      note: `${mhz.length} sector frequencies published here and the sector for this ` +
+        `position is not in the dataset — see AIP ENR 2.2.`
+    };
+  }
+  return { rows, note: notes.length ? notes.join(' ') : null };
+}
+
+/**
  * The service rows for the hover card: tag, frequencies, who you are calling.
  *
  * THE ATIS LABEL IS DELIBERATELY NOT THE PUBLISHED CALLSIGN. Norway publishes
@@ -203,11 +352,30 @@ export function isUsableFrequency(q) {
  * The published callsign is kept in the dataset either way.
  *
  * @param {AirspaceFeature} f
+ * @param {{sectors?: AirspaceSector[], at?: [number, number]|null}} [opts]
  * @returns {{tag: string, freqs: string[], callsign: string|null}[]}
  */
-export function serviceRows(f) {
+export function serviceRows(f, opts) {
   const primary = collectServices(f, SHOWN_SERVICES);
-  return primary.length ? primary : collectServices(f, FALLBACK_SERVICES);
+  if (primary.length) return primary;
+  return fallbackRows(f, opts).rows;
+}
+
+/**
+ * The fallback (area control / radio) rows, plus anything that needs saying
+ * about how they were chosen.
+ *
+ * @param {AirspaceFeature} f
+ * @param {{sectors?: AirspaceSector[], at?: [number, number]|null}} [opts]
+ * @returns {{rows: {tag: string, freqs: string[], callsign: string|null}[], note: string|null}}
+ */
+function fallbackRows(f, opts) {
+  const rows = collectServices(f, FALLBACK_SERVICES);
+  const sect = accSectorRows(f, opts);
+  if (!sect.rows.length && !sect.note) return { rows, note: null };
+  // Replace the single crowded ACC row with one row per resolved sector.
+  const others = rows.filter((r) => r.tag !== 'ACC');
+  return { rows: sect.rows.concat(others), note: sect.note };
 }
 
 /** @param {AirspaceFeature} f @param {string[]} codes
@@ -242,13 +410,24 @@ function collectServices(f, codes) {
  * into markup; this module stays DOM-free.
  *
  * @param {AirspaceFeature} f
+ * @param {{sectors?: AirspaceSector[], at?: [number, number]|null}} [opts]
+ *        the ACC sector dataset and the cursor position. Needed only for an
+ *        airspace that publishes many area-control frequencies - see
+ *        accSectorRows for why the position is the question.
  * @returns {{name: string, kindLabel: string, cls: string|null, band: string,
  *            services: {tag: string, freqs: string[], callsign: string|null}[],
  *            notes: string[], color: string}}
  */
-export function airspaceInfo(f) {
+export function airspaceInfo(f, opts) {
   const style = airspaceStyle(f.kind);
   const notes = [];
+  const primary = collectServices(f, SHOWN_SERVICES);
+  const services = primary.length ? primary : [];
+  if (!primary.length) {
+    const fb = fallbackRows(f, opts);
+    services.push(...fb.rows);
+    if (fb.note) notes.push(fb.note);
+  }
   // A boundary that came from Kartverket rather than the AIP's own coordinate
   // list is worth saying, because it is the one part of the shape the AIP did
   // not state directly.
@@ -258,7 +437,7 @@ export function airspaceInfo(f) {
     kindLabel: style.label,
     cls: f.class || null,
     band: limitsText(f),
-    services: serviceRows(f),
+    services,
     notes,
     color: style.color
   };

@@ -49,6 +49,12 @@
  * @property {string} value   the published value, trimmed ('' when absent)
  * @property {string} after   plain text following the marker: ENR 2.1 states
  *                            an airspace's TYPE here, untagged
+ * @property {number} row     index of the enclosing table row. THE GROUPING
+ *                            KEY: ENR 2.1 states an airspace's name in the
+ *                            FIRST cell of its row and ENR 2.2 in the LAST,
+ *                            so grouping on the name marker shifts every
+ *                            ENR 2.2 sector's data by one row. The row is the
+ *                            document's own boundary and does not care.
  * @property {number} order   document order, so vertices keep their sequence
  */
 
@@ -159,6 +165,29 @@ function trailingText(html, end) {
   return plainText(stop === -1 ? rest : rest.slice(0, stop));
 }
 
+/** Character offsets of every `<tr` in the document, ascending.
+ *  @param {string} html @returns {number[]} */
+function rowBoundaries(html) {
+  /** @type {number[]} */
+  const out = [];
+  const re = /<tr\b/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) out.push(m.index);
+  return out;
+}
+
+/** Which row a character offset falls in. Binary search: ENR 2.1 has ~4 900
+ *  spans and a linear scan per span is quadratic.
+ *  @param {number[]} starts @param {number} pos @returns {number} */
+function rowOf(starts, pos) {
+  let lo = 0, hi = starts.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (starts[mid] <= pos) { ans = mid; lo = mid + 1; } else { hi = mid - 1; }
+  }
+  return ans;
+}
+
 /** The value a marker describes, with any nested marker text removed.
  *  @param {SpanNode|undefined} node @returns {string} */
 function valueOf(node) {
@@ -178,6 +207,7 @@ function valueOf(node) {
  */
 export function extractFields(html) {
   const source = String(html || '');
+  const rowStarts = rowBoundaries(source);
   const nodes = spanNodes(source);
   /** @type {AipField[]} */
   const out = [];
@@ -204,6 +234,7 @@ export function extractFields(html) {
         record: m[1], field: m[2], id: m[3],
         value: valueOf(nodes[owner]),
         after: trailingText(source, node.end),
+        row: rowOf(rowStarts, node.start),
         order: out.length
       });
     }
@@ -295,4 +326,58 @@ export function verticalLimit(val, uom, code) {
     return { text, ft: null, datum: c || null, kind: 'unresolved-unit' };
   }
   return { text, ft: num, datum: c || null, kind: 'altitude' };
+}
+
+/**
+ * The designator tokens of a sector name: "Sector 20 (Offshore)" -> 20,
+ * offshore. Tokenised, not compared as a string, so a token can be looked for
+ * WHOLE - "1" must not match "15", which a substring test would.
+ *
+ * @param {string} text @returns {string[]}
+ */
+export function designatorTokens(text) {
+  return String(text || '').toLowerCase()
+    .split(/[^0-9a-zæøå]+/i)
+    .filter((t) => t && t !== 'sector' && t !== 'sectors');
+}
+
+/**
+ * The sector designators a published frequency remark claims.
+ *
+ * The eAIP writes these to a fixed shape: the remark OPENS by naming the
+ * sector(s) the frequency serves, and anything after the first full stop is
+ * free operational text:
+ *
+ *   "Sector 1"
+ *   "Sector 9/12"                      <- ONE frequency, TWO sectors combined
+ *   "Sector 17. The radio coverage in the ISVIG area ... may be marginal."
+ *   "Sector OFIR. TX located in Seivag and Berlevag FL100/180NM ..."
+ *
+ * So only the leading phrase is read for the cross-check. That matters both
+ * ways: a combined "9/12" must be ACCEPTED on Sector 9 (Polaris really does
+ * work those two on one frequency), and the trailing prose must not be
+ * searched for designators, or "FL100/180NM" starts matching sector numbers.
+ *
+ * Returns [] when the remark does not open by naming a sector - there is then
+ * nothing to contradict the source's own row-level pairing, and inventing a
+ * mismatch would refuse a frequency the eAIP did state.
+ *
+ * @param {string} remark @returns {string[]}
+ */
+export function remarkDesignators(remark) {
+  const m = /^\s*sectors?\s+([^.]*)/i.exec(String(remark || ''));
+  return m ? designatorTokens(m[1]) : [];
+}
+
+/**
+ * The operational free text after the designator phrase, or null.
+ * Kept separate so the card can show the note without the "Sector 17." prefix
+ * it already displays as the sector's own name.
+ *
+ * @param {string} remark @returns {string|null}
+ */
+export function remarkNote(remark) {
+  const m = /^\s*sectors?\s+[^.]*\.\s*(.+)$/is.exec(String(remark || ''));
+  const note = m ? m[1].trim() : '';
+  return note || null;
 }

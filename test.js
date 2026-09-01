@@ -2402,7 +2402,10 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
     'airspace.js': () => [M.airspace.visibleAirspaces([], { south: 0, west: 0, north: 1, east: 1 }, 9),
                           M.airspace.airspaceStyle('CTR'),
                           M.airspace.airspaceAttribution({ editionLabel: 'x' }),
-                          M.airspace.airspaceKinds([])],
+                          M.airspace.airspaceKinds([]),
+                          M.airspace.pointInRing([[0, 0], [0, 1], [1, 1]], [0.4, 0.5]),
+                          M.airspace.sectorsAt([], [69, 18]),
+                          M.airspace.sectorLabel({ name: 'Polaris ACC Sector 26' })],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -2881,11 +2884,234 @@ T('an airspace worked only by an ACC still names someone to call', () => {
   const endu = set.features.find((f) => f.name === 'Bardufoss CTR');
   assert(!A.serviceRows(endu).some((r) => r.tag === 'ACC'),
     'a CTR with TWR and APP was given an ACC row as well');
-  // No card may carry a "+N hidden" remark - it was noise and is gone.
-  for (const f of set.features.slice(0, 60)) {
+  // No card may carry a "+N hidden" remark - it was noise and is gone. The
+  // ENR 2.2 pointer is NOT that: it appears only where an area-control sector
+  // genuinely could not be resolved, and it replaces a frequency rather than
+  // counting hidden ones.
+  for (const f of set.features) {
     const json = JSON.stringify(A.airspaceInfo(f));
-    assert(!/non-VHF/.test(json) && !/see AIP/.test(json), f.name + ' still carries a hidden-count remark');
+    assert(!/non-VHF/.test(json) && !/hidden/i.test(json), f.name + ' still carries a hidden-count remark');
   }
+});
+/** The shipped AIP sidecar, parsed. It assigns window.C182_AIP, so the
+ *  object literal is sliced out rather than executed. */
+function aipDataset() {
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  return JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+}
+
+/**
+ * Does a closed ring cross itself? A bow tie draws an airspace that does not
+ * exist, and answers a point-in-polygon test wrongly - which matters twice
+ * over now that sector rings are used to pick a frequency.
+ */
+function ringSelfIntersects(r) {
+  const side = (a, b, c) => {
+    const v = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]);
+    return Math.abs(v) < 1e-12 ? 0 : (v > 0 ? 1 : -1);
+  };
+  const n = r.length;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (j === i || (j + 1) % n === i || j === (i + 1) % n) continue;
+      const a = r[i], b = r[(i + 1) % n], c = r[j], d = r[(j + 1) % n];
+      if (side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b)) return true;
+    }
+  }
+  return false;
+}
+
+T('the Polaris sector under the cursor is named, not all 26 frequencies', () => {
+  // THE BUG THIS FIXES: Polaris CTA is ONE airspace over the whole country, so
+  // its published block lists every Polaris sector frequency there is. Hovering
+  // it near Sorkjosen printed all 26 and told the pilot nothing.
+  const A = moduleExports.airspace;
+  const set = aipDataset();
+  assert(Array.isArray(set.sectors) && set.sectors.length === 28,
+    'the dataset carries ' + (set.sectors || []).length + ' ACC sectors, expected 28');
+
+  const SORKJOSEN = [69.7868, 20.9594];
+  const cta = set.features.filter((f) => /^Polaris CTA/.test(f.name))
+    .find((f) => A.pointInRing(f.ring, SORKJOSEN));
+  assert(cta, 'no Polaris CTA volume covers Sorkjosen');
+
+  const hits = A.sectorsAt(set.sectors, SORKJOSEN);
+  assert(hits.length === 1 && /Sector 26$/.test(hits[0].name),
+    'sectors at Sorkjosen: ' + hits.map((s) => s.name).join(', '));
+
+  const rows = A.airspaceInfo(cta, { sectors: set.sectors, at: SORKJOSEN }).services;
+  assert(rows.length === 1, 'rows: ' + JSON.stringify(rows));
+  assert(rows[0].tag === 'ACC' && rows[0].freqs.join() === '126.705', JSON.stringify(rows[0]));
+  assert(/Polaris Control/.test(rows[0].callsign) && /Sector 26/.test(rows[0].callsign),
+    'callsign: ' + rows[0].callsign);
+
+  // INDEPENDENT CORROBORATION, from a different part of the same eAIP:
+  // Sorkjosen TIA - a small airspace right there - publishes exactly ONE ACC
+  // frequency of its own, and it is the same one. The geometry agrees with the
+  // AIP's own pairing.
+  const tia = set.features.find((f) => /^Sorkjosen TIA|^S\u00f8rkjosen TIA/.test(f.name));
+  assert(tia, 'Sorkjosen TIA is missing from the dataset');
+  const tiaRows = A.serviceRows(tia, { sectors: set.sectors, at: SORKJOSEN });
+  assert(tiaRows.length === 1 && tiaRows[0].freqs.join() === '126.705',
+    'Sorkjosen TIA publishes: ' + JSON.stringify(tiaRows));
+});
+T('the sector geometry may only SELECT from what the airspace itself publishes', () => {
+  // The rule that keeps this honest: a resolved sector's frequency is shown
+  // only when it also appears in the hovered airspace's own published list, so
+  // the card can never state something that airspace does not state. Measured
+  // over a grid across every Polaris CTA volume - this sweep IS the check.
+  const A = moduleExports.airspace;
+  const set = aipDataset();
+  const cta = set.features.filter((f) => /^Polaris CTA/.test(f.name));
+  assert(cta.length > 1, 'expected many Polaris CTA volumes, got ' + cta.length);
+
+  let checks = 0, resolved = 0, ambiguous = 0, unresolved = 0;
+  for (let la = 57; la <= 72; la += 0.5) {
+    for (let lo = 4; lo <= 32; lo += 1) {
+      const at = [la, lo];
+      for (const f of cta) {
+        if (!A.pointInRing(f.ring, at)) continue;
+        checks++;
+        const published = new Set(f.services.flatMap((sv) => sv.freqs)
+          .filter((q) => A.isUsableFrequency(q)).map((q) => q.mhz));
+        const rows = A.airspaceInfo(f, { sectors: set.sectors, at }).services
+          .filter((r) => r.tag === 'ACC');
+        for (const r of rows) {
+          assert(published.has(r.freqs[0]),
+            f.name + ' at ' + at + ' was given ' + r.freqs[0] + ', which it does not publish');
+        }
+        if (!rows.length) unresolved++;
+        else if (rows.length === 1) resolved++;
+        else ambiguous++;
+      }
+    }
+  }
+  assert(checks > 100, 'the sweep only found ' + checks + ' points inside a Polaris CTA');
+  // Most points resolve to exactly one sector. The rest are the AIP's own
+  // vertical stacks (Sector 23 GND-FL 85 under Sector 27 FL 285-UNL), where
+  // showing both bands is the correct answer, not a failure.
+  assert(resolved / checks > 0.8, resolved + '/' + checks + ' points resolved to one sector');
+  console.log('        Polaris CTA sweep: ' + resolved + ' single, ' + ambiguous +
+    ' stacked, ' + unresolved + ' unresolved of ' + checks);
+});
+T('a stacked position shows every candidate sector WITH its band', () => {
+  // Where the AIP stacks sectors vertically the honest answer is both, each
+  // labelled with the band it works, so the pilot picks by planned level.
+  const A = moduleExports.airspace;
+  const set = aipDataset();
+  const at = [65.0, 8.0];
+  const cta = set.features.filter((f) => /^Polaris CTA/.test(f.name))
+    .find((f) => A.pointInRing(f.ring, at));
+  assert(cta, 'no Polaris CTA volume at 65N 008E');
+  const rows = A.airspaceInfo(cta, { sectors: set.sectors, at }).services;
+  assert(rows.length === 2, 'rows: ' + JSON.stringify(rows));
+  assert(rows.every((r) => /\(.+ – .+\)/.test(r.callsign)),
+    'a stacked row did not name its band: ' + JSON.stringify(rows));
+  // Lowest band first: a C182 reads the bottom of the stack.
+  assert(/Sector 23/.test(rows[0].callsign), 'the lower sector is not first: ' + rows[0].callsign);
+});
+T('an unresolvable sector says so and shows NO frequency', () => {
+  // Sectors 3 and 4 could not be drawn: their boundary follows the MARITIME
+  // Norway-Sweden line, which Kartverket's LAND border dataset does not
+  // contain. Over the Oslofjord the card therefore cannot name a sector - and
+  // must say that rather than fall back to reciting all 26.
+  const A = moduleExports.airspace;
+  const set = aipDataset();
+  const at = [59.6, 10.8];
+  const cta = set.features.filter((f) => /^Polaris CTA/.test(f.name))
+    .find((f) => A.pointInRing(f.ring, at));
+  assert(cta, 'no Polaris CTA volume over the Oslofjord');
+  const info = A.airspaceInfo(cta, { sectors: set.sectors, at });
+  assert(!info.services.length, 'a frequency was shown anyway: ' + JSON.stringify(info.services));
+  assert(/ENR 2\.2/.test(info.notes.join(' ')), 'notes: ' + JSON.stringify(info.notes));
+
+  // NO POSITION YET is a different state - the tooltip's initial content,
+  // bound before the pointer entered the polygon. It must not claim the sector
+  // is missing.
+  const pre = A.airspaceInfo(cta, { sectors: set.sectors, at: null });
+  assert(!pre.services.length, 'a frequency was guessed with no position');
+  assert(/depends on the position/.test(pre.notes.join(' ')) && !/ENR 2\.2/.test(pre.notes.join(' ')),
+    'pre-hover notes: ' + JSON.stringify(pre.notes));
+});
+T('an airspace that publishes ONE sector frequency never consults the geometry', () => {
+  // The AIP states the responsible sector per airspace, and that statement
+  // wins: Sogn TIA is worked by Sector 17 even though two of its sub-volumes
+  // reach east into Sector 6 and 7 territory. The position lookup exists only
+  // for airspaces that publish MORE than one, so those pairings cannot be
+  // second-guessed. Checked over the whole dataset, at a deliberately silly
+  // position.
+  const A = moduleExports.airspace;
+  const set = aipDataset();
+  let checked = 0;
+  for (const f of set.features) {
+    const mhz = [...new Set(f.services.flatMap((sv) => sv.freqs)
+      .filter((q) => A.isUsableFrequency(q) && (q.remarks || '').length)
+      .filter((q) => f.services.some((sv) => (sv.code || '') === 'ACC' && sv.freqs.includes(q)))
+      .map((q) => q.mhz))];
+    if (mhz.length !== 1) continue;
+    checked++;
+    const anywhere = A.serviceRows(f, { sectors: set.sectors, at: [0, 0] });
+    const acc = anywhere.filter((r) => r.tag === 'ACC');
+    if (!acc.length) continue;            // it also has APP/TWR, so ACC is hidden
+    assert(acc.length === 1 && acc[0].freqs.join() === mhz[0],
+      f.name + ' single ACC pairing was overridden: ' + JSON.stringify(acc));
+  }
+  assert(checked > 20, 'only ' + checked + ' airspaces publish a single ACC frequency');
+});
+T('a combined sector remark is accepted; a genuine mismatch is refused', () => {
+  // The eAIP writes a frequency remark as "Sector <designators>" and then
+  // optional free text. ONE frequency really does work two combined sectors
+  // ("Sector 9/12"), and Sector 17's remark carries a radio-coverage note
+  // after the designator. Strict string equality refused all eight of those.
+  // What must STILL be refused is a real mismatch - reading the eAIP by name
+  // marker instead of by row produced exactly that, putting Sector 2's
+  // frequency on Sector 1.
+  const F = require('./tools/aip-fields.mjs');
+  const d = (t) => F.remarkDesignators(t).join(',');
+  assert(d('Sector 1') === '1', d('Sector 1'));
+  assert(d('Sector 9/12') === '9,12', d('Sector 9/12'));
+  assert(d('Sector 17. The radio coverage in the ISVIG area (6300N 00000E) at or BLW FL195 may be marginal.')
+    === '17', 'trailing prose leaked into the designators');
+  assert(d('Sector OFIR. TX located in Seivag and Berlevag FL100/180NM FL200/230NM') === 'ofir',
+    'the oceanic sector designator was not read');
+  assert(d('Sector 20 (Offshore)') === '20,offshore', d('Sector 20 (Offshore)'));
+  assert(d('AVBL only when 125.055/118.880/ 127.255 or 134.355 U/S or HO') === '',
+    'a remark that names no sector produced designators');
+  // Whole tokens, never substrings: "1" must not match "15/16".
+  const mine = F.designatorTokens('Sector 1');
+  assert(!F.remarkDesignators('Sector 15/16. ...').some((x) => mine.includes(x)),
+    'Sector 1 matched a Sector 15/16 frequency');
+  assert(F.remarkDesignators('Sector 9/12').some((x) => F.designatorTokens('Sector 12').includes(x)),
+    'Sector 12 did not match its own combined frequency');
+  // The free text is kept, without the designator prefix the card already shows.
+  assert(/^The radio coverage/.test(String(F.remarkNote('Sector 17. The radio coverage in the ISVIG area is marginal.'))),
+    'the note kept its "Sector 17." prefix');
+  assert(F.remarkNote('Sector 1') === null, 'a bare designator produced a note');
+});
+T('every imported sector is drawable, dialable and correctly paired', () => {
+  const A = moduleExports.airspace;
+  const set = aipDataset();
+  for (const s of set.sectors) {
+    assert(s.ring.length >= 3, s.name + ' has ' + s.ring.length + ' ring points');
+    const n = Number(s.mhz);
+    assert(n >= 118 && n < 137, s.name + ' frequency ' + s.mhz + ' is not on the civil VHF band');
+    assert(s.lower && s.upper && s.lower.text && s.upper.text, s.name + ' has no published band');
+    // The pairing the importer cross-checked must hold in the shipped data.
+    const F = require('./tools/aip-fields.mjs');
+    const said = F.remarkDesignators(s.remark);
+    const mine = F.designatorTokens(A.sectorLabel(s));
+    assert(!said.length || said.some((x) => mine.includes(x)),
+      s.name + ' ships a frequency remarked "' + s.remark + '"');
+    // No self-intersection: a sector ring is used for a point test, and a bow
+    // tie would answer it wrongly. Same check the airspace rings get.
+    assert(!ringSelfIntersects(s.ring), s.name + ' ring crosses itself');
+  }
+  // The two sectors that could not be drawn are refused for a STATED reason,
+  // not silently missing.
+  const report = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  assert(report.sectorsUnresolved.length === 2, JSON.stringify(report.sectorsUnresolved));
+  assert(report.sectorsUnresolved.every((u) => u.reason === 'fix-not-on-border'),
+    JSON.stringify(report.sectorsUnresolved));
 });
 T('the hover card is content-sized, not collapsed to its minimum width', () => {
   // Leaflet tooltips are white-space:nowrap; overriding to `normal` alone
@@ -3054,25 +3280,9 @@ T('NO airspace polygon crosses itself', () => {
   // them into a bow tie - 71 of 164 polygons, each drawing an airspace that
   // does not exist. Rings are now split by the source's own delimiter (a ring
   // closes by repeating its first vertex) and paired with their volume.
-  const src = fs.readFileSync('data/aip.js', 'utf8');
-  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
-  const side = (a, b, c) => {
-    const v = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]);
-    return Math.abs(v) < 1e-12 ? 0 : (v > 0 ? 1 : -1);
-  };
+  const set = aipDataset();
   const offenders = [];
-  for (const f of set.features) {
-    const r = f.ring, n = r.length;
-    let hits = 0;
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        if (j === i || (j + 1) % n === i || j === (i + 1) % n) continue;
-        const a = r[i], b2 = r[(i + 1) % n], c = r[j], d = r[(j + 1) % n];
-        if (side(a, b2, c) !== side(a, b2, d) && side(c, d, a) !== side(c, d, b2)) hits++;
-      }
-    }
-    if (hits) offenders.push(f.name + ' (' + hits + ')');
-  }
+  for (const f of set.features) if (ringSelfIntersects(f.ring)) offenders.push(f.name);
   assert(offenders.length === 0, offenders.length + ' self-crossing polygons: ' + offenders.slice(0, 5).join(', '));
 });
 T('a stepped TMA gets one ring per band, not one ring shared', () => {
