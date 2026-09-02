@@ -1491,6 +1491,38 @@ comparison is sharper than the comparison itself, and it is cheap:
   caught anything - the real test-quality gap is M5, asserts looser than the
   measurements that justified them.
 
+### 19. SPLIT `test.js` (5 451 lines, 352 tests, 75 sections)
+
+For NAVIGABILITY, and say so plainly: this closes no quality gap. The friend's
+planner has 347 cases in 58 files against this project's 352 in one, and that is
+a difference of organisation, not of what is tested. The real test-quality gap is
+M5 - asserts looser than the measurements that justified them - and splitting the
+file does not touch it. Do not let the split be mistaken for fixing M5.
+
+- **THE SECTIONS ARE ALREADY THE SEAMS.** 75 numbered `=== N. title ===` headers,
+  each a coherent group. Four natural files suggest themselves: the PURE module
+  tests (no jsdom at all - they would run first and fast), the PAGE/jsdom tests,
+  the DATASET tests that read `data/aip.js`, and the SWEEPS.
+- **SPLIT INTO MODULES THAT RECEIVE THE HARNESS, NOT INTO SEPARATE PROCESSES.**
+  One jsdom is built once from `dist/` (test.js:69) and shared by every page test,
+  along with `ev()`, `SEED`, `SEED2`, `answerDialog`, `typeInDialog`, `txtOf` and
+  `moduleExports`. A file-per-process runner would rebuild jsdom per file and
+  multiply the slowest part of the run for no benefit.
+- **THREE THINGS THE SPLIT MUST NOT LOSE**, each of which caught real bugs:
+  the standalone-run guard that `require()`s every module in bare Node and CALLS
+  an export (that is the hidden-globals proof - toRad, OM_LEVELS and flights);
+  the source-level greps against `APP_HTML` that guard REMOVED features from
+  coming back; and the `T()`-does-not-await trap - a new harness must keep the
+  `TA()` semantics or fix them properly, never quietly re-introduce a runner
+  where an async body reports PASS without asserting.
+- **THE SWEEPS ARE THE SLOW PART** and pair with the `SWEEP_N` env var in item 15:
+  split them out and the everyday run gets faster, while the big sizes quoted in
+  this file become runnable on demand instead of aspirational.
+- **SEQUENCE IT AFTER THE AUDIT BLOCKS (items 11-14).** Those will rewrite parts
+  of this file - new invariants for the pattern chain, the wind matrix, the print
+  banner, the validating loader. Reorganising 5 451 lines is easier when nothing
+  in them is about to change, and a split done first would just have to be redone.
+
 ### Settled by the author in AUDIT.md - do not relitigate
 
 - **Times are LOCAL, not UTC**, because that is what the school plans in. It must
