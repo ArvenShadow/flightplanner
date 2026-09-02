@@ -220,6 +220,45 @@ errors is the standard.
 4. Check for duplicate DOM ids before shipping.
 5. Version naming: vMAJOR.MINOR in the filename the user receives.
 
+### THE PAGE SCRIPT IS THE THIN SHELL - three rules that are not optional (v16.42)
+
+An outside review of v16.41 put it exactly right: *"a well-engineered core with
+a thin shell"*. The pure modules take what they need as arguments, are checked by
+the real compiler and are proved to have no hidden globals; the 4 100-line page
+script is the least tested surface, and EVERY high finding in `AUDIT.md` lives
+there. The answer is NOT the module refactor this file rightly declined - it is
+three cheap disciplines applied every time the page is touched:
+
+6. **ESCAPE EVERY INTERPOLATED STRING that reaches `innerHTML`.** The METAR card,
+   the OFP sheet and the fix labels already do; the OFP rows, the pattern row,
+   `flightTitle`, the wind modal, the sub-leg row, the plotting list and the leg
+   panel do not. This is correctness before it is security: a waypoint named
+   `Bodø <VOR>` breaks the table with no malice at all.
+7. **RE-READ STATE AFTER EVERY `await`.** Never hold `flights[activeFlightIndex]`
+   (or an fIdx, or a waypoint) across a dialog: `undoLast` rebinds `flights` to a
+   fresh copy, so the captured object is detached and the confirmed action
+   silently does nothing - or, with an index, hits the wrong flight. This is a
+   PATTERN, not a one-off, and every new dialog reproduces it unless the handler
+   re-reads after the await.
+8. **THE SAFETY NET RUNS FIRST, AND IT RUNS ON EVERY SURFACE.** `runIntegrityCheck`
+   is the last call in the render pipeline with nothing guarding it, so a throw
+   anywhere earlier skips it silently; and the print rule hides the banner, so the
+   one output that goes on company paperwork is the one the guard cannot reach.
+   A guard that can be bypassed is not a guard.
+
+### TWO FAILURE SHAPES THIS PROJECT KEEPS PRODUCING - look for them by name
+
+- **AN OLD RULE NOT APPLIED TO A NEW SURFACE.** Both critical findings are this.
+  The pattern-stop chain break was written for the backward pass and never for
+  the forward one; the wind modal predates the v16.20 "never assume calm wind"
+  rule and was never revisited. When a rule is added HERE, grep for every place
+  it should already have applied.
+- **A TEST ASSERT LOOSER THAN THE MEASUREMENT THAT JUSTIFIED IT.** The advice
+  sweep measured 305 suggestions and asserts `given > 30`; a regression halving
+  the rate would pass. Where a number in this file is quoted as evidence, the
+  suite should assert close to it, or the file should say the figure was an
+  offline run. Do not let the documentation get ahead of the code.
+
 ## Test harness notes
 
 - `npm install` then `npm test` (which BUILDS first). Requires Node 18+.
@@ -1189,6 +1228,14 @@ errors is the standard.
 
 ## DEFERRED: known nits and small bugs (v16.39)
 
+**See also `AUDIT.md`** (the read-only deep audit of v16.41, with the author's
+answers inline) and roadmap items 11-17, which are the ORDERED plan for it. The
+audit deliberately did not re-report anything on this list, so the two do not
+overlap - it did add that deferred nit 4 (`tocNM` ignored on a leg with no climb)
+applies equally to `bocNM` and to `bodNM` on a leg with no descent: measured over
+6 000 routes, 434 ignored TOC, 758 ignored BOC and 3 221 ignored BOD pins. One
+fix covers all three.
+
 The user's instruction: "we will iron out all the small bugs and nitpicks
 later, make sure you keep track of all the small details that can be ironed
 out." This is that list. Everything here is OBSERVED, not speculative - each
@@ -1329,6 +1376,90 @@ whoever picks these up starts from facts rather than assumptions.
     be tested without a browser, which is how every other rule in this project
     is checked. Whatever is bound has to be discoverable: the Feature Guide
     and a `?` overlay, not folklore.
+
+### The audit backlog (v16.42 - from AUDIT.md, with the author's answers)
+
+`AUDIT.md` (committed to the repo) is the read-only deep audit of v16.41 with the
+author's replies inline. It is the DETAIL; this is the ordered plan. Three
+findings were re-reproduced independently before this list was written - C1, C2
+and H2 all hold exactly as described.
+
+**11. THE "NEVER PRESENT BROKEN OUTPUT AS CLEAN" BLOCK - do this first.**
+   C1, C2 and H2 are one class, not three bugs: the project's refuse-to-invent
+   discipline bypassed at an edge. C2 turns UNKNOWN into calm-and-0C, H2 turns
+   INVALID into a printable company form, C1 turns STALE into planned. Fix them
+   together and add the invariant they share: *a plan with missing or invalid
+   inputs must not produce clean-looking output on ANY surface.*
+   - **H2 is the worst of them and it is CRITICAL, not high** (it was ranked
+     high). Measured: 7 cells print the literal `NaN` (`tas, tt, var, wv, wca,
+     pl, gs`) because `ofpRowCells` uses `pad3`/raw `String()` where it should
+     use the finite-checking `one()`; and `body > *` in the print rule hides the
+     red banner, so a plan the app has declared DO NOT USE prints as clean
+     company paperwork. Blank every non-finite value, and render a print-only
+     "INTEGRITY CHECK FAILED - DO NOT USE" band inside `#ofp-print`.
+   - **C2**: the wind matrix's `Number(x) || 0` (index.html ~2597) writes 0 into
+     an EMPTY box and the banner goes from red to hidden. Refuse to save with an
+     empty box and highlight it; keep `Number()` for a typed 0.
+   - **C1**: a PATTERN pair leaves the forward `alt` cursor holding the previous
+     leg's altitude, so the leg after a circuit is scheduled from a stale figure
+     (measured: `B->ENTC` entered at 2500 ft where B is planned at 6000). It can
+     HIDE a descent shortfall the banner would otherwise show. Fix the cursor,
+     and add pattern waypoints to the pin sweep - it has never generated one.
+**12. Robustness of load and boot.** H4 (a corrupt `c182_custom_routes` /
+   `c182_custom_missions` throws out of the top-level script - no map, no table,
+   no way back) and H7 (route load and import bypass `sanitiseFlights`, and the
+   live plan is left half-assigned when the throw comes). NOTE: the author has
+   ruled route files TRUSTED, which lowers H3/H7 as a SECURITY matter - but H7's
+   damage is a stale or malformed file corrupting the live plan, which trust does
+   not prevent, so it stays high. M1 (sanitiseFlights coerces nothing but
+   coordinates, and mutates its input) is the same work.
+**13. Stuck states and dialogs.** H5 (a line drag has no exit but a mouseup:
+   Escape, blur, right-click or alt-tab leave the map stuck with dragging
+   disabled) and H6 (Ctrl+Z fires while a dialog is open, then the confirmed
+   action mutates a detached flight). H6 is rule 7 above, and it converges with
+   roadmap items 9-10: the author's answer is *"only escape and relevant key
+   bindings on dialog popups, all other keybindings disabled during popup"* -
+   which is exactly the guard the 1-9 digit binding needs anyway.
+**14. H3 escaping** (rule 6 above) and **H1** (a throw in the daylight card skips
+   the banner AND leaves the previous plan's print sheets on screen - rule 8).
+**15. Housekeeping, one batch.** M4 (`build-aip.mjs` writes `data/aip.js` BEFORE
+   the border reconciliation can throw, and deletes `report._border` after the
+   write - L1's 1 129 KB report), L2 (`package-lock.json` says 16.33.0), L3
+   (documentation drift: 61 vs 101 handlers, 24 vs 32 globals, invariants
+   described as build failures that are tests), M2 (an unrecognised import file
+   reports "Import complete"), M5 + a `SWEEP_N` env var so the big sweeps are
+   runnable without slowing the suite (the author agreed: *"if it costs nothing
+   and is a smart move, then sure"*), M3 (ETO and the daylight card disagree by
+   an hour across a DST transition; cannot bite a legal day-VFR flight in Norway
+   because both transitions fall in SERA night, but it is a wrong time on the
+   form), L4-L10.
+**16. The QoL list** in AUDIT.md section 4 (14 items): Escape/backdrop closes the
+   leg panel; undo for ETD/fuel/reserve; a 13" layout default; an empty state;
+   an import summary; labelled undo/redo; fix-search distance and bearing; a
+   timezone statement beside the ETD field; a print-preview button; row-hover
+   highlights the leg on the map. Nothing there changes a calculation.
+**17. TOUCH & GO / FULL STOP / FLY-OVER on an aerodrome** (the author's own
+   feature, from the taxi-fuel question). Clicking an airport offers the three,
+   and they mean different things to the plan: FULL STOP carries taxi fuel into
+   the next sector (which settles the open question - taxi fuel is per full stop,
+   NOT once per mission as it is today); TOUCH & GO costs only the descent and
+   climb-out; FLY-OVER renames the fix from the ICAO code to the civil name
+   (`ENDU` -> Bardufoss - the AIP dataset already carries `name` and `city`, so
+   nothing is invented). This also settles C1's semantics: after a full stop the
+   next leg climbs from the FIELD ELEVATION, after a touch & go from the circuit
+   altitude - which is why C1's mechanical fix (no stale cursor) and its
+   semantics are separable, and the mechanical one should not wait for this.
+
+### Settled by the author in AUDIT.md - do not relitigate
+
+- **Times are LOCAL, not UTC**, because that is what the school plans in. It must
+  be clearly labelled wherever it is printed or shown.
+- **Route files are TRUSTED** - shared only between trusted parties. This lowers
+  the SECURITY weight of H3/H7; it does not remove the robustness work (see 12).
+- **NO HARDCODED ODD VALUES.** The `|| 254` fallbacks (ENDU's elevation, four
+  sites) are leftovers and come out; first-run defaults must be generic.
+- **Taxi fuel belongs to a full stop**, not to the mission - see 17.
+- **A dialog disables every keybinding but Escape and its own.**
 
 ## Circuit altitude, and editing a waypoint from the map (v16.40)
 
