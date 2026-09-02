@@ -442,22 +442,38 @@ caching" and the failed-install case; test.js guards the worker's structure only
 1. **ETD/ETO are the browser's local time.** The card says so, but the company OFP form is
    normally filled in UTC and AIP/METAR/TAF are UTC. Should the printed ETO be UTC (with
    the offset shown), or is local deliberate?
-2. **Taxi fuel is applied once per MISSION** (index.html:3863-3865), not once per sector.
+   Answer from Author: As long as it is clearly specified, the times should be local time as thats what our flight school uses for planning.
+   
+3. **Taxi fuel is applied once per MISSION** (index.html:3863-3865), not once per sector.
    Is a multi-sector day with an engine stop meant to carry taxi fuel only on the first
    line of the first sheet? The first leg's printed "Int" fuel also includes it.
-3. **Does MET Norway's TAF feed ever prefix a line with `TAF` / `TAF AMD`?**
+   Answer from Author: I would like a feature when clicking on an airport to click "Touch & Go, Full stop, Fly-over" and full stop would include extra fuel for taxi on the next flight plan whereas touch & go will only use fuel for the descent and climb out and fly over both renames the point from the ICAO name to the civil name (ENDU is Bardufoss) etc..
+   
+5. **Does MET Norway's TAF feed ever prefix a line with `TAF` / `TAF AMD`?**
    `latestPerStation` drops any line not starting with a 4-letter ICAO, so such lines would
    vanish silently. I could not check the live feed (403 through the sandbox proxy); the
    fixture at test.js:2622 has no prefix.
-4. **The `|| 254` fallbacks** (index.html:4820/4824/4861/4866) hardcode ENDU's elevation.
+   Answer from Author: For that i am unsure, but from what i see on my side, there is clearly stated which is Metar and which is Taf on the flight planner
+   
+7. **The `|| 254` fallbacks** (index.html:4820/4824/4861/4866) hardcode ENDU's elevation.
    Intentional for the school, or leftover from the seed route?
-5. **Is a route file trusted input?** H3/H7 assume not (they are shared by email). If the
+   Answer from Author: That seems like leftover, i dont want any hardcoded odd values for anything. Just generic values when the program is opened first time
+   
+9. **Is a route file trusted input?** H3/H7 assume not (they are shared by email). If the
    answer is "yes, always our own files", H3 drops to medium and H7 to low.
-6. **Pattern semantics (C1):** after a circuit, is the intended behaviour "resume from the
+   Answer from Author: Yes, id say the route file is trusted as it will only be shared between trusted parties.
+   
+11. **Pattern semantics (C1):** after a circuit, is the intended behaviour "resume from the
    next fix's planned altitude" (what the independent PATTERN->B row already assumes), or
    should the schedule model the circuit altitude explicitly?
-7. **The sweep sizes in CLAUDE.md** (20 000 / 48 957 routes) vs the shipped 4 000 / 3 000
+   Answer from Author: for that i am unsure. When flying a traffic pattern at say 1000ft we assume 12gph and 5min per lap. for most accuracy it would be best to have the next leg assume climb from    the airfield elevation.
+
+13. **The sweep sizes in CLAUDE.md** (20 000 / 48 957 routes) vs the shipped 4 000 / 3 000
    - were they shrunk for suite runtime? If so, a `SWEEP_N` env var would let CI run the
    big ones nightly.
-8. **`removeFlightPlan` after Ctrl+Z (H6)** - do you want dialogs to block ALL app
+   Answer from Author: I dont know what that is, but if it costs nothing and is a smart move, then sure.
+
+11. **`removeFlightPlan` after Ctrl+Z (H6)** - do you want dialogs to block ALL app
    shortcuts, or only undo/redo?
+   Answer from Author: Id prefer that only escape and relevant key bindings are allowed on dialog popups with all other irrelevant keybindings disabled during popup.
+
