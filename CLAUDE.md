@@ -1450,6 +1450,47 @@ and H2 all hold exactly as described.
    altitude - which is why C1's mechanical fix (no stale cursor) and its
    semantics are separable, and the mechanical one should not wait for this.
 
+### 18. PUT THE PAGE SCRIPT UNDER THE COMPILER (`src/page.js`)
+
+From a comparison against a friend's React/TypeScript planner. Most of what that
+project does better is architectural and is NOT worth buying at the price (theirs
+needs `pnpm dev`; this one is a file you double-click, and `dist/` is the fallback
+on a machine that has never seen the app). But one finding underneath the
+comparison is sharper than the comparison itself, and it is cheap:
+
+- **`tsc` HAS NEVER SEEN THE PAGE SCRIPT.** `tsconfig.json` includes
+  `src/**/*.js`; the page script lives in `src/index.html`, an `.html` file. So
+  all ~4 900 lines of it are unchecked, while the 15 modules are checked with
+  `strict`. That is not a JSDoc-versus-`.ts` question - the code simply is not in
+  a file the checker looks at, and it explains the audit's asymmetry better than
+  the architecture does: the engine is checked, the shell is not, and every high
+  finding is in the unchecked half.
+- **THE FIX IS THE TRICK THE BUILD ALREADY USES THREE TIMES.** Extract the script
+  to `src/page.js` and inline it at a `@PAGE` marker, exactly as `@STYLES`,
+  `@AIPDATA` and `@BUNDLE` are inlined. No globals need untangling, no module
+  graph, no framework, and the emitted artifact is byte-identical. The code does
+  not change; it becomes visible to the compiler that already guards everything
+  else.
+- **IT IS A STAGED CLEANUP, NOT AN AFTERNOON.** `checkJs` over 4 900 lines of DOM
+  code produces hundreds of errors on day one - every `getElementById` is
+  `HTMLElement | null`. Land the extraction first (build + tests unchanged), then
+  turn checking on and work the errors down. Do not let that discourage it: those
+  errors ARE H1 (a throw in the daylight card), M1 (string coordinates reaching
+  `toFixed`) and half of L5.
+- **TWO tsconfig FLAGS ARE A ONE-LINE TRY**: `noUncheckedIndexedAccess` and
+  `exactOptionalPropertyTypes` are the only two the comparison named that this
+  project does not already run (`strict`, `noImplicitAny`, `strictNullChecks`,
+  `noUnusedLocals`, `noImplicitReturns` are all on).
+- WHAT THE COMPARISON GOT RIGHT AND IS ALREADY PLANNED: a validating loader with
+  typed errors (items 11-12 - and it needs neither React nor `.ts`), and escaping
+  at every `innerHTML` sink (item 14 / discipline rule 6 - the METAR card, the OFP
+  sheet and the fix labels already do it, so it is an inconsistency, not a policy).
+- WHAT IT DID NOT ESTABLISH: test COVERAGE. 347 cases in 58 files against 352 in
+  one is a difference of organisation, not of what is tested. Splitting the
+  5 451-line `test.js` is worth doing for navigability, but it would not have
+  caught anything - the real test-quality gap is M5, asserts looser than the
+  measurements that justified them.
+
 ### Settled by the author in AUDIT.md - do not relitigate
 
 - **Times are LOCAL, not UTC**, because that is what the school plans in. It must
