@@ -34,7 +34,10 @@ export const PROFILE_KEYS = [
   // Map-page display preferences. Colours are stored already validated to
   // #rrggbb; normaliseFixStyle re-checks them on the way in regardless,
   // because a route file can arrive from anyone.
-  'fixAdColor', 'fixRpColor', 'fixAdShape', 'fixRpShape', 'fixStyle', 'fixSize', 'fixLabels'
+  'fixAdColor', 'fixRpColor', 'fixAdShape', 'fixRpShape', 'fixStyle', 'fixSize', 'fixLabels',
+  // The route line's thickness (v16.50). Validated by normaliseRouteWeight on
+  // every read, because a route file can carry it.
+  'routeWeight'
 ];
 
 /** Copy across only the allowed profile keys. Anything else - now or

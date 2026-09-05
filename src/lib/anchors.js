@@ -233,6 +233,36 @@ export const FIX_SIZE_MIN = 6;
 export const FIX_SIZE_MAX = 18;
 
 /**
+ * THE ROUTE LINE'S THICKNESS (v16.50, the pilot's request).
+ *
+ * It lives here for the same reason the fix style does: it is a map-display
+ * preference that travels in PROFILE_KEYS, so it can arrive from a route file
+ * somebody else wrote and MUST be validated on the way in. It reaches Leaflet
+ * as a number rather than markup, so the risk is a NaN or an absurd value
+ * rather than injection - but "validate every door into the profile" is the
+ * rule regardless (v16.35).
+ *
+ * THE BOUNDS ARE ARGUED, NOT PICKED. Below 2 px the track is hard to follow
+ * across chart ink at reading zoom; above 10 px it covers the chart detail it
+ * is drawn over - the frequencies, MEF and airspace limits that are the whole
+ * point of the VFR raster - which is the same argument that caps the fix
+ * symbol at 18 px. 4 px is what the planner has always drawn.
+ *
+ * The invisible grab line is NOT this number: it stays a generous 20 px, so a
+ * thin track is no harder to grab than a thick one (v16.27).
+ */
+export const ROUTE_WEIGHT_MIN = 2;
+export const ROUTE_WEIGHT_MAX = 10;
+export const ROUTE_WEIGHT_DEFAULT = 4;
+
+/** @param {any} profile @returns {number} px */
+export function normaliseRouteWeight(profile) {
+  const n = Number((profile || {}).routeWeight);
+  if (!isFinite(n)) return ROUTE_WEIGHT_DEFAULT;
+  return Math.min(ROUTE_WEIGHT_MAX, Math.max(ROUTE_WEIGHT_MIN, Math.round(n)));
+}
+
+/**
  * Is this a colour we are willing to put in markup?
  *
  * NOT fussiness. The colour is interpolated into the SVG that becomes a

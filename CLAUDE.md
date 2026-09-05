@@ -1413,7 +1413,9 @@ scoped. In the user's order:
 Nothing below is built. The notes are what a look at the code turned up, so
 whoever picks these up starts from facts rather than assumptions.
 
-7. **An easy way to begin a new flight plan from the MAP-ONLY view.**
+7. **DONE at v16.50** - two controls in the `#map-controls` stack: `＋ New plan`
+   and an active-plan indicator that cycles. See the section below.
+   ~~original entry:~~ An easy way to begin a new flight plan from the MAP-ONLY view.
    This is a real gap, not a preference: the `+ Add Flight Plan` button lives
    INSIDE `#sidebar`, and `layout-map` hides the sidebar - so in the view where
    you are actually drawing on the chart there is no way to start a plan.
@@ -1422,7 +1424,9 @@ whoever picks these up starts from facts rather than assumptions.
    pairing with an active-plan indicator there, because the flight switcher
    (`setActiveFlight`, the per-section Select button) is also inside the
    sidebar and equally unreachable in map-only.
-8. **Remove the dashed track on every other flight plan.**
+8. **DONE at v16.50** - the dashes are gone; the colour and the edit-mode
+   dimming carry it. See the section below.
+   ~~original entry:~~ Remove the dashed track on every other flight plan.
    `refreshMap` sets `dashArray: (fIdx % 2 === 1) ? '10, 8' : null`. NOTE this
    REVERSES a stated decision - the comment there says the dash exists so an
    identical return route drawn on top of the outbound stays distinguishable.
@@ -1430,7 +1434,9 @@ whoever picks these up starts from facts rather than assumptions.
    (`ROUTE_COLORS`) and the edit-mode dimming of inactive flights already
    separate them, so the dash may simply be redundant now. The guide says
    "every second one is dashed" and would need the same edit.
-9. **Number keys to activate a flight plan** (1-9 -> that plan).
+9. **DONE at v16.50** - 1-9 in `resolveKey`, below the v16.46 overlay guard
+   that the trap needed. See the section below.
+   ~~original entry:~~ Number keys to activate a flight plan (1-9 -> that plan).
    THE TRAP IS ALREADY IN THE CODEBASE: `dialog.js` binds 1-9 to pick a
    dialog option, and `ask()` is used everywhere. A global digit binding MUST
    stand down while a dialog is open, or naming a waypoint becomes a game of
@@ -1795,6 +1801,58 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## The track, and reaching a plan from the map (v16.50, roadmap 7 - 9)
+
+- **THE DASHED ALTERNATE TRACK IS GONE, and this REVERSES a stated decision.**
+  Every second flight used to be dashed so an identical return route drawn on
+  top of its outbound stayed distinguishable. The author's call: *"I want to
+  remove the dashes as they've become obsolete with the hiding of the inactive
+  route. The colour difference is enough."* They are right about the premise -
+  the dash predates the edit-mode dimming, which fades every inactive plan to
+  0.35 and stops it taking the mouse, and `ROUTE_COLORS` already separates them.
+  A dash on top of that read as a property OF the route rather than as "this one
+  is not active". The guide said "every second one is dashed" and now says what
+  actually distinguishes them.
+- **TRACK THICKNESS IS A SETTING (2-10 px), AND THE GRAB LINE IS NOT.** The
+  bounds are argued rather than picked: below 2 px the track is hard to follow
+  across chart ink at reading zoom, above 10 px it covers the frequencies, MEF
+  and airspace limits it is drawn over - which is the same argument that caps
+  the fix symbol at 18 px.
+  - The invisible hit line stays a flat 20 px. Tying it to the visible weight
+    would make a THIN track harder to grab than a thick one, which is the exact
+    pixel-hunting that line exists to remove (v16.27). A test asserts
+    `ROUTE_WEIGHT_MAX < 20`, so the two cannot cross.
+  - `normaliseRouteWeight` lives beside `normaliseFixStyle` in `anchors.js` for
+    the reason that file already owns: it is a map-display preference carried in
+    PROFILE_KEYS, so it can arrive from a route file somebody else wrote and is
+    RE-VALIDATED on every read, not trusted from storage. It reaches Leaflet as
+    a number rather than markup, so the risk is a NaN or an absurd value rather
+    than injection - but the rule does not have exceptions.
+- **THE MAP-ONLY VIEW COULD NOT START A PLAN (roadmap 7), and that was a real
+  gap rather than a preference.** `+ Add Flight Plan` lives inside `#sidebar`
+  and `layout-map` hides the sidebar, so in the one view where you are actually
+  drawing on the chart there was no way to begin. Two controls join the
+  `#map-controls` stack, which since v16.24 is a flex column where a new control
+  needs no CSS at all and therefore cannot fall off the bottom of the page.
+  - The flight SWITCHER was unreachable there for the same reason, which is why
+    the second control both NAMES the active plan (with its route colour on its
+    left edge) and cycles to the next. With one plan there is nothing to cycle
+    to and it says so - a control that appears to do nothing is worse than one
+    that explains itself.
+  - `verify-layout.mjs` asserts it by MEASURING: sidebar really hidden, both
+    controls on screen with a real box, and the button actually adding a plan.
+    Grepping for the id is what passed in v16.22 while the buttons sat at y=900.
+- **1-9 ACTIVATE A FLIGHT PLAN (roadmap 9), and it was cheap because the trap
+  was already handled.** `dialog.js` binds those same digits to pick a dialog
+  option, and `ask()` is used everywhere - so a global digit binding would have
+  made naming a waypoint a game of chance. The overlay guard that prevents it
+  has existed since v16.46, and `resolveKey` puts this binding below it. A
+  number with no plan behind it says so rather than doing nothing silently.
+  - The resolver returns an `index`, not an action per digit, so the page
+    decides what an out-of-range number means. That keeps the mapping a
+    description of the keystroke rather than a list of nine near-identical
+    cases.
 
 ## Quality of life, one batch (v16.49, item 16 - AUDIT.md section 4)
 

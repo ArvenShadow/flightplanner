@@ -69,6 +69,16 @@
         <button id="fixes-btn" class="map-ctl" title="Show published AIP fixes - aerodromes (from zoom 7) and VFR reporting points (from zoom 9). Click one to add it as a waypoint at its PUBLISHED coordinate instead of clicking an approximate spot. Reporting points come from the printed table on each aerodrome's Visual Approach Chart; 29 aerodromes publish theirs graphically only and have none here. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleFixes()">⌖ Fixes: Off</button>
         <button id="fix-search-btn" class="map-ctl" title="Find a published aerodrome or VFR reporting point by name or ICAO and add it as a waypoint at its published coordinate. Norwegian letters are optional - SORKJOSEN finds SØRKJOSEN." onclick="searchFixes()">🔎 Find fix</button>
         <button id="chart-detail-btn" class="map-ctl" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
+        <!-- ROADMAP 7: THE MAP-ONLY VIEW COULD NOT START A PLAN. The
+             + Add Flight Plan button lives inside #sidebar, and layout-map
+             HIDES the sidebar - so in the one view where you are actually
+             drawing on the chart there was no way to begin. The flight
+             switcher was unreachable there for the same reason, which is why
+             this control both NAMES the active plan and cycles to the next.
+             It needs no CSS of its own: #map-controls has been a flex column
+             since v16.24, precisely so a new control cannot fall off screen. -->
+        <button id="active-flight-btn" class="map-ctl" title="Which flight plan new waypoints are added to. Click to switch to the next plan; with only one plan there is nothing to switch to. The full list is in the sidebar." onclick="cycleActiveFlight()">✈ Plan 1</button>
+        <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector). It begins at the last waypoint of the current one, so a multi-sector mission joins up. Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
       </div>
       <div id="chart-label"></div>
       <div id="airspace-attribution" class="no-print" style="display:none;"></div>
@@ -260,10 +270,11 @@
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
-            <li><b>Keyboard shortcuts.</b> <b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> (or <b>Ctrl+Y</b>) redoes, step by step up to 30 states — ⌘ on Mac, same stacks as the Undo/Redo buttons, and the buttons now <i>name the step</i> they will take back. <b>Ctrl+S</b> opens the save dialog, <b>/</b> opens Find fix, and <b>Delete</b> removes the selected waypoint (click one on the map to select it — Edit Mode only, since View Mode is read-only). <b>Esc</b> closes a dialog, abandons a line drag, or clears the selection.
+            <li><b>Keyboard shortcuts.</b> <b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> (or <b>Ctrl+Y</b>) redoes, step by step up to 30 states — ⌘ on Mac, same stacks as the Undo/Redo buttons, and the buttons now <i>name the step</i> they will take back. <b>Ctrl+S</b> opens the save dialog, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> make that flight plan the active one, and <b>Delete</b> removes the selected waypoint (click one on the map to select it — Edit Mode only, since View Mode is read-only). <b>Esc</b> closes a dialog, abandons a line drag, or clears the selection.
               <br><b>Two rules apply to all of them.</b> While any dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing else fires behind it. And inside a text field the keys keep their normal text-editing meaning (Ctrl+S is the exception: the browser's own Ctrl+S saves the web page, which is never what you want here).</li>
             <li><b>Undo now covers the whole plan, not just the route</b>: ETD, initial fuel, reserve, departure elevation and the flight date are snapshotted too, so changing an ETD — which moves every ETO and the daylight verdict — can be taken back like any other edit.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
+            <li><b>In the Map-only layout</b> the sidebar is hidden, so the two plan controls you need are on the map itself: <b>✈</b> names the active plan (and its colour) and clicks through to the next one, <b>＋ New plan</b> starts another sector. <b>1</b>–<b>9</b> do the same from the keyboard in any layout.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
             <li><b>Grab a leg line and drag</b> to bend it around terrain: a diamond <b>via point</b> appears under the cursor and follows it, with the route redrawing as you move — one motion, press to release. Let go where you want it. A plain click still drops a via point on the spot, and either way you can drag the diamond again later or right-click it to remove. The line has a generous invisible grab area, so you do not have to hit the 4-pixel stroke exactly.</li>
             <li>A via point <b>bends a leg without adding a row</b>. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
@@ -326,7 +337,7 @@
             <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail.</li>
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
             <li><b>Climbs and descents are planned across leg boundaries</b>: a climb that doesn't fit its leg simply continues on the next (the ▲ TOC lands on the leg where the altitude is actually reached), and a descent that doesn't fit its leg <b>backs up onto earlier legs</b> — the ▼ TOD names the low waypoint it serves (e.g. "TOD · 7.2 NM before B → 200' at C") — so you always cross a waypoint AT its planned altitude, never above it. A circuit (pattern) stop breaks the chain. If even all the preceding distance can't absorb the descent, the red integrity banner says so instead of letting you plan an arrival that's too high.</li>
-            <li>Multiple flight plans draw in different colours; every second one is dashed so overlapping routes stay readable.</li>
+            <li>Multiple flight plans draw in <b>different colours</b>, and in Edit Mode every plan except the active one fades and stops taking the mouse — so a return route drawn straight over its outbound cannot grab the wrong line. (Up to v16.49 every second track was also dashed; the colour and the fading do that job, so the dashes are gone.) <b>Track thickness is a Map setting</b>, 2–10 px: below 2 px the line is hard to follow across chart ink, above 10 px it covers the frequencies and MEF it is drawn over. The invisible grab area stays 20 px wide either way.</li>
             <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service. <b>Both charts need internet</b> — neither is stored on your machine. The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
             <li><b>⬢ Airspace</b> draws the published airspace from <b>AIP Norge</b> — CTR and TIZ solid, TMA and TIA dashed, CTA finely dashed, the mandatory zones (RMZ/TMZ) in orange. <b>Hover any airspace</b> for a card showing its type, ICAO class, published vertical limits, and one row per service you would actually use — <b>ATIS, Approach, Tower</b>, or <b>Information</b> at an AFIS field. Nothing is drawn below zoom 7: at country zoom the polygons bury the chart you are trying to read. Clicking still adds a waypoint, so route building inside a TMA is unaffected — the information is on hover only. The choice is remembered with your settings.</li>
             <li><b>Right-click the track</b> for that leg's settings: the altitude it is crossed at, and <b>where its climb and descent sit</b>. Three corners are yours to name — <b>start the climb</b> N&nbsp;NM after the fix (hold your current altitude, then go up), <b>be level by</b> N&nbsp;NM after it (which sets the start of the climb for you), and <b>level off</b> N&nbsp;NM before the next fix (get down early, then run in level). Both are pure geometry: the climb and descent are unchanged, they just move, so they are always flyable. The <b>Here</b> buttons turn the spot you right-clicked into the number. A live preview shows the leg's time, fuel and where each corner lands before you apply anything, and the pinned corners are drawn on the map as <b>BOC</b> and <b>BOD</b> marks beside the usual TOC and TOD. Right-clicking used to insert a waypoint outright; that is now the first action <i>in</i> the panel, at the exact point you clicked, so nothing was lost.</li>
@@ -775,6 +786,26 @@
           </div>
 
           <div class="setting-section">
+            <h3>Route track</h3>
+            <div class="setting-row">
+              <label>Track thickness:</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="range" id="map-route-weight" min="2" max="10" step="1"
+                       oninput="updateRouteWeightPreview()" onchange="updateRouteWeightPreview()" style="width:150px;">
+                <span id="map-route-weight-val" style="font-size:11px; font-weight:700; min-width:34px;"></span>
+              </div>
+            </div>
+            <div id="map-route-preview" class="route-preview" aria-hidden="true"></div>
+            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+              Below 2 px the track is hard to follow across chart ink; above 10 px it covers the
+              frequencies, MEF and airspace limits it is drawn over. The invisible grab area stays
+              20 px wide either way, so a thin track is no harder to grab than a thick one.
+              <b>Every flight plan draws in its own colour</b> and the inactive ones fade in Edit
+              Mode — since v16.50 none of them is dashed.
+            </div>
+          </div>
+
+          <div class="setting-section">
             <h3>Zoom thresholds <span style="font-weight:normal; text-transform:none; font-size:10px;">— fixed, and why</span></h3>
             <p style="font-size:10px; color:var(--text-muted); margin:0; line-height:1.5;">
               Aerodromes appear from zoom <b id="map-zoom-ad">7</b>, reporting points from
@@ -831,7 +862,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 113 inline on*= handlers - 87 written
+    // map, markers, undoStack...) plus 117 inline on*= handlers - 91 written
     // into the markup and 26 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1056,7 +1087,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.49';
+    const APP_VERSION = '16.50';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2377,10 +2408,37 @@
     }
 
     function setActiveFlight(fIdx) {
+      if (!flights[fIdx]) return;
       activeFlightIndex = fIdx;
       document.getElementById('def-dep-elev').value = flights[activeFlightIndex].depElev;
       refreshMap();   // dimming of inactive flights follows the active selection
       renderAllFlightTables();
+    }
+
+    /** Step to the next plan (roadmap 7). The map-only view has no sidebar and
+     *  so no per-plan Select button; with one plan there is nothing to cycle
+     *  to, and saying so beats a button that appears to do nothing. */
+    function cycleActiveFlight() {
+      if (flights.length < 2) {
+        say('This is the only flight plan. Use ＋ New plan to add a sector.', 'info', 3500);
+        return;
+      }
+      const next = (activeFlightIndex + 1) % flights.length;
+      setActiveFlight(next);
+      say('Active: ' + flightTitle(flights[next]) + ' (' + (next + 1) + ' of ' + flights.length + ')',
+          'good', 2500);
+    }
+
+    /** The map-only view's active-plan indicator. Re-rendered with the map,
+     *  because that is what changes when the active plan does. */
+    function updateActiveFlightButton() {
+      const btn = document.getElementById('active-flight-btn');
+      if (!btn) return;
+      const fl = flights[activeFlightIndex];
+      const label = fl ? flightTitle(fl) : 'Plan 1';
+      btn.textContent = '✈ ' + label + (flights.length > 1
+        ? '  (' + (activeFlightIndex + 1) + '/' + flights.length + ')' : '');
+      btn.style.borderLeft = '4px solid ' + ROUTE_COLORS[activeFlightIndex % ROUTE_COLORS.length];
     }
 
     function refreshMap() {
@@ -2392,6 +2450,11 @@
       profileMarkers = [];
       polylines = [];
       hitLines = [];
+
+      // Re-validated on every read, not trusted from storage: localStorage can
+      // be hand-edited and a route file can carry this key (v16.35's rule).
+      const routeWeight = normaliseRouteWeight(aircraftProfile);
+      updateActiveFlightButton();
 
       flights.forEach((fl, fIdx) => {
         const color = ROUTE_COLORS[fIdx % ROUTE_COLORS.length];
@@ -2499,11 +2562,16 @@
           markers.push(marker);
         });
 
-        // Every second flight is dashed: an identical return route drawn on
-        // top of the outbound one stays distinguishable instead of hiding it.
+        // NO MORE DASHED ALTERNATE TRACKS (v16.50, the pilot's decision, and it
+        // reverses a stated one). Every second flight used to be dashed so an
+        // identical return route drawn on top of its outbound stayed
+        // distinguishable. That reason has EXPIRED: since the edit-mode dimming
+        // arrived, the inactive routes are faded to 0.35 and non-interactive,
+        // and ROUTE_COLORS already separates them. The author's words: the
+        // colour difference is enough. A dash on top of that was reading as a
+        // property of the route rather than as "this is not the active one".
         const poly = L.polyline(lineCoords, {
-          color: color, weight: 4, opacity: dimmed ? 0.35 : 0.95,
-          dashArray: (fIdx % 2 === 1) ? '10, 8' : null,
+          color: color, weight: routeWeight, opacity: dimmed ? 0.35 : 0.95,
           interactive: !dimmed,        // only the active flight's line takes via-clicks
           bubblingMouseEvents: false   // a line click must NOT also add a waypoint
         }).addTo(map);
@@ -2512,6 +2580,11 @@
         // A 4 px line is a 4 px target. This invisible fat line sits over it
         // and takes the mouse instead, so grabbing the route does not require
         // pixel-hunting. It carries every route-line gesture.
+        //
+        // IT IS DELIBERATELY NOT THE VISIBLE THICKNESS. The track is now
+        // adjustable (2-10 px), and tying the grab area to it would make a thin
+        // track harder to grab than a thick one - the exact pixel-hunting this
+        // line exists to remove. 20 px is wider than the widest track.
         const hit = L.polyline(lineCoords, {
           className: 'route-hit',      // the cursor is the only hint it is there
           color: color, weight: 20, opacity: 0,
@@ -3809,6 +3882,8 @@
       document.getElementById('map-fix-style').value    = st.style;
       document.getElementById('map-fix-labels').value   = st.labels ? 'yes' : 'no';
       document.getElementById('map-fix-size').value     = String(st.size);
+      document.getElementById('map-route-weight').value = String(normaliseRouteWeight(aircraftProfile));
+      updateRouteWeightPreview();
       document.getElementById('map-zoom-ad').textContent = String(AERODROME_MIN_ZOOM);
       document.getElementById('map-zoom-rp').textContent = String(REPORTING_POINT_MIN_ZOOM);
       document.getElementById('map-zoom-as').textContent = String(AIRSPACE_MIN_ZOOM);
@@ -3838,10 +3913,27 @@
       }).join('');
     }
 
+    /** The track preview is a plain bar at the chosen weight in a route colour,
+     *  so what the slider promises is what refreshMap draws - the same rule as
+     *  the fix preview, which renders through fixSymbolSvg (v16.35). */
+    function updateRouteWeightPreview() {
+      const el = document.getElementById('map-route-weight');
+      if (!el) return;
+      const w = normaliseRouteWeight({ routeWeight: Number(el.value) });
+      const val = document.getElementById('map-route-weight-val');
+      if (val) val.textContent = w + ' px';
+      const host = document.getElementById('map-route-preview');
+      if (!host) return;
+      host.innerHTML = ROUTE_COLORS.slice(0, 3).map((c) =>
+        '<span class="rpv"><span class="rpv-line" style="height:' + w +
+        'px; background:' + c + ';"></span></span>').join('');
+    }
+
     async function resetFixStyle() {
       if (!await confirmDialog('Restore the default fix symbols?',
         'Aerodromes go back to a blue square, reporting points to an orange triangle, ' +
-        '10 px, filled, names shown.', { okLabel: 'Restore' })) return;
+        '10 px, filled, names shown, and the route track to ' + ROUTE_WEIGHT_DEFAULT + ' px.',
+        { okLabel: 'Restore' })) return;
       document.getElementById('map-fix-ad-color').value = DEFAULT_FIX_STYLE.adColor;
       document.getElementById('map-fix-rp-color').value = DEFAULT_FIX_STYLE.rpColor;
       document.getElementById('map-fix-ad-shape').value = DEFAULT_FIX_STYLE.adShape;
@@ -3849,6 +3941,8 @@
       document.getElementById('map-fix-style').value    = DEFAULT_FIX_STYLE.style;
       document.getElementById('map-fix-labels').value   = DEFAULT_FIX_STYLE.labels ? 'yes' : 'no';
       document.getElementById('map-fix-size').value     = String(DEFAULT_FIX_STYLE.size);
+      document.getElementById('map-route-weight').value = String(ROUTE_WEIGHT_DEFAULT);
+      updateRouteWeightPreview();
       updateFixPreview();
     }
 
@@ -4382,6 +4476,9 @@
       aircraftProfile.fixStyle   = fixSt.style;
       aircraftProfile.fixSize    = fixSt.size;
       aircraftProfile.fixLabels  = fixSt.labels;
+      aircraftProfile.routeWeight = normaliseRouteWeight({
+        routeWeight: Number(document.getElementById('map-route-weight').value)
+      });
 
       // The performance figures above are always stored internally in GPH/gal.
       // Only the *initial fuel on board* box is in display units, so convert it
@@ -4529,6 +4626,7 @@
         case 'save': saveCurrentMission(); break;
         case 'focus-search': searchFixes(); break;
         case 'delete-waypoint': deleteHighlightedWaypoint(); break;
+        case 'activate-flight': activateFlightByIndex(act.index); break;
       }
     });
 
@@ -4558,6 +4656,21 @@
       hoverLegLine = L.polyline(pts, {
         color: '#dd6b20', weight: 9, opacity: 0.45, interactive: false
       }).addTo(map);
+    }
+
+    /** 1-9 picks a flight plan. A number with no plan behind it says so rather
+     *  than silently doing nothing - a key that appears dead is the failure
+     *  mode the pure resolver exists to prevent. */
+    function activateFlightByIndex(i) {
+      if (!flights[i]) {
+        say('There is no flight plan ' + (i + 1) + ' - you have ' + flights.length +
+            (flights.length === 1 ? ' plan.' : ' plans.'), 'warn', 3000);
+        return;
+      }
+      if (i === activeFlightIndex) return;
+      setActiveFlight(i);
+      say('Active: ' + flightTitle(flights[i]) + ' (' + (i + 1) + ' of ' + flights.length + ')',
+          'good', 2500);
     }
 
     /** Delete acts on the SELECTED waypoint, and only where editing is allowed.

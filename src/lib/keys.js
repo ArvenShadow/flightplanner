@@ -53,6 +53,7 @@
  * @typedef {object} KeyAction
  * @property {string} action        what the page should do
  * @property {boolean} preventDefault whether the browser's own handling must be stopped
+ * @property {number} [index]        0-based target, for actions that address one thing
  */
 
 /** Every action `resolveKey` can return. The page has a case for each. */
@@ -62,7 +63,8 @@ export const KEY_ACTIONS = [
   'undo', 'redo',
   'save',             // Ctrl/Cmd+S: the save-plan dialog
   'focus-search',     // "/": find a published fix
-  'delete-waypoint'   // Delete/Backspace on the selected waypoint
+  'delete-waypoint',  // Delete/Backspace on the selected waypoint
+  'activate-flight'   // 1-9: make that flight plan the active one
 ];
 
 /** A one-line description of each binding, for the guide and the ? overlay.
@@ -72,6 +74,7 @@ export const KEY_HELP = [
   { keys: 'Ctrl+S', what: 'Save the plan as a route or mission' },
   { keys: '/', what: 'Find a published aerodrome or reporting point' },
   { keys: 'Delete', what: 'Remove the selected waypoint (click one on the map to select it)' },
+  { keys: '1 - 9', what: 'Make that flight plan the active one' },
   { keys: 'Esc', what: 'Close a dialog, abandon a line drag, or clear the selection' }
 ];
 
@@ -131,6 +134,17 @@ export function resolveKey(ev, ctx) {
   if ((key === 'Delete' || key === 'Backspace') && !mod && !ev.altKey) {
     if (c.viewMode || !c.hasHighlight) return null;
     return { action: 'delete-waypoint', preventDefault: true };
+  }
+
+  // 1-9 ACTIVATE A FLIGHT PLAN (roadmap 9). THE TRAP WAS ALREADY IN THE
+  // CODEBASE: dialog.js binds these same digits to pick a dialog option, and
+  // `ask()` is used everywhere - so without the overlay guard above, naming a
+  // waypoint would have become a game of chance. That guard has existed since
+  // v16.46 and this binding sits below it, which is the whole reason this is
+  // cheap now. The index is returned rather than acted on, so the page decides
+  // what an out-of-range number means.
+  if (/^[1-9]$/.test(key) && !mod && !ev.altKey && !ev.shiftKey) {
+    return { action: 'activate-flight', index: Number(key) - 1, preventDefault: true };
   }
 
   return null;

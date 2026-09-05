@@ -6439,6 +6439,135 @@ T('the leg panel closes on a backdrop click like every other modal', () => {
 });
 
 
+
+console.log('\n=== 62a000e. Route track and the map-only plan controls (v16.50) ===');
+
+T('no flight plan is drawn dashed any more', () => {
+  // The dash existed so an identical return route drawn over its outbound
+  // stayed distinguishable. The edit-mode dimming and ROUTE_COLORS do that now,
+  // and the author's call is that the colour difference is enough.
+  ev(`flights = [
+    { id: 1, title: 'A', depElev: 254, waypoints: [
+      { lat: 69.05, lng: 18.54, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.67, lng: 18.91, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 }]},
+    { id: 2, title: 'B', depElev: 31, waypoints: [
+      { lat: 69.67, lng: 18.91, name: 'ENTC', alt: 31, oat: 10, wdir: 0, wspd: 0, var: -12 },
+      { lat: 69.05, lng: 18.54, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]}
+  ]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const dashes = ev('JSON.stringify(polylines.map(p => p._opts.dashArray || null))');
+  assert(JSON.parse(dashes).every((d) => d === null), 'a route line is still dashed: ' + dashes);
+  // ...and the thing that replaced it must actually be there
+  const colors = JSON.parse(ev('JSON.stringify(polylines.map(p => p._opts.color))'));
+  assert(new Set(colors).size === colors.length, 'two flights drew in the same colour: ' + colors);
+  assert(!/every second one is dashed/.test(APP_SRC), 'the guide still promises dashed tracks');
+  ev(SEED);
+});
+
+T('the track thickness is a validated setting, not a free number', () => {
+  const A = moduleExports.anchors;
+  assert(A.normaliseRouteWeight({ routeWeight: 7 }) === 7, 'a valid weight was changed');
+  assert(A.normaliseRouteWeight({}) === A.ROUTE_WEIGHT_DEFAULT, 'no value must give the default');
+  assert(A.normaliseRouteWeight({ routeWeight: 'fat' }) === A.ROUTE_WEIGHT_DEFAULT, 'a string got through');
+  assert(A.normaliseRouteWeight({ routeWeight: NaN }) === A.ROUTE_WEIGHT_DEFAULT, 'NaN got through');
+  assert(A.normaliseRouteWeight({ routeWeight: 0 }) === A.ROUTE_WEIGHT_MIN, 'no lower clamp');
+  assert(A.normaliseRouteWeight({ routeWeight: 999 }) === A.ROUTE_WEIGHT_MAX, 'no upper clamp');
+  assert(A.normaliseRouteWeight({ routeWeight: 4.6 }) === 5, 'a fraction was not rounded');
+  // THE GRAB LINE IS NOT THE VISIBLE LINE: tying them together would make a
+  // thin track harder to grab, which is the pixel-hunting it exists to remove.
+  assert(A.ROUTE_WEIGHT_MAX < 20, 'the widest track is now wider than the 20 px grab line');
+  // and it travels in the profile, so it must be whitelisted
+  assert(moduleExports.exch.PROFILE_KEYS.includes('routeWeight'), 'routeWeight is not in PROFILE_KEYS');
+});
+
+T('the drawn track uses the configured thickness', () => {
+  ev(SEED);
+  const A = moduleExports.anchors;
+  assert(ev('polylines[0]._opts.weight') === A.ROUTE_WEIGHT_DEFAULT,
+    'the default weight is not what is drawn: ' + ev('polylines[0]._opts.weight'));
+  ev(`aircraftProfile.routeWeight = 9; refreshMap();`);
+  assert(ev('polylines[0]._opts.weight') === 9, 'the setting did not reach the map');
+  assert(ev('hitLines[0]._opts.weight') === 20, 'the grab line followed the visible weight');
+  // a hostile value from a route file must not reach Leaflet
+  ev(`aircraftProfile.routeWeight = 'x'; refreshMap();`);
+  assert(ev('polylines[0]._opts.weight') === A.ROUTE_WEIGHT_DEFAULT,
+    'an invalid weight reached the map: ' + ev('polylines[0]._opts.weight'));
+  ev(`delete aircraftProfile.routeWeight; refreshMap();`);
+});
+
+T('the map-only view can start a plan and name the active one', () => {
+  // Roadmap 7: `+ Add Flight Plan` lives inside #sidebar, and layout-map hides
+  // the sidebar - so the one view where you draw could not begin a plan.
+  const stack = doc.getElementById('map-controls');
+  assert(stack, 'no map control stack');
+  for (const id of ['add-flight-btn', 'active-flight-btn']) {
+    const btn = doc.getElementById(id);
+    assert(btn, id + ' is missing');
+    assert(btn.closest('#map-controls') === stack, id + ' is not in the map control stack');
+    assert(btn.className.includes('map-ctl'), id + ' does not use the shared control class');
+  }
+  // v16.24's rule: a control must not be positioned by its own id again.
+  assert(!/#add-flight-btn\s*{[^}]*top:/.test(APP_SRC), 'the new control is positioned by id');
+  ev(SEED);
+  assert(/ENDU/.test(doc.getElementById('active-flight-btn').textContent),
+    'the indicator does not name the active plan: ' + doc.getElementById('active-flight-btn').textContent);
+});
+
+T('cycling the active plan wraps, and says so when there is nothing to cycle to', () => {
+  ev(SEED);
+  assert(ev('flights.length') === 1, 'seed should be one plan');
+  ev('cycleActiveFlight()');
+  assert(ev('activeFlightIndex') === 0, 'cycling with one plan moved the active index');
+  ev(`flights.push({ id: 2, title: 'B', depElev: 31, waypoints: [
+        { lat: 69.67, lng: 18.91, name: 'ENTC', alt: 31, oat: 10, wdir: 0, wspd: 0, var: -12 },
+        { lat: 69.05, lng: 18.54, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]});
+      refreshMap(); renderAllFlightTables();`);
+  ev('cycleActiveFlight()');
+  assert(ev('activeFlightIndex') === 1, 'cycle did not advance');
+  ev('cycleActiveFlight()');
+  assert(ev('activeFlightIndex') === 0, 'cycle did not wrap');
+  const btn = doc.getElementById('active-flight-btn');
+  assert(/1\/2/.test(btn.textContent), 'the indicator does not show which of how many: ' + btn.textContent);
+  ev(SEED);
+});
+
+T('1-9 activate a flight plan, and stand down behind a dialog', () => {
+  const K = moduleExports.keys;
+  const a = K.resolveKey({ key: '3' }, {});
+  assert(a && a.action === 'activate-flight' && a.index === 2, '3 should mean plan 3 (index 2)');
+  assert(a.preventDefault, 'the digit must not also reach the page');
+  assert(K.resolveKey({ key: '0' }, {}) === null, '0 is not a plan');
+  assert(K.resolveKey({ key: '3' }, { textLike: true }) === null, 'a digit must type in a text field');
+  // THE TRAP: dialog.js binds 1-9 to pick an option, so naming a waypoint
+  // would otherwise become a game of chance.
+  assert(K.resolveKey({ key: '3' }, { overlayOpen: true, dialogOpen: true }) === null,
+    'a digit fired through an open dialog');
+  assert(K.resolveKey({ key: '3', ctrlKey: true }, {}) === null, 'Ctrl+3 is a browser tab shortcut');
+});
+
+TA('pressing 2 switches to the second plan; an absent plan says so', async () => {
+  ev(SEED);
+  ev(`flights.push({ id: 2, title: 'B', depElev: 31, waypoints: [
+        { lat: 69.67, lng: 18.91, name: 'ENTC', alt: 31, oat: 10, wdir: 0, wspd: 0, var: -12 },
+        { lat: 69.05, lng: 18.54, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]});
+      refreshMap(); renderAllFlightTables();`);
+  ev(`document.dispatchEvent(new window.KeyboardEvent('keydown', { key: '2', bubbles: true }))`);
+  await tick();
+  assert(ev('activeFlightIndex') === 1, 'pressing 2 did not activate the second plan');
+  // A key that appears dead is the failure mode the resolver exists to prevent.
+  const host0 = doc.getElementById('app-toasts');
+  const before = host0 ? host0.children.length : 0;
+  ev(`document.dispatchEvent(new window.KeyboardEvent('keydown', { key: '7', bubbles: true }))`);
+  await tick();
+  assert(ev('activeFlightIndex') === 1, 'a nonexistent plan changed the active one');
+  const host = doc.getElementById('app-toasts');
+  assert(host && host.children.length > before, 'pressing 7 with 2 plans said nothing at all');
+  assert(/no flight plan 7/i.test(host.lastChild.textContent), 'the toast does not name the problem: ' +
+    host.lastChild.textContent);
+  host.innerHTML = '';
+  ev(SEED);
+});
+
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');
