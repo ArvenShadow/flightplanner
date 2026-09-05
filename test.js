@@ -1185,7 +1185,8 @@ T('the mark is a tick rotated ACROSS the track, anchored on the exact point', ()
 T('the chip is just TOC / TOD, with the sentence on hover', () => {
   const raw = APP_SRC;
   // the chip text must be the bare kind, not the whole sentence
-  assert(raw.includes('title="${tip}">${fTag}${prof.kind}</div>'), 'the chip is not just the kind + a tooltip');
+  // v16.47 routes both through the one escaper (rule 6); the shape is unchanged.
+  assert(raw.includes('title="${esc(tip)}">${fTag}${esc(prof.kind)}</div>'), 'the chip is not just the kind + a tooltip');
   assert(!/TOC \$\{prof\.alt\}' /.test(raw), 'the old spelled-out chip is back');
   // the tooltip has to be reachable: the marker is non-interactive, so the
   // chip needs pointer-events of its own or nothing ever hovers it
@@ -5763,6 +5764,159 @@ T('toasts notify without stealing a click', () => {
   assert(!openDlg(), 'a toast must not open a modal');
   host.innerHTML = '';
 });
+
+
+console.log('\n=== 62a000b. Every interpolated string is escaped (v16.47, H3 / rule 6) ===');
+
+// THIS IS CORRECTNESS BEFORE IT IS SECURITY. A waypoint the pilot names
+// `Bodo <VOR>` breaks the OFP table with no malice at all: `<VOR>` is parsed
+// as a tag and the rest of the row disappears. The probe below is an <img>
+// only because it is the cheapest thing to DETECT after a render - one
+// query for a tag that must never exist, over every surface at once.
+const XSS_NAME = '<img src=x onerror="window.__xssFired=(window.__xssFired||0)+1" class="xss-probe">';
+const XSS_FLIGHTS = [{
+  id: 1, title: XSS_NAME, depElev: 254,
+  waypoints: [
+    { lat: 69.05505349, lng: 18.54466865, name: XSS_NAME, alt: 254, oat: 14, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.23781330, lng: 17.97902780, name: XSS_NAME, alt: 9500, oat: 10, wdir: 0, wspd: 0, var: -11,
+      via: [{ lat: 69.15, lng: 18.30 }], tocNM: 1, bodNM: 4 },
+    { lat: 69.67895054, lng: 18.91143033, name: XSS_NAME, alt: 500, oat: 10, wdir: 0, wspd: 0, var: -12 },
+    // The circuit stop carries the hostile name too: the map's pattern label is
+    // a SEPARATE interpolation from the waypoint label, and a route file can
+    // give a circuit stop any name even though the app's rename refuses to.
+    { lat: 69.67895054, lng: 18.91143033, name: XSS_NAME, alt: 1000, oat: 10, wdir: 0, wspd: 0,
+      var: -12, isPattern: true, laps: 2 }
+  ]
+}];
+
+function renderEverySurface() {
+  ev(`window.__xssFired = 0;
+      flights = ${JSON.stringify(XSS_FLIGHTS)};
+      activeFlightIndex = 0;
+      // MIDWINTER AT 69 N WITH A PRE-DAWN ETD, so the daylight card's WARNING and
+      // CAUTION lists fire as well as its rows - each names the aerodrome it is
+      // about, and that is the only way a waypoint name reaches those surfaces.
+      // The day-VFR window on this date is 08:21-13:06, so 05:00 is night.
+      document.getElementById('def-etd').value = '05:00';
+      document.getElementById('def-date').value = '2026-12-21';
+      refreshMap(); renderAllFlightTables(); openWindModal();
+      hitLines[0]._h.contextmenu({ latlng: { lat: 69.45, lng: 18.90 },
+                                   originalEvent: { preventDefault: function(){} } });`);
+}
+
+T('a hostile waypoint name injects nothing on ANY rendered surface', () => {
+  renderEverySurface();
+  // One query for the whole document: the table, the sub-leg line, the
+  // plotting list, the wind modal, the daylight card, the leg panel, the
+  // red banner and the OFP print sheets are all inside <body>.
+  // THE SELECTOR HAS TO COVER BOTH SHAPES, and the second one is easy to miss.
+  // In element content the payload becomes an <img>; inside an ATTRIBUTE
+  // (`value="..."` in the plotting list) its own quote closes the attribute
+  // first, so the browser hangs `class="xss-probe"` on the HOST element and
+  // there is no <img> to find at all. Looking only for a tag passed that case.
+  const probes = doc.body.querySelectorAll('.xss-probe, [onerror], img[src="x"]');
+  assert(probes.length === 0, probes.length + ' injected node(s) reached the DOM, first is a <' +
+    (probes[0] ? probes[0].tagName.toLowerCase() : '') + '> in .' +
+    (probes[0] && probes[0].parentElement ? probes[0].parentElement.className : ''));
+  assert(!w.__xssFired, 'the injected handler ran ' + w.__xssFired + ' time(s)');
+});
+
+T('the surfaces the audit named actually rendered, so the check above is not vacuous', () => {
+  // A test that proves "no <img> anywhere" would also pass if nothing rendered.
+  const has = (sel) => !!doc.querySelector(sel);
+  assert(doc.querySelectorAll('#flight-plans-container tbody tr').length > 2, 'no OFP rows rendered');
+  assert(has('.sub-leg-row'), 'no sub-leg row (the via point should have produced one)');
+  assert(has('.plotting-details'), 'no plotting list');
+  assert(has('#wind-matrix-container .wind-table'), 'the wind modal did not render');
+  assert(doc.getElementById('leg-modal').style.display === 'flex', 'the leg panel did not open');
+  assert(doc.getElementById('daylight-body').innerHTML.length > 100, 'the daylight card is empty');
+  assert(has('#ofp-print .ofp-grid'), 'no OFP print sheet');
+  const banner = doc.getElementById('integrity-banner');
+  assert(banner.style.display === 'block', 'the banner should be up: a 9500 ft leg with a 500 ft ' +
+    'arrival cannot be flown, and the banner NAMES the waypoint - which is how a name reaches it');
+});
+
+T('a waypoint name with angle brackets survives intact, it is not just stripped', () => {
+  // The point of escaping is that the pilot SEES the name they typed.
+  ev(`flights = [{ id: 1, title: 'T', depElev: 254, waypoints: [
+    { lat: 69.05505349, lng: 18.54466865, name: 'Bodø <VOR> & co', alt: 254, oat: 14, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.23781330, lng: 17.97902780, name: 'FINNSNES', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const firstCell = doc.querySelector('#flight-plans-container tbody tr td b');
+  assert(firstCell && firstCell.textContent === 'Bodø <VOR> & co',
+    'name mangled: ' + (firstCell && JSON.stringify(firstCell.textContent)));
+  // and the row is still whole - the <VOR> did not eat the rest of it
+  assert(doc.querySelector('#flight-plans-container tbody tr').children.length >= 13,
+    'the row lost cells to the tag');
+  const plotName = doc.querySelector('.plotting-details input[type=text]');
+  assert(plotName && plotName.value === 'Bodø <VOR> & co',
+    'the plotting list mangled the name: ' + (plotName && JSON.stringify(plotName.value)));
+});
+
+T('the map label carries the name escaped too', () => {
+  renderEverySurface();
+  const html = ev(`markers.map(function(m){ return (m._opts && m._opts.icon && m._opts.icon.html) || ''; }).join('')`);
+  assert(html.length > 0, 'no marker html captured');
+  assert(!/<img/i.test(html), 'a marker label carries a raw tag: ' + html.slice(0, 160));
+  assert(html.includes('&lt;img'), 'the marker label does not carry the escaped name at all');
+});
+
+T('there is exactly ONE escaper in the app, not a copy per function', () => {
+  // Six near-identical local copies used to live inside the functions that
+  // needed one; three omitted `"` and one omitted `>`, so which characters
+  // were safe depended on which function you were in.
+  const copies = APP_SRC.match(/const esc = \(t\) =>/g) || [];
+  assert(copies.length === 0, copies.length + ' local esc copies are back - use escapeText');
+  assert(/function escapeText/.test(APP_SRC), 'escapeText is missing from the bundle');
+  assert(APP_SRC.includes('const esc = escapeText'), 'the page script no longer aliases the one escaper');
+});
+
+T('the daylight WARNING and CAUTION lists both fired, so both are covered', () => {
+  // Two separate interpolations, and each names the aerodrome it is about.
+  // 05:00 lands before morning civil twilight (a WARNING); 12:00 lands inside
+  // the last 30 minutes of the evening window (a CAUTION). Nothing else in the
+  // card reaches either list with a waypoint name in it.
+  renderEverySurface();
+  let html = doc.getElementById('daylight-body').innerHTML;
+  assert(html.includes('\u26d4'), 'no warning row: the probe no longer reaches the warn list');
+  assert(html.includes('&lt;img'), 'the warning does not carry the (escaped) waypoint name');
+
+  ev(`document.getElementById('def-etd').value = '12:00'; renderAllFlightTables();`);
+  html = doc.getElementById('daylight-body').innerHTML;
+  assert(html.includes('\u26a0'), 'no caution row: the probe no longer reaches the caution list');
+  const probes = doc.body.querySelectorAll('.xss-probe, [onerror], img[src="x"]');
+  assert(probes.length === 0, probes.length + ' injected node(s) reached the DOM via the caution list');
+});
+
+T('the version badge escapes the tag it got from GitHub', () => {
+  // The one genuinely REMOTE string this app renders: package.json's version
+  // field, fetched from raw.githubusercontent. It has to read as NEWER or the
+  // badge never renders it - and compareVersions splits on '.', so the payload
+  // goes in a later segment and "99" stays a clean first one.
+  ev(`window.__xssFired = 0; renderVersionBadge('99.${XSS_NAME}')`);
+  const el = doc.getElementById('app-version-badge');
+  assert(el.innerHTML.includes('available on GitHub'), 'the update branch did not render: ' + el.innerHTML);
+  assert(el.querySelectorAll('.xss-probe, [onerror], img').length === 0,
+    'the remote version string injected a node: ' + el.innerHTML.slice(0, 160));
+  ev(`renderVersionBadge()`);
+});
+
+T('the print host is emptied BEFORE the render, so a throw cannot leave a stale sheet', () => {
+  // back to a normal date first - nothing downstream should inherit midwinter
+  ev(`document.getElementById('def-date').value = ''; document.getElementById('def-etd').value = '';`);
+  // H1: the sheets are written in the LAST statement of renderAllFlightTables,
+  // so a throw anywhere before it used to leave the PREVIOUS plan's sheets in
+  // #ofp-print - another route's figures on company paperwork.
+  ev(SEED);
+  assert(doc.querySelector('#ofp-print .ofp-grid'), 'no sheet to start from');
+  const before = doc.getElementById('ofp-print').innerHTML;
+  assert(before.includes('ENDU'), 'the seed sheet does not name ENDU');
+  ev(`flights = []; renderAllFlightTables();`);
+  assert(!doc.getElementById('ofp-print').innerHTML.includes('ENDU'),
+    'the previous plan’s sheets survived a render that produced none');
+  ev(SEED);
+});
+
 
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');

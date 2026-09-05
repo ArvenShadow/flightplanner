@@ -23,6 +23,8 @@
  * Pure: no DOM, no Leaflet. The page draws; this decides what and says what.
  */
 
+import { escapeText } from './format.js';
+
 /**
  * Zoom thresholds, and why they differ.
  *
@@ -325,13 +327,10 @@ export function fixMarkerHtml(a, st) {
 }
 
 /** Fix names are published data, not user input, but they land in innerHTML
- *  and one of them could gain an ampersand in a future edition. */
-/** @param {string} t @returns {string} */
-export function escapeText(t) {
-  return String(t == null ? '' : t)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+ *  and one of them could gain an ampersand in a future edition. The escaper
+ *  itself lives in format.js - one helper for the whole app (v16.47) - and is
+ *  re-exported here so existing callers keep the name they know. */
+export { escapeText };
 
 /**
  * The waypoint an anchor becomes.

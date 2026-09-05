@@ -1478,8 +1478,13 @@ and H2 all hold exactly as described.
    roadmap items 9-10: the author's answer is *"only escape and relevant key
    bindings on dialog popups, all other keybindings disabled during popup"* -
    which is exactly the guard the 1-9 digit binding needs anyway.
-**14. H3 escaping** (rule 6 above) and **H1** (a throw in the daylight card skips
-   the banner AND leaves the previous plan's print sheets on screen - rule 8).
+**14. DONE at v16.47 - one escaper, applied everywhere.** See the section below.
+   H3 and the remaining half of H1 are fixed; 17 sinks now go through the single
+   `escapeText`, and the print host is emptied before the render rather than only
+   refilled at the end.
+   ~~original entry:~~ H3 escaping (rule 6 above) and H1 (a throw in the daylight
+   card skips the banner AND leaves the previous plan's print sheets on screen -
+   rule 8).
 **15. Housekeeping, one batch.** M4 (`build-aip.mjs` writes `data/aip.js` BEFORE
    the border reconciliation can throw, and deletes `report._border` after the
    write - L1's 1 129 KB report), L2 (`package-lock.json` says 16.33.0), L3
@@ -1765,6 +1770,78 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## One escaper, applied everywhere (v16.47, item 14 - H3 and the rest of H1)
+
+Discipline rule 6, finally applied to every surface instead of the three that
+already had it.
+
+- **THIS IS CORRECTNESS BEFORE IT IS SECURITY, and the argument matters because
+  the author has ruled route files TRUSTED.** A waypoint the pilot names
+  `Bodø <VOR>` breaks the OFP row with no malice at all: `<VOR>` is parsed as a
+  tag and the rest of the row disappears. That a shared route file can no longer
+  carry a script is a second benefit, not the reason.
+- **THERE WAS NOT ONE ESCAPER, THERE WERE SIX**, each a local `const esc` inside
+  the function that needed it - and they disagreed: three omitted `"`, one
+  omitted `>`. Which characters were safe depended on which function you were
+  in. `escapeText` now lives in `src/lib/format.js` (a formatting primitive, not
+  an anchors one - `anchors.js` re-exports it so existing callers keep the name),
+  the page script aliases it ONCE as `esc`, and a test asserts no local copy
+  comes back.
+- **TWENTY SINKS, and the audit named nine of them.** The rest turned up by
+  grepping for `.name` reaching `innerHTML`: the map's own waypoint and circuit
+  LABELS (Leaflet `divIcon` html, which is not in the DOM under jsdom), the
+  TOC/TOD chip's tooltip, the daylight card's rows AND its warning list, the red
+  banner (problem messages NAME the waypoint at fault - that is the v16.20 rule),
+  and the version badge's remote tag, which is the one genuinely remote string
+  the app renders.
+- **WHAT NEEDED NO CHANGE, checked rather than assumed:** `dialog.js` and `say()`
+  build their text with `createTextNode`; the route dropdown uses `innerText` and
+  `opt.value`; the leg-panel headings use `textContent`; `metarStatus` only ever
+  interpolates ICAO codes that `isIcao` has already validated. The METAR card,
+  the OFP sheet and the fix labels escaped already.
+- **THE TEST IS ONE QUERY OVER THE WHOLE DOCUMENT**, because a per-sink test
+  would have missed the eight sinks the audit did not name. A plan whose every
+  waypoint is named `<img src=x onerror=... class="xss-probe">` is rendered
+  through the table, the sub-leg line, the plotting list, the wind modal, the
+  daylight card, the leg panel, the banner and the print sheets, and then
+  `body` is asked for a single selector.
+  - **THE SELECTOR HAS TO COVER TWO SHAPES, and the second one passed at first.**
+    In element content the payload becomes an `<img>`. Inside an ATTRIBUTE - the
+    plotting list's `value="..."` - its own quote closes the attribute first, so
+    the browser hangs `class="xss-probe"` on the INPUT and there is no `<img>`
+    anywhere. Looking only for a tag reported that sink clean.
+  - A SECOND TEST ASSERTS THE SURFACES ACTUALLY RENDERED, or "no `<img>`
+    anywhere" would also pass if nothing had rendered at all.
+  - A THIRD ASSERTS THE NAME SURVIVES: `Bodø <VOR> & co` reads back intact and
+    the row still has all its cells. Escaping that silently stripped the name
+    would pass the injection test and be a different bug.
+  - **EVERY SITE WAS REVERTED IN TURN and the suite re-run**, because a guard
+    nobody has seen fail is not known to guard anything. The first pass came back
+    17 of 20 - and the three misses were the useful part, because each was a
+    surface the probe simply never drove:
+    - the CIRCUIT-STOP map label is a SEPARATE interpolation from the waypoint
+      label, and the probe's pattern waypoint was named the literal `PATTERN`. A
+      route file can give a circuit stop any name even though the app's own
+      rename refuses to (v16.40), so it is named hostilely now.
+    - the daylight WARNING and CAUTION lists are two more interpolations, and
+      both need a plan that is actually illegal. Midwinter at 69 N: the day-VFR
+      window is 08:21-13:06, so an 05:00 ETD fires a warning and a 12:00 ETD
+      fires the within-30-minutes caution. The probe renders at both.
+    - the version badge needed a remote string that reads as NEWER, or the branch
+      that renders it never runs; `compareVersions` splits on `.`, so the payload
+      goes in a later segment and `99` stays a clean first one.
+    That leaves **19 of 20 guarded**. The one that is not is the VAR-source
+    `title=` attribute, and it stays that way honestly: `varIndicator` is built in
+    the page from `window.WMM_MODEL`, a bundle constant, so no route file can
+    steer it. It is escaped for uniformity, not because a path exists. Stated here
+    rather than counted as covered - documentation must not get ahead of the code.
+- **THE REST OF H1: THE PRINT HOST IS EMPTIED BEFORE THE RENDER, not only
+  refilled at the end.** v16.43 stopped the daylight card from skipping the
+  banner, but the sheets are written in the LAST statement of
+  `renderAllFlightTables`, so a throw anywhere before it still left the PREVIOUS
+  plan's sheets in `#ofp-print` - another route's figures going onto company
+  paperwork. A failed render now prints nothing, which is the honest outcome.
 
 ## An overlay owns the keyboard, and a drag has an exit (v16.46, item 13)
 

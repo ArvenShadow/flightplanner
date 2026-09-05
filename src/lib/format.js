@@ -73,3 +73,23 @@ export function convertFuel(gal, targetUnit) {
   if (targetUnit === 'KG') return gal * 2.72; // AvGas 100LL density approx
   return gal;
 }
+
+// ---- HTML escaping -----------------------------------------------------
+// THE ONE ESCAPER (v16.47). Every string the app interpolates into innerHTML
+// goes through this, and there is exactly one of it on purpose: six
+// near-identical local copies had grown across the page script, three of
+// which omitted `"` and one of which omitted `>`, so which characters were
+// safe depended on which function you happened to be in.
+//
+// THIS IS CORRECTNESS BEFORE IT IS SECURITY. A waypoint the pilot names
+// `Bodø <VOR>` breaks the OFP table with no malice at all - the `<VOR>`
+// is parsed as a tag and the rest of the row disappears. That it ALSO
+// closes an injection door on a shared route file is a second benefit,
+// not the argument.
+
+/** @param {any} t @returns {string} */
+export function escapeText(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
