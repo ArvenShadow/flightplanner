@@ -33,7 +33,7 @@ import { cruisePerf, climbPerf, climbCumulative, calcWCA, activeAircraftProfile,
 // the climb-continuity pass in computeFlightSchedule uses the same number, so
 // what the schedule calls one climb and what the map draws as one climb cannot
 // disagree. 0.05 NM is 3 seconds at C182 speeds.
-const EDGE_NM = 0.05;
+export const EDGE_NM = 0.05;
 
 // 4b. VIA POINTS & UNIFIED LEG ENGINE
 //

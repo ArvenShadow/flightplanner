@@ -1,4 +1,14 @@
 process.env.TZ = 'UTC';   // deterministic clock for the daylight/sun tests
+
+// SWEEP SIZES ARE SCALABLE (M5). The everyday run uses the sizes written into
+// each sweep; the big figures quoted in CLAUDE.md ("20 000 pinned routes",
+// "48 957 unpinned legs") were development runs, and SWEEP_N is how anyone
+// reproduces them without slowing the suite down for everybody:
+//     SWEEP_N=5 npm test
+// The asserts are absolute lower bounds, so a larger multiplier can only make
+// them easier - the sweep is a search for violations, not a fixed-size sample.
+const SWEEP_N = Math.max(1, Number(process.env.SWEEP_N) || 1);
+const sweep = (n) => Math.round(n * SWEEP_N);
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 
@@ -2388,6 +2398,50 @@ T('the ETO clock never reads earlier than the departure it follows', () => {
   assert(F.clockFromMinutes('', 60) === null && F.clockFromMinutes('7pm', 60) === null, 'bad ETD invented a time');
   assert(F.formatTimeHHMM(undefined) === '-' && F.formatTimeHHMM(125) === '02:05', 'formatTimeHHMM broken');
   assert(F.toDMM(69.6805, true) === "69\u00b040.83'N", 'toDMM: ' + F.toDMM(69.6805, true));
+  // With a date, the ETO is an absolute instant (M3). Under TZ=UTC it must
+  // agree with the clock arithmetic exactly - the Oslo pass below is what
+  // separates them.
+  assert(F.clockFromInstant('2026-06-15', '23:30', 90) === '01:00+1',
+    'dated rollover: ' + F.clockFromInstant('2026-06-15', '23:30', 90));
+  assert(F.clockFromInstant('', '23:30', 90) === '01:00+1', 'no date must fall back to the clock');
+  assert(F.clockFromInstant('not-a-date', '08:00', 45) === '08:45', 'malformed date must fall back');
+  assert(F.clockFromInstant('2026-06-15', '7pm', 60) === null, 'bad ETD invented a time');
+});
+
+// THE SUITE PINS TZ=UTC, so it could never see M3: a zone with no DST cannot
+// produce the disagreement. This runs the same module in a CHILD PROCESS under
+// Europe/Oslo - the pilot's own zone - which is the only place the bug lives.
+T('across a DST transition the ETO is an instant, not clock arithmetic (TZ=Europe/Oslo)', () => {
+  const { execFileSync } = require('child_process');
+  const script = `
+    const F = require('${require('path').resolve('./src/lib/format.js')}');
+    const out = {
+      // 2026-10-25, clocks go BACK: 01:30 + 2 h is 02:30 local, not 03:30,
+      // because the 02:00 hour is flown twice.
+      autumn:      F.clockFromInstant('2026-10-25', '01:30', 120),
+      autumnClock: F.clockFromMinutes('01:30', 120),
+      // 2026-03-29, clocks go FORWARD: 02:30 does not exist locally. The
+      // daylight card reads it as 03:30, so the ETO must too.
+      springGap:   F.clockFromInstant('2026-03-29', '02:30', 60),
+      spring:      F.clockFromInstant('2026-03-29', '01:30', 60),
+      springClock: F.clockFromMinutes('01:30', 60),
+      // a 25-hour local day: the "+1" marker is a CALENDAR difference, so it
+      // must NOT appear 24 h after an ETD on the day the clocks go back.
+      longDay:     F.clockFromInstant('2026-10-25', '00:30', 24 * 60),
+      normal:      F.clockFromInstant('2026-06-15', '08:00', 45)
+    };
+    process.stdout.write(JSON.stringify(out));
+  `;
+  const raw = execFileSync(process.execPath, ['-e', script],
+    { env: Object.assign({}, process.env, { TZ: 'Europe/Oslo' }), encoding: 'utf8' });
+  const r = JSON.parse(raw);
+  assert(r.autumn === '02:30', 'autumn transition: got ' + r.autumn + ' (want 02:30)');
+  assert(r.autumnClock === '03:30', 'the old arithmetic no longer shows the defect - check the fixture');
+  assert(r.springGap === '04:30', 'spring gap: got ' + r.springGap + ' (want 04:30)');
+  assert(r.spring === '03:30', 'spring transition: got ' + r.spring + ' (want 03:30)');
+  assert(r.springClock === '02:30', 'the old arithmetic no longer shows the defect - check the fixture');
+  assert(r.longDay === '23:30', 'a 25-hour day is still one day: got ' + r.longDay);
+  assert(r.normal === '08:45', 'an ordinary day moved: ' + r.normal);
 });
 // THE recurring trap, now guarded. A module that reads a page global -
 // toRad, aircraftProfile - still WORKS in the browser, because the page
@@ -2404,7 +2458,8 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
     'magvar.js': () => [M.magvar.resolveMagVar(69.055, 18.544, 2026.6438).raw, M.magvar.magneticTrackLabel(10, -11)],
     'geodesy.js': () => M.geodesy.calcDistanceNM(69.055, 18.545, 69.679, 18.911),
     'performance.js': () => [M.perf.climbPerf(0, 6000, 15), M.perf.cruisePerf(6000, -5), M.perf.calcWCA(120, 20, 1)],
-    'format.js': () => [M.fmt.formatTimeHHMM(125), M.fmt.toDMM(69.68, true), M.fmt.clockFromMinutes('23:30', 90)],
+    'format.js': () => [M.fmt.formatTimeHHMM(125), M.fmt.toDMM(69.68, true), M.fmt.clockFromMinutes('23:30', 90), M.fmt.clockFromInstant('2026-06-15', '23:30', 90),
+                            M.fmt.escapeText('a & b')],
     'legs.js+paths': () => [M.legs.flightLineCoords({ waypoints: [wp(69, 18, 0), wp(69.7, 18.9, 2500)] }),
                             M.legs.findPathInsertion([wp(69, 18, 0), wp(69.7, 18.9, 2500)], { lat: 69.3, lng: 18.4 }),
                             M.legs.legMidpoint(wp(69, 18, 0), wp(69.7, 18.9, 2500))],
@@ -2931,6 +2986,9 @@ T('an airspace worked only by an ACC still names someone to call', () => {
   // ENR 2.2 pointer is NOT that: it appears only where an area-control sector
   // genuinely could not be resolved, and it replaces a frequency rather than
   // counting hidden ones.
+  // L9: the loop below IS the assertion, so an empty dataset would pass it
+  // silently. Every collection walked in this file states its size first.
+  assert(set.features.length > 100, 'only ' + set.features.length + ' features to check');
   for (const f of set.features) {
     const json = JSON.stringify(A.airspaceInfo(f));
     assert(!/non-VHF/.test(json) && !/hidden/i.test(json), f.name + ' still carries a hidden-count remark');
@@ -3141,6 +3199,7 @@ T('a combined sector remark is accepted; a genuine mismatch is refused', () => {
 T('every imported sector is drawable, dialable and correctly paired', () => {
   const A = moduleExports.airspace;
   const set = aipDataset();
+  assert(set.sectors.length > 20, 'only ' + set.sectors.length + ' sectors to check (L9)');
   for (const s of set.sectors) {
     assert(s.ring.length >= 3, s.name + ' has ' + s.ring.length + ' ring points');
     const n = Number(s.mhz);
@@ -3343,6 +3402,7 @@ T('every shipped reporting point is corroborated by the chart it came from', () 
   const set = aipDataset();
   const V = require('./tools/aip-vac.mjs');
   let n = 0;
+  assert(set.aerodromes.length > 40, 'only ' + set.aerodromes.length + ' aerodromes to check (L9)');
   for (const a of set.aerodromes) {
     assert(/^EN[A-Z]{2}$/.test(a.icao), 'bad ICAO ' + a.icao);
     for (const p of a.points) {
@@ -3374,6 +3434,7 @@ T('an aerodrome with no published table has NO points, and that is said', () => 
   // Every aerodrome still ANCHORS: the ARP is a tagged field on every AD 2
   // page, so an aerodrome with no VAC table is still a usable waypoint.
   const anchors = A.buildAnchors(set);
+  assert(set.aerodromes.length > 40, 'only ' + set.aerodromes.length + ' aerodromes to check (L9)');
   for (const a of set.aerodromes) {
     assert(anchors.some((x) => x.kind === 'AD' && x.icao === a.icao),
       a.icao + ' has no aerodrome anchor');
@@ -3878,6 +3939,7 @@ T('NO airspace polygon crosses itself', () => {
   // closes by repeating its first vertex) and paired with their volume.
   const set = aipDataset();
   const offenders = [];
+  assert(set.features.length > 100, 'only ' + set.features.length + ' rings to check (L9)');
   for (const f of set.features) if (ringSelfIntersects(f.ring)) offenders.push(f.name);
   assert(offenders.length === 0, offenders.length + ' self-crossing polygons: ' + offenders.slice(0, 5).join(', '));
 });
@@ -4151,7 +4213,7 @@ T('advice is only offered if it actually WORKS', () => {
   const rnd = (() => { let s = 987654; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
   let given = 0, works = 0, noneHelps = 0, firstLeg = 0, continuous = 0, noEarlierClimb = 0, absorbed = 0;
   const splitClimb = [], doubleToc = [];
-  for (let iter = 0; iter < 3000; iter++) {
+  for (let iter = 0; iter < sweep(3000); iter++) {
     const nWp = 3 + Math.floor(rnd() * 2);
     const wps = []; let lat = 68.5 + rnd() * 1.0;
     for (let k = 0; k < nWp; k++) {
@@ -4250,7 +4312,7 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   // which is why C1 - the forward altitude cursor surviving a pattern pair -
   // went unseen through every run of it.
   let patterns = 0, afterPattern = 0;
-  for (let iter = 0; iter < 4000; iter++) {
+  for (let iter = 0; iter < sweep(4000); iter++) {
     const nWp = 2 + Math.floor(rnd() * 3);
     const wps = []; let lat = 68.5 + rnd() * 1.0;
     for (let k = 0; k < nWp; k++) {
@@ -4283,9 +4345,24 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
       if (Math.abs(sch[k].entryAlt - sch[k].from.alt) > 0.5)
         bad.push('stale entry altitude after a break on ' + sch[k].i);
     }
+    // ALTITUDE CONTINUITY ACROSS THE WHOLE FLIGHT (M5). Nothing asserted this,
+    // and it is the one thing the OFP's altitude column is: what a leg leaves
+    // at must be what the next leg enters at, or the two rows contradict each
+    // other. A break in the chain (a circuit stop) is checked above instead.
+    for (let k = 0; k + 1 < sch.length; k++) {
+      if (!sch[k] || !sch[k + 1]) continue;
+      if (Math.abs(sch[k].exitAlt - sch[k + 1].entryAlt) > 0.5)
+        bad.push('exitAlt != entryAlt across ' + sch[k].i + '->' + sch[k + 1].i);
+    }
     for (const S of sch) {
       if (!S) continue;
       legs++;
+      // EVERY PHASE IS NON-NEGATIVE, ASSERTED DIRECTLY (M5). The bounds checks
+      // below catch a phase that leaves the leg, but a negative duration or
+      // fuel figure would sail through them and land straight on the form.
+      for (const k of ['climbMin', 'climbDistNM', 'climbFuelGal', 'climbStartNM',
+                       'descMin', 'descDistNM', 'bodTailNM', 'shortfallMin', 'distNM'])
+        if (!(S[k] >= 0) || !isFinite(S[k])) bad.push(k + ' is ' + S[k] + ' on ' + S.i);
       if (S.climbStartNM > 0.05) withBoc++;
       if (S.bodTailNM > 0.05) withBod++;
       if (S.bodRefused) refused++;
@@ -4311,9 +4388,28 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
       const marks = L2.computeLegMarkers(S.from, S.to, S);
       const kinds = marks.map((m) => m.kind);
       if (new Set(kinds).size !== kinds.length) bad.push('duplicate marker on ' + S.i);
+      // MARKS COME BACK IN FLIGHT ORDER (M5, and legs.js:1015 says so). The
+      // plotting list and the OFP sub-line print them straight through, so
+      // "TOC ... BOC" down a leg flown BOC-first makes the pilot reorder it in
+      // their head. Which end a distance is measured from is `rel`, not the
+      // kind - testing for 'TOC' put two of the four marks on the wrong end.
+      let prevAlong = -1;
       for (const m of marks) {
         if (!isFinite(m.lat) || !isFinite(m.lng)) bad.push('marker with no position on ' + S.i);
         if (m.distNM < -tol || m.distNM > S.distNM + 0.06) bad.push('marker off the leg on ' + S.i);
+        const along = m.rel === 'after' ? m.distNM : S.distNM - m.distNM;
+        if (along < prevAlong - 1e-6) bad.push('markers out of flight order on ' + S.i);
+        prevAlong = along;
+        // `atWaypoint` MEANS the mark is on that fix, within the one shared
+        // EDGE_NM. A mark claiming a fix it is nowhere near reads as a
+        // different instruction ("start down at B" vs "27 NM before ENTC").
+        if (m.atWaypoint) {
+          const toEnd = m.rel === 'after' ? S.distNM - along : along;
+          if (toEnd > L2.EDGE_NM + 1e-9)
+            bad.push('atWaypoint ' + m.atWaypoint + ' is ' + toEnd.toFixed(3) + ' NM away on ' + S.i);
+          const want = m.rel === 'after' ? S.to.name : S.from.name;
+          if (m.atWaypoint !== want) bad.push('atWaypoint names the wrong fix on ' + S.i);
+        }
       }
       if (S.climbStartNM > 0.05 && S.climbDistNM > 0.05 && !kinds.includes('BOC')) bad.push('BOC pinned but unmarked on ' + S.i);
       if (S.bodTailNM > 0.05 && S.descDistNM > 0.05 && !kinds.includes('BOD')) bad.push('BOD pinned but unmarked on ' + S.i);
@@ -4347,10 +4443,59 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   assert(continues > 0, 'the sweep never produced a climb continuing through a fix');
   assert(patterns > 100 && afterPattern > 100,
     'the sweep barely exercised circuit stops: ' + patterns + ' routes, ' + afterPattern + ' legs after one');
+  // A MISSING OAT OR WIND MUST SURVIVE THE PIN MACHINERY (M5). The v16.20 rule
+  // is that an absent value yields NaN and the banner NAMES it - never calm
+  // wind at 0 C. The pins added a lot of arithmetic between the input and the
+  // output, and nothing checked that the NaN still comes out the other end as
+  // a NaN instead of a throw or a plausible number.
+  {
+    const wps = [W('A', 69.0, 18.0, 254), W('B', 69.4, 18.1, 6000), W('C', 69.9, 18.4, 1000)];
+    wps[1].oat = NaN; wps[1].bocNM = 3; wps[1].tocNM = 12;
+    wps[2].wspd = NaN; wps[2].bodNM = 4;
+    let sch2 = null;
+    try { sch2 = L2.computeFlightSchedule({ id: 1, waypoints: wps }); }
+    catch (e) { assert(false, 'an absent OAT threw out of the schedule: ' + e.message); }
+    assert(sch2 && sch2.length === 2, 'the schedule did not survive an absent OAT');
+    const t0 = L2.computeLegTotals(wps[0], wps[1], sch2[0]);
+    assert(t0 && isNaN(t0.timeMin), 'an absent OAT produced a usable time - that is a guess');
+    const t1 = L2.computeLegTotals(wps[1], wps[2], sch2[1]);
+    assert(t1 && isNaN(t1.timeMin), 'an absent wind speed produced a usable time');
+    // and the marks still come back rather than throwing on a NaN position
+    for (const S of sch2) L2.computeLegMarkers(S.from, S.to, S);
+  }
+
   console.log('        ' + legs + ' pinned legs: ' + withBoc + ' with a BOC, ' + withBod +
     ' with a BOD, ' + refused + ' pins refused, ' + missed + ' TOC targets missed, ' +
     continues + ' climbs continuing through a fix, ' + afterPattern +
     ' legs after a circuit, 0 violations');
+});
+T('EDGE_NM is ONE constant, and the marks and the continuity pass both turn on it', () => {
+  // v16.39: testing the next climb's LENGTH instead of who draws the mark
+  // failed on a 0.0499 NM climb whose TOC lands at 0.0500 NM and IS drawn - two
+  // chips a twentieth of a mile apart. The fix was one module-level constant
+  // shared by both, so what the schedule calls one climb and what the map draws
+  // as one climb cannot drift. Nothing referenced it until now.
+  const L2 = moduleExports.legs;
+  assert(L2.EDGE_NM === 0.05, 'EDGE_NM moved: ' + L2.EDGE_NM);
+  const src = require('fs').readFileSync('src/lib/legs.js', 'utf8');
+  assert((src.match(/EDGE_NM\s*=/g) || []).length === 1, 'EDGE_NM is declared more than once');
+
+  // The behaviour, not just the number: a mark that falls inside EDGE_NM of the
+  // leg start is degenerate and belongs to the neighbouring leg; one just
+  // outside it is drawn. Built directly rather than searched for, so the test
+  // states the threshold instead of hoping a random route lands on it.
+  const W = (n, alt) => ({ name: n, lat: 69, lng: 18, alt, oat: 0, wdir: 0, wspd: 0, var: 0 });
+  const leg = (tocAlong) => L2.computeLegMarkers(W('A', 254), W('B', 5000), {
+    i: 0, from: W('A', 254), to: W('B', 5000),
+    segs: [{ a: { lat: 69, lng: 18 }, b: { lat: 69.5, lng: 18 }, distNM: 30, tt: 0 }],
+    distNM: 30, climbStartNM: 0, climbDistNM: tocAlong, tocAlongNM: tocAlong,
+    climbMin: 5, climbFuelGal: 1, climbTas: 90, stillClimbing: false,
+    descMin: 0, descDistNM: 0, todStartsHere: false, todBeforeNM: null,
+    descContinues: false, descTargetName: null, descTargetAlt: null, shortfallMin: 0,
+    entryAlt: 254, exitAlt: 5000, bodTailNM: 0, climbContinues: false
+  }).filter((m) => m.kind === 'TOC');
+  assert(leg(L2.EDGE_NM).length === 0, 'a TOC exactly at EDGE_NM should be left to the neighbour');
+  assert(leg(L2.EDGE_NM + 0.0001).length === 1, 'a TOC just past EDGE_NM must be drawn');
 });
 
 console.log('\n=== 62a000. Stuck states and dialogs (v16.46) ===');
@@ -5915,6 +6060,139 @@ T('the print host is emptied BEFORE the render, so a throw cannot leave a stale 
   assert(!doc.getElementById('ofp-print').innerHTML.includes('ENDU'),
     'the previous plan’s sheets survived a render that produced none');
   ev(SEED);
+});
+
+
+
+console.log('\n=== 62a000c. The low findings, one batch (v16.48, item 15) ===');
+
+T('L4: a clock BEFORE the departure marks the day too', () => {
+  const F = moduleExports.fmt;
+  assert(F.clockFromMinutes('01:00', -90) === '23:30-1', 'negative offset: ' + F.clockFromMinutes('01:00', -90));
+  assert(F.clockFromMinutes('01:00', 90) === '02:30', 'a forward offset changed');
+  assert(F.clockFromMinutes('01:00', 0) === '01:00', 'a zero offset gained a day marker');
+});
+
+T('L5: a key parked in localStorage does not survive the boot whitelist', () => {
+  // Export and import have used PROFILE_KEYS since v16.18; boot did not, so an
+  // old build's key outlived every reload even though both file paths drop it.
+  const E = moduleExports.exch;
+  w.localStorage.setItem('c182_perf_profile', JSON.stringify({
+    cruiseTas: 133, theme: 'dark', pilotName: 'Someone', tailNumber: 'LN-TRA', legacyThing: 1
+  }));
+  ev('loadSavedProfile()');
+  const live = ev('JSON.stringify(aircraftProfile)');
+  const p = JSON.parse(live);
+  assert(p.cruiseTas === 133, 'a whitelisted key was dropped');
+  for (const k of ['pilotName', 'tailNumber', 'legacyThing'])
+    assert(!(k in p), k + ' survived the boot whitelist');
+  assert(!E.PROFILE_KEYS.includes('pilotName') && !E.PROFILE_KEYS.includes('tailNumber'),
+    'PROFILE_KEYS grew a key that identifies a person or a machine');
+  w.localStorage.removeItem('c182_perf_profile');
+});
+
+T('L7: "PATTERN" is reserved in BOTH directions', () => {
+  // v16.40 blocked renaming a circuit stop, because the add flow and the
+  // return-leg builder test for the literal name. The reverse was open: a
+  // normal waypoint renamed to PATTERN kept isPattern false and started being
+  // treated as a circuit stop by both.
+  ev(SEED);
+  ev(`renameWaypoint(0, 1, 'PATTERN')`);
+  assert(ev('flights[0].waypoints[1].name') === 'FINNSNES', 'a waypoint was renamed to PATTERN');
+  ev(`renameWaypoint(0, 1, 'pattern')`);
+  assert(ev('flights[0].waypoints[1].name') === 'FINNSNES', 'the lower-case form got through');
+  ev(`renameWaypoint(0, 1, 'PATTERN LAKE')`);
+  assert(ev('flights[0].waypoints[1].name') === 'PATTERN LAKE',
+    'a name that merely CONTAINS the word was refused: ' + ev('flights[0].waypoints[1].name'));
+  ev(SEED);
+});
+
+T('L8: the saved-route reference travels with the plan', () => {
+  ev(SEED);
+  ev(`loadedRouteRef = { type: 'route', name: 'ENDU-ENTC' }`);
+  // undoing ONE edit off a loaded route still leaves it that route
+  ev(`pushUndoState(); flights[0].waypoints.push({ lat: 69.9, lng: 19.1, name: 'X', alt: 2500,
+       oat: 0, wdir: 0, wspd: 0, var: -12 }); renderAllFlightTables();`);
+  ev('undoLast(true)');
+  assert(ev('loadedRouteRef && loadedRouteRef.name') === 'ENDU-ENTC',
+    'undoing one edit forgot which saved route the plan came from');
+  // but undoing back PAST the load must not still offer to overwrite it
+  ev(`loadedRouteRef = null; pushUndoState(); loadedRouteRef = { type: 'route', name: 'ENDU-ENTC' };
+      flights[0].waypoints.push({ lat: 69.9, lng: 19.1, name: 'Y', alt: 2500,
+       oat: 0, wdir: 0, wspd: 0, var: -12 }); renderAllFlightTables();`);
+  ev('undoLast(true)');
+  assert(ev('loadedRouteRef') === null,
+    'undoing past the load still offers to update a route this plan never came from');
+  ev('redoLast(true)');
+  assert(ev('loadedRouteRef && loadedRouteRef.name') === 'ENDU-ENTC', 'redo lost the reference');
+  ev(SEED);
+});
+
+TA('L8: clearing everything drops the saved-route reference', async () => {
+  ev(SEED);
+  ev(`loadedRouteRef = { type: 'route', name: 'ENDU-ENTC' }`);
+  const p = ev('clearAllFlights()');
+  await tick();
+  answerDialog('Clear everything');
+  await p;
+  assert(ev('loadedRouteRef') === null, 'an empty sheet still claims to come from a saved route');
+  ev(SEED);
+});
+
+T('L10: a circuit row is formatted like every other row on the form', () => {
+  const O = moduleExports.ofp;
+  const row = { pattern: true, from: 'ENTC', to: 'PATTERN', laps: 3, accDist: '', pl: 1000,
+                accTime: '01:02', accBurn: 3.4000000000000004, ff: 8.4, legBurn: 1.2,
+                time: '00:09', eto: '', rem: 29.799999999999997 };
+  const c = O.ofpRowCells(row);
+  assert(c.accBurn === '3.4', 'a raw float reached the form: ' + c.accBurn);
+  assert(c.estRem === '29.8', 'estRem: ' + c.estRem);
+  assert(c.accDist === '', 'an empty accumulated distance became a number: ' + JSON.stringify(c.accDist));
+  assert(O.ofpRowCells({ ...row, accDist: '12.4' }).accDist === '12.4', 'a real accDist was lost');
+  // H2 had survived in this one row: String(NaN) prints "NaN" on company paper.
+  const bad = O.ofpRowCells({ ...row, pl: NaN, accBurn: NaN, rem: NaN });
+  assert(bad.pl === '' && bad.accBurn === '' && bad.estRem === '',
+    'a circuit row still prints NaN: ' + JSON.stringify([bad.pl, bad.accBurn, bad.estRem]));
+});
+
+T('L3: the counts the page script quotes are the counts it has', () => {
+  // DOCUMENTATION DRIFT IS A BUG WITH A LONG FUSE. The page script said "61
+  // inline on*= handlers" and CLAUDE.md said "24 shared mutable globals"; both
+  // were true when written and neither was true at v16.41, and an audit spent
+  // effort re-deriving them. A figure quoted as evidence is re-measured here,
+  // so it fails the day it stops being true instead of the day someone checks.
+  const fs = require('fs');
+  const src = fs.readFileSync('src/index.html', 'utf8');
+  const blocks = src.match(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g) || [];
+  const page = blocks[blocks.length - 1];
+  const markup = src.replace(/<script[\s\S]*?<\/script>/g, '');
+  const nStatic = (markup.match(/\son[a-z]+\s*=\s*"/g) || []).length;
+  const nGenerated = (blocks.join('').match(/\son[a-z]+\s*=\s*"/g) || []).length;
+
+  const claim = page.match(/plus (\d+) inline on\*= handlers - (\d+) written/);
+  assert(claim, 'the page script no longer states its handler counts');
+  assert(Number(claim[1]) === nStatic + nGenerated,
+    'the page says ' + claim[1] + ' handlers, there are ' + (nStatic + nGenerated));
+  assert(Number(claim[2]) === nStatic,
+    'the page says ' + claim[2] + ' in markup, there are ' + nStatic);
+
+  const tops = new Set((page.match(/^    (?:let|var)\s+([A-Za-z_$][\w$]*)/gm) || [])
+    .map((m) => m.replace(/^\s*(?:let|var)\s+/, '')));
+  const md = fs.readFileSync('CLAUDE.md', 'utf8');
+  const gm = md.match(/it is one web of (\d+) shared mutable/);
+  assert(gm, 'CLAUDE.md no longer states the shared-globals count');
+  assert(Number(gm[1]) === tops.size,
+    'CLAUDE.md says ' + gm[1] + ' shared globals, the page script declares ' + tops.size);
+});
+
+T('L2: the build refuses a lockfile whose version has drifted', () => {
+  const fs = require('fs');
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+  assert(lock.version === pkg, 'package-lock.json says ' + lock.version + ', package.json says ' + pkg);
+  assert(lock.packages[''].version === pkg, 'the lockfile root package version drifted');
+  const build = fs.readFileSync('tools/build.mjs', 'utf8');
+  assert(/package-lock\.json/.test(build), 'the build no longer checks the lockfile version');
 });
 
 

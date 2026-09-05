@@ -823,9 +823,11 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 61 inline on*= handlers that need
+    // map, markers, undoStack...) plus 108 inline on*= handlers - 83 written
+    // into the markup and 25 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
-    // edit span MORE files, not fewer.
+    // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
+    // comment said 61, which was true when it was written.)
     //
     // Sections below, in order:
     //   1   helpers                    6b  wind fetch (Open-Meteo)
@@ -853,9 +855,15 @@
     // formatTimeHHMM, toDMM and the ETO clock arithmetic -> src/lib/format.js
     // (pure, so the midnight rollover is tested without a browser). Only the
     // DOM read of the ETD field stays here.
+    // ETO IS BUILT FROM THE SAME INSTANT THE DAYLIGHT CARD USES (M3, v16.48).
+    // Clock arithmetic alone disagreed with the card by an hour across a DST
+    // transition - see clockFromInstant in format.js for the measured cases.
+    // The date is read here for the same reason the ETD is: only the page knows
+    // what is in the field.
     function computeETO(accMins) {
-      const etd = document.getElementById('def-etd') ? document.getElementById('def-etd').value : '';
-      return clockFromMinutes(etd, accMins);
+      const etdEl = document.getElementById('def-etd');
+      const dateEl = document.getElementById('def-date');
+      return clockFromInstant(dateEl ? dateEl.value : '', etdEl ? etdEl.value : '', accMins);
     }
 
     function etoCellHTML(accMins) {
@@ -1040,7 +1048,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.47';
+    const APP_VERSION = '16.48';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1463,10 +1471,16 @@
     // settings form keeps editing the one source of truth.
     setAircraftProfile(aircraftProfile);
 
+    // EVERY DOOR INTO THE PROFILE GOES THROUGH THE WHITELIST (L5, v16.48).
+    // Export and import have used PROFILE_KEYS since v16.18; BOOT did not, so a
+    // key parked in localStorage by an older build or an older import survived
+    // every reload even though both file paths would have dropped it. It is the
+    // same rule and there is no reason the storage door should be the exception.
     function loadSavedProfile() {
       const saved = localStorage.getItem('c182_perf_profile');
       if (saved) {
-        try { aircraftProfile = Object.assign(aircraftProfile, JSON.parse(saved)); } catch(e){}
+        try { aircraftProfile = Object.assign(aircraftProfile, pickProfileKeys(JSON.parse(saved))); }
+        catch (e) {}
       }
       populateSettingsForm();
 
@@ -1922,8 +1936,30 @@
 
     // 5. MAP INTERACTIONS, RULER MODE & UNDO / REDO
     // =========================================================================
+    // THE SAVED-ROUTE REFERENCE TRAVELS WITH THE PLAN (L8, v16.48).
+    //
+    // `loadedRouteRef` is what makes the save dialog offer `Update "X"` first,
+    // and it used to be a session fact: nothing cleared it, so after undoing
+    // back PAST the load - or clearing everything, or importing a file - the
+    // dialog still offered to update X with a plan that had nothing to do with
+    // X, and taking that offer overwrote the saved route.
+    //
+    // Undo is not "forget X", though: undo one waypoint off a loaded route and
+    // it IS still that route. So the reference is pushed and popped WITH the
+    // state rather than being cleared, and only a wholesale replacement
+    // (clear-all, an import) drops it outright.
+    function undoEntry() {
+      return JSON.stringify({ flights, ref: loadedRouteRef });
+    }
+    function restoreUndoEntry(raw) {
+      const parsed = JSON.parse(raw);
+      // Older entries in a live session are a bare flights array.
+      const fl = Array.isArray(parsed) ? parsed : parsed.flights;
+      loadedRouteRef = Array.isArray(parsed) ? loadedRouteRef : (parsed.ref || null);
+      return sanitiseFlights(fl);
+    }
     function pushUndoState() {
-      undoStack.push(JSON.stringify(flights));
+      undoStack.push(undoEntry());
       if (undoStack.length > 30) undoStack.shift();
       redoStack = [];
     }
@@ -1935,9 +1971,9 @@
         if (!quiet) say("Nothing to undo.", "warn");
         return;
       }
-      redoStack.push(JSON.stringify(flights));
+      redoStack.push(undoEntry());
       const prevState = undoStack.pop();
-      flights = sanitiseFlights(JSON.parse(prevState)) || flights;
+      flights = restoreUndoEntry(prevState) || flights;
       if (activeFlightIndex >= flights.length) activeFlightIndex = flights.length - 1;
       if (activeFlightIndex < 0) activeFlightIndex = 0;
       refreshMap();
@@ -1950,9 +1986,9 @@
         if (!quiet) say("Nothing to redo.", "warn");
         return;
       }
-      undoStack.push(JSON.stringify(flights));
+      undoStack.push(undoEntry());
       const nextState = redoStack.pop();
-      flights = sanitiseFlights(JSON.parse(nextState)) || flights;
+      flights = restoreUndoEntry(nextState) || flights;
       if (activeFlightIndex >= flights.length) activeFlightIndex = flights.length - 1;
       if (activeFlightIndex < 0) activeFlightIndex = 0;
       refreshMap();
@@ -4279,6 +4315,7 @@
       }];
       activeFlightIndex = 0;
       highlightedWaypoint = null;
+      loadedRouteRef = null;   // an empty sheet did not come from a saved route
       document.getElementById('route-selector').value = '';
       clearRuler();
       refreshMap();
@@ -4573,6 +4610,19 @@
     function renameWaypoint(fIdx, wpIdx, value) {
       const name = String(value).trim();
       if (!name) { renderAllFlightTables(); return; }
+      // "PATTERN" IS A RESERVED NAME, IN BOTH DIRECTIONS (L7, v16.48).
+      // v16.40 stopped a CIRCUIT stop being renamed, because the add flow and
+      // the return-leg builder test for the literal name. The reverse was still
+      // open: a normal waypoint renamed to PATTERN kept `isPattern` false but
+      // started being treated as a circuit stop by those two - a fix on the
+      // ground that the route builder thinks is a lap in the air.
+      const wp = flights[fIdx].waypoints[wpIdx];
+      if (!wp.isPattern && name.toUpperCase() === 'PATTERN') {
+        say('"PATTERN" is reserved for circuit stops - pick another name. Add a circuit ' +
+            'from the aerodrome instead.', 'warn');
+        renderAllFlightTables();
+        return;
+      }
       pushUndoState();
       flights[fIdx].waypoints[wpIdx].name = name;
       refreshMap();
@@ -5069,6 +5119,11 @@
               // No house default: an invented field elevation is a wrong climb
               // datum on every leg. Keep what the plan already had.
               if (isFinite(live[0].waypoints[0].alt)) flights[0].depElev = live[0].waypoints[0].alt;
+              // The plan on screen came from a FILE now, not from whatever saved
+              // route was last loaded (L8) - offering to update that route would
+              // overwrite it with something else entirely.
+              loadedRouteRef = null;
+              document.getElementById('route-selector').value = '';
               applied.push('the current route');
             }
           }
@@ -5108,8 +5163,12 @@
 
           if (parsed.currentFlights && Array.isArray(parsed.currentFlights) && parsed.currentFlights.length > 0) {
             const ok = sanitiseFlights(parsed.currentFlights);
-            if (ok) { flights = ok; applied.push(ok.length + ' flight plan' + (ok.length > 1 ? 's' : '')); }
-            else rejected.push('the flight plans');
+            if (ok) {
+              flights = ok;
+              loadedRouteRef = null;   // it came from a file, not a saved route (L8)
+              document.getElementById('route-selector').value = '';
+              applied.push(ok.length + ' flight plan' + (ok.length > 1 ? 's' : ''));
+            } else rejected.push('the flight plans');
           }
 
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -5125,6 +5184,8 @@
                 if (isFinite(asFlights[0].waypoints[0].alt))
                   flights[activeFlightIndex].depElev = asFlights[0].waypoints[0].alt;
               }
+              loadedRouteRef = null;   // it came from a file, not a saved route (L8)
+              document.getElementById('route-selector').value = '';
               applied.push('a route');
             } else rejected.push('the file contents');
           }
@@ -5187,8 +5248,23 @@
       document.getElementById('def-dep-elev').value = flights[0].depElev;
     }
     loadViewPrefs();
-    // Airspace overlay was removed (community data proved outdated vs the
+    // THE FLIGHT DATE IS SET BEFORE THE FIRST RENDER, not by the daylight card
+    // on its way past (v16.48). The ETO column now needs it - it builds an
+    // absolute instant so it cannot disagree with the card across a DST
+    // transition (M3) - and the card fills the field only on a plan that
+    // already has a departure and a destination. Setting it here means the
+    // first render has the same date every later one does.
+    // It is still deliberately NOT PERSISTED: a stale date must never show
+    // wrong sun times (v16.3).
+    {
+      const dEl = document.getElementById('def-date');
+      if (dEl && !dEl.value) dEl.value = localDateStrOf(Date.now());
+    }
+    // THE OPENAIP overlay was removed (community data proved outdated vs the
     // current VFR chart); purge its stored state incl. any personal API key.
+    // An OFFICIAL overlay exists again since v16.31, built from the Avinor
+    // eAIP - drawing airspace was never the objection, drawing unofficial
+    // airspace was. These two keys belong to the old one and stay purged.
     localStorage.removeItem('c182_openaip_key');
     localStorage.removeItem('c182_airspace_on');
     refreshMap();

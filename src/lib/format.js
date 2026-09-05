@@ -50,7 +50,59 @@ export function clockFromMinutes(etd, accMins) {
   const raw = h * 60 + m + Math.round(accMins);
   const total = ((raw % 1440) + 1440) % 1440;
   const days = Math.floor(raw / 1440);
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` + (days > 0 ? `+${days}` : '');
+  // A NEGATIVE offset marks the day too (L4). accMins is always forward today,
+  // so this is latent - but "01:00" for a time the day BEFORE the departure is
+  // the same defect the "+1" exists to prevent, in the other direction.
+  const dayTag = days > 0 ? `+${days}` : (days < 0 ? `${days}` : '');
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` + dayTag;
+}
+
+// ETO ON A REAL DATE, WHICH IS WHERE clockFromMinutes IS WRONG (M3, v16.48).
+//
+// clockFromMinutes is pure clock arithmetic - ETD plus elapsed minutes, mod
+// 1440 - and it disagreed with the daylight card by an HOUR across a DST
+// transition, because the card works in absolute instants. With TZ=Europe/Oslo,
+// ETD 01:30 on 2026-10-25 plus 120 min: the OFP column printed 03:30 while the
+// card (correctly) put the landing at 02:30. On 2026-03-29 an ETD typed as
+// 02:30 does not exist locally; the card reads it as 03:30, the column did not.
+//
+// Both transitions fall at 02:00-03:00 local, which is deep SERA night in
+// Norway on those dates, so a legal day-VFR flight cannot be airborne across
+// one. It was still a wrong time on a printed form, and only ever wrong in the
+// output the pilot copies - the legality check itself was always right.
+//
+// So the ETO is now built from the SAME instant the card uses, and the two
+// cannot disagree. Without a date there is no instant to build, and the old
+// arithmetic is the honest fallback rather than an invented calendar day.
+//
+// THE "+1" IS A CALENDAR-DAY DIFFERENCE, NOT 1440 MINUTES. Across a transition
+// a local day is 23 or 25 hours long, so counting minutes would put the marker
+// on the wrong side of midnight in exactly the case this function exists for.
+
+/** @param {Date} a @param {Date} b @returns {number} whole local days b is after a */
+function localDaysBetween(a, b) {
+  const a0 = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const b0 = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.round((b0 - a0) / 86400000);
+}
+
+/**
+ * @param {string} dateStr flight date "YYYY-MM-DD" ('' or malformed -> fallback)
+ * @param {string} etd "HH:MM" local
+ * @param {number} accMins minutes after the ETD
+ * @returns {string|null} "HH:MM" local, with "+1" past midnight; null if the ETD is unusable
+ */
+export function clockFromInstant(dateStr, etd, accMins) {
+  if (!etd || !/^\d{1,2}:\d{2}$/.test(etd)) return null;
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return clockFromMinutes(etd, accMins);
+  const [Y, M, D] = dateStr.split('-').map(Number);
+  const [h, m] = etd.split(':').map(Number);
+  const start = new Date(Y, M - 1, D, h, m);
+  if (isNaN(start.getTime())) return clockFromMinutes(etd, accMins);
+  const at = new Date(start.getTime() + Math.round(accMins) * 60000);
+  const days = localDaysBetween(start, at);
+  return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}` +
+    (days > 0 ? `+${days}` : '');
 }
 
 /** @param {string} [u] @returns {string} */

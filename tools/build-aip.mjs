@@ -830,6 +830,30 @@ async function main() {
     } : null
   };
 
+  // NOTHING IS WRITTEN UNTIL THE BORDER RECONCILIATION HAS PASSED (M4).
+  //
+  // CLAUDE.md calls this invariant "a build error, not a warning" - but the
+  // throw used to come AFTER the writes, so the dataset that violated it was
+  // already on disk and a `git add -A` would have committed it. Exiting 1 does
+  // not un-write a file. The check is the gate now, so a failed build leaves
+  // the previous edition in place.
+  const br = report.borderRefs;
+  const published = br.tagged + br.onVertexRemark;
+  const handled = br.resolved + br.refused + br.notDrawn;
+  console.log(`border references: ${published} published (${br.tagged} tagged, ${br.onVertexRemark} on a vertex remark)` +
+    ` -> ${br.resolved} resolved, ${br.refused} refused, ${br.notDrawn} in airspace that is never drawn`);
+  if (handled !== published) {
+    // A reference the importer never saw is a boundary drawn as a straight line
+    // where the AIP says it follows a border, which is exactly the failure this
+    // project refuses to ship.
+    throw new Error(`${published - handled} border reference(s) unaccounted for: ` +
+      `published ${published}, handled ${handled}. A dropped reference draws a boundary that does not exist.`);
+  }
+  // The whole 18 435-point Kartverket line was a working value, not a result.
+  // Deleting it AFTER the write meant the report shipped at 1 129 KB where its
+  // real content is 74 KB (L1) - and the delete then had nothing to affect.
+  delete report._border;
+
   await mkdir('data', { recursive: true });
   // A classic-script sidecar: a file:// page can load this with <script src>,
   // which it cannot do with JSON.
@@ -847,19 +871,6 @@ async function main() {
     `${dataset.aerodromes.reduce((n, a) => n + a.points.length, 0)} reporting points`);
   console.log(`ATS delegation areas (not drawn): ${report.delegations.length}` +
     ` - ${report.delegations.filter((x) => x.withinFir && x.withinFir !== 'POLARIS').length} inside a foreign FIR`);
-  const br = report.borderRefs;
-  const published = br.tagged + br.onVertexRemark;
-  const handled = br.resolved + br.refused + br.notDrawn;
-  console.log(`border references: ${published} published (${br.tagged} tagged, ${br.onVertexRemark} on a vertex remark)` +
-    ` -> ${br.resolved} resolved, ${br.refused} refused, ${br.notDrawn} in airspace that is never drawn`);
-  if (handled !== published) {
-    // NOT a warning. A reference the importer never saw is a boundary drawn as
-    // a straight line where the AIP says it follows a border, which is exactly
-    // the failure this project refuses to ship.
-    throw new Error(`${published - handled} border reference(s) unaccounted for: ` +
-      `published ${published}, handled ${handled}. A dropped reference draws a boundary that does not exist.`);
-  }
-  delete report._border;
 }
 
 main().catch((err) => { console.error(err); process.exitCode = 1; });

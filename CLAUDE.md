@@ -84,7 +84,7 @@ That condition is now a constraint on the project, not a footnote:
     working - it is the fallback on a machine that has never seen the app.
   - Both deliveries use the SAME classic-script IIFE bundle. For site/
     that is not inertia: the page script is a classic script whose top
-    level calls setAircraftProfile() and whose 61 inline on*= handlers
+    level calls setAircraftProfile() and whose 108 inline on*= handlers
     need its functions as globals. A `type="module"` script is DEFERRED,
     so it would run AFTER the page script - too late. site/ can move to a
     real module graph only once Phase 1 has extracted the page script and
@@ -151,13 +151,14 @@ That condition is now a constraint on the project, not a footnote:
   - Phase 1 CLOSED at v16.19, deliberately short of a full module graph.
     ALL 938 lines of CSS moved to `src/styles.css`, inlined at a @STYLES
     marker into both deliveries (there were TWO style blocks; they are
-    merged in cascade order, and the build asserts exactly one remains).
+    merged in cascade order, and a TEST asserts exactly one remains - the
+    build does not check it, and this file said it did until v16.48).
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 24 shared mutable
+    decision, not unfinished work: it is one web of 32 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
-    61 inline on*= handlers that need its functions as globals. Threading
+    108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
     files. Instead the script opens with a WHERE TO EDIT WHAT index, and a
     test asserts the index still points at every module that exists.
@@ -532,9 +533,13 @@ three cheap disciplines applied every time the page is touched:
        after all placement. That flaw was latent before the pins - the right
        altitudes alone could always have produced two descents on one leg -
        and 0 of 39 483 unpinned legs hit it, which is why it was never seen.
-    20 000 pinned routes now pass with 0 violations, and the no-pin schedule is
-    BIT-IDENTICAL to the derived v16.5 one (asserted on climb/descent minutes,
-    fuel, TOC, TOD and the leg totals).
+    20 000 pinned routes passed with 0 violations. **THAT WAS A DEVELOPMENT
+    RUN, AND THIS FILE USED TO IMPLY IT WAS THE SHIPPED SIZE** (M5). The suite
+    sweeps 4 000 by default so the everyday run stays fast; `SWEEP_N=5 npm test`
+    reproduces the 20 000 quoted here, and any multiplier only makes the
+    absolute lower bounds easier - the sweep is a search for violations, not a
+    fixed-size sample. The no-pin schedule is BIT-IDENTICAL to the derived v16.5
+    one (asserted on climb/descent minutes, fuel, TOC, TOD and the leg totals).
   - `computeLegTotals` HAD TO CHANGE its level-flight maths. Before the pins
     there was one level stretch and it always FOLLOWED the climb, so the code
     could assume `[climbDistNM, climbDistNM + cruiseDist]`. A BOC puts level
@@ -1485,7 +1490,10 @@ and H2 all hold exactly as described.
    ~~original entry:~~ H3 escaping (rule 6 above) and H1 (a throw in the daylight
    card skips the banner AND leaves the previous plan's print sheets on screen -
    rule 8).
-**15. Housekeeping, one batch.** M4 (`build-aip.mjs` writes `data/aip.js` BEFORE
+**15. DONE at v16.48 - housekeeping, one batch.** See the section below.
+   M3, M4, M5 + SWEEP_N and L1-L10 are fixed; M2 had landed at v16.44 and L6 is a
+   constraint on item 18 rather than a defect.
+   ~~original entry:~~ Housekeeping, one batch. M4 (`build-aip.mjs` writes `data/aip.js` BEFORE
    the border reconciliation can throw, and deletes `report._border` after the
    write - L1's 1 129 KB report), L2 (`package-lock.json` says 16.33.0), L3
    (documentation drift: 61 vs 101 handlers, 24 vs 32 globals, invariants
@@ -1770,6 +1778,109 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## Housekeeping, one batch (v16.48, item 15 - M3, M4, M5 and L1-L10)
+
+Nothing here changes a number a pilot flies by. Two of them changed a number a
+pilot READS, and one of them was a gate that did not gate.
+
+- **M4: NOTHING IS WRITTEN UNTIL THE BORDER RECONCILIATION HAS PASSED.** This
+  file calls `resolved + refused + notDrawn == published` "a build error, not a
+  warning" - and it was, except the throw came AFTER the writes, so the dataset
+  that violated it was already on disk and a `git add -A` would have committed
+  it. Exiting 1 does not un-write a file. The check is the gate now.
+  - **L1 was the same ordering bug wearing a different hat**: `delete
+    report._border` sat after the write too, so the 18 435-point Kartverket line
+    shipped in `data/aip-report.json` (1 129 KB against 74 KB of real content)
+    AND the delete had nothing left to affect. The committed report is 159 KB
+    now, stripped with the same JSON.stringify the tool uses so the diff is a
+    pure deletion rather than a reformat.
+- **M3: THE ETO IS AN INSTANT, NOT CLOCK ARITHMETIC.** `clockFromMinutes` is ETD
+  plus elapsed minutes mod 1440; the daylight card works in absolute time. Under
+  Europe/Oslo they disagreed by an HOUR across a DST transition - ETD 01:30 on
+  2026-10-25 plus 120 min printed 03:30 on the form while the card correctly put
+  the landing at 02:30. `clockFromInstant` builds the same instant the card does.
+  - **THE "+1" IS A CALENDAR-DAY DIFFERENCE, NOT 1440 MINUTES.** A local day is
+    23 or 25 hours long across a transition, so counting minutes puts the marker
+    on the wrong side of midnight in exactly the case the function exists for.
+  - WHY IT WAS NEVER CRITICAL, and it is worth saying: both transitions fall at
+    02:00-03:00 local, which is deep SERA night in Norway on those dates, so a
+    legal day-VFR flight cannot be airborne across one. The legality check was
+    always right; only the printed time was wrong.
+  - **THE SUITE PINS `TZ=UTC`, SO IT COULD NEVER SEE THIS.** A zone with no DST
+    cannot produce the disagreement. The test spawns a CHILD PROCESS under
+    Europe/Oslo - the pilot's own zone - and asserts the old arithmetic still
+    produces the defect, so the fixture cannot quietly stop testing anything.
+- **M5: THE ASSERTS NOW MATCH THE MEASUREMENTS THAT JUSTIFIED THEM.** Five
+  invariants this file describes were asserted nowhere. Each was added to the
+  pin sweep and then PROVED LOAD-BEARING by mutating `legs.js` until it fired:
+  1. `exitAlt(k) === entryAlt(k+1)` - the altitude column is the one thing an
+     OFP row is, and nothing checked that two adjacent rows agreed. (Mutation:
+     +7 ft on one leg's exit -> 870 violations.)
+  2. every phase is `>= 0` and finite, asserted DIRECTLY. The bounds checks
+     catch a phase that leaves the leg; a negative duration sailed through them.
+  3. marks come back in FLIGHT ORDER (legs.js says so, nothing tested it).
+     (Mutation: reverse the sort -> 938 violations.)
+  4. `atWaypoint` really is within `EDGE_NM` of the fix it names, and names the
+     right END. (Mutation: widen to 50 NM -> 3 672 violations.)
+  5. `EDGE_NM` is referenced by a test at last - both that it is declared once
+     and that the behaviour turns at exactly that value, built directly rather
+     than hoping a random route lands on 0.05.
+  - A NaN OAT and a NaN wind now go through the whole pin machinery: the totals
+    must come out NaN (the v16.20 rule) rather than throwing or, far worse,
+    producing a plausible number.
+  - **`SWEEP_N` MAKES THE QUOTED SIZES RUNNABLE.** `SWEEP_N=5 npm test`
+    reproduces the "20 000 pinned routes" this file quotes; the everyday run
+    sweeps 4 000. The figures in this file were development runs and now say so.
+- **L3: A FIGURE QUOTED AS EVIDENCE IS RE-MEASURED BY A TEST.** The page script
+  said "61 inline on*= handlers" and this file said "24 shared mutable globals";
+  both were true when written, neither was true at v16.41, and the audit spent
+  effort re-deriving them. It is 108 handlers (83 in markup, 25 generated) and
+  32 globals, and a test now fails the day those stop being true. Also corrected:
+  the one-`<style>`-block invariant is a TEST, not a build failure, and the boot
+  comment said "airspace overlay was removed" three versions after an official
+  one was added - the two purged keys belong to the old openAIP one.
+- **L5: EVERY DOOR INTO THE PROFILE GOES THROUGH THE WHITELIST.** Export and
+  import have used `PROFILE_KEYS` since v16.18; BOOT did not, so a key parked in
+  localStorage by an older build survived every reload even though both file
+  paths would have dropped it. There was no reason for the storage door to be
+  the exception.
+- **L7: "PATTERN" IS RESERVED IN BOTH DIRECTIONS.** v16.40 stopped a circuit
+  stop being renamed, because the add flow and the return-leg builder test for
+  the literal name. The reverse was open: a normal waypoint renamed to PATTERN
+  kept `isPattern` false and started being treated as a circuit stop by both - a
+  fix on the ground that the route builder thinks is a lap in the air. A name
+  that merely CONTAINS the word is still fine.
+- **L8: THE SAVED-ROUTE REFERENCE TRAVELS WITH THE PLAN.** `loadedRouteRef` is
+  what makes the save dialog offer `Update "X"` first, and nothing cleared it -
+  so after undoing back PAST the load, or clearing everything, or importing a
+  file, the dialog still offered to update X with a plan that had nothing to do
+  with X, and taking that offer overwrote the saved route.
+  - **UNDO IS NOT "FORGET X", THOUGH**, which is why it is not simply cleared:
+    undo one waypoint off a loaded route and it IS still that route. The
+    reference is pushed and popped WITH the undo state; only a wholesale
+    replacement (clear-all, an import) drops it outright.
+- **L10: A CIRCUIT ROW IS FORMATTED LIKE EVERY OTHER ROW ON THE FORM.** `accBurn`
+  was passed through raw, so a running total of 3.4000000000000004 printed in
+  full while the rows above and below it read 3.4 - and `String(row.pl)` printed
+  the literal "NaN", which is H2 surviving in this one row. `accDist` is left as
+  a string on purpose: `one('')` prints 0.0, because `Number('')` is 0 and
+  `isFinite` says yes.
+- **L2: THE LOCKFILE IS THE THIRD PLACE THE VERSION LIVES**, and it sat at
+  16.33.0 for eight releases, so every `npm install` rewrote it and dirtied the
+  tree - which trains you to ignore a lockfile diff, the one diff worth reading.
+  The build now fails when it drifts, alongside the APP_VERSION check.
+- **L4: A CLOCK BEFORE THE DEPARTURE MARKS THE DAY TOO** (`23:30-1`). Latent -
+  `accMins` is always forward - but it is the same defect the "+1" exists to
+  prevent, in the other direction.
+- **L9: A LOOP THAT HOLDS THE ASSERTIONS STATES ITS SIZE FIRST.** Five
+  `for (const x of set.features / .sectors / .aerodromes)` loops carried the
+  substantive checks and would have passed silently on an empty dataset.
+
+WHAT WAS ALREADY DONE AND IS NOT REPEATED HERE: M2 (an unrecognised import
+reporting "Import complete") landed at v16.44, and L6 (`defaultOatTouched` being
+assigned from an inline attribute) is a note about what would break if the page
+script were ever wrapped - it is a constraint on roadmap item 18, not a defect.
 
 ## One escaper, applied everywhere (v16.47, item 14 - H3 and the rest of H1)
 
