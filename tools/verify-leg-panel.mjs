@@ -229,6 +229,50 @@ const painted = await page.evaluate(() => [...document.querySelectorAll('.toc-la
 check(painted.filter((t) => /TOC/.test(t) && !/BOC/.test(t)).length === 1,
   'one continuous climb paints exactly one TOC: ' + JSON.stringify(painted));
 
+// ---- A STUCK DRAG HAS AN EXIT (v16.46) ------------------------------------
+// The drag used to end only on a mouseup, so Escape / a blur / a right-click
+// left the map with dragging disabled and the via following a button-less
+// cursor. jsdom cannot prove the map was given back; measure it.
+await page.evaluate(async () => {
+  flights = [{ id: 1, title: 'D', depElev: 254, waypoints: [
+    { lat: 68.50, lng: 18.50, name: 'A', alt: 254,  oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.50, lng: 18.50, name: 'B', alt: 3000, oat: 0, wdir: 0, wspd: 0, var: -11 }] }];
+  activeFlightIndex = 0;
+  map.setView([69.0, 18.5], 8, { animate: false });
+  await new Promise((r) => setTimeout(r, 320));
+  refreshMap(); renderAllFlightTables();
+});
+await page.waitForTimeout(320);
+const midPt = await page.evaluate(() => {
+  const p = map.latLngToContainerPoint([69.0, 18.5]);
+  const r = document.getElementById('map').getBoundingClientRect();
+  return [r.left + p.x, r.top + p.y];
+});
+const viaCount = () => page.evaluate(() =>
+  (flights[0].waypoints[1].via || []).length);
+check(await viaCount() === 0, 'the route starts with no via points');
+await page.mouse.move(midPt[0], midPt[1]);
+await page.mouse.down();
+await page.mouse.move(midPt[0] + 40, midPt[1] + 25, { steps: 6 });
+await page.waitForTimeout(120);
+const mid = await page.evaluate(() => ({ dragging: !!lineDrag, mapDrag: map.dragging.enabled() }));
+check(mid.dragging && mid.mapDrag === false,
+  'a press-drag really captured the map: ' + JSON.stringify(mid));
+await page.keyboard.press('Escape');
+await page.waitForTimeout(250);
+const freed = await page.evaluate(() => ({ dragging: !!lineDrag, mapDrag: map.dragging.enabled() }));
+check(!freed.dragging, 'Escape ended the drag');
+check(freed.mapDrag === true, 'Escape gave map panning back: ' + JSON.stringify(freed));
+check(await viaCount() === 0, 'Escape took the via back out');
+// ...and the map is usable again: a fresh drag must still work.
+await page.mouse.up();
+await page.mouse.move(midPt[0], midPt[1]);
+await page.mouse.down();
+await page.mouse.move(midPt[0] + 30, midPt[1] + 15, { steps: 4 });
+await page.mouse.up();
+await page.waitForTimeout(250);
+check(await viaCount() === 1, 'a new drag after the abort still bends the line');
+
 // ---- right-clicking a WAYPOINT is the OTHER panel (v16.40) -----------------
 // A waypoint sits ON the route line, and right-clicking the line opens the leg
 // panel. jsdom cannot prove which one a real right-click reaches, so measure it:

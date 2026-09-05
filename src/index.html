@@ -1032,7 +1032,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.45';
+    const APP_VERSION = '16.46';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1776,12 +1776,60 @@
           html: `<div class="via-dot dragging" style="background:${color};"></div>`,
           iconAnchor: [0, 0] })
       }).addTo(map);
-      lineDrag = { fIdx: fIdx, v: made.v, ghost: ghost };
+      lineDrag = { fIdx: fIdx, wp: made.wp, v: made.v, ghost: ghost };
       map.dragging.disable();
       map.on('mousemove', onLineDragMove);
       map.on('mouseup', endLineDrag);
       document.addEventListener('mouseup', endLineDrag);
+      // A MOUSEUP IS NOT THE ONLY WAY A DRAG ENDS (v16.46).
+      //
+      // It used to be the only way OUT, so anything that swallowed the mouseup
+      // left the map stuck: dragging disabled, the via still following a cursor
+      // with no button held, and `|| lineDrag` blocking any new gesture until
+      // some later mouseup happened to arrive. Alt-tabbing and right-clicking
+      // mid-drag (the native context menu eats the mouseup) are the realistic
+      // triggers; Escape and a window blur are the ones a pilot reaches for.
+      window.addEventListener('blur', cancelLineDrag);
+      document.addEventListener('visibilitychange', cancelLineDrag);
+      document.addEventListener('contextmenu', cancelLineDrag);
+      document.addEventListener('pointercancel', cancelLineDrag);
       drawLiveLine(fIdx);
+    }
+
+    /** Every listener the drag installs, removed in one place so no exit path
+     *  can leave one behind. */
+    function releaseLineDragListeners() {
+      map.off('mousemove', onLineDragMove);
+      map.off('mouseup', endLineDrag);
+      document.removeEventListener('mouseup', endLineDrag);
+      window.removeEventListener('blur', cancelLineDrag);
+      document.removeEventListener('visibilitychange', cancelLineDrag);
+      document.removeEventListener('contextmenu', cancelLineDrag);
+      document.removeEventListener('pointercancel', cancelLineDrag);
+    }
+
+    /**
+     * Abandon the drag: take the via back out and leave the route as it was.
+     *
+     * Escape means "forget this", not "drop it wherever the cursor happens to
+     * be" - the via was created by the press that started the drag, so undoing
+     * the gesture has to remove it. It is spliced out by identity, which is why
+     * beginLineDrag keeps the waypoint it was inserted on.
+     */
+    function cancelLineDrag() {
+      if (!lineDrag) return;
+      const { wp, v, ghost } = lineDrag;
+      releaseLineDragListeners();
+      map.removeLayer(ghost);
+      map.dragging.enable();
+      lineDrag = null;
+      lineDragEndedAt = Date.now();
+      if (wp && Array.isArray(wp.via)) {
+        const i = wp.via.indexOf(v);
+        if (i >= 0) wp.via.splice(i, 1);
+        if (wp.via.length === 0) delete wp.via;
+      }
+      refreshMap(); renderAllFlightTables(); saveActiveState();
     }
 
     function onLineDragMove(e) {
@@ -1794,9 +1842,7 @@
 
     function endLineDrag() {
       if (!lineDrag) return;
-      map.off('mousemove', onLineDragMove);
-      map.off('mouseup', endLineDrag);
-      document.removeEventListener('mouseup', endLineDrag);
+      releaseLineDragListeners();
       map.removeLayer(lineDrag.ghost);
       map.dragging.enable();
       lineDrag = null;
@@ -2149,10 +2195,24 @@
         say("Cannot remove the only flight plan.", "warn");
         return;
       }
+      // AN INDEX IS NOT AN IDENTITY ACROSS AN AWAIT (discipline rule 7). If the
+      // flight list changes while the dialog is open, `fIdx` points at a
+      // different plan and this deletes the wrong one. Remember WHICH flight was
+      // asked about and find it again afterwards.
+      const targetId = flights[fIdx] && flights[fIdx].id;
       const ok = await confirmDialog(`Delete ${flightTitle(flights[fIdx])}?`,
         'The flight plan and its waypoints are removed from this mission. Undo (Ctrl+Z) restores it.',
         { okLabel: 'Delete flight', danger: true });
       if (ok) {
+        fIdx = flights.findIndex((f) => f.id === targetId);
+        if (fIdx < 0) {
+          say('That flight plan is no longer there - nothing was deleted.', 'warn');
+          return;
+        }
+        if (flights.length <= 1) {
+          say('Cannot remove the only flight plan.', 'warn');
+          return;
+        }
         pushUndoState();
         flights.splice(fIdx, 1);
         // Keep pointing at the SAME flight the user had active. Removing an
@@ -4172,8 +4232,17 @@
         { okLabel: 'Apply to all legs' });
       if (!ok) return;
 
+      // RE-READ AFTER THE AWAIT (discipline rule 7). `undoLast` rebinds
+      // `flights` to a fresh copy, so the `fl` captured before the dialog can be
+      // detached from the live plan - the loop below would then "succeed" while
+      // changing nothing the pilot can see.
+      const live = flights[activeFlightIndex];
+      if (!live || live.waypoints.length === 0) {
+        say('The flight changed while the dialog was open - nothing was applied.', 'warn');
+        return;
+      }
       pushUndoState();
-      fl.waypoints.forEach((wp, idx) => {
+      live.waypoints.forEach((wp, idx) => {
         wp.oat  = oat;
         wp.wdir = wdir;
         wp.wspd = wspd;
@@ -4211,11 +4280,42 @@
     // Ctrl+Z / Ctrl+Shift+Z (Cmd on Mac) drive the same multi-step undo/redo
     // stacks as the toolbar buttons (up to 30 states). Keystrokes inside
     // text fields are left alone so native input editing keeps its own undo.
+    /** Every overlay that owns the keyboard while it is up. `dialogIsOpen()`
+     *  covers everything dialog.js puts on screen; the rest are the page's own
+     *  modals and the leg panel. */
+    const OVERLAY_IDS = ['sera-modal', 'wind-modal', 'settings-modal', 'help-modal', 'leg-modal'];
+    function anyOverlayOpen() {
+      if (typeof dialogIsOpen === 'function' && dialogIsOpen()) return true;
+      return OVERLAY_IDS.some((id) => {
+        const el = document.getElementById(id);
+        return el && el.style.display === 'flex';
+      });
+    }
+
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        ['sera-modal', 'wind-modal', 'settings-modal', 'help-modal'].forEach(closeModal);
+        // A drag first: it is the state that traps the map, so Escape must
+        // reach it even with a modal somehow open on top.
+        if (lineDrag) { cancelLineDrag(); return; }
+        if (typeof dialogIsOpen === 'function' && dialogIsOpen()) return;   // dialog.js owns its own Escape
+        OVERLAY_IDS.forEach(closeModal);
+        closeLegModal();
         return;
       }
+      // AN OVERLAY OWNS THE KEYBOARD WHILE IT IS UP (v16.46, the author's rule:
+      // "only escape and relevant key bindings on dialog popups, all other
+      // keybindings disabled during popup").
+      //
+      // Ctrl+Z used to fire straight through a confirm dialog. `undoLast`
+      // rebinds `flights` to a fresh copy, so the handler waiting on that dialog
+      // was left holding a DETACHED flight: it then "succeeded" and changed
+      // nothing, or - holding an index - hit the wrong flight. Reproduced on
+      // "Apply defaults to every leg": undo ran behind the dialog, the dialog
+      // stayed open, and applying afterwards moved no altitude at all.
+      //
+      // This is also the guard the 1-9 flight-plan shortcut needs (roadmap 9):
+      // dialog.js binds those digits to pick an option.
+      if (anyOverlayOpen()) return;
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key && e.key.toLowerCase() === 'z') {
         const t = e.target;
         const tag = t && t.tagName ? t.tagName.toUpperCase() : '';

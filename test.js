@@ -4352,6 +4352,82 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
     ' legs after a circuit, 0 violations');
 });
 
+console.log('\n=== 62a000. Stuck states and dialogs (v16.46) ===');
+TA('Ctrl+Z is inert while a dialog is open, so no handler acts on a detached flight', async () => {
+  // H6: undoLast rebinds `flights` to a fresh copy, so a handler waiting on a
+  // dialog was left holding a DETACHED flight - it then "succeeded" and changed
+  // nothing. Reproduced on "Apply defaults to every leg".
+  ev(SEED);
+  // THERE MUST BE SOMETHING TO UNDO, or an unguarded Ctrl+Z changes nothing and
+  // the test passes either way. Rename a waypoint first: that pushes an undo
+  // state, so a leaked Ctrl+Z would visibly put the old name back.
+  ev(`renameWaypoint(0, 1, 'RENAMED');`);
+  assert(ev('flights[0].waypoints[1].name') === 'RENAMED', 'the setup rename did not take');
+  ev(`document.getElementById('def-alt').value = 7000;
+      document.getElementById('def-oat').value = -5;`);
+  const p = ev('applyBulkDefaultsToActive()');
+  await tick();
+  assert(doc.getElementById('app-dialog'), 'the confirm dialog did not open');
+  // Fire Ctrl+Z the way the keyboard would, with the dialog up.
+  ev(`document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].name') === 'RENAMED',
+    'Ctrl+Z ran behind the dialog and reverted the rename to ' + ev('flights[0].waypoints[1].name'));
+  assert(doc.getElementById('app-dialog'), 'the dialog was closed by the undo');
+  answerDialog('Apply to all legs');
+  await p; await tick();
+  const alts = ev('flights[0].waypoints.map(w => w.alt)');
+  assert(alts[1] === 7000 && alts[2] === 7000,
+    'applying after the dialog changed nothing: ' + JSON.stringify(alts));
+});
+T('every overlay owns the keyboard while it is up', () => {
+  const fn = APP_SRC.split('function anyOverlayOpen()')[1].split('\n    document.addEventListener')[0];
+  assert(/dialogIsOpen/.test(fn), 'dialog.js state is not consulted');
+  for (const id of ['sera-modal', 'wind-modal', 'settings-modal', 'help-modal', 'leg-modal'])
+    assert(APP_SRC.includes("'" + id + "'"), 'overlay not covered: ' + id);
+  const handler = APP_SRC.split("document.addEventListener('keydown'")[1].split('\n    }')[0];
+  assert(/if \(anyOverlayOpen\(\)\) return;/.test(handler),
+    'the keydown handler no longer stands down while an overlay is open');
+  // ...but Escape must still get through, and reach a stuck drag first.
+  const esc = handler.split("if (e.key === 'Escape')")[1].split('return;')[0];
+  assert(/lineDrag/.test(esc), 'Escape no longer cancels a stuck line drag');
+});
+TA('Escape aborts a line drag and gives the map back', () => {
+  // H5: the drag had no exit but a mouseup, so Escape, a blur, a right-click or
+  // alt-tab left the map with dragging disabled and the via following a cursor
+  // that had no button held.
+  ev(SEED);
+  const wpBefore = ev('flights[0].waypoints[1].via ? flights[0].waypoints[1].via.length : 0');
+  ev(`beginLineDrag(0, { lat: 69.14, lng: 18.26 })`);
+  assert(ev('lineDrag !== null'), 'the drag did not start');
+  ev(`document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  assert(ev('lineDrag === null'), 'Escape did not end the drag');
+  const after = ev('flights[0].waypoints[1].via ? flights[0].waypoints[1].via.length : 0');
+  assert(after === wpBefore, 'Escape left the via behind: ' + wpBefore + ' -> ' + after);
+  return Promise.resolve();
+});
+T('a drag installs and removes the same set of listeners', () => {
+  // Every exit path goes through one release function, so no path can leave a
+  // listener behind and keep the map half-captured.
+  const begin = APP_SRC.split('function beginLineDrag')[1].split('function releaseLineDragListeners')[0];
+  const release = APP_SRC.split('function releaseLineDragListeners()')[1].split('\n    }')[0];
+  for (const ev2 of ['blur', 'visibilitychange', 'contextmenu', 'pointercancel', 'mouseup']) {
+    assert(begin.includes("'" + ev2 + "'"), 'the drag does not listen for ' + ev2);
+    assert(release.includes("'" + ev2 + "'"), 'the drag never removes its ' + ev2 + ' listener');
+  }
+  for (const f of ['endLineDrag', 'cancelLineDrag'])
+    assert(APP_SRC.includes('function ' + f), f + ' is gone');
+  assert(/releaseLineDragListeners\(\)/.test(APP_SRC.split('function endLineDrag')[1].split('\n    }')[0]),
+    'endLineDrag no longer uses the shared release');
+});
+T('deleting a flight plan after a dialog acts on the flight that was ASKED about', () => {
+  // H6, the index half: fIdx was captured before the await, so a list that
+  // changed meanwhile meant deleting the wrong plan.
+  const fn = APP_SRC.split('async function removeFlightPlan')[1].split('\n    function ')[0];
+  assert(/targetId/.test(fn) && /findIndex/.test(fn),
+    'removeFlightPlan still trusts the index it captured before the dialog');
+});
+
 console.log('\n=== 62a00. Load and boot robustness (v16.44) ===');
 T('sanitiseFlights coerces every field, and never mutates its input', () => {
   // M1: it checked coordinate finiteness and passed everything else through, so
