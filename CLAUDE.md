@@ -1424,7 +1424,8 @@ and H2 all hold exactly as described.
      (measured: `B->ENTC` entered at 2500 ft where B is planned at 6000). It can
      HIDE a descent shortfall the banner would otherwise show. Fix the cursor,
      and add pattern waypoints to the pin sweep - it has never generated one.
-**12. Robustness of load and boot.** H4 (a corrupt `c182_custom_routes` /
+**12. DONE at v16.44 - robustness of load and boot.** See the section below.
+   ~~original entry:~~ H4 (a corrupt `c182_custom_routes` /
    `c182_custom_missions` throws out of the top-level script - no map, no table,
    no way back) and H7 (route load and import bypass `sanitiseFlights`, and the
    live plan is left half-assigned when the throw comes). NOTE: the author has
@@ -1726,6 +1727,48 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## Every door into the live plan goes through the sanitiser (v16.44, item 12)
+
+H4, H7, M1 and M2. The engine was hardened long ago; the shell was trusting, and
+these are the four places that showed it.
+
+- **M1: `sanitiseFlights` NOW COERCES, AND NO LONGER MUTATES ITS INPUT.** It used
+  to check coordinate finiteness and pass everything else through untouched, so
+  `lat: "69.3"` reached `toFixed` (a string has none - that is what took the
+  daylight card down, and with it the banner), `name` could be an object that
+  printed `[object Object]`, `laps` could be negative and `isPattern` a string.
+  It also reassigned and deleted `via` on the CALLER's objects.
+  - **ABSENT STAYS ABSENT.** `num()` returns NaN for null/undefined/'' rather
+    than 0, so a missing OAT or wind is still NAMED by the banner. Coercing it to
+    a number would be C2 in a new place. A TYPED 0 is a real value and survives.
+  - The key list is EXPLICIT and an unknown key is dropped. Add a field there
+    when the app gains one; the alternative is a future feature's half-written
+    field riding into the live plan from an old file.
+- **H4: A CORRUPT SAVED-ROUTE LIBRARY NO LONGER BRICKS THE BOOT.** The two
+  getters ran `JSON.parse` with no try/catch and are called from
+  `populateRouteDropdown()` at boot, BEFORE `refreshMap()` and
+  `renderAllFlightTables()` - so a partial write threw out of the top-level
+  script and left no map, no table and no way to recover from inside the app.
+  `readStoredLibrary` degrades to `{}` and says so once. A broken library costs
+  the SAVED ROUTES, never the plan in front of the pilot.
+- **H7: A MALFORMED ROUTE IS REFUSED BEFORE ANYTHING IS TOUCHED.** The route
+  branch assigned the stored value onto the live flight and only THEN walked it,
+  so a bad entry threw with `flights[i].waypoints` already replaced. Every path -
+  route load, `parsed.routes`, `parsed.missions`, `parsed.current`, a bare array
+  - now goes through `sanitiseFlights` first, and a library entry that is not an
+  array of waypoints is dropped with a count rather than stored.
+  - The author ruled route files TRUSTED, which lowers this as a SECURITY matter.
+    It does not lower it as a ROBUSTNESS one: the file that breaks a plan is
+    usually one of your own, saved before a field existed.
+- **M2: AN UNRECOGNISED FILE IS NOT AN IMPORT.** `{"hello":"world"}` matched no
+  branch, changed nothing, and said "Import complete." The toast now names what
+  actually landed ("Imported 2 routes, aircraft settings.") and refuses to claim
+  success when nothing did.
+- **NO HOUSE DEFAULT ELEVATION.** The four `|| 254` fallbacks were ENDU's field
+  elevation standing in for "unknown" - an invented climb datum on every leg of
+  a sea-level route. Gone; the departure elevation is set only from a finite
+  published altitude, and a test greps for the number so it cannot return.
 
 ## Broken output is never presented as clean (v16.43, roadmap item 11)
 
