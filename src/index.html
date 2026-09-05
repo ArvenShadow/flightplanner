@@ -1032,7 +1032,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.42';
+    const APP_VERSION = '16.43';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2585,7 +2585,43 @@
       document.getElementById('wind-modal').style.display = 'none';
     }
 
+    /**
+     * AN EMPTY BOX IS NOT CALM WIND, AND IT IS NOT 0 °C (v16.43).
+     *
+     * `Number(x) || 0` wrote a 0 into every blank field, so a waypoint whose
+     * OAT or wind is genuinely UNKNOWN - an imported file, a route saved before
+     * those fields existed, a box cleared by hand - was silently given calm wind
+     * at 0 °C, the table computed happily, and the red banner went from naming
+     * the missing field to hidden. That is the v16.20 rule inverted: a missing
+     * value must stay missing and be NAMED, because assuming calm wind is
+     * exactly the plausible wrong answer this planner refuses.
+     *
+     * So a blank box now BLOCKS the save and is highlighted. `Number()` still
+     * accepts a typed 0, which is a real value and a different thing entirely.
+     */
     function saveWindModal() {
+      const blanks = [];
+      flights.forEach((fl, fIdx) => {
+        for (let i = 0; i < fl.waypoints.length - 1; i++) {
+          for (const kind of ['dir', 'spd', 'oat']) {
+            const el = document.getElementById(`wmodal-${kind}-${fIdx}-${i+1}`);
+            if (!el) continue;
+            const empty = String(el.value).trim() === '';
+            el.classList.toggle('wmodal-missing', empty);
+            if (empty) blanks.push({ el, name: fl.waypoints[i + 1].name, kind });
+          }
+        }
+      });
+      if (blanks.length) {
+        blanks[0].el.focus();
+        const names = [...new Set(blanks.map((b) => b.name))];
+        say(blanks.length + ' box' + (blanks.length > 1 ? 'es are' : ' is') + ' empty (' +
+            names.slice(0, 3).join(', ') + (names.length > 3 ? ', …' : '') +
+            '). An empty box is not calm wind or 0 °C — fill it in, or leave the ' +
+            'modal and the plan keeps saying the value is missing.', 'warn', 8000);
+        return;
+      }
+
       pushUndoState();
       flights.forEach((fl, fIdx) => {
         for (let i = 0; i < fl.waypoints.length - 1; i++) {
@@ -2594,11 +2630,11 @@
           const oatInput = document.getElementById(`wmodal-oat-${fIdx}-${i+1}`);
 
           if (dirInput && spdInput) {
-            fl.waypoints[i + 1].wdir = Number(dirInput.value) || 0;
-            fl.waypoints[i + 1].wspd = Number(spdInput.value) || 0;
+            fl.waypoints[i + 1].wdir = Number(dirInput.value);
+            fl.waypoints[i + 1].wspd = Number(spdInput.value);
           }
           if (oatInput) {
-            fl.waypoints[i + 1].oat = Number(oatInput.value) || 0;
+            fl.waypoints[i + 1].oat = Number(oatInput.value);
           }
         }
       });
@@ -3938,9 +3974,23 @@
       remEl.innerText = runningFuelRemaining.toFixed(1) + ` ${fuelLabel(fuelUnit)}`;
       remEl.classList.toggle('low-fuel', runningFuelRemaining < getReserveDisplayUnits());
 
-      updateDaylightCard(runningAccTime, sectorTimeWindows);
-      renderOfpPrintSheets();
-      runIntegrityCheck();
+      // THE SAFETY NET RUNS FIRST, AND NOTHING BEFORE IT MAY SKIP IT (v16.43).
+      //
+      // The order used to be card -> sheets -> check, with nothing guarding it,
+      // so a throw in the daylight card (a string coordinate reaching toFixed
+      // is enough) silently skipped the banner AND left the PREVIOUS plan's
+      // sheets in the print host. Now the check runs first and its verdict is
+      // handed to the sheets, and the card cannot take either down with it.
+      let problems = [];
+      try { problems = runIntegrityCheck(); }
+      catch (e) { problems = ['The integrity check itself failed to run: ' + (e && e.message) + '. DO NOT USE this output.']; }
+      try { updateDaylightCard(runningAccTime, sectorTimeWindows); }
+      catch (e) {
+        problems = problems.concat('The daylight card failed to render: ' + (e && e.message) +
+          '. Sunrise/sunset and the day-VFR verdict are NOT shown - check AIP Norge GEN 2.7.');
+        showIntegrityProblems(problems);
+      }
+      renderOfpPrintSheets(problems);
     }
 
     function createRowHTML(fromName, toName, type, altDisplay, oat, tas, tt, magVar, varIndicator, mt, wdir, wspd, wca, mh, gs, dist, threeMinNM, legTime, accTime, ff, legBurn, accBurn, remFuel, fIdx, wpIndex, showDelete) {
@@ -4212,7 +4262,15 @@
         fuelRemaining: remEl ? parseFloat(remEl.innerText !== undefined ? remEl.innerText : remEl.textContent) : NaN
       });
 
+      showIntegrityProblems(problems);
+      return problems;
+    }
+
+    /** Paint the red banner. Split out so a failure discovered AFTER the check
+     *  (the daylight card throwing) can still reach the same banner. */
+    function showIntegrityProblems(problems) {
       const banner = document.getElementById('integrity-banner');
+      if (!banner) return;
       if (problems.length === 0) {
         banner.style.display = 'none';
         banner.innerHTML = '';
@@ -4221,7 +4279,6 @@
         banner.style.display = 'block';
         if (typeof console !== 'undefined') console.warn('Integrity check:', problems);
       }
-      return problems;
     }
 
     // Compact detail line under a leg row: climb/descent portion and via
@@ -4380,12 +4437,30 @@
         </section>`;
     }
 
-    function renderOfpPrintSheets() {
+    /**
+     * THE BANNER MUST REACH THE PAPER (v16.43).
+     *
+     * The print rule hides everything on the page and shows only `#ofp-print`,
+     * so the red banner - the app's own "do not use this plan" verdict - was
+     * hidden along with it. The one output that goes on company paperwork was
+     * the one output the guard could not reach. A plan the app has declared
+     * broken now prints with a band across every sheet saying so.
+     */
+    function renderOfpPrintSheets(problems) {
       const host = document.getElementById('ofp-print');
       if (!host) return;
+      const bad = Array.isArray(problems) && problems.length > 0;
+      const esc = (t) => String(t == null ? '' : t)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const band = bad
+        ? '<div class="ofp-void"><b>INTEGRITY CHECK FAILED — DO NOT USE</b>' +
+          '<span>' + esc(problems[0]) +
+          (problems.length > 1 ? ' (+' + (problems.length - 1) + ' more — see the planner)' : '') +
+          '</span></div>'
+        : '';
       let html = '';
       for (const f of ofpPrintModel)
-        for (const sheet of buildOfpSheets(f.meta, f.rows)) html += ofpSheetHTML(sheet);
+        for (const sheet of buildOfpSheets(f.meta, f.rows)) html += band + ofpSheetHTML(sheet);
       host.innerHTML = html;
     }
 

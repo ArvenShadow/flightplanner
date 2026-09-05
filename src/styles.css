@@ -1079,6 +1079,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
        Column widths come from ofpform.js (measured off the real form), so
        nothing here sets a column width - only type, rules and shading.
        ===================================================================== */
+    /* An empty wind/OAT box blocks the save and says so. */
+    .wmodal-missing {
+      border: 2px solid #e53e3e !important;
+      background: #fff5f5 !important;
+    }
+    body.dark-mode .wmodal-missing { background: #3b1111 !important; }
+
     #ofp-print { display: none; }
 
     @page { size: A4 landscape; margin: 6mm; }
@@ -1110,6 +1117,19 @@ svg.leaflet-image-layer.leaflet-interactive path {
         font-family: "Helvetica Neue", Arial, sans-serif; color: #000;
       }
       .ofp-sheet:last-child { break-after: auto; page-break-after: auto; }
+
+      /* The app's "do not use" verdict, on the paper. Solid black on white like
+         the rest of the sheet - it has to survive a mono printer. */
+      #ofp-print .ofp-void {
+        border: 1.2pt solid #000 !important;
+        padding: 1.5mm 2mm; margin-bottom: 2mm;
+        font-size: 9pt; display: flex; gap: 3mm; align-items: baseline;
+        background: repeating-linear-gradient(45deg, #000 0 .4mm, #fff .4mm 2.2mm) !important;
+      }
+      #ofp-print .ofp-void b, #ofp-print .ofp-void span {
+        background: #fff !important; padding: 0 1.5mm;
+      }
+      #ofp-print .ofp-void span { font-size: 7pt; }
 
       .ofp-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 2mm; }
       .ofp-title { font-size: 16pt; font-weight: 400; letter-spacing: .2px; white-space: nowrap; padding-right: 4mm; }

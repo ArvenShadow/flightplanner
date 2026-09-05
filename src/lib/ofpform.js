@@ -109,8 +109,17 @@ export function groupSpans() {
  *  box for the pilot's pen - never a zero, a dash or an invented value. */
 const BLANK = '';
 
-const pad3 = (/** @type {number} */ v) => String(Math.round(v)).padStart(3, '0');
+// EVERY NUMERIC CELL GOES THROUGH A FINITE CHECK (v16.43). `pad3` and a raw
+// `String()` printed the literal "NaN" into TAS, TT, VAR, Dir/Vel, WCA, PL and
+// GS - seven cells of a company form, on a plan the app had already declared
+// unusable. A figure that is not a number is an EMPTY BOX for the pilot's pen,
+// exactly like the fields we deliberately never fill.
+const pad3 = (/** @type {number} */ v) =>
+  (isFinite(v) ? String(Math.round(v)).padStart(3, '0') : BLANK);
 const one = (/** @type {number} */ v) => (isFinite(v) ? Number(v).toFixed(1) : BLANK);
+const whole = (/** @type {number} */ v) => (isFinite(v) ? String(Math.round(v)) : BLANK);
+const signed = (/** @type {number} */ v) =>
+  (isFinite(v) ? (v > 0 ? '+' : '') + Math.round(v) : BLANK);
 
 /**
  * One flight's rows as the form's cells: strings, ready to print.
@@ -138,14 +147,16 @@ export function ofpRowCells(row) {
       ato: BLANK, diff: BLANK, actRem: BLANK, freq: BLANK
     };
   }
+  const wv = isFinite(row.wdir) && isFinite(row.wspd)
+    ? pad3(row.wdir) + '/' + String(Math.round(row.wspd)).padStart(2, '0') : BLANK;
   return {
     from: row.from,
-    tas: String(Math.round(row.tas)),
+    tas: whole(row.tas),
     tt: pad3(row.tt),
-    var: (row.var > 0 ? '+' : '') + Math.round(row.var),
+    var: signed(row.var),
     mt: row.mt === null || row.mt === undefined ? '---' : pad3(row.mt),
-    wv: pad3(row.wdir) + '/' + String(Math.round(row.wspd)).padStart(2, '0'),
-    wca: (row.wca > 0 ? '+' : '') + Math.round(row.wca),
+    wv,
+    wca: signed(row.wca),
     accDist: one(row.accDist),
     accTime: row.accTime,
     ff: one(row.ff),
@@ -153,9 +164,9 @@ export function ofpRowCells(row) {
     accBurn: one(row.accBurn),
     to: row.to,
     msa: BLANK,
-    pl: String(Math.round(row.alt)),
+    pl: whole(row.alt),
     mh: row.mh === null || row.mh === undefined ? '---' : pad3(row.mh),
-    gs: String(Math.round(row.gs)),
+    gs: whole(row.gs),
     dist: one(row.dist),
     time: row.time,
     eto: row.eto || BLANK,

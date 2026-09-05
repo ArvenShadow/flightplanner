@@ -1399,7 +1399,11 @@ author's replies inline. It is the DETAIL; this is the ordered plan. Three
 findings were re-reproduced independently before this list was written - C1, C2
 and H2 all hold exactly as described.
 
-**11. THE "NEVER PRESENT BROKEN OUTPUT AS CLEAN" BLOCK - do this first.**
+**11. DONE at v16.43 - THE "NEVER PRESENT BROKEN OUTPUT AS CLEAN" BLOCK.**
+   See "Broken output is never presented as clean" below. C1, C2, H2 and the
+   half of H1 that shares the same three lines are fixed; the invariant they
+   share is asserted, and the pin sweep now generates circuit stops.
+   ~~do this first~~
    C1, C2 and H2 are one class, not three bugs: the project's refuse-to-invent
    discipline bypassed at an edge. C2 turns UNKNOWN into calm-and-0C, H2 turns
    INVALID into a printable company form, C1 turns STALE into planned. Fix them
@@ -1722,6 +1726,53 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## Broken output is never presented as clean (v16.43, roadmap item 11)
+
+Four audit findings, one class: the refuse-to-invent discipline bypassed at an
+edge. Fixed together because they share an invariant - *a plan with missing or
+invalid inputs must not produce clean-looking output on ANY surface.*
+
+- **C1: A CIRCUIT STOP NOW BREAKS THE CHAIN FORWARD AS WELL AS BACKWARD.** It
+  always broke the DESCENT chain, but the forward `alt` cursor survived the
+  pattern pair, so the first real leg after a circuit was scheduled from the
+  altitude BEFORE it. On `ENDU(254) -> A(2500) -> PATTERN -> B(6000) -> ENTC(31)`
+  the last leg entered at 2500 while the column said B is crossed at 6000 - and
+  the stale figure HID a 7.4-minute descent shortfall, i.e. an arrival that
+  cannot be flown. One line (`alt = null`), and the next leg starts from its own
+  `from.alt`, which is what the independent `computeLegTotals` path rendering the
+  PATTERN->B row already assumed. The two agree again.
+  - WHAT ALTITUDE A CIRCUIT RESUMES FROM (field elevation after a full stop,
+    circuit altitude after a touch & go) is roadmap item 17 and is a SEPARATE
+    question: the stale cursor is wrong under every answer to it.
+  - **THE PIN SWEEP HAD NEVER GENERATED A PATTERN WAYPOINT**, which is why this
+    survived every run of it. It does now (523 legs after a circuit per run), and
+    reverting the one-line fix produces 114 violations plus the targeted test -
+    checked, because a guard nobody has seen fail is not known to guard anything.
+- **C2: AN EMPTY BOX IN THE WIND MATRIX IS NOT CALM WIND AND NOT 0 °C.**
+  `Number(x) || 0` wrote a 0 into every blank field, so a waypoint whose wind or
+  OAT was genuinely UNKNOWN got calm wind at 0 °C and the red banner went from
+  naming the missing field to hidden - the v16.20 rule exactly inverted. A blank
+  box now BLOCKS the save, is outlined red, and the toast names the waypoints.
+  `Number()` still accepts a typed 0, which is a real value and a different thing.
+- **H2: THE BANNER REACHES THE PAPER.** Two failures at once, both mine from
+  v16.41. `pad3`/`String(Math.round())` printed the literal `NaN` into seven
+  cells (TAS, TT, VAR, Dir/Vel, WCA, PL, GS); and `body > *` in the print rule
+  hid the red banner along with the rest of the page, so the one output that goes
+  on company paperwork was the one output the guard could not reach.
+  - Every numeric cell now goes through a finite check and blanks - an empty box
+    for the pilot's pen, exactly like the fields we deliberately never fill.
+  - A broken plan prints an `INTEGRITY CHECK FAILED - DO NOT USE` band above
+    EVERY sheet, naming the first problem and counting the rest. Solid black on
+    white so it survives a mono printer. `verify-ofp-print.mjs` measures the
+    painted box (1400x27 px, 4 bands for 4 sheets), not just the markup.
+- **H1 (the half that shares those lines): THE SAFETY NET RUNS FIRST.** The order
+  was card -> sheets -> check with nothing guarding it, so a throw in the
+  daylight card skipped the banner AND left the PREVIOUS plan's sheets in the
+  print host. Now the check runs first, its verdict is handed to the sheets, and
+  the card is wrapped so it can only add a banner line, never remove one.
+  `showIntegrityProblems` is split out so a failure discovered after the check
+  still reaches the same banner.
 
 ## Dialogs (v16.11)
 
