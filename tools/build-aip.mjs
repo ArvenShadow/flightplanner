@@ -301,6 +301,21 @@ function parseBlock(nameField, own) {
       continue;
     }
   }
+  // A FREQUENCY WITHOUT A PUBLISHED UNIT IS NOT AN ATS FREQUENCY (v16.42).
+  //
+  // AD 2.18's communication table states every frequency with its unit
+  // (`TFREQUENCY;UOM_FREQ` = MHZ). Some PROSE paragraphs elsewhere on the page
+  // also carry a tagged `VAL_FREQ_TRANS` - ground handling and de-icing
+  // coordination - and those have no unit. Because frequencies are paired with
+  // the preceding service in document order, every one of them was landing on
+  // the last APPROACH service of the aerodrome, so the hover card told a pilot
+  // that Kjevik Approach works 121.780 when that is Wideroe ground handling.
+  //
+  // MEASURED over the 2026-09-03 edition: 10 of 1683 frequencies have no unit,
+  // and all 10 are prose - "Wideroe Ground Handling: 121.780", "De-icing FREQ
+  // 121.780", "De-ice frequency for WGH 121.955", "DEICE COORDINATOR ... FREQ
+  // 131.905". The split is clean, so the unit is the discriminator.
+  for (const s of block.services) s.freqs = s.freqs.filter((q) => q.unit);
   return block;
 }
 
