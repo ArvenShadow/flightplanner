@@ -4229,6 +4229,10 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   const rnd = (() => { let s = 12345; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
   const bad = [];
   let legs = 0, withBoc = 0, withBod = 0, refused = 0, missed = 0, continues = 0;
+  // CIRCUIT STOPS ARE GENERATED NOW (v16.43). This sweep had never produced one,
+  // which is why C1 - the forward altitude cursor surviving a pattern pair -
+  // went unseen through every run of it.
+  let patterns = 0, afterPattern = 0;
   for (let iter = 0; iter < 4000; iter++) {
     const nWp = 2 + Math.floor(rnd() * 3);
     const wps = []; let lat = 68.5 + rnd() * 1.0;
@@ -4246,7 +4250,22 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
       if (rnd() < 0.6) pin[li].bodNM = +(rnd() * legDist * 0.9).toFixed(2);
       if (rnd() < 0.4) pin[li].tocNM = +(rnd() * legDist).toFixed(2);
     }
+    // Drop a circuit stop into the middle of some routes.
+    if (nWp >= 3 && rnd() < 0.35) {
+      const at = 1 + Math.floor(rnd() * (pin.length - 1));
+      pin.splice(at, 0, { ...W('PATTERN', pin[at - 1].lat + 0.01, pin[at - 1].lng, 1000),
+                          isPattern: true, laps: 1 + Math.floor(rnd() * 3) });
+      patterns++;
+    }
     const sch = L2.computeFlightSchedule({ id: 1, waypoints: pin });
+    // THE INVARIANT C1 BROKE: a real leg that follows a break in the chain must
+    // enter at its OWN fix's altitude, never at a leftover cursor value.
+    for (let k = 1; k < sch.length; k++) {
+      if (!sch[k] || sch[k - 1]) continue;
+      afterPattern++;
+      if (Math.abs(sch[k].entryAlt - sch[k].from.alt) > 0.5)
+        bad.push('stale entry altitude after a break on ' + sch[k].i);
+    }
     for (const S of sch) {
       if (!S) continue;
       legs++;
@@ -4309,9 +4328,103 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   assert(refused > 0 && missed > 0, 'the sweep never hit a refused BOD or a missed TOC target');
   assert(bad.length === 0, bad.length + ' violations, first few: ' + [...new Set(bad)].slice(0, 5).join(' | '));
   assert(continues > 0, 'the sweep never produced a climb continuing through a fix');
+  assert(patterns > 100 && afterPattern > 100,
+    'the sweep barely exercised circuit stops: ' + patterns + ' routes, ' + afterPattern + ' legs after one');
   console.log('        ' + legs + ' pinned legs: ' + withBoc + ' with a BOC, ' + withBod +
     ' with a BOD, ' + refused + ' pins refused, ' + missed + ' TOC targets missed, ' +
-    continues + ' climbs continuing through a fix, 0 violations');
+    continues + ' climbs continuing through a fix, ' + afterPattern +
+    ' legs after a circuit, 0 violations');
+});
+
+console.log('\n=== 62a0. Broken output is never presented as clean (v16.43) ===');
+T('a circuit stop breaks the altitude chain FORWARD as well as backward', () => {
+  // C1: the forward cursor kept the previous real leg's exit altitude across a
+  // pattern pair, so the first leg after a circuit was scheduled from a STALE
+  // figure - and could hide a descent shortfall the banner would have shown.
+  const L2 = moduleExports.legs;
+  const wp = (lat, name, alt, x) => ({ lat, lng: 18.5, name, alt, oat: 0, wdir: 0,
+    wspd: 0, var: -11, ...(x || {}) });
+  const sch = L2.computeFlightSchedule({ id: 1, depElev: 254, waypoints: [
+    wp(68.40, 'ENDU', 254), wp(69.00, 'A', 2500),
+    wp(69.02, 'PATTERN', 1000, { isPattern: true, laps: 3 }),
+    wp(69.60, 'B', 6000), wp(69.75, 'ENTC', 31)] });
+  const after = sch[3];
+  assert(after, 'the leg after the circuit was not scheduled');
+  assert(Math.abs(after.entryAlt - 6000) < 1,
+    'the leg after a circuit started from a stale altitude: ' + Math.round(after.entryAlt) +
+    ' instead of its own fix at 6000');
+  // ...and the shortfall the stale figure was hiding is now visible.
+  assert(after.shortfallMin > 1,
+    'the descent shortfall stayed hidden: ' + after.shortfallMin.toFixed(1) + ' min');
+  // THE INVARIANT, so this cannot come back: every real leg that follows a
+  // pattern pair enters at its OWN from.alt.
+  const legs = sch;
+  for (let i = 1; i < legs.length; i++)
+    if (legs[i] && !legs[i - 1])
+      assert(Math.abs(legs[i].entryAlt - legs[i].from.alt) < 1,
+        'leg ' + i + ' follows a break but entered at ' + Math.round(legs[i].entryAlt));
+});
+T('a non-finite figure is an EMPTY box on the company form, never "NaN"', () => {
+  // H2, half one. pad3/String(Math.round(NaN)) printed the literal "NaN" into
+  // seven cells of a form that goes on company paperwork.
+  const F = moduleExports.ofp;
+  const c = F.ofpRowCells({ from: 'A', to: 'B', tas: NaN, tt: NaN, var: NaN, mt: null,
+    mh: null, wdir: NaN, wspd: NaN, wca: NaN, accDist: NaN, accTime: '--:--', ff: NaN,
+    legBurn: NaN, accBurn: NaN, alt: NaN, gs: NaN, dist: NaN, time: '--:--', eto: '', rem: NaN });
+  const nan = Object.entries(c).filter(([, v]) => /NaN/.test(String(v)));
+  assert(nan.length === 0, 'the form printed NaN in ' + JSON.stringify(nan));
+  for (const k of ['tas', 'tt', 'var', 'wv', 'wca', 'pl', 'gs'])
+    assert(c[k] === '', k + ' should be an empty box, got ' + JSON.stringify(c[k]));
+  // A real figure still prints.
+  const ok = F.ofpRowCells({ from: 'A', to: 'B', tas: 129.4, tt: 74, var: -11.6, mt: 62,
+    mh: 52, wdir: 285, wspd: 45, wca: -10, accDist: 20.6, accTime: '00:08', ff: 13,
+    legBurn: 3.4, accBurn: 3.4, alt: 2500, gs: 158.6, dist: 20.6, time: '00:08', eto: '', rem: 84.5 });
+  assert(ok.tas === '129' && ok.tt === '074' && ok.wv === '285/45' && ok.pl === '2500',
+    'a valid row stopped printing: ' + JSON.stringify([ok.tas, ok.tt, ok.wv, ok.pl]));
+});
+TA('a plan the app calls unusable prints a DO NOT USE band on every sheet', async () => {
+  // H2, half two. The print rule hides the whole page and shows only the form,
+  // so the red banner - the app's own verdict - never reached the paper.
+  ev(SEED);
+  const host = doc.getElementById('ofp-print');
+  assert(!/DO NOT USE/.test(host.innerHTML), 'a clean plan printed a failure band');
+  const sheets = host.querySelectorAll('.ofp-sheet').length;
+  // Break it the way a real plan breaks: a waypoint above the POH ceiling.
+  ev('flights[0].waypoints[1].alt = 26000; renderAllFlightTables();');
+  await tick();
+  assert(doc.getElementById('integrity-banner').style.display === 'block',
+    'the banner did not fire on a broken plan');
+  const bands = host.querySelectorAll('.ofp-void');
+  assert(bands.length === sheets && bands.length > 0,
+    'expected one DO NOT USE band per sheet, got ' + bands.length + ' for ' + sheets);
+  assert(/INTEGRITY CHECK FAILED/.test(bands[0].textContent),
+    'the band does not say what it is: ' + bands[0].textContent);
+  ev('flights[0].waypoints[1].alt = 2500; renderAllFlightTables();');
+  await tick();
+  assert(host.querySelectorAll('.ofp-void').length === 0, 'the band did not clear');
+});
+T('the integrity check runs FIRST, and the daylight card cannot take it down', () => {
+  // H1: the card ran before the check with nothing guarding it, so a throw
+  // there skipped the banner AND left the previous plan's sheets on screen.
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const tail = raw.split('sectorTimeWindows.push(')[1].split('function ')[0];
+  const iCheck = tail.indexOf('runIntegrityCheck()');
+  const iCard = tail.indexOf('updateDaylightCard(');
+  assert(iCheck > -1 && iCard > -1 && iCheck < iCard,
+    'the daylight card runs before the integrity check again');
+  assert(/catch\s*\(e\)[^]{0,200}daylight card failed/.test(tail),
+    'the daylight card is no longer guarded');
+});
+T('the wind matrix refuses to invent calm wind for an empty box', () => {
+  // C2: Number(x) || 0 turned an unknown OAT/wind into 0, and the banner went
+  // from naming the missing field to hidden.
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const fn = raw.split('function saveWindModal()')[1].split('\n    function ')[0];
+  assert(!/\|\|\s*0/.test(fn), 'saveWindModal still coerces a blank box to 0');
+  assert(/wmodal-missing/.test(fn), 'an empty box is not highlighted');
+  assert(/blanks\.length/.test(fn) && /return;/.test(fn),
+    'an empty box no longer blocks the save');
+  assert(/Number\(dirInput\.value\)/.test(fn), 'a typed 0 must still be accepted');
 });
 
 console.log('\n=== 62a1. The company OFP form (v16.41) ===');

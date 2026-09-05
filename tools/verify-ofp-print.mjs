@@ -190,6 +190,36 @@ const pdf3 = await page.pdf({ format: 'A4', landscape: true, printBackground: tr
 const pages3 = (pdf3.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
 check(pages3 === 4, 'each sheet gets its own printed page: ' + pages3);
 
+// ---- A BROKEN PLAN MUST SAY SO ON THE PAPER (v16.43) ----------------------
+// The print rule hides the whole page and shows only the form, so the red
+// banner never reached print: a plan the app had declared DO NOT USE printed as
+// clean company paperwork. Measure that the band is really painted, not just
+// present in the markup.
+await page.emulateMedia({ media: 'screen' });
+await page.evaluate(() => {
+  flights[0].waypoints[1].alt = 26000;   // above the POH ceiling
+  renderAllFlightTables();
+});
+await page.waitForTimeout(300);
+await page.emulateMedia({ media: 'print' });
+await page.waitForTimeout(300);
+const voided = await page.evaluate(() => {
+  const bands = [...document.querySelectorAll('#ofp-print .ofp-void')];
+  const sheets = document.querySelectorAll('#ofp-print .ofp-sheet').length;
+  const r = bands[0] && bands[0].getBoundingClientRect();
+  return { n: bands.length, sheets, text: bands[0] ? bands[0].textContent : '',
+           h: r ? Math.round(r.height) : 0, w: r ? Math.round(r.width) : 0,
+           banner: !!document.getElementById('integrity-banner').innerHTML };
+});
+check(voided.banner, 'the plan is genuinely broken (the banner fired)');
+check(voided.n === voided.sheets && voided.n > 0,
+  'one DO NOT USE band per sheet: ' + voided.n + ' bands for ' + voided.sheets + ' sheets');
+check(/INTEGRITY CHECK FAILED/.test(voided.text), 'the band names itself: ' + voided.text.slice(0, 60));
+check(voided.h > 10 && voided.w > 200, 'the band has a real painted box: ' + voided.w + 'x' + voided.h);
+const pdfBad = await page.pdf({ format: 'A4', landscape: true, printBackground: true,
+  margin: { top: '6mm', bottom: '6mm', left: '6mm', right: '6mm' } });
+check(pdfBad.length > 1000, 'the broken plan still renders a PDF (' + pdfBad.length + ' bytes)');
+
 // The M&B side is explicitly NOT reproduced yet - guard that we did not half
 // do it, which would be worse than not doing it.
 const mb = await page.evaluate(() => document.getElementById('ofp-print').textContent);

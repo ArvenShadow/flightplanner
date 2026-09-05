@@ -655,7 +655,23 @@ export function computeFlightSchedule(fl, opts) {
   let alt = null;
   for (let i = 0; i < wps.length - 1; i++) {
     const from = wps[i], to = wps[i + 1];
-    if (from.isPattern || to.isPattern) continue;
+    // A CIRCUIT STOP BREAKS THE ALTITUDE CHAIN IN BOTH DIRECTIONS (v16.43).
+    //
+    // It always broke the DESCENT chain (the backward pass stops at a null leg),
+    // but the forward cursor was left holding the previous real leg's exit
+    // altitude - so the first leg after a circuit was scheduled from a STALE
+    // figure. Measured on ENDU(254) -> A(2500) -> PATTERN -> B(6000) -> ENTC(31):
+    // B->ENTC entered at 2500 ft while the column says B is crossed at 6000, and
+    // over 6 000 generated routes 274 legs started stale, 56 of them HIDING a
+    // descent shortfall the banner would otherwise have shown.
+    //
+    // Clearing the cursor makes the next real leg start from its own `from.alt`,
+    // which is what the independent computeLegTotals path rendering the
+    // PATTERN->B row already assumes, so the two agree again. What altitude a
+    // circuit should resume from (field elevation after a full stop, circuit
+    // altitude after a touch & go) is roadmap item 17 and is a separate question
+    // from this one: the stale cursor is wrong under every answer to it.
+    if (from.isPattern || to.isPattern) { alt = null; continue; }
     const segs = pathSegments(from, to);
     if (!segs.length) continue;
     const L = { i, from, to, segs, distNM: segs.reduce((a, s) => a + s.distNM, 0),
