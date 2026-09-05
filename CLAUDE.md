@@ -1470,7 +1470,8 @@ and H2 all hold exactly as described.
    damage is a stale or malformed file corrupting the live plan, which trust does
    not prevent, so it stays high. M1 (sanitiseFlights coerces nothing but
    coordinates, and mutates its input) is the same work.
-**13. Stuck states and dialogs.** H5 (a line drag has no exit but a mouseup:
+**13. DONE at v16.46 - stuck states and dialogs.** See the section below.
+   ~~original entry:~~ H5 (a line drag has no exit but a mouseup:
    Escape, blur, right-click or alt-tab leave the map stuck with dragging
    disabled) and H6 (Ctrl+Z fires while a dialog is open, then the confirmed
    action mutates a detached flight). H6 is rule 7 above, and it converges with
@@ -1764,6 +1765,51 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## An overlay owns the keyboard, and a drag has an exit (v16.46, item 13)
+
+H5 and H6, plus the stale-capture pattern behind H6.
+
+- **AN OVERLAY OWNS THE KEYBOARD WHILE IT IS UP.** The author's rule: *"only
+  escape and relevant key bindings on dialog popups, all other keybindings
+  disabled during popup."* `anyOverlayOpen()` consults `dialogIsOpen()` plus the
+  five page modals, and the global keydown returns early for everything except
+  Escape.
+  - WHY IT MATTERED: Ctrl+Z fired straight through a dialog. `undoLast` rebinds
+    `flights` to a fresh copy, so the handler awaiting that dialog was left
+    holding a DETACHED flight - it then "succeeded" and changed nothing.
+    Reproduced on "Apply defaults to every leg".
+  - **THIS IS ALSO THE GUARD ROADMAP 9 NEEDS.** `dialog.js` binds 1-9 to pick an
+    option, so a global digit shortcut for flight plans must stand down here or
+    naming a waypoint becomes a game of chance. It already does.
+  - A COMMENT CAN TRIP A SOURCE-LEVEL GUARD: writing the words `confirm()` in a
+    new comment failed the "no native dialogs remain" test. The guard greps the
+    built app; prose counts. Reword rather than weaken the guard.
+- **A DRAG NOW HAS EXITS OTHER THAN A MOUSEUP.** It used to have exactly one, so
+  anything that swallowed the mouseup - alt-tab, a right-click (the native menu
+  eats it), Escape, a window blur - left the map with `dragging` disabled, the
+  via following a button-less cursor, and `|| lineDrag` blocking any new gesture
+  until some later mouseup happened to arrive.
+  - `blur`, `visibilitychange`, `contextmenu` and `pointercancel` all cancel;
+    Escape reaches the drag BEFORE any modal handling, because the drag is the
+    state that traps the map.
+  - **ESCAPE TAKES THE VIA BACK OUT**, spliced by identity - which is why
+    `beginLineDrag` now keeps the waypoint it was inserted on. Escape means
+    "forget this", not "drop it wherever the cursor is".
+  - EVERY exit goes through one `releaseLineDragListeners()`, so no path can
+    leave a listener behind and keep the map half-captured. A test asserts the
+    install list and the release list are the same set.
+- **AN INDEX IS NOT AN IDENTITY ACROSS AN AWAIT** (discipline rule 7).
+  `removeFlightPlan` captured `fIdx` before the dialog and spliced it after, so
+  a list that changed meanwhile deleted the wrong plan; it now remembers the
+  flight's `id` and finds it again. `applyBulkDefaultsToActive` re-reads
+  `flights[activeFlightIndex]` after its await instead of using the reference it
+  captured.
+- **THE BEHAVIOURAL TEST HAD TO BE MADE DISCRIMINATING.** The first version
+  passed with the guard disabled: there was nothing on the undo stack, so a
+  leaked Ctrl+Z changed nothing either. It now renames a waypoint first, so an
+  unguarded Ctrl+Z visibly reverts it - and with the guard removed, three tests
+  fail. A guard nobody has seen fail is not known to guard anything.
 
 ## Every door into the live plan goes through the sanitiser (v16.44, item 12)
 
