@@ -2291,11 +2291,13 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const metarModule = require('./src/lib/metar.js');
   const ofpModule = require('./src/lib/ofpform.js');
   const airspaceModule = require('./src/lib/airspace.js');
+  const keysModule = require('./src/lib/keys.js');
   const anchorsModule = require('./src/lib/anchors.js');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
                     exch: exchModule, plot: plotModule, metar: metarModule,
-                    airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule };
+                    airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
+                    keys: keysModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -4531,12 +4533,25 @@ T('every overlay owns the keyboard while it is up', () => {
   assert(/dialogIsOpen/.test(fn), 'dialog.js state is not consulted');
   for (const id of ['sera-modal', 'wind-modal', 'settings-modal', 'help-modal', 'leg-modal'])
     assert(APP_SRC.includes("'" + id + "'"), 'overlay not covered: ' + id);
-  const handler = APP_SRC.split("document.addEventListener('keydown'")[1].split('\n    }')[0];
-  assert(/if \(anyOverlayOpen\(\)\) return;/.test(handler),
-    'the keydown handler no longer stands down while an overlay is open');
-  // ...but Escape must still get through, and reach a stuck drag first.
-  const esc = handler.split("if (e.key === 'Escape')")[1].split('return;')[0];
-  assert(/lineDrag/.test(esc), 'Escape no longer cancels a stuck line drag');
+  // v16.49 moved the mapping into src/lib/keys.js, so the rule is asserted as
+  // BEHAVIOUR rather than by grepping for one line of the handler.
+  const K = moduleExports.keys;
+  const shut = { overlayOpen: true, dialogOpen: true };
+  for (const stroke of [{ key: 'z', ctrlKey: true }, { key: 'z', ctrlKey: true, shiftKey: true },
+                        { key: '/' }, { key: 'Delete' }, { key: 's', ctrlKey: true },
+                        { key: '1' }, { key: '5' }])
+    assert(K.resolveKey(stroke, shut) === null,
+      JSON.stringify(stroke.key) + ' still fires with an overlay open');
+  // ...but Escape must still get through, and reach a stuck drag FIRST.
+  assert(K.resolveKey({ key: 'Escape' }, { dragging: true, overlayOpen: true, dialogOpen: true })
+    .action === 'cancel-drag', 'Escape no longer reaches a stuck line drag first');
+  assert(K.resolveKey({ key: 'Escape' }, { dialogOpen: true, overlayOpen: true }) === null,
+    'Escape must be left to dialog.js while a dialog is open');
+  // and the page must still hand the resolver the real situation
+  const handler = APP_SRC.split("document.addEventListener('keydown'")[1].split('\n    });')[0];
+  for (const k of ['dragging', 'dialogOpen', 'overlayOpen', 'textLike', 'viewMode', 'hasHighlight'])
+    assert(handler.includes(k + ':'), 'the handler no longer reports ' + k + ' to resolveKey');
+  assert(/anyOverlayOpen\(\)/.test(handler), 'the handler no longer consults the overlays');
 });
 TA('Escape aborts a line drag and gives the map back', () => {
   // H5: the drag had no exit but a mouseup, so Escape, a blur, a right-click or
@@ -5813,10 +5828,12 @@ TA('saving offers every option at once, update-in-place first', async () => {
   // ONE dialog, not a chain of yes/no questions
   const opts = [...openDlg().querySelectorAll('.dlg-btn')].map(b => b.textContent.replace(/\s+/g, ' ').trim());
   assert(opts.length === 4, 'expected 4 options, got: ' + opts.join(' | '));
-  assert(opts[0].includes('Update "MY ROUTE"'), 'update-in-place is not the first option: ' + opts[0]);
+  // v16.49 (QoL 11) says what the option DOES: it replaces the saved entry.
+  assert(opts[0].includes('MY ROUTE') && /replace/i.test(opts[0]),
+    'update-in-place is not the first option, or no longer says it overwrites: ' + opts[0]);
   assert(opts.some(o => o.includes('new route')) && opts.some(o => o.includes('whole mission')),
     'save-as-new options missing: ' + opts.join(' | '));
-  answerDialog('Update "MY ROUTE"');
+  answerDialog('Replace "MY ROUTE" with this plan');
   await p;
 
   const saved = ev(`getStoredSingleRoutes()['MY ROUTE']`);
@@ -6193,6 +6210,232 @@ T('L2: the build refuses a lockfile whose version has drifted', () => {
   assert(lock.packages[''].version === pkg, 'the lockfile root package version drifted');
   const build = fs.readFileSync('tools/build.mjs', 'utf8');
   assert(/package-lock\.json/.test(build), 'the build no longer checks the lockfile version');
+});
+
+
+
+console.log('\n=== 62a000d. Quality of life, one batch (v16.49, item 16) ===');
+
+T('the key mapping is a pure decision, and every action has a home', () => {
+  const K = moduleExports.keys;
+  const R = (stroke, ctx) => { const a = K.resolveKey(stroke, ctx); return a && a.action; };
+  assert(R({ key: 'z', ctrlKey: true }) === 'undo', 'Ctrl+Z');
+  assert(R({ key: 'z', ctrlKey: true, shiftKey: true }) === 'redo', 'Ctrl+Shift+Z');
+  assert(R({ key: 'Z', metaKey: true }) === 'undo', 'Cmd+Z (capital Z with shift off)');
+  assert(R({ key: 'y', ctrlKey: true }) === 'redo', 'Ctrl+Y');
+  assert(R({ key: 'y', metaKey: true }) === null, 'Cmd+Y is a browser History shortcut, not ours');
+  assert(R({ key: 's', ctrlKey: true }) === 'save', 'Ctrl+S');
+  assert(R({ key: '/' }) === 'focus-search', '/');
+  assert(R({ key: 'Escape' }) === 'close-overlays', 'Escape');
+  assert(R({ key: 'Escape' }, { dragging: true }) === 'cancel-drag', 'Escape during a drag');
+  assert(R({ key: 'q' }) === null, 'an unbound key claimed something');
+  assert(R({ key: 'z', ctrlKey: true, altKey: true }) === null, 'Ctrl+Alt+Z is not ours');
+
+  // Every action the resolver can return must be handled by the page, or a
+  // binding is silently dead - the failure mode this module exists to prevent.
+  const handler = APP_SRC.split("document.addEventListener('keydown'")[1].split('\n    });')[0];
+  for (const a of K.KEY_ACTIONS)
+    assert(handler.includes("case '" + a + "'"), 'the page has no case for ' + a);
+  // ...and the help text must cover them, or the bindings are folklore.
+  assert(K.KEY_HELP.length >= 5, 'the key help shrank');
+  assert(/Ctrl\+S/.test(APP_SRC) && /Find fix/.test(APP_SRC), 'the guide does not mention the new keys');
+});
+
+T('a free-text field keeps its own editing, but Ctrl+S is still ours', () => {
+  const K = moduleExports.keys;
+  const typing = { textLike: true };
+  assert(K.resolveKey({ key: 'z', ctrlKey: true }, typing) === null, 'Ctrl+Z must stay native while typing');
+  assert(K.resolveKey({ key: '/' }, typing) === null, '/ must type a slash in a text field');
+  assert(K.resolveKey({ key: 'Delete' }, { ...typing, hasHighlight: true }) === null,
+    'Delete must delete text, not a waypoint');
+  // The browser's own Ctrl+S saves the PAGE, which is never wanted here - and a
+  // pilot naming a route has their cursor in a field at exactly that moment.
+  const s = K.resolveKey({ key: 's', ctrlKey: true }, typing);
+  assert(s && s.action === 'save' && s.preventDefault, 'Ctrl+S must still save from inside a field');
+});
+
+T('Delete is offered only where editing is', () => {
+  const K = moduleExports.keys;
+  const R = (ctx) => { const a = K.resolveKey({ key: 'Delete' }, ctx); return a && a.action; };
+  assert(R({ hasHighlight: true }) === 'delete-waypoint', 'Delete with a selection in Edit Mode');
+  assert(R({ hasHighlight: true, viewMode: true }) === null,
+    'View Mode is read-only - Delete must not remove a waypoint there');
+  assert(R({}) === null, 'Delete with nothing selected must do nothing');
+  assert(K.resolveKey({ key: 'Backspace' }, { hasHighlight: true }).action === 'delete-waypoint',
+    'Backspace is the same key on a Mac keyboard');
+});
+
+TA('Delete removes the selected waypoint, and Ctrl+Z puts it back', async () => {
+  ev(SEED);
+  ev(`isDoneMode = false; markers[1].fire ? markers[1].fire('click') : markers[1]._h.click()`);
+  assert(ev('highlightedWaypoint && highlightedWaypoint.wpIdx') === 1,
+    'clicking a marker in Edit Mode did not select it');
+  const before = ev('flights[0].waypoints.length');
+  ev(`document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))`);
+  await tick();
+  assert(ev('flights[0].waypoints.length') === before - 1,
+    'Delete did not remove the waypoint: ' + ev('flights[0].waypoints.length'));
+  ev('undoLast(true)');
+  assert(ev('flights[0].waypoints.length') === before, 'the deletion could not be undone');
+  assert(ev(`flights[0].waypoints.map(w => w.name).join(',')`) === 'ENDU,FINNSNES,ENTC',
+    'undo restored the wrong route: ' + ev(`flights[0].waypoints.map(w => w.name).join(',')`));
+  ev(SEED);
+});
+
+T('undo covers the whole plan, not just the waypoints', () => {
+  // QoL 3: ETD moves every ETO and the entire daylight verdict, and it was the
+  // one plan input Ctrl+Z could not take back - it lives in a DOM field, not
+  // in `flights`.
+  ev(SEED);
+  ev(`document.getElementById('def-etd').value = '08:00';
+      document.getElementById('fuel-dep').value = '64';
+      rememberPlanField(document.getElementById('def-etd'));
+      rememberPlanField(document.getElementById('fuel-dep'));`);
+  ev(`document.getElementById('def-etd').value = '14:30';
+      pushPlanFieldUndo(document.getElementById('def-etd'), 'change ETD');
+      renderAllFlightTables();`);
+  ev(`document.getElementById('fuel-dep').value = '40';
+      pushPlanFieldUndo(document.getElementById('fuel-dep'), 'change initial fuel');
+      renderAllFlightTables();`);
+  ev('undoLast(true)');
+  assert(ev(`document.getElementById('fuel-dep').value`) === '64',
+    'undo did not restore the fuel: ' + ev(`document.getElementById('fuel-dep').value`));
+  assert(ev(`document.getElementById('def-etd').value`) === '14:30', 'undo went back too far');
+  ev('undoLast(true)');
+  assert(ev(`document.getElementById('def-etd').value`) === '08:00',
+    'undo did not restore the ETD: ' + ev(`document.getElementById('def-etd').value`));
+  ev('redoLast(true)');
+  assert(ev(`document.getElementById('def-etd').value`) === '14:30', 'redo did not reapply the ETD');
+  ev(SEED);
+});
+
+T('a field edit snapshots the value it had BEFORE the edit', () => {
+  // `onchange` fires with the NEW value already in the box, so pushing there
+  // would store the change instead of the state before it.
+  ev(SEED);
+  ev(`document.getElementById('fuel-reserve').value = '8';
+      rememberPlanField(document.getElementById('fuel-reserve'));
+      document.getElementById('fuel-reserve').value = '12';
+      pushPlanFieldUndo(document.getElementById('fuel-reserve'), 'change reserve');`);
+  assert(ev(`document.getElementById('fuel-reserve').value`) === '12',
+    'the push left the old value in the box');
+  ev('undoLast(true)');
+  assert(ev(`document.getElementById('fuel-reserve').value`) === '8',
+    'undo restored ' + ev(`document.getElementById('fuel-reserve').value`) + ', not 8');
+  // an edit that changes nothing must not add a step
+  const depth = ev('undoStack.length');
+  ev(`rememberPlanField(document.getElementById('fuel-reserve'));
+      pushPlanFieldUndo(document.getElementById('fuel-reserve'), 'change reserve');`);
+  assert(ev('undoStack.length') === depth, 'a no-op edit pushed an undo step');
+  ev(SEED);
+});
+
+T('undo and redo name the step they will take back', () => {
+  ev(SEED);
+  ev(`pushUndoState('rename a waypoint'); flights[0].waypoints[1].name = 'X'; renderAllFlightTables();`);
+  const undoBtn = doc.getElementById('undo-btn');
+  assert(undoBtn && /rename a waypoint/.test(undoBtn.title),
+    'the Undo button does not name the step: ' + (undoBtn && undoBtn.title));
+  ev('undoLast(true)');
+  const redoBtn = doc.getElementById('redo-btn');
+  assert(redoBtn && /rename a waypoint/.test(redoBtn.title),
+    'the Redo button does not name the step: ' + (redoBtn && redoBtn.title));
+  assert(undoBtn.disabled === (ev('undoStack.length') === 0), 'the button state does not follow the stack');
+  // every call site names its step, or the buttons fall back to "the last change"
+  assert(!/pushUndoState\(\)/.test(APP_SRC), 'an unlabelled pushUndoState() call came back');
+  ev(SEED);
+});
+
+T('an empty plan says what to do next', () => {
+  ev(`flights = [{ id: 1, title: 'Flight Plan 1', depElev: 0, waypoints: [] }];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const es = doc.getElementById('empty-state');
+  assert(es, 'no empty state rendered');
+  assert(/Click the map/.test(es.textContent), 'the empty state does not say how to start');
+  assert(es.className.includes('no-print'), 'the empty state would print');
+  ev(SEED);
+  assert(!doc.getElementById('empty-state'), 'the empty state survived a real plan');
+});
+
+T('the ETD field names the actual offset, not just "local"', () => {
+  // QoL 10: a pilot used to UTC forms types UTC into a field labelled "local".
+  ev(SEED);
+  ev(`document.getElementById('def-date').value = '2026-06-21'; renderAllFlightTables();`);
+  const tz = doc.getElementById('etd-tz');
+  assert(tz && /^UTC[+-]/.test(tz.textContent), 'the offset is not shown: ' + (tz && tz.textContent));
+  // the suite is pinned to TZ=UTC, so the offset must read UTC+0 here
+  assert(tz.textContent === 'UTC+0', 'offset under TZ=UTC: ' + tz.textContent);
+});
+
+T('a fix search result says how far and which way, exactly', () => {
+  const A = moduleExports.anchors;
+  const set = aipDataset();
+  const anchors = A.buildAnchors(set);
+  const near = [69.6832, 18.9186];   // Tromso
+  const hits = A.searchAnchors(anchors, 'ENDU', { limit: 3, near });
+  assert(hits.length, 'no hit for ENDU');
+  const h = hits[0];
+  assert(isFinite(h.fromNM) && isFinite(h.fromTrueBrg), 'no distance/bearing on the hit');
+  // EXACT, not the local-scale approximation the ORDERING uses: it must agree
+  // with geodesy.js, which is where every distance a pilot reads comes from.
+  const G = moduleExports.geodesy;
+  assert(Math.abs(h.fromNM - G.calcDistanceNM(near[0], near[1], h.lat, h.lng)) < 1e-9,
+    'the shown distance is not the geodesic one');
+  assert(Math.abs(h.fromTrueBrg - G.calcTrueTrack(near[0], near[1], h.lat, h.lng)) < 1e-9,
+    'the shown bearing is not the geodesic one');
+  // ENDU is roughly 39 NM south-south-west of Tromso
+  assert(h.fromNM > 30 && h.fromNM < 45, 'ENDU from Tromso: ' + h.fromNM + ' NM');
+  assert(h.fromTrueBrg > 170 && h.fromTrueBrg < 230, 'bearing: ' + h.fromTrueBrg);
+  // WITHOUT a centre there is nothing to measure from, and nothing is invented.
+  const noNear = A.searchAnchors(anchors, 'ENDU', { limit: 3 });
+  assert(noNear[0].fromNM === undefined, 'a distance appeared with no reference point');
+  // and the dialog must label it TRUE, because that is what it is
+  assert(/°T from the map centre/.test(APP_SRC), 'the search hint does not label the bearing true');
+});
+
+T('hovering an OFP row traces that leg, and only that leg', () => {
+  ev(SEED);
+  ev(`showLegHover(0, 1)`);
+  assert(ev('hoverLegLine !== null'), 'no hover line drawn');
+  const coords = ev('JSON.stringify(hoverLegLine._ll)');   // the Leaflet stub keeps the args
+  assert(JSON.parse(coords).length === 2, 'the hover line is not the one leg: ' + coords);
+  ev(`clearLegHover()`);
+  assert(ev('hoverLegLine === null'), 'the hover line was not removed');
+  // A circuit stop is not a line on the ground, so there is nothing to trace.
+  ev(`flights[0].waypoints.push({ isPattern: true, name: 'PATTERN', laps: 2,
+        lat: 69.679, lng: 18.911, alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -12 });
+      renderAllFlightTables(); showLegHover(0, 3);`);
+  assert(ev('hoverLegLine === null'), 'a circuit stop drew a ground track');
+  ev(SEED);
+});
+
+T('the update badge names WHY a check failed', () => {
+  // QoL 12: "update check failed" left a normal offline session and a network
+  // that blocks GitHub looking identical - one needs nothing, the other a person.
+  ev(`updateState = { phase: 'failed', remote: null, at: new Date(), why: 'offline' };
+      renderVersionBadge();`);
+  const el = doc.getElementById('app-version-badge');
+  assert(/offline/.test(el.innerHTML), 'the badge does not say offline: ' + el.innerHTML);
+  assert(/offline/i.test(el.title), 'the tooltip does not explain offline');
+  ev(`updateState = { phase: 'failed', remote: null, at: new Date(), why: 'blocked (HTTP 403)' };
+      renderVersionBadge();`);
+  assert(/HTTP 403/.test(doc.getElementById('app-version-badge').innerHTML),
+    'a blocked check does not name the status');
+  ev(`updateState = { phase: 'idle', remote: null, at: null, why: null }; renderVersionBadge();`);
+});
+
+T('the leg panel closes on a backdrop click like every other modal', () => {
+  // QoL 1: Escape reached it (v16.46) but the backdrop list named four modals
+  // and leg-modal was not one of them.
+  ev(SEED);
+  ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.45, lng: 18.90 },
+        originalEvent: { preventDefault: function(){} } })`);
+  assert(doc.getElementById('leg-modal').style.display === 'flex', 'the panel did not open');
+  ev(`(function(){ const el = document.getElementById('leg-modal');
+       el.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); })()`);
+  assert(doc.getElementById('leg-modal').style.display === 'none',
+    'a backdrop click did not close the leg panel');
+  assert(ev('legPanel === null'), 'the panel state survived the close');
 });
 
 

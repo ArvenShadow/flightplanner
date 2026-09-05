@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 32 shared mutable
+    decision, not unfinished work: it is one web of 34 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -314,8 +314,22 @@ three cheap disciplines applied every time the page is touched:
 ## Test harness notes
 
 - `npm install` then `npm test` (which BUILDS first). Requires Node 18+.
-- Tests load `dist/C182_FlightPlanner.html` via the APP_HTML constant, so
-  source-level guard greps keep working wherever code currently lives.
+- `SWEEP_N=<n> npm test` multiplies every generated sweep, so the big figures
+  quoted in this file are reproducible on demand instead of aspirational. The
+  everyday run uses the smaller sizes; the asserts are absolute lower bounds, so
+  a larger multiplier can only make them easier.
+- SIX CHROMIUM VERIFIERS, and each exists for something jsdom cannot see:
+  `verify:hosted` (the service worker and the real tile cache), `verify:ofp`
+  (whether a value FITS its printed cell), `verify:fixes` (that a marker is
+  visible and a click does not bubble), `verify:leg` (that a right-click reaches
+  a 20 px invisible hit-line), `verify:hover` (that the card re-resolves across a
+  sector seam) and `verify:layout` (v16.49 - what a 1280x720 laptop can actually
+  SEE without scrolling). They need `npm install --no-save playwright`, or
+  `CHROME_PATH` pointing at a browser already on the machine.
+- Tests load `site/index.html` via the APP_HTML constant and assemble it with
+  `app.js` and `aip.js` into `APP_SRC`, so source-level guard greps keep working
+  wherever code currently lives. Grepping the shell alone is not enough - four
+  guards once went green for the wrong reason that way.
   Extracted modules also get pure `require()` unit tests with no jsdom,
   plus an equality test proving module and built page agree.
 - WARNING when scripting edits: `open(p,'w').write(open(p).read()...)`
@@ -1504,7 +1518,10 @@ and H2 all hold exactly as described.
    an hour across a DST transition; cannot bite a legal day-VFR flight in Norway
    because both transitions fall in SERA night, but it is a wrong time on the
    form), L4-L10.
-**16. The QoL list** in AUDIT.md section 4 (14 items): Escape/backdrop closes the
+**16. DONE at v16.49 - the QoL list.** See the section below. Twelve items
+   built, two already done (v16.43 and v16.44), and QoL 13 was not a gap - a
+   Print OFP button has existed since v16.41.
+   ~~original entry:~~ The QoL list in AUDIT.md section 4 (14 items): Escape/backdrop closes the
    leg panel; undo for ETD/fuel/reserve; a 13" layout default; an empty state;
    an import summary; labelled undo/redo; fix-search distance and bearing; a
    timezone statement beside the ETD field; a print-preview button; row-hover
@@ -1778,6 +1795,95 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## Quality of life, one batch (v16.49, item 16 - AUDIT.md section 4)
+
+Fourteen items, none of which changes a calculation. Two were already done (the
+wind-matrix guard at v16.43, the import summary at v16.44) and one turned out
+not to be a gap at all. What is worth recording is the three that needed a
+DECISION rather than a change, and the one the audit measured wrongly.
+
+- **THE KEY MAPPING IS A PURE MODULE NOW (`src/lib/keys.js`), which is what
+  roadmap item 10 asked for.** Every other rule in this project is checked
+  without a browser; the keyboard was the exception, and it is the one surface
+  where a wrong answer is SILENT - a binding that quietly does nothing looks
+  exactly like a key that was never pressed. `resolveKey` takes a description of
+  the keystroke and of what is on screen and returns what should happen; the
+  page does it. A test asserts the page has a `case` for every action the
+  resolver can return, so a binding cannot go dead by being unhandled.
+  - The v16.46 overlay rule and the v16.11 `textLike` rule both live here now,
+    and the overlay test is BEHAVIOURAL rather than a grep for one line.
+  - **Ctrl+S IS CLAIMED EVEN INSIDE A TEXT FIELD**, and that is the one
+    deliberate exception: the browser's own Ctrl+S saves the PAGE, which is
+    never what is wanted here, and a pilot naming a route has their cursor in a
+    field at exactly the moment they want to save.
+  - **Cmd+Y IS NOT CLAIMED** though Ctrl+Y is: on a Mac browser Cmd+Y opens
+    History, and taking it would be worse than not offering redo twice.
+- **THE AUDIT'S DELETE BINDING WOULD HAVE CONTRADICTED ITS OWN MODE.** It asked
+  for "Delete to remove the highlighted waypoint IN VIEW MODE" - and View Mode
+  is locked and read-only by definition. The entry read `highlightedWaypoint`,
+  saw it only ever set in View Mode, and wrote the binding against that without
+  weighing what the mode is for.
+  - The fix is to give EDIT MODE a selection, which it never had: a marker click
+    now selects in both modes (Leaflet fires `click` only when the marker was
+    not dragged, so this cannot fire at the end of a drag), and Delete acts on
+    it only where editing is allowed. The right-click menu remains the other way
+    to remove a waypoint.
+- **UNDO NOW COVERS THE PLAN, NOT JUST THE ROUTE (QoL 3).** ETD moves every ETO
+  and the whole daylight verdict, and it was the one plan input Ctrl+Z could not
+  take back - it lives in a DOM field, not in `flights`. Initial fuel, reserve,
+  departure elevation and the flight date go in the snapshot too.
+  - **THE SNAPSHOT HAS TO PREDATE THE EDIT, and `onchange` fires too late**: the
+    new value is already in the box, so pushing there stores the change rather
+    than the state before it. The old value is remembered on `focusin` and put
+    back for the length of the push. (`focusin`, not `focus`, because two of
+    these fields already use `onfocus` to select their contents.)
+  - The flight DATE is in the undo snapshot and still never in storage. Those
+    are different questions: v16.3 forbids a STALE date showing wrong sun times
+    on a later day; undoing a change made this session is not that.
+- **UNDO AND REDO NAME THE STEP (QoL 7).** A stack of bare JSON strings could
+  not; the entries carry a label now and all 25 call sites pass one, so the
+  buttons say "Undo: delete a waypoint" before you press them. A test asserts no
+  unlabelled `pushUndoState()` comes back.
+- **THE 13" LAPTOP IS SHORT, NOT NARROW (QoL 4), and this one is measured.** The
+  layout auto-pick only ever looked at WIDTH, so 1280x720 already got Stacked -
+  and Stacked then spent 42vh of a 720 px window on the map, putting the
+  daylight card below the fold at 826 px. `tools/verify-layout.mjs` opens the
+  real page at the real sizes and reads `getBoundingClientRect`, because this
+  project has shipped invisible controls before with every grep passing (v16.22).
+  - Measured after the fix at 1280x720: map 302 -> 230 px, header 76 -> 64 px,
+    and the card 440 px into a 426 px sidebar. **THAT STILL FAILED**, and the
+    verifier said so - the media query was written ABOVE the base `.card` rule,
+    and a media query adds no specificity, so source order won. Moved below it:
+    410 px into 426. A wide, tall window is asserted UNCHANGED.
+  - The honest limit: on a 720 px window with a header, a map, an inputs card,
+    an OFP table and three more cards, something must scroll. The daylight card
+    is on screen now; the METAR card below it is not.
+- **A SEARCH HIT SAYS HOW FAR AND WHICH WAY (QoL 9), AND IT IS NOT THE NUMBER
+  THE RANKING USED.** The audit noted the ranking already computes a distance -
+  it does, with `roughNM`, a local-scale approximation whose own comment says it
+  must never be read. The few hits actually shown get proper WGS-84 figures from
+  geodesy.js, which costs at most nine calls.
+  - **THE BEARING IS TRUE AND SAYS SO.** A magnetic one would need a variation at
+    the map centre, and this is a hint for telling the two BREIVIKAs apart, not a
+    heading to fly. Labelling a true bearing as magnetic is exactly the plausible
+    wrong answer this project refuses.
+- **QoL 13 WAS NOT A GAP.** It asked for a print preview "since today the only
+  route is Ctrl+P" - but a `Print OFP` button has been in the header since
+  v16.41, and `window.print()` IS the browser's preview. Nothing was built; the
+  button is renamed `Print / preview OFP` and its title says what it opens.
+  Reporting the item as done without saying this would have been a lie by
+  omission.
+- The rest, briefly: the leg panel closes on a backdrop click like every other
+  modal (QoL 1 - Escape already reached it at v16.46); an empty plan says how to
+  start instead of showing a blank panel (QoL 5); the ETD field names the ACTUAL
+  offset rather than the word "local", read from the flight date so it is right
+  across a DST change (QoL 10); the save dialog says `Replace "X" with this plan`
+  instead of `Update "X"`, because that option is the one that destroys
+  something (QoL 11); the version badge distinguishes offline from blocked
+  (QoL 12); and hovering an OFP row traces that leg on the map (QoL 14) as a
+  TRANSIENT overlay - re-rendering on `mouseenter` would rebuild the table under
+  the cursor and run the integrity check on every row the pointer crosses.
 
 ## Housekeeping, one batch (v16.48, item 15 - M3, M4, M5 and L1-L10)
 
