@@ -746,6 +746,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     body.layout-plan #map-container { display: none; }
     body.layout-map #sidebar { display: none; }
 
+
     /* On-map ruler measurement chips */
     .ruler-seg-label, .ruler-total-label {
       background: rgba(38, 122, 118, 0.94); color: #ffffff;
@@ -905,6 +906,16 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .input-group input { padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; text-align: center; background: var(--bg-input); color: var(--text-main); }
     
     /* Multi-Flight Plan Section */
+    /* The empty state (QoL 5). Deliberately quiet - it is a hint, not a
+       banner, and it disappears the moment the first waypoint exists. */
+    .empty-state { border: 1.5px dashed var(--border-color); border-radius: 6px; padding: 18px 16px;
+                   text-align: center; color: var(--text-muted); font-size: 12px; line-height: 1.7;
+                   background: var(--bg-card); margin-bottom: 12px; }
+    .empty-state b { color: var(--text-main); font-size: 13px; }
+    .empty-state kbd { font-family: inherit; border: 1px solid var(--border-color); border-radius: 3px;
+                       padding: 0 4px; background: var(--bg-calc); color: var(--text-main); }
+    .empty-more { display: block; margin-top: 8px; font-size: 11px; }
+
     .flight-section { border: 1.5px solid var(--border-color); border-radius: 6px; margin-bottom: 12px; background: var(--bg-card); overflow: hidden; }
     .flight-header { background: #2b6cb0; color: white; padding: 6px 10px; font-size: 12px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
     .flight-header-active { background: #1a365d; border-left: 5px solid #ecc94b; }
@@ -1089,6 +1100,27 @@ svg.leaflet-image-layer.leaflet-interactive path {
     #ofp-print { display: none; }
 
     @page { size: A4 landscape; margin: 6mm; }
+
+    /* A 13" LAPTOP IS SHORT, NOT NARROW (QoL 4, v16.49). The layout auto-pick
+       only ever looked at WIDTH, so a 1280x720 window already got Stacked -
+       and Stacked then spent 42vh of a 720 px window on the map, leaving the
+       daylight card below the fold. Height is the constraint on these screens,
+       so the map's share and the header's padding both shrink with it. The
+       figures are measured in tools/verify-layout.mjs, not guessed. */
+    @media (max-height: 800px) {
+      body.layout-stacked #map-container { height: 32vh; min-height: 190px; }
+      #header { padding: 4px 12px; gap: 4px 10px; }
+      #header h1 { font-size: 14px; }
+      .tick-box { padding: 4px 8px; }
+      /* The sidebar's own spacing is the other half of the reclaim: six cards
+         with 10 px gaps and 10 px padding spend ~100 px on air alone. */
+      #sidebar { padding: 6px; gap: 6px; }
+      .card { padding: 6px 8px; }
+      .input-grid { gap: 6px 10px; }
+    }
+    @media (max-height: 650px) {
+      body.layout-stacked #map-container { height: 28vh; min-height: 160px; }
+    }
 
     @media print {
       /* HIDE EVERYTHING, THEN SHOW THE FORM. Enumerating what to hide is how

@@ -24,6 +24,7 @@
  */
 
 import { escapeText } from './format.js';
+import { calcDistanceNM, calcTrueTrack } from './geodesy.js';
 
 /**
  * Zoom thresholds, and why they differ.
@@ -148,7 +149,24 @@ export function searchAnchors(anchors, query, opts) {
     scored.push({ a, rank, d });
   }
   scored.sort((x, y) => x.rank - y.rank || x.d - y.d || x.a.name.localeCompare(y.a.name, 'nb'));
-  return scored.slice(0, limit).map((s) => s.a);
+  const hits = scored.slice(0, limit).map((s) => s.a);
+  // HOW FAR AND WHICH WAY, FOR THE FEW THAT ARE SHOWN (QoL 9). The ordering
+  // above uses roughNM, which is a local-scale approximation and must never be
+  // READ - so the figures offered to the pilot are computed properly, on the
+  // WGS-84 geodesic, exactly like every other distance in this planner. It is
+  // at most `limit` calls, so the exactness is free.
+  //
+  // THE BEARING IS TRUE AND SAYS SO. A magnetic one would need a variation at
+  // the map centre, and this is a hint for telling two BREIVIKAs apart, not a
+  // heading to fly - labelling a true bearing as magnetic is exactly the
+  // plausible wrong answer this project refuses.
+  if (near) {
+    return hits.map((a) => Object.assign({}, a, {
+      fromNM: calcDistanceNM(near[0], near[1], a.lat, a.lng),
+      fromTrueBrg: calcTrueTrack(near[0], near[1], a.lat, a.lng)
+    }));
+  }
+  return hits;
 }
 
 /** Local-scale distance in NM. Used only for ORDERING search hits and for

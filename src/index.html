@@ -42,10 +42,16 @@
       <button class="btn btn-sera btn-sm" onclick="openSeraModal()">🇪🇺 SERA Rules</button>
       <button class="btn btn-wind btn-sm" onclick="openWindModal()">💨 Input Wind</button>
       <button class="btn btn-settings btn-sm" onclick="openSettingsModal()">⚙ Settings & Units</button>
-      <button class="btn btn-secondary btn-sm" onclick="undoLast()">Undo Point</button>
-      <button class="btn btn-secondary btn-sm" onclick="redoLast()">Redo</button>
+      <button id="undo-btn" class="btn btn-secondary btn-sm" onclick="undoLast()">Undo</button>
+      <button id="redo-btn" class="btn btn-secondary btn-sm" onclick="redoLast()">Redo</button>
       <button class="btn btn-danger btn-sm" onclick="clearAllFlights()">Clear All</button>
-      <button class="btn btn-primary btn-sm" onclick="window.print()">Print OFP</button>
+      <!-- QoL 13 asked for a print PREVIEW so the sheet is seen before paper.
+           This button already is one: window.print() opens the browser's own
+           print dialog, which renders the form exactly as it will print and
+           lets it be cancelled. The audit read the only route as Ctrl+P and
+           missed the button; the title now says what it opens. -->
+      <button class="btn btn-primary btn-sm" onclick="window.print()"
+              title="Preview and print the company Operational flightplan form, filled from this plan. Opens the browser's print dialog, so you see the sheet before any paper - one sheet per sector, landscape A4.">Print / preview OFP</button>
     </div>
   </div>
 
@@ -101,19 +107,19 @@
           </div>
           <div class="input-group">
             <label id="fuel-dep-label">Initial Fuel (gal)</label>
-            <input type="number" id="fuel-dep" value="64" onfocus="this.select()" onchange="renderAllFlightTables(); savePlanningPrefs();">
+            <input type="number" id="fuel-dep" value="64" onfocus="this.select()" onfocusin="rememberPlanField(this)" onchange="pushPlanFieldUndo(this, 'change initial fuel'); renderAllFlightTables(); savePlanningPrefs();">
           </div>
           <div class="input-group">
             <label id="fuel-reserve-label" title="Legs where remaining fuel drops below this are flagged red">Reserve (gal)</label>
-            <input type="number" id="fuel-reserve" value="8" step="0.5" onfocus="this.select()" onchange="renderAllFlightTables(); savePlanningPrefs();">
+            <input type="number" id="fuel-reserve" value="8" step="0.5" onfocus="this.select()" onfocusin="rememberPlanField(this)" onchange="pushPlanFieldUndo(this, 'change reserve'); renderAllFlightTables(); savePlanningPrefs();">
           </div>
           <div class="input-group">
-            <label title="Estimated Time of Departure as LOCAL clock time on the Flight Date (this computer's timezone). When set, an ETO clock time is shown for every leg.">ETD (HH:MM local)</label>
-            <input type="time" id="def-etd" value="" onchange="renderAllFlightTables(); savePlanningPrefs();">
+            <label title="Estimated Time of Departure as LOCAL clock time on the Flight Date (this computer's timezone). When set, an ETO clock time is shown for every leg.">ETD (HH:MM <span id="etd-tz">local</span>)</label>
+            <input type="time" id="def-etd" value="" onfocusin="rememberPlanField(this)" onchange="pushPlanFieldUndo(this, 'change ETD'); renderAllFlightTables(); savePlanningPrefs();">
           </div>
           <div class="input-group">
             <label title="Flight date, used for the Daylight &amp; VFR-day card. Defaults to today and is NOT saved between sessions, so a stale date can never show the wrong sun times.">Flight Date</label>
-            <input type="date" id="def-date" onchange="renderAllFlightTables();">
+            <input type="date" id="def-date" onfocusin="rememberPlanField(this)" onchange="pushPlanFieldUndo(this, 'change flight date'); renderAllFlightTables();">
           </div>
         </div>
       </div>
@@ -254,7 +260,9 @@
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
-            <li><b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> redoes (⌘ on Mac), step by step up to 30 states — same stacks as the Undo/Redo buttons. Inside a text field the keys keep their normal text-editing meaning.</li>
+            <li><b>Keyboard shortcuts.</b> <b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> (or <b>Ctrl+Y</b>) redoes, step by step up to 30 states — ⌘ on Mac, same stacks as the Undo/Redo buttons, and the buttons now <i>name the step</i> they will take back. <b>Ctrl+S</b> opens the save dialog, <b>/</b> opens Find fix, and <b>Delete</b> removes the selected waypoint (click one on the map to select it — Edit Mode only, since View Mode is read-only). <b>Esc</b> closes a dialog, abandons a line drag, or clears the selection.
+              <br><b>Two rules apply to all of them.</b> While any dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing else fires behind it. And inside a text field the keys keep their normal text-editing meaning (Ctrl+S is the exception: the browser's own Ctrl+S saves the web page, which is never what you want here).</li>
+            <li><b>Undo now covers the whole plan, not just the route</b>: ETD, initial fuel, reserve, departure elevation and the flight date are snapshotted too, so changing an ETD — which moves every ETO and the daylight verdict — can be taken back like any other edit.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
             <li><b>Grab a leg line and drag</b> to bend it around terrain: a diamond <b>via point</b> appears under the cursor and follows it, with the route redrawing as you move — one motion, press to release. Let go where you want it. A plain click still drops a via point on the spot, and either way you can drag the diamond again later or right-click it to remove. The line has a generous invisible grab area, so you do not have to hit the 4-pixel stroke exactly.</li>
@@ -823,8 +831,8 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 108 inline on*= handlers - 83 written
-    // into the markup and 25 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 113 inline on*= handlers - 87 written
+    // into the markup and 26 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -1048,7 +1056,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.48';
+    const APP_VERSION = '16.49';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1071,15 +1079,15 @@
     //   latest   v16.9 · latest (21:32)
     //   update   v16.9 · ⬆ v17.0 available on GitHub
     //   failed   v16.9 · update check failed - click to retry
-    let updateState = { phase: 'idle', remote: null, at: null };
+    let updateState = { phase: 'idle', remote: null, at: null, why: null };
 
     function renderVersionBadge(remoteVersion) {
       // back-compat: a bare call with a version behaves like a finished check
-      if (arguments.length && remoteVersion) updateState = { phase: 'done', remote: remoteVersion, at: new Date() };
-      else if (arguments.length) updateState = { phase: 'idle', remote: null, at: null };
+      if (arguments.length && remoteVersion) updateState = { phase: 'done', remote: remoteVersion, at: new Date(), why: null };
+      else if (arguments.length) updateState = { phase: 'idle', remote: null, at: null, why: null };
       const el = document.getElementById('app-version-badge');
       if (!el) return;
-      const { phase, remote, at } = updateState;
+      const { phase, remote, at, why } = updateState;
       const clock = at ? String(at.getHours()).padStart(2, '0') + ':' + String(at.getMinutes()).padStart(2, '0') : '';
       const click = ' <span class="ver-recheck" onclick="checkForUpdate(true)" style="cursor:pointer; text-decoration:underline dotted;">';
 
@@ -1093,8 +1101,11 @@
         el.textContent = `v${APP_VERSION} · checking…`;
         el.title = 'Contacting GitHub';
       } else if (phase === 'failed') {
-        el.innerHTML = `v${APP_VERSION} ·${click}update check failed - retry</span>`;
-        el.title = 'Could not reach GitHub (offline, or the network blocks it). Click to try again.';
+        el.innerHTML = `v${APP_VERSION} ·${click}update check failed${why ? ' - ' + esc(why) : ''} - retry</span>`;
+        el.title = why === 'offline'
+          ? 'This computer is offline, which is normal for this planner - everything except live data works. Click to try again when connected.'
+          : (why ? 'GitHub answered, but not with a version: ' + why + '. Click to try again.'
+                 : 'Could not reach GitHub (offline, or the network blocks it). Click to try again.');
       } else {
         el.innerHTML = `v${APP_VERSION} ·${click}check for updates</span>`;
         el.title = 'Click to ask GitHub whether a newer version exists';
@@ -1102,7 +1113,7 @@
     }
 
     async function checkForUpdate(manual) {
-      updateState = { phase: 'checking', remote: null, at: null };
+      updateState = { phase: 'checking', remote: null, at: null, why: null };
       renderVersionBadge();
       try {
         // The unique query string defeats the raw.githubusercontent CDN cache
@@ -1115,7 +1126,16 @@
         updateState = { phase: 'done', remote: String(pkg.version).replace(/\.0$/, ''), at: new Date() };
       } catch (e) {
         // Offline is normal for this app - never block anything, just say so.
-        updateState = { phase: 'failed', remote: null, at: new Date() };
+        //
+        // AND SAY WHICH (QoL 12). "Update check failed" left the pilot unable
+        // to tell a normal offline session from a network that is blocking
+        // GitHub - one needs nothing done, the other needs a person. The two
+        // are distinguishable: a browser reports itself offline, and an HTTP
+        // status means the request reached a server and was refused.
+        const why = (typeof navigator !== 'undefined' && navigator.onLine === false)
+          ? 'offline'
+          : (/^HTTP \d/.test(e && e.message ? e.message : '') ? 'blocked (' + e.message + ')' : null);
+        updateState = { phase: 'failed', remote: null, at: new Date(), why };
       }
       renderVersionBadge();
     }
@@ -1741,7 +1761,7 @@
       if (!fl) return null;
       const best = findPathInsertion(fl.waypoints, latlng);
       if (!best) return null;
-      pushUndoState();
+      pushUndoState('add a via point');
       const to = fl.waypoints[best.legEnd];
       to.via = to.via || [];
       const v = { lat: latlng.lat, lng: latlng.lng };
@@ -1916,7 +1936,7 @@
       });
       if (named.id === 'cancel') return;
 
-      pushUndoState();
+      pushUndoState('insert a waypoint');
       const via = Array.isArray(after.via) ? after.via : [];
       const magData = resolveMagVar(latlng.lat, latlng.lng);
       const wp = {
@@ -1948,20 +1968,96 @@
     // it IS still that route. So the reference is pushed and popped WITH the
     // state rather than being cleared, and only a wholesale replacement
     // (clear-all, an import) drops it outright.
-    function undoEntry() {
-      return JSON.stringify({ flights, ref: loadedRouteRef });
+    // THE PLAN IS MORE THAN ITS WAYPOINTS (QoL 3, v16.49). The stack held only
+    // `flights`, so the three inputs that change every figure on the sheet -
+    // ETD (which moves every ETO and the whole daylight verdict), initial fuel
+    // and reserve - were the one part of a plan Ctrl+Z could not take back.
+    // They live in DOM fields rather than in `flights`, so they are snapshotted
+    // by id here. The flight DATE goes in the snapshot too, and only here: it
+    // is still never persisted to storage (v16.3 - a stale date must never show
+    // wrong sun times), but undoing a change made this session should undo it.
+    const PLAN_FIELDS = ['fuel-dep', 'fuel-reserve', 'def-etd', 'def-date', 'def-dep-elev'];
+    function planFieldState() {
+      /** @type {Record<string, string>} */
+      const out = {};
+      for (const id of PLAN_FIELDS) {
+        const el = document.getElementById(id);
+        if (el) out[id] = el.value;
+      }
+      return out;
+    }
+    function restorePlanFields(plan) {
+      if (!plan) return;
+      for (const id of PLAN_FIELDS) {
+        const el = document.getElementById(id);
+        if (el && plan[id] !== undefined) el.value = plan[id];
+      }
+      savePlanningPrefs();
+    }
+
+    function undoEntry(label) {
+      return JSON.stringify({ flights, ref: loadedRouteRef, plan: planFieldState(),
+                              label: label || null });
     }
     function restoreUndoEntry(raw) {
       const parsed = JSON.parse(raw);
       // Older entries in a live session are a bare flights array.
       const fl = Array.isArray(parsed) ? parsed : parsed.flights;
-      loadedRouteRef = Array.isArray(parsed) ? loadedRouteRef : (parsed.ref || null);
+      if (!Array.isArray(parsed)) {
+        loadedRouteRef = parsed.ref || null;
+        restorePlanFields(parsed.plan);
+      }
       return sanitiseFlights(fl);
     }
-    function pushUndoState() {
-      undoStack.push(undoEntry());
+    /** The label of the step an entry represents, for the toast and the button
+     *  titles (QoL 7). A stack of bare JSON strings could not name a step; this
+     *  one carries what the caller was doing when it pushed. */
+    function undoEntryLabel(raw) {
+      try { const p = JSON.parse(raw); return (!Array.isArray(p) && p.label) || null; }
+      catch (e) { return null; }
+    }
+    // A FIELD'S UNDO STEP HAS TO SNAPSHOT THE VALUE IT HAD BEFORE THE EDIT, and
+    // `onchange` fires when the new value is already in the box - so pushing
+    // there would store the change, not the state before it. The value is
+    // remembered on focus instead, and the snapshot is taken with the old value
+    // temporarily put back. `onfocusin` (not `onfocus`) because two of these
+    // fields already use `onfocus` to select their contents.
+    let planFieldBefore = {};
+    function rememberPlanField(el) {
+      if (el && el.id) planFieldBefore[el.id] = el.value;
+    }
+    function pushPlanFieldUndo(el, label) {
+      if (!el || !el.id) return;
+      const before = planFieldBefore[el.id];
+      const now = el.value;
+      if (before === undefined || before === now) return;   // nothing changed
+      el.value = before;
+      pushUndoState(label);
+      el.value = now;
+      planFieldBefore[el.id] = now;
+    }
+
+    /** @param {string} [label] what this step is, e.g. "delete MID" */
+    function pushUndoState(label) {
+      undoStack.push(undoEntry(label));
       if (undoStack.length > 30) undoStack.shift();
       redoStack = [];
+      updateUndoButtons();
+    }
+
+    /** Name the step on the buttons, so the pilot knows what Ctrl+Z will take
+     *  back before pressing it. */
+    function updateUndoButtons() {
+      const pairs = [['undo-btn', undoStack, 'Undo'], ['redo-btn', redoStack, 'Redo']];
+      for (const [id, stack, verb] of pairs) {
+        const btn = document.getElementById(id);
+        if (!btn) continue;
+        const label = stack.length ? undoEntryLabel(stack[stack.length - 1]) : null;
+        btn.title = stack.length
+          ? verb + (label ? ': ' + label : ' the last change')
+          : 'Nothing to ' + verb.toLowerCase();
+        btn.disabled = stack.length === 0;
+      }
     }
 
     // quiet=true (keyboard use): an empty stack is ignored silently, so
@@ -1971,14 +2067,19 @@
         if (!quiet) say("Nothing to undo.", "warn");
         return;
       }
-      redoStack.push(undoEntry());
+      // The label belongs to the step being UNDONE, which is the entry we are
+      // about to pop - not the state we are leaving.
       const prevState = undoStack.pop();
+      const what = undoEntryLabel(prevState);
+      redoStack.push(undoEntry(what));
       flights = restoreUndoEntry(prevState) || flights;
       if (activeFlightIndex >= flights.length) activeFlightIndex = flights.length - 1;
       if (activeFlightIndex < 0) activeFlightIndex = 0;
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
+      updateUndoButtons();
+      if (!quiet) say(what ? 'Undone: ' + what + '.' : 'Undone.', 'info', 3000);
     }
 
     function redoLast(quiet) {
@@ -1986,14 +2087,17 @@
         if (!quiet) say("Nothing to redo.", "warn");
         return;
       }
-      undoStack.push(undoEntry());
       const nextState = redoStack.pop();
+      const what = undoEntryLabel(nextState);
+      undoStack.push(undoEntry(what));
       flights = restoreUndoEntry(nextState) || flights;
       if (activeFlightIndex >= flights.length) activeFlightIndex = flights.length - 1;
       if (activeFlightIndex < 0) activeFlightIndex = 0;
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
+      updateUndoButtons();
+      if (!quiet) say(what ? 'Redone: ' + what + '.' : 'Redone.', 'info', 3000);
     }
 
     function toggleRulerMode() {
@@ -2129,7 +2233,7 @@
         if (!isNaN(parseInt(lapsInput))) laps = Math.max(1, parseInt(lapsInput));
       }
 
-      pushUndoState();
+      pushUndoState('clear the ruler');
       const magData = resolveMagVar(e.latlng.lat, e.latlng.lng);
       const initialAlt = isFirstInFlight ? activeFlight.depElev : Number(document.getElementById('def-alt').value);
 
@@ -2174,7 +2278,7 @@
     });
 
     function setFlightDepElevation(fIdx, val) {
-      pushUndoState();
+      pushUndoState('change departure elevation');
       const newElev = Number(val);
       flights[fIdx].depElev = newElev;
       if (flights[fIdx].waypoints.length > 0) {
@@ -2193,7 +2297,7 @@
     }
 
     function addNewFlightPlan() {
-      pushUndoState();
+      pushUndoState('add a flight plan');
       const lastFlight = flights[flights.length - 1];
       let newDepElev = Number(document.getElementById('def-dep-elev').value);
       let initialWPs = [];
@@ -2257,7 +2361,7 @@
           say('Cannot remove the only flight plan.', 'warn');
           return;
         }
-        pushUndoState();
+        pushUndoState('delete a flight plan');
         flights.splice(fIdx, 1);
         // Keep pointing at the SAME flight the user had active. Removing an
         // earlier plan shifts every later index down by one.
@@ -2304,7 +2408,7 @@
 
         fl.waypoints.forEach((wp, idx) => {
           const isPattern = wp.isPattern;
-          const isHighlighted = (isDoneMode && highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === idx);
+          const isHighlighted = (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === idx);
           
           let dotColor = color;
           let labelBg = "#ffffff";
@@ -2351,19 +2455,25 @@
             });
           }
 
+          // CLICK SELECTS, IN BOTH MODES (v16.49). It used to select only in
+          // View Mode, which left Edit Mode with no notion of "this waypoint"
+          // at all - so the Delete key had nothing to act on and the OFP row
+          // had nothing to scroll to. Leaflet fires `click` only when the
+          // marker was not dragged, so this cannot fire at the end of a drag,
+          // and markers do not bubble to the map, so no waypoint is added.
           marker.on('click', function() {
-            if (isDoneMode) {
-              highlightedWaypoint = { fIdx: fIdx, wpIdx: idx };
-              refreshMap();
-              renderAllFlightTables();
-              const rowEl = document.getElementById(`row-${fIdx}-${idx}`);
-              if (rowEl) rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+            highlightedWaypoint = { fIdx: fIdx, wpIdx: idx };
+            refreshMap();
+            renderAllFlightTables();
+            const rowEl = document.getElementById(`row-${fIdx}-${idx}`);
+            // Guarded: not every host implements scrollIntoView, and losing the
+            // scroll must never cost the selection itself.
+            if (rowEl && rowEl.scrollIntoView) rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
           });
 
           if (!isPattern && !isDoneMode) {
             marker.on('dragstart', function() {
-              pushUndoState();
+              pushUndoState('move a waypoint');
             });
 
             // During the drag only the route line follows the marker. The OFP
@@ -2455,7 +2565,7 @@
                 iconAnchor: [0, 0]
               })
             }).addTo(map);
-            vm.on('dragstart', function() { pushUndoState(); });
+            vm.on('dragstart', function() { pushUndoState('move a via point'); });
             // Same rule as the waypoint markers: the line follows live, the
             // OFP tables wait for dragend. Rebuilding the tables per mousemove
             // makes the drag stutter.
@@ -2472,7 +2582,7 @@
             vm.on('contextmenu', function(e) {
               if (isDoneMode) return;
               if (e.originalEvent && e.originalEvent.preventDefault) e.originalEvent.preventDefault();
-              pushUndoState();
+              pushUndoState('delete a via point');
               wp.via.splice(vIdx, 1);
               refreshMap(); renderAllFlightTables(); saveActiveState();
             });
@@ -2591,7 +2701,7 @@
     }
 
     function deleteWaypointFromFlight(fIdx, wpIdx) {
-      pushUndoState();
+      pushUndoState('delete a waypoint');
       flights[fIdx].waypoints.splice(wpIdx, 1);
       refreshMap();
       renderAllFlightTables();
@@ -2726,7 +2836,7 @@
         return;
       }
 
-      pushUndoState();
+      pushUndoState('apply the wind matrix');
       flights.forEach((fl, fIdx) => {
         for (let i = 0; i < fl.waypoints.length - 1; i++) {
           const dirInput = document.getElementById(`wmodal-dir-${fIdx}-${i+1}`);
@@ -3289,7 +3399,7 @@
      */
     function addAnchorWaypoint(a) {
       const fl = flights[activeFlightIndex];
-      pushUndoState();
+      pushUndoState('add a published fix');
       const first = fl.waypoints.length === 0;
       const wp = anchorWaypoint(a, {
         alt: first ? fl.depElev : Number(document.getElementById('def-alt').value),
@@ -3360,7 +3470,17 @@
         buttons: hits.map((a, i) => ({
           id: String(i),
           label: (a.kind === 'AD' ? '■ ' : '▲ ') + a.name,
-          hint: a.detail
+          // HOW FAR AND WHICH WAY FROM WHAT IS ON SCREEN (QoL 9), because
+          // BREIVIKA exists at both Tromsø and Evenes and the name alone
+          // cannot tell them apart. Exact geodesic figures - the ordering uses
+          // a local-scale approximation that must never be read - and the
+          // bearing is labelled TRUE: it is a hint for picking the right fix,
+          // not a heading to fly.
+          hint: a.detail + (isFinite(a.fromNM)
+            ? '  ·  ' + convertDist(a.fromNM, aircraftProfile.distUnit || 'NM').toFixed(1) + ' ' +
+              distLabel(aircraftProfile.distUnit || 'NM') + ' ' +
+              String(Math.round(a.fromTrueBrg) % 360).padStart(3, '0') + '°T from the map centre'
+            : '')
         })).concat([{ id: 'cancel', label: 'Cancel' }])
       });
       if (chosen.id === 'cancel') return;
@@ -3581,7 +3701,7 @@
       const fl = flights[legPanel.fIdx];
       const from = fl.waypoints[legPanel.legEnd - 1];
       if (!from) return;
-      pushUndoState();
+      pushUndoState('raise the crossing altitude');
       from.alt = legPanel.suggestAlt;
       // AND DELAY THE EARLIER LEG'S CLIMB so the two halves are ONE climb
       // (v16.39). Raising the fix alone tops the earlier leg out early and holds
@@ -3617,7 +3737,7 @@
       const to = fl.waypoints[legPanel.legEnd];
       if (!to) { closeLegModal(); return; }
       const form = readLegForm();
-      pushUndoState();
+      pushUndoState('apply leg settings');
       if (isFinite(form.alt)) to.alt = form.alt;
       // Stored as null rather than 0 when cleared, so a saved route carries no
       // pin at all and reads identically to one made before pins existed.
@@ -3816,6 +3936,14 @@
     function renderAllFlightTables() {
       const container = document.getElementById('flight-plans-container');
       container.innerHTML = '';
+
+      // THE ETD IS LOCAL, AND THE FIELD NOW SAYS WHICH LOCAL (QoL 10). The
+      // footer of the daylight card said so; the field itself said only
+      // "local", and a pilot used to UTC forms types UTC there. The offset is
+      // read from the flight date, so it is right across a DST change too.
+      const tzEl = document.getElementById('etd-tz');
+      const tzDate = (document.getElementById('def-date') || {}).value;
+      if (tzEl) tzEl.textContent = tzDate ? utcOffsetLabel(tzDate) : 'local';
       // THE PRINT HOST IS EMPTIED HERE, NOT ONLY REFILLED AT THE END (H1).
       // v16.43 stopped the daylight card from skipping the banner, but the
       // print sheets are written in the LAST statement of this function, so a
@@ -3828,6 +3956,24 @@
 
       const distUnit = aircraftProfile.distUnit || 'NM';
       const fuelUnit = aircraftProfile.fuelUnit || 'GAL';
+
+      // AN EMPTY PLAN SAYS WHAT TO DO NEXT (QoL 5). The guide opens once, on
+      // the first run; a returning pilot with an empty sheet got a blank panel
+      // and no hint that the map is where a route starts.
+      const anyWaypoints = flights.some((f) => (f.waypoints || []).length > 0);
+      if (!anyWaypoints) {
+        const hint = document.createElement('div');
+        hint.className = 'empty-state no-print';
+        hint.id = 'empty-state';
+        hint.innerHTML =
+          '<b>No waypoints yet.</b><br>' +
+          'Click the map to drop one, or press <kbd>/</kbd> (\ud83d\udd0e Find fix) to place a ' +
+          'published aerodrome or reporting point on its exact coordinate.<br>' +
+          '<span class="empty-more">Right-click a leg for climb and descent corners \u00b7 ' +
+          'right-click a waypoint to rename or delete it \u00b7 ' +
+          '<button class="btn btn-outline btn-sm" onclick="openModal(\'help-modal\')">Feature guide</button></span>';
+        container.appendChild(hint);
+      }
 
       let runningAccTime = 0;
       let runningAccBurn = 0;
@@ -3950,16 +4096,20 @@
               ff: patternFFUnit, legBurn: patternBurn, time: formatTimeHHMM(patternMinutes),
               eto: computeETO(runningAccTime) || '', rem: runningFuelRemaining });
 
-            const isHighlighted = (isDoneMode && highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === (i+1));
+            const isHighlighted = (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === (i+1));
             const tr = document.createElement('tr');
             if (isHighlighted) tr.className = "row-highlight";
             tr.id = `row-${fIdx}-${i+1}`;
+            // A circuit has no ground track; showLegHover draws nothing for it,
+            // but the leave handler still clears whatever the last row drew.
+            tr.addEventListener('mouseenter', () => showLegHover(fIdx, i + 1));
+            tr.addEventListener('mouseleave', clearLegHover);
 
             tr.innerHTML = `
               <td><b>${esc(from.name)}</b></td>
               <td><b>PATTERN</b></td>
               <td class="cc"><span class="type-pattern">PATTERN</span></td>
-              <td><input type="number" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority)" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${i+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+              <td><input type="number" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority)" onfocus="this.select()" onchange="pushUndoState('change the circuit altitude'); flights[${fIdx}].waypoints[${i+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
               <td class="cc">${to.oat}°</td>
               <td class="cc">-</td>
               <td class="cc">-</td>
@@ -3972,7 +4122,7 @@
               <td class="calc-cell">0.0</td>
               <td class="calc-cell cc">-</td>
               <td class="calc-cell">
-                <input type="number" style="width:36px; display:inline-block;" value="${to.laps}" title="Pattern Laps" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${i+1}].laps=Math.max(1,parseInt(this.value)); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}> laps (${formatTimeHHMM(patternMinutes)})
+                <input type="number" style="width:36px; display:inline-block;" value="${to.laps}" title="Pattern Laps" onfocus="this.select()" onchange="pushUndoState('change the number of laps'); flights[${fIdx}].waypoints[${i+1}].laps=Math.max(1,parseInt(this.value)); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}> laps (${formatTimeHHMM(patternMinutes)})
               </td>
               <td class="calc-cell">${formatTimeHHMM(runningAccTime)}${etoCellHTML(runningAccTime)}</td>
               <td class="calc-cell cc" style="min-width:44px;">${patternFFUnit.toFixed(1)}</td>
@@ -4100,10 +4250,12 @@
     }
 
     function createRowHTML(fromName, toName, type, altDisplay, oat, tas, tt, magVar, varIndicator, mt, wdir, wspd, wca, mh, gs, dist, threeMinNM, legTime, accTime, ff, legBurn, accBurn, remFuel, fIdx, wpIndex, showDelete) {
-      const isHighlighted = (isDoneMode && highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === (wpIndex+1));
+      const isHighlighted = (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === (wpIndex+1));
       const tr = document.createElement('tr');
       if (isHighlighted) tr.className = "row-highlight";
       tr.id = `row-${fIdx}-${wpIndex+1}`;
+      tr.addEventListener('mouseenter', () => showLegHover(fIdx, wpIndex + 1));
+      tr.addEventListener('mouseleave', clearLegHover);
 
       const typeBadge = `<span class="${type.includes('CLB') ? 'type-climb' : (type.includes('DES') ? 'type-desc' : 'type-cruise')}">${esc(type)}</span>`;
       
@@ -4111,12 +4263,12 @@
         <td><b>${esc(fromName)}</b></td>
         <td><b>${esc(toName)}</b></td>
         <td class="cc">${typeBadge}</td>
-        <td><input type="number" value="${flights[fIdx].waypoints[wpIndex+1].alt}" step="500" title="Target Alt" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
-        <td class="cc"><input type="number" value="${oat}" title="OAT" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].oat=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+        <td><input type="number" value="${flights[fIdx].waypoints[wpIndex+1].alt}" step="500" title="Target Alt" onfocus="this.select()" onchange="pushUndoState('change an altitude'); flights[${fIdx}].waypoints[${wpIndex+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+        <td class="cc"><input type="number" value="${oat}" title="OAT" onfocus="this.select()" onchange="pushUndoState('change an OAT'); flights[${fIdx}].waypoints[${wpIndex+1}].oat=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="calc-cell cc">${tas}</td>
         <td class="calc-cell cc">${String(tt).padStart(3, '0')}°</td>
         <td class="cc" title="Declination Source: ${esc(varIndicator)}">
-          <input type="number" value="${magVar}" title="Mag VAR (${esc(varIndicator)})" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].var=Number(this.value); flights[${fIdx}].waypoints[${wpIndex+1}].varSource='MANUAL'; refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}>
+          <input type="number" value="${magVar}" title="Mag VAR (${esc(varIndicator)})" onfocus="this.select()" onchange="pushUndoState('change a magnetic variation'); flights[${fIdx}].waypoints[${wpIndex+1}].var=Number(this.value); flights[${fIdx}].waypoints[${wpIndex+1}].varSource='MANUAL'; refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}>
         </td>
         <td class="calc-cell">${mt}°</td>
         <td class="wv-cell" title="Click to open Quick Wind Matrix" onclick="${isDoneMode ? '' : 'openWindModal()'}">
@@ -4287,7 +4439,7 @@
         say('The flight changed while the dialog was open - nothing was applied.', 'warn');
         return;
       }
-      pushUndoState();
+      pushUndoState('apply defaults to every leg');
       live.waypoints.forEach((wp, idx) => {
         wp.oat  = oat;
         wp.wdir = wdir;
@@ -4306,7 +4458,7 @@
         'Start from an empty sheet. Saved routes and missions are NOT deleted, and Ctrl+Z undoes this.',
         { okLabel: 'Clear everything', danger: true });
       if (!ok) return;
-      pushUndoState();
+      pushUndoState('clear all flight plans');
       flights = [{
         id: 1,
         title: "Flight Plan 1",
@@ -4339,52 +4491,96 @@
       });
     }
 
+    // WHICH FIELDS KEEP THEIR NATIVE EDITING. Only free-text ones: the app's
+    // number/date/select fields commit on change and KEEP focus afterwards
+    // (they are not rebuilt by the re-render), so exempting every input made
+    // Ctrl+Z silently dead right after editing fuel, an ETD or an altitude -
+    // exactly when a pilot reaches for undo (verified in Chromium, v16.11).
+    function isTextLikeTarget(t) {
+      const tag = t && t.tagName ? t.tagName.toUpperCase() : '';
+      return tag === 'TEXTAREA' || !!(t && t.isContentEditable) ||
+        (tag === 'INPUT' && /^(text|search|email|password|url|tel)$/i.test(t.type || 'text'));
+    }
+
+    // THE MAPPING ITSELF IS PURE -> src/lib/keys.js, so every binding is tested
+    // without a browser, including the cases that only arise with a dialog up
+    // or the cursor in a field. This handler only describes the situation and
+    // carries out the answer.
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        // A drag first: it is the state that traps the map, so Escape must
-        // reach it even with a modal somehow open on top.
-        if (lineDrag) { cancelLineDrag(); return; }
-        if (typeof dialogIsOpen === 'function' && dialogIsOpen()) return;   // dialog.js owns its own Escape
-        OVERLAY_IDS.forEach(closeModal);
-        closeLegModal();
-        return;
-      }
-      // AN OVERLAY OWNS THE KEYBOARD WHILE IT IS UP (v16.46, the author's rule:
-      // "only escape and relevant key bindings on dialog popups, all other
-      // keybindings disabled during popup").
-      //
-      // Ctrl+Z used to fire straight through a confirm dialog. `undoLast`
-      // rebinds `flights` to a fresh copy, so the handler waiting on that dialog
-      // was left holding a DETACHED flight: it then "succeeded" and changed
-      // nothing, or - holding an index - hit the wrong flight. Reproduced on
-      // "Apply defaults to every leg": undo ran behind the dialog, the dialog
-      // stayed open, and applying afterwards moved no altitude at all.
-      //
-      // This is also the guard the 1-9 flight-plan shortcut needs (roadmap 9):
-      // dialog.js binds those digits to pick an option.
-      if (anyOverlayOpen()) return;
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key && e.key.toLowerCase() === 'z') {
-        const t = e.target;
-        const tag = t && t.tagName ? t.tagName.toUpperCase() : '';
-        // Only fields with real free-text editing keep the browser's native
-        // undo. The app's number/time/date fields and selects commit on
-        // change, and focus often REMAINS in them afterwards (they are not
-        // rebuilt by the re-render) — exempting all inputs made Ctrl+Z
-        // silently dead right after editing fuel, ETD or an altitude, which
-        // is exactly when a pilot reaches for undo (verified in Chromium).
-        const textLike = tag === 'TEXTAREA' || (t && t.isContentEditable) ||
-          (tag === 'INPUT' && /^(text|search|email|password|url|tel)$/i.test(t.type || 'text'));
-        if (textLike) return;
-        e.preventDefault();
-        if (e.shiftKey) redoLast(true); else undoLast(true);
+      const act = resolveKey(e, {
+        dragging: !!lineDrag,
+        dialogOpen: typeof dialogIsOpen === 'function' && dialogIsOpen(),
+        overlayOpen: anyOverlayOpen(),
+        textLike: isTextLikeTarget(e.target),
+        viewMode: isDoneMode,
+        hasHighlight: !!highlightedWaypoint
+      });
+      if (!act) return;
+      if (act.preventDefault) e.preventDefault();
+      switch (act.action) {
+        case 'cancel-drag': cancelLineDrag(); break;
+        case 'close-overlays':
+          OVERLAY_IDS.forEach(closeModal);
+          closeLegModal();
+          if (highlightedWaypoint) { highlightedWaypoint = null; refreshMap(); renderAllFlightTables(); }
+          break;
+        case 'undo': undoLast(true); break;
+        case 'redo': redoLast(true); break;
+        case 'save': saveCurrentMission(); break;
+        case 'focus-search': searchFixes(); break;
+        case 'delete-waypoint': deleteHighlightedWaypoint(); break;
       }
     });
 
-    ['sera-modal', 'wind-modal', 'settings-modal', 'help-modal'].forEach(function(id) {
+    // HOVERING AN OFP ROW SHOWS WHICH LINE IT IS (QoL 14). On a five-sector
+    // mission the table is long and the map is full of track; the row and the
+    // leg already share the same indices, so the connection was there and
+    // simply not drawn.
+    //
+    // IT IS A TRANSIENT OVERLAY, NOT A STATE CHANGE. Re-rendering on mouseenter
+    // would rebuild the table under the cursor and fire the integrity check on
+    // every row the pointer crosses - the same reason the waypoint drag does
+    // not rebuild the tables per mousemove (v16.27). This adds one polyline and
+    // removes it again, so nothing recalculates.
+    let hoverLegLine = null;
+    function clearLegHover() {
+      if (hoverLegLine) { map.removeLayer(hoverLegLine); hoverLegLine = null; }
+    }
+    function showLegHover(fIdx, wpIdx) {
+      clearLegHover();
+      const fl = flights[fIdx];
+      if (!fl) return;
+      const from = fl.waypoints[wpIdx - 1], to = fl.waypoints[wpIdx];
+      // A circuit is not a line on the ground, so there is nothing to trace.
+      if (!from || !to || from.isPattern || to.isPattern) return;
+      const pts = legPath(from, to).map((p) => [p.lat, p.lng]);
+      if (pts.length < 2) return;
+      hoverLegLine = L.polyline(pts, {
+        color: '#dd6b20', weight: 9, opacity: 0.45, interactive: false
+      }).addTo(map);
+    }
+
+    /** Delete acts on the SELECTED waypoint, and only where editing is allowed.
+     *  View Mode is locked and read-only by its own definition, so removing a
+     *  waypoint there would contradict the mode rather than serve it. */
+    function deleteHighlightedWaypoint() {
+      if (isDoneMode || !highlightedWaypoint) return;
+      const { fIdx, wpIdx } = highlightedWaypoint;
+      const fl = flights[fIdx];
+      if (!fl || !fl.waypoints[wpIdx]) { highlightedWaypoint = null; return; }
+      const name = fl.waypoints[wpIdx].name;
+      highlightedWaypoint = null;
+      deleteWaypointFromFlight(fIdx, wpIdx);
+      say('Removed ' + name + '. Ctrl+Z puts it back.', 'info');
+    }
+
+    // The leg panel is a modal like the others and closes the same way. It was
+    // missing from this list, so clicking its backdrop did nothing (QoL 1).
+    OVERLAY_IDS.forEach(function(id) {
       const el = document.getElementById(id);
       if (el) {
         el.addEventListener('click', function(e) {
-          if (e.target === el) closeModal(id);
+          if (e.target === el) { if (id === 'leg-modal') closeLegModal(); else closeModal(id); }
         });
       }
     });
@@ -4623,7 +4819,7 @@
         renderAllFlightTables();
         return;
       }
-      pushUndoState();
+      pushUndoState('rename a waypoint');
       flights[fIdx].waypoints[wpIdx].name = name;
       refreshMap();
       renderAllFlightTables();
@@ -4888,7 +5084,7 @@
                 'waypoints, so nothing was changed.', 'warn', 8000);
             return;
           }
-          pushUndoState();
+          pushUndoState('load a saved route');
           const wps = clean[0].waypoints;
           flights[activeFlightIndex].waypoints = wps;
           flights[activeFlightIndex].title = name;
@@ -4908,7 +5104,7 @@
       } else if (type === 'mission') {
         const customMissions = getStoredMissions();
         if (customMissions[name]) {
-          pushUndoState();
+          pushUndoState('load a saved mission');
           flights = sanitiseFlights(JSON.parse(JSON.stringify(customMissions[name]))) || flights;
           activeFlightIndex = 0;
           loadedRouteRef = { type: 'mission', name };
@@ -4940,9 +5136,11 @@
       if (loadedRouteRef) {
         buttons.push({
           id: 'update',
-          label: `Update "${loadedRouteRef.name}"`,
+          // "Update X" did not say what it does to X. It REPLACES it, and this
+          // is the one option in the dialog that destroys something (QoL 11).
+          label: `Replace "${loadedRouteRef.name}" with this plan`,
           variant: 'primary',
-          hint: loadedRouteRef.type === 'route' ? 'saved route' : 'saved mission'
+          hint: loadedRouteRef.type === 'route' ? 'overwrites the saved route' : 'overwrites the saved mission'
         });
       }
       buttons.push({ id: 'route', label: 'Save active flight as a new route',
@@ -5086,7 +5284,7 @@
       const reader = new FileReader();
       reader.onload = function(e) {
         try {
-          pushUndoState();
+          pushUndoState('import a file');
           const parsed = JSON.parse(e.target.result);
           // What actually landed, so the toast can say so instead of claiming
           // success for a file it did not understand.
@@ -5269,6 +5467,7 @@
     localStorage.removeItem('c182_airspace_on');
     refreshMap();
     renderAllFlightTables();
+    updateUndoButtons();
     maybeShowFirstRunGuide();
   </script>
   <!-- The company OFP form, print-only. Filled by renderOfpPrintSheets(). -->
