@@ -2953,8 +2953,15 @@ T('the Polaris sector under the cursor is named, not all 26 frequencies', () => 
   // it near Sorkjosen printed all 26 and told the pilot nothing.
   const A = moduleExports.airspace;
   const set = aipDataset();
-  assert(Array.isArray(set.sectors) && set.sectors.length === 28,
-    'the dataset carries ' + (set.sectors || []).length + ' ACC sectors, expected 28');
+  // EDITION-DEPENDENT DATA, pinned on purpose: this is not an invariant, so it
+  // is asserted exactly and updated when the edition is. 2026-06-11 published
+  // 28 sectors; 2026-09-03 removed Sector 8 (verified in the source - "Sector 8"
+  // appears twice in the June ENR 2.2 and not at all in September). If this
+  // fails after an AIP update, CHECK THE SOURCE before editing the number: a
+  // parser regression looks exactly like a real change here.
+  assert(Array.isArray(set.sectors) && set.sectors.length === 27,
+    'the dataset carries ' + (set.sectors || []).length + ' ACC sectors, expected 27 ' +
+    '(edition ' + set.editionLabel + ') - verify against ENR 2.2 before changing this');
 
   const SORKJOSEN = [69.7868, 20.9594];
   const cta = set.features.filter((f) => /^Polaris CTA/.test(f.name))

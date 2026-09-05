@@ -1160,7 +1160,8 @@ three cheap disciplines applied every time the page is touched:
   nothing. The CTA is ONE airspace over the whole country, so its published
   block genuinely does list every sector. ENR 2.2 publishes each sector as its
   own airspace with its own lateral boundary, so the sector under the cursor is
-  a LOOKUP. 28 of 30 imported (`sectors` in `data/aip.js`); they are NOT drawn -
+  a LOOKUP. 27 of 29 imported at 2026-09-03 (`sectors` in `data/aip.js`); they
+  are NOT drawn -
   an en-route sector division far above a C182 would bury the CTRs and TMAs.
   - THE eAIP NAMES AN ACC SECTOR IN THE **LAST** CELL OF ITS ROW, where ENR 2.1
     and AD 2 name it in the FIRST. Grouping on the name marker therefore shifted
@@ -1665,6 +1666,48 @@ asserts nothing M&B appears on the sheet.
   - then renders a real PDF and counts the pages.
 - NOT REPRODUCED: the school's UiT logo. Embedding someone's letterhead into
   generated output is their call, not ours; ask before adding it.
+
+## AIRAC updates: what re-importing actually costs (v16.42, 2026-09-03)
+
+The dataset moved 2026-06-11-AIRAC -> 2026-09-03-AIRAC. `npm run build:aip`
+rediscovered the index on its own (154 -> 155), so the discovery is doing its
+job. What the cycle changed, and what it exposed:
+
+- **THE DIFF HAS TO BE A MULTISET, NOT A MAP.** Many volumes share a name AND a
+  band - "Polaris CTA (FL 115 - FL 660)" appears a dozen times - so keying a
+  comparison on name+band pairs each new volume against the SAME old one and
+  invents changes. The first diff claimed 41 rings had changed; every one of them
+  reported the same old point count (`7 -> 40`, `7 -> 10`, `7 -> 24` ...), which
+  is the tell. Compared properly, exactly TWO features differed.
+- **REAL CHANGES**: Polaris ACC Sector 8 was withdrawn (verified in the source -
+  "Sector 8" appears twice in the June ENR 2.2 and not once in September), and
+  Norne ADS lost a vertex. 212 features, 0 added, 0 removed, 243 reporting points
+  unchanged; the border invariant still reconciles at 67 = 51 + 11 + 5.
+- **THE EDITION NOW CARRIES TRACKED-CHANGE MARKUP** (`<ins class="AmdtInsertedAIRAC">`
+  / `<del ...>`). Checked before trusting anything: NO `class="SD"` span sits
+  inside a `<del>` anywhere in the edition, so no superseded value is being
+  imported. Re-check this on future editions rather than assuming.
+- **A FREQUENCY WITHOUT A PUBLISHED UNIT IS NOT AN ATS FREQUENCY** - and this was
+  a live wrong number, not a new one. AD 2.18's table states every frequency with
+  its unit (`TFREQUENCY;UOM_FREQ`). Some PROSE paragraphs also carry a tagged
+  `VAL_FREQ_TRANS` and no unit, and because frequencies pair with the preceding
+  service in document order, each of them was landing on the aerodrome's last
+  APPROACH service - which is one of the four the hover card shows. So the
+  shipped card was telling a pilot that Kjevik Approach works 121.780, which is
+  Wideroe ground handling.
+  - MEASURED over the edition: 10 of 1683 frequencies have no unit, and all 10
+    are prose - "Wideroe Ground Handling: 121.780", "De-icing FREQ 121.780",
+    "De-ice frequency for WGH 121.955", "DEICE COORDINATOR ... FREQ 131.905".
+    A clean split, so the unit IS the discriminator; `build-aip.mjs` now drops a
+    unit-less frequency and the dataset carries 1673.
+  - The new edition is what surfaced it: ENBR's de-icing paragraph previously
+    published 131.900 as untagged prose and now publishes 131.905 with a real
+    marker, so it entered the dataset for the first time and made the pattern
+    visible. The other 9 had been shipping since v16.31.
+- THE SECTOR COUNT IN `test.js` IS PINNED ON PURPOSE and updated per edition, not
+  loosened: it is edition-dependent data, not an invariant. A parser regression
+  looks exactly like a real withdrawal here, so the assert message says to check
+  the source before editing the number. That is what caught Sector 8.
 
 ## Dialogs (v16.11)
 
