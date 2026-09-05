@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 34 shared mutable
+    decision, not unfinished work: it is one web of 36 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -1441,7 +1441,9 @@ whoever picks these up starts from facts rather than assumptions.
    dialog option, and `ask()` is used everywhere. A global digit binding MUST
    stand down while a dialog is open, or naming a waypoint becomes a game of
    chance. Same for the settings/wind/help modals.
-10. **General keybinds for navigation and editing.**
+10. **DONE at v16.52** - `Settings -> Keyboard` binds every action to any key,
+   and the bindings travel in the exported JSON. See the section below.
+   ~~original entry:~~ General keybinds for navigation and editing.
     Only two exist today (Esc closes modals, Ctrl+Z / Ctrl+Shift+Z undo and
     redo). Two constraints are already documented in the Ctrl+Z handler and
     apply to anything added: a binding must be inert while the user is TYPING,
@@ -1801,6 +1803,69 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## The keyboard belongs to the pilot (v16.52, roadmap item 10)
+
+`Settings -> Keyboard` lists every action the planner has and binds any of them
+to any keystroke. The mapping used to be a chain of `if`s in `keys.js`; it is
+now a TABLE - `ACTION_SPECS` plus a keymap - which is what makes it settable,
+and what stops a binding being added without saying where it may fire.
+
+- **EVERY ACTION IS IN THE MENU; MOST SHIP UNBOUND.** The pilot asked for the
+  whole list, and a menu that hides half the app's verbs is not a keybind menu.
+  But inventing a dozen shortcuts to fill it would take chords away from them
+  and guess at what they want - so the DEFAULTS are exactly the bindings that
+  already existed, and the other ~15 (layers, base chart, ruler, View Mode, new
+  plan, wind matrix, Settings, guide, Print, layout) are listed, described, and
+  left to be claimed.
+- **THREE REFUSALS, EACH WITH A STATED REASON.** A menu that silently ignores
+  what you pressed is the same silent-key failure this module exists to prevent.
+  1. **A CHORD THE BROWSER OWNS.** `preventDefault` does NOT stop Ctrl+W,
+     Ctrl+T, F5 and friends in any mainstream browser - the tab closes anyway.
+     Offering them would be a promise the platform revokes at the moment it
+     matters, which is the NO GUESSTIMATES rule applied to a keystroke.
+     `RESERVED_CHORDS` refuses them by name.
+  2. **A CHORD ALREADY IN USE.** Two actions on one chord means whichever comes
+     second never fires. The menu refuses it and NAMES the other action;
+     `normaliseKeymap` drops it as well, for a hand-edited file.
+  3. **ESCAPE IS FIXED.** It is the way out of a dialog AND out of a stuck line
+     drag (v16.46), so rebinding it could leave the pilot with no way back. The
+     row says so rather than leaving a Set button that refuses.
+- **ONE CHORD PER ACTION, and that cost two aliases** - `Ctrl+Y` for redo and
+  `Backspace` for delete. Both were hardcoded second bindings, and carrying them
+  would have meant two slots per row in the menu. They are bindable in one
+  click now, which is the whole point of the feature; the loss is stated rather
+  than quietly absorbed. A Mac's "delete" key reports `Backspace`, so that one
+  matters more than it looks - it is called out in the guide.
+- **"Ctrl" MEANS CTRL OR COMMAND**, as it always has here. One binding that
+  works on either keyboard beats two rows that differ by platform, and the menu
+  says so. The chord's canonical spelling has a FIXED modifier order
+  (`Ctrl+Alt+Shift+X`), so one keystroke cannot sit in the map under two names
+  and shadow itself.
+- **CAPTURE RUNS IN THE CAPTURE PHASE AND SWALLOWS THE EVENT.** Binding Ctrl+S
+  must not also SAVE, and binding Delete must not also delete a waypoint. jsdom
+  cannot prove that, so `verify-layout.mjs` presses Ctrl+S at a real browser
+  while capturing and asserts the save dialog opened ZERO times - then rebinds
+  undo to Alt+U, presses Ctrl+Z (nothing happens) and Alt+U (it undoes).
+  Closing the modal ends any capture, or the map would go deaf with nothing on
+  screen to explain it.
+- **KEYBINDS TRAVEL IN THE EXPORTED JSON**, normalised on the way OUT as well as
+  in, so an export can never carry a chord the app would refuse to load. They
+  are NOT in PROFILE_KEYS: that whitelist guards the aircraft profile and the
+  personal-data rule, and a list of keystrokes identifies nobody - but it gets
+  the same treatment on every read regardless.
+- **THE HELP IS BUILT FROM THE LIVE KEYMAP** (`keyHelp()`), so it cannot describe
+  a binding that is not in force. The static list it replaced could.
+- **A TEST SLICING THE PAGE SCRIPT NEEDS AN ANCHOR, NOT A GREP.** Three guards
+  split the built file on `document.addEventListener('keydown'` - and the
+  keybind CAPTURE listener now registers earlier in the file, so all three
+  silently started inspecting the wrong function. They anchor on a
+  `/* @KEY-DISPATCH */` marker now. The same trap will catch the next person who
+  adds a listener above the dispatcher.
+- **THE NINE FLIGHT-PLAN CASES ARE WRITTEN OUT** rather than caught by a regex in
+  `default:`. A test asserts the switch has a `case` for every id the resolver
+  can return, and a catch-all makes that guard inexact - which is the
+  looser-assert-than-the-measurement trap this file names by name.
 
 ## The track, and reaching a plan from the map (v16.50-v16.51, roadmap 7 - 9)
 

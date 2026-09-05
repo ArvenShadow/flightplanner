@@ -270,8 +270,10 @@
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
-            <li><b>Keyboard shortcuts.</b> <b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> (or <b>Ctrl+Y</b>) redoes, step by step up to 30 states — ⌘ on Mac, same stacks as the Undo/Redo buttons, and the buttons now <i>name the step</i> they will take back. <b>Ctrl+S</b> opens the save dialog, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> make that flight plan the active one while <b>,</b> and <b>.</b> step back and forward through them (they stop at the first and last plan rather than wrapping, so the key always does what its direction says), and <b>Delete</b> removes the selected waypoint (click one on the map to select it — Edit Mode only, since View Mode is read-only). <b>Esc</b> closes a dialog, abandons a line drag, or clears the selection.
-              <br><b>Two rules apply to all of them.</b> While any dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing else fires behind it. And inside a text field the keys keep their normal text-editing meaning (Ctrl+S is the exception: the browser's own Ctrl+S saves the web page, which is never what you want here).</li>
+            <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — click <b>Set</b>, press the key. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only.
+              <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
+              <br><b>Four rules apply to every binding.</b> <b>Ctrl</b> means Ctrl <i>or</i> ⌘, so one binding works on either keyboard. While a dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing fires behind it. Inside a text field the keys keep their normal text-editing meaning (<b>Ctrl+S</b> is the deliberate exception: the browser's own Ctrl+S saves the web page, which is never what you want here). And <b>Escape cannot be rebound</b> — it is the way out of a dialog and out of a half-finished line drag, so moving it could leave you with no way back.
+              <br>Two things the menu will refuse, and it says why: a chord the <b>browser owns</b> (Ctrl+W, Ctrl+T, F5 …), because <i>preventDefault</i> cannot stop those and the binding would look like it worked and then not; and a chord <b>already used by another action</b>, because whichever came second would silently never fire. Your bindings are saved with your settings and <b>travel in the exported JSON</b>.</li>
             <li><b>Undo now covers the whole plan, not just the route</b>: ETD, initial fuel, reserve, departure elevation and the flight date are snapshotted too, so changing an ETD — which moves every ETO and the daylight verdict — can be taken back like any other edit.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
             <li><b>In the Map-only layout</b> the sidebar is hidden, so the two plan controls you need are on the map itself: <b>✈</b> names the active plan (and its colour) and clicks through to the next one, <b>＋ New plan</b> starts another sector. <b>1</b>–<b>9</b> jump straight to a plan from the keyboard in any layout, and <b>,</b> / <b>.</b> step through them. The map button <i>cycles</i> (it wraps) because it is the only way to switch without a keyboard; the two keys do not.</li>
@@ -526,15 +528,18 @@
         <h2>⚙ Settings</h2>
         <button class="btn btn-outline btn-sm" onclick="closeSettingsModal()">×</button>
       </div>
-      <!-- Two pages rather than one long scroll. The aircraft page is set up
+      <!-- Three pages rather than one long scroll. The aircraft page is set up
            once per machine and then left alone; the map page is pure display
-           preference. Mixing them meant scrolling past the POH tables to
-           change a symbol colour. -->
+           preference; the keyboard page is set once and then lived with.
+           Mixing them meant scrolling past the POH tables to change a symbol
+           colour. -->
       <div id="settings-tabs" class="settings-tabs no-print" role="tablist">
         <button id="settings-tab-aircraft" class="settings-tab is-active" role="tab"
                 onclick="showSettingsPage('aircraft')">✈ Aircraft &amp; Units</button>
         <button id="settings-tab-map" class="settings-tab" role="tab"
                 onclick="showSettingsPage('map')">🗺 Map</button>
+        <button type="button" id="settings-tab-keys" class="settings-tab"
+                onclick="showSettingsPage('keys')">⌨ Keyboard</button>
       </div>
       <div class="modal-body">
 
@@ -819,6 +824,26 @@
 
         </div><!-- /settings-page-map -->
 
+        <div id="settings-page-keys" class="settings-page" hidden>
+          <div class="setting-section">
+            <h3>Keyboard shortcuts</h3>
+            <p style="font-size:10px; color:var(--text-muted); margin:0 0 8px; line-height:1.6;">
+              Click <b>Set</b>, then press the keystroke you want. <b>Ctrl</b> means Ctrl or ⌘,
+              so one binding works on either keyboard. <b>Clear</b> unbinds an action — most of
+              these ship unbound on purpose, so the keyboard is yours rather than full of
+              shortcuts nobody asked for. Shortcuts never fire while a dialog is open, and
+              never while you are typing in a text box (Ctrl+S is the one exception, and says
+              why). They travel in your exported JSON.
+            </p>
+            <div id="keybind-capture-note" class="keybind-note" hidden></div>
+            <div id="keybind-list"></div>
+            <div class="setting-row" style="margin-top:10px;">
+              <label>Reset:</label>
+              <div><button class="btn btn-outline btn-sm" onclick="resetKeybinds()">Restore default shortcuts</button></div>
+            </div>
+          </div>
+        </div><!-- /settings-page-keys -->
+
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary btn-sm" onclick="closeSettingsModal()">Cancel</button>
@@ -862,8 +887,8 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 117 inline on*= handlers - 91 written
-    // into the markup and 26 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 121 inline on*= handlers - 93 written
+    // into the markup and 28 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -1087,7 +1112,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.51';
+    const APP_VERSION = '16.52';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1684,6 +1709,16 @@
       if (persist !== false) localStorage.setItem('c182_layout', mode);
       // Leaflet must re-measure its container after any size change.
       setTimeout(() => { if (map && map.invalidateSize) map.invalidateSize(); }, 60);
+    }
+
+    /** For the (unbound by default) cycle-layout key. Same four modes the
+     *  header's select offers, in the same order. */
+    function cycleLayoutMode() {
+      const modes = ['split', 'stacked', 'plan', 'map'];
+      const cur = modes.findIndex((m) => document.body.classList.contains('layout-' + m));
+      const next = modes[(cur + 1) % modes.length];
+      setLayoutMode(next);
+      say('Layout: ' + next, 'info', 1800);
     }
 
     function toggleCompactCols() {
@@ -3854,7 +3889,7 @@
     // adjustable either, and the page says why rather than leaving a gap.
     // =========================================================================
     function showSettingsPage(which) {
-      const pages = ['aircraft', 'map'];
+      const pages = ['aircraft', 'map', 'keys'];
       for (const p of pages) {
         const page = document.getElementById('settings-page-' + p);
         const tab = document.getElementById('settings-tab-' + p);
@@ -3865,6 +3900,114 @@
       }
       const body = document.querySelector('#settings-modal .modal-body');
       if (body) body.scrollTop = 0;
+    }
+
+    // =========================================================================
+    // 2g. THE KEYBOARD PAGE (v16.52, roadmap 10)
+    //
+    // The whole mapping lives in src/lib/keys.js and every rule about it is
+    // tested without a browser. This is only the form: it renders ACTION_SPECS,
+    // captures one keystroke, asks the module whether that chord is allowed,
+    // and stores the answer.
+    //
+    // CAPTURE IS A REAL LISTENER, NOT A TEXT BOX. A pilot pressing Ctrl+S to
+    // bind it must not trigger Ctrl+S, so the capture handler runs in the
+    // CAPTURE phase and stops the event dead before the app's own keydown ever
+    // sees it.
+    // =========================================================================
+    let keybindCapturing = null;   // the action id being rebound, or null
+
+    function keybindNote(msg, bad) {
+      const el = document.getElementById('keybind-capture-note');
+      if (!el) return;
+      if (!msg) { el.hidden = true; el.textContent = ''; return; }
+      el.hidden = false;
+      el.textContent = msg;
+      el.classList.toggle('is-bad', !!bad);
+    }
+
+    function populateKeybindForm() {
+      const host = document.getElementById('keybind-list');
+      if (!host) return;
+      const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+      let html = '';
+      let group = null;
+      for (const spec of ACTION_SPECS) {
+        if (spec.group !== group) {
+          group = spec.group;
+          html += '<div class="keybind-group">' + esc(group) + '</div>';
+        }
+        const chord = spec.fixed ? spec.dflt : keybinds[spec.id];
+        const capturing = keybindCapturing === spec.id;
+        html += '<div class="keybind-row' + (capturing ? ' is-capturing' : '') + '">' +
+          '<span class="keybind-what"><b>' + esc(spec.label) + '</b>' +
+          (spec.hint ? '<small>' + esc(spec.hint) + '</small>' : '') + '</span>' +
+          '<kbd class="keybind-chord' + (chord ? '' : ' is-unbound') + '">' +
+          esc(capturing ? 'Press a key…' : chordLabel(chord, mac)) + '</kbd>' +
+          '<span class="keybind-actions">' +
+          (spec.fixed
+            ? '<span class="keybind-fixed">fixed</span>'
+            : '<button class="btn btn-outline btn-sm" onclick="beginKeybindCapture(' +
+                JSON.stringify(spec.id) + ')">' + (capturing ? 'Cancel' : 'Set') + '</button>' +
+              '<button class="btn btn-outline btn-sm" onclick="clearKeybind(' +
+                JSON.stringify(spec.id) + ')"' + (chord ? '' : ' disabled') + '>Clear</button>') +
+          '</span></div>';
+      }
+      host.innerHTML = html;
+    }
+
+    function beginKeybindCapture(id) {
+      if (keybindCapturing === id) { endKeybindCapture(); return; }
+      const spec = actionSpec(id);
+      if (!spec || spec.fixed) return;
+      keybindCapturing = id;
+      keybindNote('Press the keystroke for "' + spec.label + '". Escape cancels.', false);
+      populateKeybindForm();
+      document.addEventListener('keydown', captureKeybind, true);
+    }
+
+    function endKeybindCapture() {
+      keybindCapturing = null;
+      document.removeEventListener('keydown', captureKeybind, true);
+      populateKeybindForm();
+    }
+
+    /** Runs in the CAPTURE phase and swallows the event, so binding Ctrl+S does
+     *  not also save, and binding Delete does not also delete a waypoint. */
+    function captureKeybind(e) {
+      if (!keybindCapturing) return;
+      const chord = chordOf(e);
+      if (!chord) return;              // a bare modifier: they are mid-chord
+      e.preventDefault();
+      e.stopPropagation();
+      if (chord === 'Escape') { keybindNote('Cancelled - nothing changed.', false); endKeybindCapture(); return; }
+      const id = keybindCapturing;
+      const problem = chordProblem(keybinds, chord, id);
+      if (problem) { keybindNote(problem, true); return; }   // stay in capture, let them try again
+      keybinds[id] = chord;
+      saveKeybinds();
+      const spec = actionSpec(id);
+      keybindNote(chordLabel(chord) + ' is now "' + ((spec && spec.label) || id) + '".', false);
+      endKeybindCapture();
+    }
+
+    function clearKeybind(id) {
+      const spec = actionSpec(id);
+      if (!spec || spec.fixed) return;
+      keybinds[id] = null;
+      saveKeybinds();
+      keybindNote('"' + spec.label + '" has no shortcut now.', false);
+      populateKeybindForm();
+    }
+
+    async function resetKeybinds() {
+      if (!await confirmDialog('Restore the default shortcuts?',
+        'Every action goes back to what the planner ships with, and anything you bound ' +
+        'yourself is forgotten.', { okLabel: 'Restore' })) return;
+      keybinds = normaliseKeymap(null);
+      saveKeybinds();
+      keybindNote('Default shortcuts restored.', false);
+      populateKeybindForm();
     }
 
     /** The Map page's inputs, read and validated through the module. */
@@ -4429,13 +4572,21 @@
       // leave stale values sitting in the inputs.
       populateSettingsForm();
       populateMapSettingsForm();
+      populateKeybindForm();
       updatePerfModelVisibility();
       updateC182Preview();
       showSettingsPage('aircraft');
       openModal('settings-modal');
     }
 
-    function closeSettingsModal() { closeModal('settings-modal'); }
+    function closeSettingsModal() {
+      // A capture left running would keep swallowing keystrokes after the
+      // modal is gone - the map would go deaf with nothing on screen to explain
+      // it, which is the worst version of a silent key.
+      if (keybindCapturing) endKeybindCapture();
+      keybindNote('');
+      closeModal('settings-modal');
+    }
 
     function numOr(id, fallback) {
       const v = Number(document.getElementById(id).value);
@@ -4611,7 +4762,27 @@
     // without a browser, including the cases that only arise with a dialog up
     // or the cursor in a field. This handler only describes the situation and
     // carries out the answer.
-    document.addEventListener('keydown', function(e) {
+    // THE PILOT'S OWN BINDINGS (v16.52, roadmap 10). Re-validated on every read
+    // rather than trusted from storage or a route file: normaliseKeymap drops an
+    // unknown action, an unstorable chord, one the browser owns, and a duplicate
+    // - a duplicate being the one that would look like a dead key.
+    let keybinds = normaliseKeymap(null);
+    function loadKeybinds() {
+      let raw = null;
+      try { raw = JSON.parse(localStorage.getItem('c182_keybinds') || 'null'); } catch (e) {}
+      keybinds = normaliseKeymap(raw);
+    }
+    function saveKeybinds() {
+      keybinds = normaliseKeymap(keybinds);
+      try { localStorage.setItem('c182_keybinds', JSON.stringify(keybinds)); } catch (e) {}
+    }
+
+    // KEY-DISPATCH: the app's one global keydown handler. The marker is here
+    // because the tests slice this block out of the built file, and a plain
+    // grep for addEventListener('keydown') now finds the keybind-capture
+    // listener first - which is how three guards silently started inspecting
+    // the wrong function.
+    document.addEventListener('keydown', function(e) {   /* @KEY-DISPATCH */
       const act = resolveKey(e, {
         dragging: !!lineDrag,
         dialogOpen: typeof dialogIsOpen === 'function' && dialogIsOpen(),
@@ -4619,9 +4790,12 @@
         textLike: isTextLikeTarget(e.target),
         viewMode: isDoneMode,
         hasHighlight: !!highlightedWaypoint
-      });
+      }, keybinds);
       if (!act) return;
       if (act.preventDefault) e.preventDefault();
+      // A CASE PER ACTION, and a test asserts there is one for every id the
+      // resolver can return - a binding that is settable in the menu but
+      // unhandled here would be the silent dead key all over again.
       switch (act.action) {
         case 'cancel-drag': cancelLineDrag(); break;
         case 'close-overlays':
@@ -4634,9 +4808,29 @@
         case 'save': saveCurrentMission(); break;
         case 'focus-search': searchFixes(); break;
         case 'delete-waypoint': deleteHighlightedWaypoint(); break;
-        case 'activate-flight': activateFlightByIndex(act.index); break;
         case 'next-flight': stepActiveFlight(1); break;
         case 'prev-flight': stepActiveFlight(-1); break;
+        case 'new-flight-plan': addNewFlightPlan(); break;
+        case 'toggle-view-mode': toggleDoneMode(); break;
+        case 'toggle-ruler': toggleRulerMode(); break;
+        case 'toggle-airspace': toggleAirspace(); break;
+        case 'toggle-fixes': toggleFixes(); break;
+        case 'toggle-chart': toggleBaseChart(); break;
+        case 'cycle-chart-detail': cycleChartDetail(); break;
+        case 'cycle-declutter': cycleDeclutterMode(); break;
+        case 'cycle-layout': cycleLayoutMode(); break;
+        case 'open-winds': openWindModal(); break;
+        case 'open-settings': openSettingsModal(); break;
+        case 'open-guide': openHelpModal(); break;
+        case 'print': window.print(); break;
+        // THE NINE ARE WRITTEN OUT rather than caught by a regex in `default`.
+        // A test asserts this switch has a `case` for every id the resolver can
+        // return, and a catch-all makes that guard inexact - which is the
+        // looser-assert-than-the-measurement trap CLAUDE.md names by name.
+        case 'activate-flight-1': case 'activate-flight-2': case 'activate-flight-3':
+        case 'activate-flight-4': case 'activate-flight-5': case 'activate-flight-6':
+        case 'activate-flight-7': case 'activate-flight-8': case 'activate-flight-9':
+          activateFlightByIndex(act.index); break;
       }
     });
 
@@ -5409,6 +5603,7 @@
         missions: getStoredMissions(),
         flights: flights,
         profile: aircraftProfile,
+        keybinds: keybinds,
         planningPrefs: {
           fuel: document.getElementById('fuel-dep').value,
           reserve: document.getElementById('fuel-reserve').value,
@@ -5509,6 +5704,15 @@
             applied.push('planning preferences');
           }
 
+          if (parsed.keybinds && typeof parsed.keybinds === 'object' && !Array.isArray(parsed.keybinds)) {
+            // Normalised, not trusted: a file can carry an unknown action, an
+            // unstorable chord, one the browser owns, or a duplicate.
+            keybinds = normaliseKeymap(parsed.keybinds);
+            saveKeybinds();
+            if (typeof populateKeybindForm === 'function') populateKeybindForm();
+            applied.push('keyboard shortcuts');
+          }
+
           if (parsed.currentFlights && Array.isArray(parsed.currentFlights) && parsed.currentFlights.length > 0) {
             const ok = sanitiseFlights(parsed.currentFlights);
             if (ok) {
@@ -5596,6 +5800,7 @@
       document.getElementById('def-dep-elev').value = flights[0].depElev;
     }
     loadViewPrefs();
+    loadKeybinds();
     // THE FLIGHT DATE IS SET BEFORE THE FIRST RENDER, not by the daylight card
     // on its way past (v16.48). The ETO column now needs it - it builds an
     // absolute instant so it cannot disagree with the card across a DST

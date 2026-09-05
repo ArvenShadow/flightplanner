@@ -852,6 +852,29 @@ svg.leaflet-image-layer.leaflet-interactive path {
     body.dark-mode .fix-preview .pv-name { color: #bee3f8; text-shadow: 0 0 2px #10151f, 0 0 3px #10151f; }
     .fix-preview .pv-kind { font-size: 9px; color: var(--text-muted); text-transform: uppercase;
       letter-spacing: 0.4px; }
+    /* The keyboard page (v16.52). A dense list - 30-odd rows - so the row is
+       compact and the group headers carry the structure. */
+    .keybind-group { font-size: 9.5px; font-weight: 700; letter-spacing: 0.5px;
+      text-transform: uppercase; color: var(--text-muted); margin: 10px 0 3px; }
+    .keybind-group:first-child { margin-top: 0; }
+    .keybind-row { display: flex; align-items: center; gap: 8px; padding: 3px 6px;
+      border-radius: 4px; border: 1px solid transparent; }
+    .keybind-row:nth-child(even) { background: var(--bg-calc); }
+    .keybind-row.is-capturing { border-color: #dd6b20; background: rgba(221,107,32,0.12); }
+    .keybind-what { flex: 1; min-width: 0; font-size: 11px; line-height: 1.35; }
+    .keybind-what small { display: block; font-size: 9.5px; color: var(--text-muted); }
+    .keybind-chord { font-family: inherit; font-size: 10.5px; font-weight: 700; white-space: nowrap;
+      min-width: 108px; text-align: center; padding: 2px 6px; border-radius: 3px;
+      border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); }
+    .keybind-chord.is-unbound { font-weight: 400; font-style: italic; color: var(--text-muted); }
+    .keybind-actions { display: flex; gap: 4px; }
+    .keybind-fixed { font-size: 9.5px; color: var(--text-muted); font-style: italic; padding: 0 6px; }
+    .keybind-note { font-size: 10.5px; padding: 6px 8px; border-radius: 4px; margin-bottom: 8px;
+      background: #ebf8ff; color: #2a4365; border: 1px solid #bee3f8; }
+    .keybind-note.is-bad { background: #fff5f5; color: #822727; border-color: #feb2b2; }
+    body.dark-mode .keybind-note { background: #1a365d; color: #bee3f8; border-color: #2c5282; }
+    body.dark-mode .keybind-note.is-bad { background: #63171b; color: #fed7d7; border-color: #9b2c2c; }
+
     /* The route-track preview (v16.50). Same chart-paper ground as the fix
        preview, so the thickness is judged against something the colour of what
        it will actually sit on. */

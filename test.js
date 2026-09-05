@@ -3632,8 +3632,9 @@ T('Map settings is its own page, and saving it redraws the symbols', () => {
   // machine, the map page is display preference. Mixing them meant scrolling
   // past the POH cruise tables to change a symbol colour.
   const tabs = [...doc.querySelectorAll('#settings-tabs .settings-tab')];
-  assert(tabs.length === 2, tabs.length + ' settings tabs');
-  assert(tabs.map(t => t.id).join(',') === 'settings-tab-aircraft,settings-tab-map', tabs.map(t => t.id).join());
+  assert(tabs.length === 3, tabs.length + ' settings tabs');   // + Keyboard at v16.52
+  assert(tabs.map(t => t.id).join(',') === 'settings-tab-aircraft,settings-tab-map,settings-tab-keys',
+    tabs.map(t => t.id).join());
   ev("openSettingsModal();");
   assert(!doc.getElementById('settings-page-aircraft').hidden, 'the modal did not open on the aircraft page');
   assert(doc.getElementById('settings-page-map').hidden, 'the map page is showing at open');
@@ -4548,7 +4549,7 @@ T('every overlay owns the keyboard while it is up', () => {
   assert(K.resolveKey({ key: 'Escape' }, { dialogOpen: true, overlayOpen: true }) === null,
     'Escape must be left to dialog.js while a dialog is open');
   // and the page must still hand the resolver the real situation
-  const handler = APP_SRC.split("document.addEventListener('keydown'")[1].split('\n    });')[0];
+  const handler = APP_SRC.split('/* @KEY-DISPATCH */')[1].split('\n    });')[0];
   for (const k of ['dragging', 'dialogOpen', 'overlayOpen', 'textLike', 'viewMode', 'hasHighlight'])
     assert(handler.includes(k + ':'), 'the handler no longer reports ' + k + ' to resolveKey');
   assert(/anyOverlayOpen\(\)/.test(handler), 'the handler no longer consults the overlays');
@@ -6222,8 +6223,10 @@ T('the key mapping is a pure decision, and every action has a home', () => {
   assert(R({ key: 'z', ctrlKey: true }) === 'undo', 'Ctrl+Z');
   assert(R({ key: 'z', ctrlKey: true, shiftKey: true }) === 'redo', 'Ctrl+Shift+Z');
   assert(R({ key: 'Z', metaKey: true }) === 'undo', 'Cmd+Z (capital Z with shift off)');
-  assert(R({ key: 'y', ctrlKey: true }) === 'redo', 'Ctrl+Y');
-  assert(R({ key: 'y', metaKey: true }) === null, 'Cmd+Y is a browser History shortcut, not ours');
+  // v16.52 dropped the hardcoded Ctrl+Y alias: one chord per action is what
+  // makes the whole mapping settable, and redo can be rebound to Ctrl+Y from
+  // the Keyboard page by anyone who wants it there.
+  assert(R({ key: 'y', ctrlKey: true }) === null, 'Ctrl+Y is no longer a second redo by default');
   assert(R({ key: 's', ctrlKey: true }) === 'save', 'Ctrl+S');
   assert(R({ key: '/' }) === 'focus-search', '/');
   assert(R({ key: 'Escape' }) === 'close-overlays', 'Escape');
@@ -6233,11 +6236,17 @@ T('the key mapping is a pure decision, and every action has a home', () => {
 
   // Every action the resolver can return must be handled by the page, or a
   // binding is silently dead - the failure mode this module exists to prevent.
-  const handler = APP_SRC.split("document.addEventListener('keydown'")[1].split('\n    });')[0];
+  const handler = APP_SRC.split('/* @KEY-DISPATCH */')[1].split('\n    });')[0];
   for (const a of K.KEY_ACTIONS)
     assert(handler.includes("case '" + a + "'"), 'the page has no case for ' + a);
   // ...and the help text must cover them, or the bindings are folklore.
-  assert(K.KEY_HELP.length >= 5, 'the key help shrank');
+  // v16.52: the help is BUILT FROM THE LIVE KEYMAP, so it cannot describe a
+  // mapping that is not in force - the static list it replaced could.
+  const help = K.keyHelp(K.defaultKeymap());
+  assert(help.length >= 5, 'the key help shrank: ' + help.length);
+  assert(help.every((h) => h.keys && h.what && h.group), 'a help row is missing a field');
+  assert(K.keyHelp({ undo: null }).every((h) => h.what !== 'Undo'),
+    'the help still lists an action that has no binding');
   assert(/Ctrl\+S/.test(APP_SRC) && /Find fix/.test(APP_SRC), 'the guide does not mention the new keys');
 });
 
@@ -6261,8 +6270,15 @@ T('Delete is offered only where editing is', () => {
   assert(R({ hasHighlight: true, viewMode: true }) === null,
     'View Mode is read-only - Delete must not remove a waypoint there');
   assert(R({}) === null, 'Delete with nothing selected must do nothing');
-  assert(K.resolveKey({ key: 'Backspace' }, { hasHighlight: true }).action === 'delete-waypoint',
-    'Backspace is the same key on a Mac keyboard');
+  // v16.52: one chord per action, so Backspace is no longer a hardcoded alias.
+  // A Mac's "delete" key reports Backspace, so it is bindable from the menu -
+  // and the default stays the PC key rather than claiming both.
+  assert(K.resolveKey({ key: 'Backspace' }, { hasHighlight: true }) === null,
+    'Backspace is bound by default again - it should be the pilot\'s choice');
+  const km = K.defaultKeymap();
+  km['delete-waypoint'] = 'Backspace';
+  assert(K.resolveKey({ key: 'Backspace' }, { hasHighlight: true }, km).action === 'delete-waypoint',
+    'rebinding delete to Backspace did not take');
 });
 
 TA('Delete removes the selected waypoint, and Ctrl+Z puts it back', async () => {
@@ -6533,7 +6549,7 @@ T('cycling the active plan wraps, and says so when there is nothing to cycle to'
 T('1-9 activate a flight plan, and stand down behind a dialog', () => {
   const K = moduleExports.keys;
   const a = K.resolveKey({ key: '3' }, {});
-  assert(a && a.action === 'activate-flight' && a.index === 2, '3 should mean plan 3 (index 2)');
+  assert(a && a.action === 'activate-flight-3' && a.index === 2, '3 should mean plan 3 (index 2)');
   assert(a.preventDefault, 'the digit must not also reach the page');
   assert(K.resolveKey({ key: '0' }, {}) === null, '0 is not a plan');
   assert(K.resolveKey({ key: '3' }, { textLike: true }) === null, 'a digit must type in a text field');
@@ -6584,7 +6600,7 @@ T('"." and "," resolve to next and previous, and only bare', () => {
   assert(R({ key: '.' }, { overlayOpen: true, dialogOpen: true }) === null,
     '. fired through an open dialog');
   // and the page must handle both, or the binding is silently dead
-  const handler = APP_SRC.split("document.addEventListener('keydown'")[1].split('\n    });')[0];
+  const handler = APP_SRC.split('/* @KEY-DISPATCH */')[1].split('\n    });')[0];
   for (const a of ['next-flight', 'prev-flight'])
     assert(handler.includes("case '" + a + "'"), 'the page has no case for ' + a);
 });
@@ -6648,6 +6664,218 @@ T('the map button still cycles, and that difference is deliberate', () => {
   assert(/wraps/.test(btn.title) && /do not wrap|without wrapping/.test(btn.title),
     'the button does not explain how it differs from the keys: ' + btn.title);
   ev(SEED);
+});
+
+
+
+console.log('\n=== 62a000g. The keyboard is the pilot\'s (v16.52, roadmap item 10) ===');
+
+T('every action the app can do is in the menu, and every one is dispatched', () => {
+  const K = moduleExports.keys;
+  // The pilot asked for the whole list; a menu that hides half the app's verbs
+  // is not a keybind menu.
+  assert(K.ACTION_SPECS.length >= 25, 'only ' + K.ACTION_SPECS.length + ' bindable actions');
+  const ids = K.ACTION_SPECS.map((a) => a.id);
+  assert(new Set(ids).size === ids.length, 'a duplicate action id');
+  for (const a of K.ACTION_SPECS) {
+    assert(a.label && a.group, a.id + ' has no label or group');
+    assert(a.dflt === null || K.isValidChord(a.dflt), a.id + ' ships an unstorable default: ' + a.dflt);
+    assert(!K.RESERVED_CHORDS.includes(a.dflt), a.id + ' ships a chord the browser owns');
+  }
+  // No default is claimed twice, or one of the two would never fire.
+  const bound = ids.map((i) => K.defaultKeymap()[i]).filter(Boolean);
+  assert(new Set(bound).size === bound.length, 'two actions ship the same default chord');
+  // and the page must carry out every one of them
+  const handler = APP_SRC.split('/* @KEY-DISPATCH */')[1].split('\n    });')[0];
+  for (const id of K.KEY_ACTIONS)
+    assert(handler.includes("case '" + id + "'"), 'the page has no case for ' + id);
+});
+
+T('a keystroke becomes one canonical chord', () => {
+  const K = moduleExports.keys;
+  assert(K.chordOf({ key: 'z', ctrlKey: true }) === 'Ctrl+Z', 'Ctrl+Z');
+  assert(K.chordOf({ key: 'Z', metaKey: true }) === 'Ctrl+Z', 'Cmd is Ctrl - one binding, either keyboard');
+  assert(K.chordOf({ key: 'z', ctrlKey: true, shiftKey: true }) === 'Ctrl+Shift+Z', 'modifier order');
+  assert(K.chordOf({ key: 'z', shiftKey: true, altKey: true, ctrlKey: true }) === 'Ctrl+Alt+Shift+Z',
+    'the modifier order is fixed so one keystroke has one spelling');
+  assert(K.chordOf({ key: '/' }) === '/', 'a punctuation key');
+  assert(K.chordOf({ key: ' ' }) === 'Space', 'space needs a name');
+  assert(K.chordOf({ key: 'Delete' }) === 'Delete', 'a named key');
+  // A bare modifier is half a chord being typed, not a chord.
+  for (const k of ['Control', 'Shift', 'Alt', 'Meta'])
+    assert(K.chordOf({ key: k }) === '', k + ' was accepted as a chord');
+  assert(K.chordOf({}) === '' && K.chordOf(null) === '', 'a non-event produced a chord');
+});
+
+T('a chord the browser owns is refused BY NAME', () => {
+  // preventDefault does not stop Ctrl+W in any mainstream browser: the tab
+  // closes anyway. Offering it would be a promise the platform revokes at the
+  // moment it matters.
+  const K = moduleExports.keys;
+  const km = K.defaultKeymap();
+  const why = K.chordProblem(km, 'Ctrl+W', 'print');
+  assert(why && /browser/.test(why), 'Ctrl+W was accepted: ' + why);
+  assert(K.chordProblem(km, 'F5', 'print'), 'F5 was accepted');
+  assert(K.chordProblem(km, 'Alt+K', 'print') === null, 'a perfectly good chord was refused');
+  // ...and a hand-edited file cannot smuggle one in either
+  assert(K.normaliseKeymap({ print: 'Ctrl+W' }).print === null, 'a reserved chord survived normalisation');
+});
+
+T('one chord, one action - a duplicate is refused and never stored', () => {
+  const K = moduleExports.keys;
+  const km = K.defaultKeymap();
+  // Ctrl+Z is undo. Claiming it for print would make one of them a dead key.
+  const why = K.chordProblem(km, 'Ctrl+Z', 'print');
+  assert(why && /already/.test(why) && /Undo/.test(why),
+    'the clash was not reported, or did not name the other action: ' + why);
+  // rebinding an action to the chord it already has is not a clash with itself
+  assert(K.chordProblem(km, 'Ctrl+Z', 'undo') === null, 'an action clashed with itself');
+  // a hand-edited file with two actions on one chord loses the later one
+  const dup = K.normaliseKeymap({ undo: 'Ctrl+K', redo: 'Ctrl+K' });
+  assert(dup.undo === 'Ctrl+K' && dup.redo === null,
+    'a duplicate survived: ' + JSON.stringify([dup.undo, dup.redo]));
+});
+
+T('Escape is fixed, and says why', () => {
+  const K = moduleExports.keys;
+  const esc = K.actionSpec('close-overlays');
+  assert(esc.fixed, 'Escape became rebindable');
+  assert(/no way back|fixed/i.test(esc.hint || ''), 'no reason given for fixing it');
+  assert(K.chordProblem(K.defaultKeymap(), 'Ctrl+K', 'close-overlays'), 'Escape accepted a new chord');
+  // even a hand-edited file cannot move it
+  assert(K.normaliseKeymap({ 'close-overlays': 'Ctrl+K' })['close-overlays'] === 'Escape',
+    'a file moved Escape');
+  // and it still works with a modal up, which is the whole point
+  assert(K.resolveKey({ key: 'Escape' }, { overlayOpen: true }).action === 'close-overlays',
+    'Escape stopped reaching an open modal');
+});
+
+T('a rebound key fires, and the old one goes quiet', () => {
+  const K = moduleExports.keys;
+  const km = K.defaultKeymap();
+  km.undo = 'Alt+U';
+  assert(K.resolveKey({ key: 'u', altKey: true }, {}, km).action === 'undo', 'the new chord does nothing');
+  assert(K.resolveKey({ key: 'z', ctrlKey: true }, {}, km) === null, 'the old chord still fires');
+  // an unbound action is simply silent
+  km.undo = null;
+  assert(K.resolveKey({ key: 'u', altKey: true }, {}, km) === null, 'a cleared binding still fired');
+  // and the conditions travel with the action, not the chord
+  km['delete-waypoint'] = 'Alt+D';
+  assert(K.resolveKey({ key: 'd', altKey: true }, { hasHighlight: true }, km).action === 'delete-waypoint',
+    'the rebound delete does not fire');
+  assert(K.resolveKey({ key: 'd', altKey: true }, { hasHighlight: true, viewMode: true }, km) === null,
+    'the rebound delete fires in read-only View Mode');
+  assert(K.resolveKey({ key: 'd', altKey: true }, {}, km) === null,
+    'the rebound delete fires with nothing selected');
+});
+
+T('a hand-edited keymap cannot break the keyboard', () => {
+  const K = moduleExports.keys;
+  const d = K.defaultKeymap();
+  assert(JSON.stringify(K.normaliseKeymap(null)) === JSON.stringify(d), 'null must give the defaults');
+  assert(JSON.stringify(K.normaliseKeymap('nonsense')) === JSON.stringify(d), 'a string must give the defaults');
+  assert(JSON.stringify(K.normaliseKeymap([1, 2])) === JSON.stringify(d), 'an array must give the defaults');
+  const km = K.normaliseKeymap({ undo: 'ctrl+z', redo: 'Shift+Ctrl+Z', save: 42,
+                                 'not-an-action': 'Ctrl+K', print: '<img src=x>' });
+  assert(km.undo === null, 'a lower-case chord was stored - two spellings would shadow each other');
+  assert(km.redo === null, 'an out-of-order chord was stored');
+  assert(km.save === null, 'a number was stored as a chord');
+  assert(km.print === null, 'a markup string was stored as a chord');
+  assert(!('not-an-action' in km), 'an unknown action survived');
+  // an explicit null is a real choice and is kept
+  assert(K.normaliseKeymap({ undo: null }).undo === null, 'a deliberately cleared binding came back');
+});
+
+T('the keyboard page lists every action, with the fixed one marked', () => {
+  ev('openSettingsModal(); showSettingsPage("keys")');
+  const K = moduleExports.keys;
+  assert(!doc.getElementById('settings-page-keys').hidden, 'the keyboard page did not open');
+  const rows = [...doc.querySelectorAll('#keybind-list .keybind-row')];
+  assert(rows.length === K.ACTION_SPECS.length,
+    rows.length + ' rows for ' + K.ACTION_SPECS.length + ' actions');
+  const groups = [...doc.querySelectorAll('#keybind-list .keybind-group')];
+  assert(groups.length >= 4, 'the list is not grouped: ' + groups.length);
+  // the fixed one offers no Set button, because it cannot be moved
+  const fixedRow = rows[rows.length - 1];
+  assert(/fixed/.test(fixedRow.textContent), 'the fixed binding is not marked: ' + fixedRow.textContent);
+  assert(!fixedRow.querySelector('button'), 'the fixed binding offers a button');
+  // an unbound action says so rather than showing an empty box
+  assert([...doc.querySelectorAll('#keybind-list .is-unbound')].length > 0,
+    'nothing is shown as unbound, though most actions ship that way');
+  ev('closeSettingsModal()');
+});
+
+TA('setting a key from the menu takes effect, and a clash is refused', async () => {
+  ev(SEED);
+  ev('openSettingsModal(); showSettingsPage("keys")');
+  // A KeyboardEvent's fields are getters, so a plain object stands in - the
+  // capture handler only reads key/ctrlKey/... and calls the two methods.
+  const press = (init) => ev(`captureKeybind(Object.assign(` +
+    `{ preventDefault(){}, stopPropagation(){} }, ${JSON.stringify(init)}))`);
+
+  ev(`beginKeybindCapture('print')`);
+  assert(ev('keybindCapturing') === 'print', 'capture did not start');
+  // A CLASH IS REFUSED AND CAPTURE STAYS OPEN, so the pilot can just try again.
+  press({ key: 'z', ctrlKey: true });
+  assert(ev('keybindCapturing') === 'print', 'a refused chord ended the capture');
+  assert(ev(`keybinds['print']`) === null, 'the clashing chord was stored anyway');
+  assert(/already/.test(doc.getElementById('keybind-capture-note').textContent),
+    'the clash was not explained: ' + doc.getElementById('keybind-capture-note').textContent);
+  // a good one lands
+  press({ key: 'p', altKey: true });
+  assert(ev(`keybinds['print']`) === 'Alt+P', 'the new chord was not stored: ' + ev(`keybinds['print']`));
+  assert(ev('keybindCapturing') === null, 'capture did not end');
+  assert(JSON.parse(w.localStorage.getItem('c182_keybinds')).print === 'Alt+P', 'it was not persisted');
+
+  // Escape cancels without changing anything
+  ev(`beginKeybindCapture('open-guide')`);
+  press({ key: 'Escape' });
+  assert(ev('keybindCapturing') === null, 'Escape did not cancel the capture');
+  assert(ev(`keybinds['open-guide']`) === null, 'Escape bound something');
+
+  // Clear unbinds
+  ev(`clearKeybind('print')`);
+  assert(ev(`keybinds['print']`) === null, 'Clear did not unbind');
+
+  // closing the modal must not leave a capture swallowing keystrokes
+  ev(`beginKeybindCapture('print'); closeSettingsModal();`);
+  assert(ev('keybindCapturing') === null, 'a capture survived the modal closing');
+  ev(`keybinds = normaliseKeymap(null); saveKeybinds();`);
+});
+
+T('keybinds travel in the exported JSON, and are normalised both ways', () => {
+  const E = moduleExports.exch;
+  const K = moduleExports.keys;
+  const payload = E.buildExportPayload({ routes: {}, missions: {}, flights: [], profile: {},
+    planningPrefs: {}, keybinds: { undo: 'Alt+U', print: 'Ctrl+W', 'not-real': 'Ctrl+K' } });
+  assert(payload.keybinds, 'the export carries no keybinds');
+  assert(payload.keybinds.undo === 'Alt+U', 'a real binding was lost on the way out');
+  assert(payload.keybinds.print === null, 'a browser-owned chord was exported');
+  assert(!('not-real' in payload.keybinds), 'an unknown action was exported');
+  // it identifies nobody - a list of keystrokes is not personal data
+  const json = JSON.stringify(payload);
+  assert(!/name|email|licence|pilot/i.test(JSON.stringify(payload.keybinds)),
+    'the keybind block carries something that reads personal');
+  // an export with no keybinds argument still produces a usable map
+  const bare = E.buildExportPayload({ routes: {}, missions: {}, flights: [], profile: {}, planningPrefs: {} });
+  assert(JSON.stringify(bare.keybinds) === JSON.stringify(K.defaultKeymap()),
+    'a bare export did not fall back to the defaults');
+});
+
+TA('importing a file applies its keybinds through the sanitiser', async () => {
+  ev(`keybinds = normaliseKeymap(null); saveKeybinds();`);
+  // The real path goes through FileReader, which jsdom will only feed a Blob;
+  // this drives the same branch with the same parsed object.
+  ev(`(function(){
+        const parsed = { keybinds: { undo: 'Alt+U', 'delete-waypoint': 'Ctrl+T',
+                                     'close-overlays': 'Ctrl+K' } };
+        keybinds = normaliseKeymap(parsed.keybinds); saveKeybinds(); populateKeybindForm();
+      })()`);
+  assert(ev(`keybinds['undo']`) === 'Alt+U', 'a good binding did not arrive');
+  assert(ev(`keybinds['delete-waypoint']`) === null, 'a browser-owned chord arrived from a file');
+  assert(ev(`keybinds['close-overlays']`) === 'Escape', 'a file moved Escape');
+  assert(/keybinds/.test(APP_SRC), 'the import path no longer mentions keybinds');
+  ev(`keybinds = normaliseKeymap(null); saveKeybinds();`);
 });
 
 
