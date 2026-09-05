@@ -1032,7 +1032,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.43';
+    const APP_VERSION = '16.44';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4598,14 +4598,44 @@
     // =========================================================================
     // 8. UNIVERSAL STORAGE & EXPORT / IMPORT ENGINE
     // =========================================================================
+    /**
+     * A CORRUPT SAVED-ROUTE LIBRARY MUST NOT BRICK THE APP (v16.44).
+     *
+     * These two getters ran `JSON.parse` with no try/catch, and they are called
+     * from `populateRouteDropdown()` at BOOT - before `refreshMap()` and
+     * `renderAllFlightTables()`. Any malformed value (a partial write, a hand
+     * edit, a quota-truncated string) therefore threw out of the top-level
+     * script: no map, no table, no guide, and no way to recover from inside the
+     * app. `c182_active_mission` was hardened for exactly this long ago; these
+     * two were missed.
+     *
+     * The library is a name -> entry map, so a broken one costs the SAVED
+     * ROUTES, not the flight in front of the pilot. Report it and carry on.
+     */
+    let storageWarned = false;
+    function readStoredLibrary(key, label) {
+      let raw = null;
+      try { raw = localStorage.getItem(key); } catch (e) { return {}; }
+      if (!raw) return {};
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        if (!storageWarned && typeof say === 'function') {
+          storageWarned = true;
+          say('Your saved ' + label + ' could not be read (the stored data is damaged). ' +
+              'The plan you have open is unaffected, and saving again will replace it.', 'warn', 9000);
+        }
+        return {};
+      }
+      return parsed;
+    }
+
     function getStoredMissions() {
-      const stored = localStorage.getItem('c182_custom_missions');
-      return stored ? JSON.parse(stored) : {};
+      return readStoredLibrary('c182_custom_missions', 'missions');
     }
 
     function getStoredSingleRoutes() {
-      const stored = localStorage.getItem('c182_custom_routes');
-      return stored ? JSON.parse(stored) : {};
+      return readStoredLibrary('c182_custom_routes', 'routes');
     }
 
     function populateRouteDropdown() {
@@ -4686,13 +4716,32 @@
       if (type === 'route') {
         const singleRoutes = getStoredSingleRoutes();
         if (singleRoutes[name]) {
+          // EVERY DOOR INTO THE LIVE PLAN GOES THROUGH THE SANITISER (v16.44).
+          //
+          // This branch assigned the stored value straight onto the live flight
+          // and only then walked it, so a malformed entry (a number where an
+          // array belongs, string coordinates, a name that is an object) threw
+          // AFTER `flights[i].waypoints` had already been replaced - leaving the
+          // pilot with a broken plan on screen and nothing but undo or a reload
+          // to get back. Sanitising FIRST means a bad route is refused before
+          // anything is touched.
+          const clean = sanitiseFlights([{ id: 1, title: name, depElev: 0,
+                                           waypoints: singleRoutes[name] }]);
+          if (!clean || !clean[0].waypoints.length) {
+            say('Saved route "' + name + '" could not be read - it holds no usable ' +
+                'waypoints, so nothing was changed.', 'warn', 8000);
+            return;
+          }
           pushUndoState();
-          const wps = JSON.parse(JSON.stringify(singleRoutes[name]));
+          const wps = clean[0].waypoints;
           flights[activeFlightIndex].waypoints = wps;
           flights[activeFlightIndex].title = name;
           loadedRouteRef = { type: 'route', name };
           reportMagVarRefresh(refreshMagVarOnLoad([{ waypoints: wps }]), `Route "${name}"`);
-          if (wps.length > 0) {
+          // The departure elevation is the first fix's altitude ONLY when it is
+          // a real number. There is no house default: an invented field
+          // elevation is a wrong climb datum on every leg.
+          if (wps.length > 0 && isFinite(wps[0].alt)) {
             flights[activeFlightIndex].depElev = wps[0].alt;
             document.getElementById('def-dep-elev').value = wps[0].alt;
           }
@@ -4883,28 +4932,53 @@
         try {
           pushUndoState();
           const parsed = JSON.parse(e.target.result);
+          // What actually landed, so the toast can say so instead of claiming
+          // success for a file it did not understand.
+          const applied = [], rejected = [];
 
-          if (parsed.routes && typeof parsed.routes === 'object') {
-            const customRoutes = localStorage.getItem('c182_custom_routes') ? JSON.parse(localStorage.getItem('c182_custom_routes')) : {};
-            Object.assign(customRoutes, parsed.routes);
-            localStorage.setItem('c182_custom_routes', JSON.stringify(customRoutes));
+          // A ROUTE LIBRARY ENTRY MUST BE AN ARRAY OF WAYPOINTS (v16.44).
+          // `Object.assign` used to copy whatever was in the file - including a
+          // number or a string - straight into storage, and the next load of
+          // that name threw with the live plan already half-replaced.
+          if (parsed.routes && typeof parsed.routes === 'object' && !Array.isArray(parsed.routes)) {
+            const customRoutes = getStoredSingleRoutes();
+            let kept = 0, dropped = 0;
+            for (const [rn, entry] of Object.entries(parsed.routes)) {
+              const ok = sanitiseFlights([{ id: 1, title: rn, depElev: 0, waypoints: entry }]);
+              if (ok && ok[0].waypoints.length) { customRoutes[rn] = ok[0].waypoints; kept++; }
+              else dropped++;
+            }
+            if (kept) {
+              localStorage.setItem('c182_custom_routes', JSON.stringify(customRoutes));
+              applied.push(kept + ' route' + (kept > 1 ? 's' : ''));
+            }
+            if (dropped) rejected.push(dropped + ' unreadable route' + (dropped > 1 ? 's' : ''));
 
-            if (parsed.current && Array.isArray(parsed.current) && parsed.current.length > 0) {
-              flights[0].waypoints = parsed.current;
-              flights[0].depElev = parsed.current[0].alt || 254;
-            } else {
-              const firstRouteName = Object.keys(parsed.routes)[0];
-              if (firstRouteName) {
-                flights[0].waypoints = parsed.routes[firstRouteName];
-                flights[0].depElev = parsed.routes[firstRouteName][0]?.alt || 254;
-              }
+            const first = parsed.current && parsed.current.length ? parsed.current
+              : parsed.routes[Object.keys(parsed.routes)[0]];
+            const live = sanitiseFlights([{ id: flights[0].id, title: flights[0].title,
+                                            depElev: flights[0].depElev, waypoints: first }]);
+            if (live && live[0].waypoints.length) {
+              flights[0].waypoints = live[0].waypoints;
+              // No house default: an invented field elevation is a wrong climb
+              // datum on every leg. Keep what the plan already had.
+              if (isFinite(live[0].waypoints[0].alt)) flights[0].depElev = live[0].waypoints[0].alt;
+              applied.push('the current route');
             }
           }
 
-          if (parsed.missions && typeof parsed.missions === 'object') {
+          if (parsed.missions && typeof parsed.missions === 'object' && !Array.isArray(parsed.missions)) {
             const customMissions = getStoredMissions();
-            Object.assign(customMissions, parsed.missions);
-            localStorage.setItem('c182_custom_missions', JSON.stringify(customMissions));
+            let kept = 0, dropped = 0;
+            for (const [mn, entry] of Object.entries(parsed.missions)) {
+              const ok = sanitiseFlights(entry);
+              if (ok) { customMissions[mn] = ok; kept++; } else dropped++;
+            }
+            if (kept) {
+              localStorage.setItem('c182_custom_missions', JSON.stringify(customMissions));
+              applied.push(kept + ' mission' + (kept > 1 ? 's' : ''));
+            }
+            if (dropped) rejected.push(dropped + ' unreadable mission' + (dropped > 1 ? 's' : ''));
           }
 
           if (parsed.profile && typeof parsed.profile === 'object') {
@@ -4914,6 +4988,7 @@
             toggleTheme(aircraftProfile.theme || 'light');
             updateUnitLabels();
             updatePerfBadge();
+            applied.push('aircraft settings');
           }
 
           if (parsed.planningPrefs && typeof parsed.planningPrefs === 'object') {
@@ -4922,28 +4997,54 @@
             if (pp.reserve !== undefined && pp.reserve !== '') document.getElementById('fuel-reserve').value = pp.reserve;
             if (pp.etd !== undefined) document.getElementById('def-etd').value = pp.etd;
             savePlanningPrefs();
+            applied.push('planning preferences');
           }
 
           if (parsed.currentFlights && Array.isArray(parsed.currentFlights) && parsed.currentFlights.length > 0) {
-            flights = sanitiseFlights(parsed.currentFlights) || flights;
+            const ok = sanitiseFlights(parsed.currentFlights);
+            if (ok) { flights = ok; applied.push(ok.length + ' flight plan' + (ok.length > 1 ? 's' : '')); }
+            else rejected.push('the flight plans');
           }
 
           if (Array.isArray(parsed) && parsed.length > 0) {
-            if (parsed[0].waypoints) {
-              flights = sanitiseFlights(parsed) || flights;
-            } else {
-              flights[activeFlightIndex].waypoints = parsed;
-              flights[activeFlightIndex].depElev = parsed[0].alt || 254;
-            }
+            const asFlights = parsed[0] && parsed[0].waypoints
+              ? sanitiseFlights(parsed)
+              : sanitiseFlights([{ id: flights[activeFlightIndex].id,
+                                   title: flights[activeFlightIndex].title,
+                                   depElev: flights[activeFlightIndex].depElev, waypoints: parsed }]);
+            if (asFlights && asFlights[0].waypoints.length) {
+              if (parsed[0] && parsed[0].waypoints) flights = asFlights;
+              else {
+                flights[activeFlightIndex].waypoints = asFlights[0].waypoints;
+                if (isFinite(asFlights[0].waypoints[0].alt))
+                  flights[activeFlightIndex].depElev = asFlights[0].waypoints[0].alt;
+              }
+              applied.push('a route');
+            } else rejected.push('the file contents');
+          }
+
+          // AN UNRECOGNISED FILE IS NOT AN IMPORT (v16.44). `{"hello":"world"}`
+          // matched no branch, changed nothing, and was reported as "Import
+          // complete" - a silent no-op dressed as success, and the same for a
+          // file from another tool.
+          if (!applied.length) {
+            say('Nothing in this file was recognised' +
+                (rejected.length ? ' (' + rejected.join(', ') + ')' : '') +
+                ' - your plan is unchanged.', 'warn', 9000);
+            return;
           }
 
           populateRouteDropdown();
           activeFlightIndex = 0;
-          document.getElementById('def-dep-elev').value = flights[0].depElev || 254;
+          if (isFinite(flights[0].depElev))
+            document.getElementById('def-dep-elev').value = flights[0].depElev;
           refreshMap();
           renderAllFlightTables();
           saveActiveState();
-          say('Import complete. ' + (parsed.profile ? 'Aircraft settings and planning preferences were applied.' : 'This file has no aircraft settings (older export) - the current performance profile is kept.'), 'good', 8000);
+          say('Imported ' + applied.join(', ') + '.' +
+              (rejected.length ? ' Skipped ' + rejected.join(', ') + '.' : '') +
+              (parsed.profile ? '' : ' This file has no aircraft settings (older export) - your performance profile is kept.'),
+              'good', 8000);
         } catch (err) {
           say('Could not read that file: ' + err.message, 'bad', 9000);
         }

@@ -4336,6 +4336,100 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
     ' legs after a circuit, 0 violations');
 });
 
+console.log('\n=== 62a00. Load and boot robustness (v16.44) ===');
+T('sanitiseFlights coerces every field, and never mutates its input', () => {
+  // M1: it checked coordinate finiteness and passed everything else through, so
+  // lat:"69.3" reached toFixed (which took the daylight card down, and with it
+  // the banner), a name could be an object, laps could be negative.
+  const E = moduleExports.exch;
+  const hostile = [{ id: 'x', title: { a: 1 }, depElev: 'abc', waypoints: [
+    { lat: '69.3', lng: '18.5', name: { toString: () => 'OBJ' }, alt: '2500',
+      oat: null, wdir: undefined, wspd: '', var: '-11', isPattern: 'true', laps: -4,
+      bocNM: '1e309', tocNM: 0, junk: 'dropped',
+      via: [{ lat: '69.4', lng: '18.6' }, { lat: 'nope', lng: 1 }] } ] }];
+  const frozenName = hostile[0].waypoints[0].name;
+  const out = E.sanitiseFlights(hostile);
+  const w = out[0].waypoints[0];
+  assert(typeof w.lat === 'number' && w.lat === 69.3, 'lat stayed a string: ' + typeof w.lat);
+  assert(typeof w.lng === 'number' && w.lng === 18.5, 'lng stayed a string');
+  assert(w.alt === 2500 && typeof w.alt === 'number', 'alt not coerced: ' + JSON.stringify(w.alt));
+  assert(typeof w.name === 'string', 'name is still not a string: ' + typeof w.name);
+  // ABSENT STAYS ABSENT: a missing OAT/wind must be NaN so the banner names it,
+  // never 0 - that is C2 all over again.
+  assert(Number.isNaN(w.oat) && Number.isNaN(w.wdir) && Number.isNaN(w.wspd),
+    'a missing OAT/wind was invented: ' + JSON.stringify([w.oat, w.wdir, w.wspd]));
+  assert(w.var === -11, 'var not coerced: ' + w.var);
+  assert(w.isPattern === true && w.laps === 1, 'pattern/laps: ' + w.isPattern + '/' + w.laps);
+  assert(w.bocNM === undefined, 'an Infinity pin survived: ' + w.bocNM);
+  assert(w.tocNM === undefined, 'a 0 pin became a pin');
+  assert(w.junk === undefined, 'an unknown key was carried into the live plan');
+  assert(w.via.length === 1 && w.via[0].lat === 69.4, 'via not cleaned: ' + JSON.stringify(w.via));
+  assert(out[0].title === '[object Object]' || typeof out[0].title === 'string',
+    'title is not a string');
+  assert(out[0].depElev === 0, 'a non-numeric depElev did not fall back generically');
+  // ...and the caller's object is untouched.
+  assert(hostile[0].waypoints[0].name === frozenName, 'sanitiseFlights mutated its input');
+  assert(hostile[0].waypoints[0].via.length === 2, 'sanitiseFlights mutated the caller\'s via');
+  // A typed 0 is a real value and survives.
+  const zero = E.sanitiseFlights([{ waypoints: [{ lat: 69, lng: 18, oat: 0, wdir: 0, wspd: 0 }] }]);
+  const z = zero[0].waypoints[0];
+  assert(z.oat === 0 && z.wdir === 0 && z.wspd === 0, 'a typed 0 was lost');
+});
+T('a corrupt saved-route library does not brick the boot', () => {
+  // H4: JSON.parse with no try/catch, called from populateRouteDropdown() at
+  // boot BEFORE refreshMap/renderAllFlightTables - so a partial write meant no
+  // map, no table, no way back.
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const fn = raw.split('function readStoredLibrary')[1].split('\n    function ')[0];
+  assert(/try\s*\{[^]{0,200}JSON\.parse/.test(fn), 'the library parse is unguarded again');
+  assert(/Array\.isArray\(parsed\)/.test(fn), 'a JSON array is accepted as a name->entry map');
+  // Drive it: plant garbage, then confirm the app still renders.
+  ev(`localStorage.setItem('c182_custom_routes', '{oops'); localStorage.setItem('c182_custom_missions', '[1,2]');`);
+  const routes = ev('JSON.stringify(getStoredSingleRoutes())');
+  const missions = ev('JSON.stringify(getStoredMissions())');
+  assert(routes === '{}' && missions === '{}',
+    'a corrupt library did not degrade to empty: ' + routes + ' / ' + missions);
+  ev(`populateRouteDropdown(); renderAllFlightTables();`);
+  assert(doc.querySelectorAll('#flight-plans-container table').length > 0,
+    'the app did not render after a corrupt library');
+  ev(`localStorage.removeItem('c182_custom_routes'); localStorage.removeItem('c182_custom_missions');`);
+});
+TA('a malformed saved route is refused BEFORE the live plan is touched', async () => {
+  // H7: the stored value was assigned onto the live flight and only then walked,
+  // so a bad entry threw with flights[i].waypoints already replaced.
+  ev(SEED);
+  const before = ev('JSON.stringify(flights[0].waypoints.map(w => w.name))');
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({ BAD: 5, ALSO_BAD: [{ lat: 'x', lng: 'y' }] }));
+      populateRouteDropdown();
+      document.getElementById('route-selector').value = 'route:BAD';`);
+  await ev('loadSelectedRouteOrMission()');
+  await tick();
+  assert(ev('JSON.stringify(flights[0].waypoints.map(w => w.name))') === before,
+    'a malformed route changed the live plan: ' + ev('JSON.stringify(flights[0].waypoints.map(w => w.name))'));
+  ev(`document.getElementById('route-selector').value = 'route:ALSO_BAD';`);
+  await ev('loadSelectedRouteOrMission()');
+  await tick();
+  assert(ev('JSON.stringify(flights[0].waypoints.map(w => w.name))') === before,
+    'a route with unusable coordinates changed the live plan');
+  ev(`localStorage.removeItem('c182_custom_routes');`);
+});
+T('no house default elevation is invented anywhere', () => {
+  // The author's rule: no hardcoded odd values. The four `|| 254` fallbacks were
+  // ENDU's elevation standing in for "unknown".
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  assert(!/\|\|\s*254/.test(raw), 'a hardcoded 254 ft fallback is back');
+});
+T('an unrecognised import file is not reported as a successful import', () => {
+  // M2: {"hello":"world"} matched no branch, changed nothing, and said
+  // "Import complete."
+  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const fn = raw.split('function importMissionFile')[1].split('\n    function ')[0];
+  assert(/Nothing in this file was recognised/.test(fn),
+    'an unrecognised file is still reported as complete');
+  assert(/applied\.push/.test(fn) && /if \(!applied\.length\)/.test(fn),
+    'the import no longer counts what it applied');
+});
+
 console.log('\n=== 62a0. Broken output is never presented as clean (v16.43) ===');
 T('a circuit stop breaks the altitude chain FORWARD as well as backward', () => {
   // C1: the forward cursor kept the previous real leg's exit altitude across a
