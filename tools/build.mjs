@@ -1,38 +1,38 @@
 #!/usr/bin/env node
 /**
- * Build: src/ -> dist/C182_FlightPlanner.html  AND  src/ -> site/
+ * Build: src/ -> site/   (the only delivery, since v16.45)
  *
- * TWO deliveries of the SAME source, because they fail in different ways:
+ * site/ is the hosted build - GitHub Pages, or a static server on the LAN via
+ * `npm run serve`. It emits four files:
  *
- *   dist/C182_FlightPlanner.html - ONE self-contained file, opened by
- *     double-clicking. No server, no install, no network. This is the
- *     fallback that works on a machine that has never seen the app.
+ *   index.html   the page, with styles inlined at @STYLES
+ *   app.js       the module bundle (esbuild), linked at @BUNDLE
+ *   aip.js       the AIP dataset, linked at @AIPDATA
+ *   sw.js        the service worker, stamped with the app version
  *
- *   site/ - the hosted build (GitHub Pages, or a static server on the LAN).
- *     Same page, but the bundle is a separate app.js and a service worker
- *     is registered, which is the ONLY way to cache VFR chart tiles for
- *     offline use - a file:// page cannot register one.
+ * WHY THE SINGLE-FILE BUILD IS GONE (v16.45, the author's decision). There used
+ * to be a second delivery, dist/C182_FlightPlanner.html - one self-contained
+ * file opened by double-clicking. Its stated purpose was a fallback on a machine
+ * that had never seen the app. In practice it was never used, and it was not
+ * even the better offline option: a file:// page cannot register a service
+ * worker, so it could not cache a single chart tile, while the hosted copy can.
+ * Keeping it also forced the dataset to be INLINED, because file:// forbids
+ * fetch() - 366 KB, 42% of the page, re-downloaded on every app release even
+ * though AIRAC data changes on its own 28-day schedule.
  *
- * The bundle is emitted as a CLASSIC script (esbuild --format=iife) for
- * BOTH. For dist/ that is forced by file:// (browsers block ES modules
- * there). For site/ it is forced by the page itself: the page script is a
- * classic script whose top level calls into the bundle and whose 61 inline
- * on*= handlers need its functions as globals, and a type="module" script
- * is deferred - it would run AFTER the page script, too late. Once Phase 1
- * finishes extracting the page script and the handlers are bound in code,
- * site/ can switch to a real module graph.
+ * THE BUNDLE IS STILL A CLASSIC SCRIPT (esbuild --format=iife), and that is NOT
+ * left over from file://. The page script is a classic script whose top level
+ * calls into the bundle and whose inline on*= handlers need its functions as
+ * globals; a type="module" script is DEFERRED, so it would run AFTER the page
+ * script - too late. site/ can move to a real module graph only once the page
+ * script is extracted and the handlers are bound in code.
  *
- * The bundle is emitted as a CLASSIC script (esbuild --format=iife) and
- * inlined at the @BUNDLE marker, above the app's main script block: a
- * page opened from file:// cannot load ES modules (the browser blocks
- * them cross-origin) but runs classic scripts fine. Verified in Chromium.
- *
- * The build also enforces the project's ship checklist, so a broken
- * artifact can never reach dist/:
+ * The build also enforces the project's ship checklist, so a broken artifact
+ * can never reach site/:
  *   - the bundle and the page script must both parse
  *   - no duplicate DOM ids
  *   - APP_VERSION must match package.json
- *   - the marker must actually have been replaced
+ *   - every marker must actually have been replaced
  *
  *   node tools/build.mjs [--watch]
  */
@@ -45,8 +45,6 @@ import { execFileSync } from 'node:child_process';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_HTML = join(ROOT, 'src', 'index.html');
 const ENTRY = join(ROOT, 'src', 'main.js');
-const OUT_DIR = join(ROOT, 'dist');
-const OUT_HTML = join(OUT_DIR, 'C182_FlightPlanner.html');
 const SITE_DIR = join(ROOT, 'site');
 const SW_SRC = join(ROOT, 'src', 'sw.js');
 const CSS_SRC = join(ROOT, 'src', 'styles.css');
@@ -126,10 +124,17 @@ export async function runBuild({ quiet = false } = {}) {
   if (!MARKER.test(srcHtml)) fail('src/index.html has no @BUNDLE marker');
   if (!STYLE_MARKER.test(srcHtml)) fail('src/index.html has no @STYLES marker');
 
+  // THE DATASET IS A SIDECAR, NOT INLINED (v16.45). It used to be pasted into
+  // the HTML because a file:// page cannot fetch() and the single-file delivery
+  // had to carry everything. That delivery is gone, and inlining was costing
+  // real money: aip.js is 366 KB, 42% of the page, and the shell and the data
+  // change on completely different schedules - an app release re-downloaded
+  // 366 KB of unchanged AIRAC data, and an AIRAC update re-downloaded the whole
+  // shell. As its own file each is cached and revalidated on its own.
   if (!AIP_MARKER.test(srcHtml)) fail('src/index.html has no @AIPDATA marker');
+  let aip = '';
   {
     const indent = srcHtml.match(AIP_MARKER)[1];
-    let aip = '';
     try { aip = readFileSync(AIP_DATA, 'utf8'); }
     catch (err) {
       // Not fatal: the planner hides the airspace control when the dataset is
@@ -137,9 +142,10 @@ export async function runBuild({ quiet = false } = {}) {
       console.warn(`WARNING: ${AIP_DATA} is missing - the airspace overlay will be unavailable. Run: npm run build:aip`);
       aip = 'window.C182_AIP = null;\n';
     }
-    if (/<\/script/i.test(aip)) fail(`${AIP_DATA} contains a literal </script sequence`);
     if (!/window\.C182_AIP\s*=/.test(aip)) fail(`${AIP_DATA} does not assign window.C182_AIP`);
-    srcHtml = srcHtml.replace(AIP_MARKER, indent + '<script>\n' + aip + indent + '</script>\n');
+    // Must load BEFORE the page script reads window.C182_AIP. Classic scripts
+    // run in document order and the marker sits above @BUNDLE, so it does.
+    srcHtml = srcHtml.replace(AIP_MARKER, indent + '<script src="aip.js"></script>\n');
     if (AIP_MARKER.test(srcHtml)) fail('the @AIPDATA marker was not replaced');
   }
 
@@ -152,30 +158,15 @@ export async function runBuild({ quiet = false } = {}) {
   const code = await bundle();
   checkSyntax(code, 'bundle (src/main.js)');
 
-  // The bundle is inserted verbatim; guard the one sequence that could
-  // terminate the host <script> element early.
-  if (/<\/script/i.test(code)) fail('bundle contains a literal </script sequence');
-
   const banner = '  <!-- GENERATED by tools/build.mjs from src/ - do not edit this file; edit src/ and rebuild. -->\n';
-  const html = srcHtml.replace(MARKER, banner + '  <script>\n' + code + '  </script>\n');
-  if (MARKER.test(html)) fail('marker was not replaced');
+  const version = checkVersion(srcHtml);
 
-  const blocks = scriptBlocks(html);
-  checkSyntax(blocks[blocks.length - 1], 'page script (src/index.html)');
-  checkDuplicateIds(html);
-  const version = checkVersion(html);
-
-  // Always emit LF, whatever the working tree uses. A Windows clone has the
-  // source checked out as CRLF, and without this the rebuilt dist/ would
-  // differ from the committed one on every build - which then blocks the
-  // next `git pull` with "local changes would be overwritten".
+  // Always emit LF, whatever the working tree uses, so a Windows clone with
+  // CRLF in the source does not produce a different artifact.
   const lf = (t) => t.replace(/\r\n/g, '\n');
 
-  mkdirSync(OUT_DIR, { recursive: true });
-  writeFileSync(OUT_HTML, lf(html));
-
-  // ---- hosted build -------------------------------------------------
-  // Same page, bundle split out to app.js and a service worker attached.
+  // ---- the hosted build, and the only one --------------------------------
+  // Bundle split out to app.js, dataset to aip.js, service worker attached.
   const siteHtml = srcHtml.replace(MARKER,
     banner +
     '  <script src="app.js"></script>\n' +
@@ -202,19 +193,18 @@ export async function runBuild({ quiet = false } = {}) {
   mkdirSync(SITE_DIR, { recursive: true });
   writeFileSync(join(SITE_DIR, 'index.html'), lf(siteHtml));
   writeFileSync(join(SITE_DIR, 'app.js'), lf(code));
+  writeFileSync(join(SITE_DIR, 'aip.js'), lf(aip));
   writeFileSync(join(SITE_DIR, 'sw.js'), lf(sw));
   // Pages would otherwise run the upload through Jekyll, which skips files
   // and folders beginning with an underscore.
   writeFileSync(join(SITE_DIR, '.nojekyll'), '');
 
   if (!quiet) {
-    console.log(`built dist/C182_FlightPlanner.html  v${version}  ` +
-      `${(html.length / 1024).toFixed(0)} KB (bundle ${(code.length / 1024).toFixed(1)} KB, ` +
-      `${blocks.length} script blocks) - checks passed`);
     console.log(`built site/  v${version}  index.html ${(siteHtml.length / 1024).toFixed(0)} KB ` +
-      `+ app.js ${(code.length / 1024).toFixed(1)} KB + sw.js - checks passed`);
+      `+ app.js ${(code.length / 1024).toFixed(1)} KB + aip.js ${(aip.length / 1024).toFixed(0)} KB ` +
+      `+ sw.js - checks passed`);
   }
-  return OUT_HTML;
+  return join(SITE_DIR, 'index.html');
 }
 
 if (process.argv[1] && process.argv[1].endsWith('build.mjs')) {

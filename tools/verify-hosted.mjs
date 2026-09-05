@@ -44,6 +44,19 @@ await page.waitForTimeout(500);
 if (!(await page.evaluate(() => !!navigator.serviceWorker.controller))) { await page.reload({waitUntil:'domcontentloaded'}); await page.waitForTimeout(1200); }
 
 const tileCaches = () => page.evaluate(() => caches.keys().then(k => k.filter(n => n.startsWith('c182-tiles-'))));
+
+// THE SHELL MUST REALLY HOLD THE DATASET (v16.45). aip.js stopped being inlined
+// into index.html and became its own file, so if the worker does not precache it
+// the airspace overlay and the fix layer silently vanish offline - which looks
+// like a bug, not a gap. Asserting the string is in sw.js is not the same as
+// asserting the browser cached it.
+const shellHolds = () => page.evaluate(async () => {
+  const names = (await caches.keys()).filter((n) => n.startsWith('c182-shell-'));
+  if (!names.length) return null;
+  const c = await caches.open(names[0]);
+  const urls = (await c.keys()).map((r) => r.url.replace(/^https?:\/\/[^/]+/, ''));
+  return { cache: names[0], urls: urls.sort() };
+});
 const fetchTile = (n) => page.evaluate(async (n) => {
   await Promise.all([...Array(n)].map((_, i) =>
     fetch('https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer/export?bbox=' + i + '&f=image', { mode: 'no-cors' }).catch(() => {})));
@@ -78,7 +91,14 @@ await page.waitForTimeout(700);
 const newCycleCaches = await tileCaches();
 console.log('new cycle reported   -> tile caches:', newCycleCaches, '(old cycle must be gone)');
 
+const shell = await shellHolds();
+console.log('shell cache          :', shell ? shell.cache + ' holds ' + shell.urls.join(', ') : 'NONE');
+
 const fails = [];
+if (!shell) fails.push('SHELL BROKEN: no shell cache - the worker never precached the app');
+else for (const want of ['/index.html', '/app.js', '/aip.js'])
+  if (!shell.urls.some((u) => u.endsWith(want)))
+    fails.push('SHELL BROKEN: the shell cache is missing ' + want + ' - offline would lose it');
 if (unknownCaches.length) fails.push('RULE 1 BROKEN: a tile was cached before the AIRAC edition was known');
 if (!knownCaches.includes('c182-tiles-AIRAC19MAR26')) fails.push('RULE 2 BROKEN: tiles are not cached under the reported cycle');
 if (heldTiles !== 3) fails.push('RULE 2 BROKEN: expected 3 held tiles, got ' + heldTiles);
