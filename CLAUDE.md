@@ -218,7 +218,21 @@ errors is the standard.
    140 tests pass at v16.2. Never ship with failures. Add tests for new
    behavior AND for removals (guard that removed features stay removed).
 4. Check for duplicate DOM ids before shipping.
-5. Version naming: vMAJOR.MINOR in the filename the user receives.
+5. **BUMP THE VERSION ON EVERY SHIPPED CHANGE - `package.json` AND
+   `APP_VERSION` TOGETHER.** vMAJOR.MINOR is what the user sees in the app and
+   in the filename they receive, and it is how they tell one build from another.
+   It is easy to miss because the build only checks that the two agree with EACH
+   OTHER (major.minor) - nothing forces a bump when the CONTENT changes, so a
+   dataset re-import or a fix can ship under the previous number and look
+   identical to the build before it.
+   - This has already happened once: the 2026-09-03 AIP re-import shipped with
+     `package.json` still at 16.41.0 while the CLAUDE.md text written in the very
+     same commit said "v16.42". The documentation claimed a version the artifact
+     did not carry.
+   - A DATA-ONLY change counts. `data/aip.js` is inlined into both deliveries, so
+     a new AIRAC edition IS a new build even though no source line moved.
+   - Bump BEFORE the final `npm test`, so `dist/` and `site/` are rebuilt at the
+     new number and the committed artifact matches the tag in the notes.
 
 ### THE PAGE SCRIPT IS THE THIN SHELL - three rules that are not optional (v16.42)
 
