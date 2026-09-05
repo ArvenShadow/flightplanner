@@ -10,7 +10,7 @@
  *
  * Put the build you are comparing against at the path in REFERENCE
  * (default: the previous dist/, e.g.
- *   git show origin/main:dist/C182_FlightPlanner.html > /tmp/old_build.html)
+ *   git show origin/main:site/index.html is not committed; rebuild an old checkout instead)
  *
  * Playwright is not a project dependency; install it when you need this:
  *   npm install --no-save playwright && npx playwright install chromium
@@ -24,7 +24,7 @@ let chromium;
 try { ({ chromium } = await import('playwright')); }
 catch (e) { console.error('playwright is not installed - see the header of this file.'); process.exit(2); }
 const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
-const CURRENT = process.env.CURRENT || new URL('../dist/C182_FlightPlanner.html', import.meta.url).pathname;
+const CURRENT = process.env.CURRENT || new URL('../site/index.html', import.meta.url).pathname;
 const REFERENCE = process.env.REFERENCE || '/tmp/old_build.html';
 async function shot(file, theme, tag) {
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 } });

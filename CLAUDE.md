@@ -36,8 +36,45 @@ That condition is now a constraint on the project, not a footnote:
 
 ## Architecture (deliberate, do not "modernize")
 
-- **v16.14 (user decision, premise changed AGAIN): the planner is now
-  HOSTED as well.** The user asked for GitHub Pages plus the ability to
+- **v16.45 (user decision, premise changed AGAIN): there is now ONE delivery,
+  `site/`. The single-file `dist/C182_FlightPlanner.html` is GONE.**
+  The author's words: *"I don't want any unused files... the flightplanner is
+  more for myself now and I don't plan on distributing it to anyone anymore."*
+  Also, explicitly: *"CLAUDE.md shouldn't always be taken literally to the
+  extremes"* - this file records decisions, it does not outrank the person whose
+  project it is.
+  - THE STATED REASON FOR KEEPING IT DID NOT SURVIVE INSPECTION. It was "the
+    fallback on a machine that has never seen the app" - but a `file://` page
+    CANNOT register a service worker, so it cached no chart tiles at all, while
+    the hosted copy does. On the very machine the fallback existed for there is
+    no internet, so both base charts are blank: it was the LESS capable offline
+    option, not the more capable one.
+  - WHAT IT COST, MEASURED: `file://` forbids `fetch()`, so `data/aip.js` had to
+    be INLINED - 366 KB, 42% of the page. The shell and the dataset change on
+    completely different schedules (app releases vs the 28-day AIRAC cycle), so
+    every app release re-downloaded 366 KB of unchanged AIP data and every AIRAC
+    update re-downloaded the whole shell. `index.html` is now 497 KB with the
+    dataset a separately cached `aip.js`.
+  - **THE BUNDLE IS STILL A CLASSIC IIFE, and that is NOT leftover.** The reason
+    was never only `file://`: the page script is a classic script whose inline
+    `on*=` handlers need the bundle's functions as globals, and a
+    `type="module"` script is DEFERRED - it would run AFTER the page script.
+    That constraint is unchanged. `data/*.js` as a sidecar is likewise still
+    right; it is just linked now instead of pasted in.
+  - THE SERVICE WORKER MUST PRECACHE `aip.js`. Miss it and the airspace overlay
+    and the fix layer vanish offline, which looks like a bug rather than a gap.
+    `verify-hosted.mjs` reads the real shell cache and asserts all three assets
+    are in it - asserting the filename appears in `sw.js` is not the same thing.
+  - THE TESTS ASSEMBLE THE THREE FILES IN MEMORY and grep the result (`APP_SRC`).
+    Reading `site/index.html` alone would miss everything in `app.js` and
+    `aip.js`, so a guard against a REMOVED feature would pass because it was
+    looking in the wrong file. That bit immediately: four such guards went green
+    for the wrong reason before `APP_SRC` existed.
+  - `build.cmd` went with it (its only job was opening the double-click file);
+    `serve.cmd` builds, serves and opens the browser.
+
+- **v16.14 (superseded at v16.45 - the single-file half is gone; kept for the
+  history of why `site/` exists at all): the planner is now HOSTED as well.** The user asked for GitHub Pages plus the ability to
   serve it on the local wifi or a phone hotspot. `tools/build.mjs` emits
   TWO deliveries from one source: `dist/C182_FlightPlanner.html` (the
   double-click file, unchanged) and `site/` (index.html + app.js + sw.js,

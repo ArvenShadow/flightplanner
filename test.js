@@ -2,16 +2,32 @@ process.env.TZ = 'UTC';   // deterministic clock for the daylight/sun tests
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 
-// Tests run against the BUILT artifact (npm test builds first): it contains
-// both the module bundle and the page script, so source-level guards keep
-// working wherever a given piece of code currently lives.
-const APP_HTML = 'dist/C182_FlightPlanner.html';
+// Tests run against the BUILT delivery (npm test builds first). site/ splits it
+// into index.html + app.js + aip.js; jsdom is handed the three assembled into
+// one document, which is the same bytes the browser ends up executing, and lets
+// the source-level guard greps keep working against APP_HTML wherever a given
+// piece of code currently lives.
+const APP_HTML = 'site/index.html';
 if (!fs.existsSync(APP_HTML)) {
-  console.error('dist/C182_FlightPlanner.html is missing - run: npm run build');
+  console.error('site/index.html is missing - run: npm run build');
   process.exit(1);
 }
 
 let html = fs.readFileSync(APP_HTML, 'utf8');
+// Inline the linked assets. jsdom would need resources:'usable' plus a file://
+// base to fetch them itself, which is slower and adds a failure mode that has
+// nothing to do with what is being tested.
+for (const [tag, file] of [
+  ['<script src="aip.js"></script>', 'site/aip.js'],
+  ['<script src="app.js"></script>', 'site/app.js']
+]) {
+  if (!html.includes(tag)) { console.error('site/index.html no longer links ' + file); process.exit(1); }
+  html = html.replace(tag, '<script>\n' + fs.readFileSync(file, 'utf8') + '\n</script>');
+}
+// The ASSEMBLED document, for the source-level guard greps. Reading
+// site/index.html alone would miss everything in app.js and aip.js, so a guard
+// against a removed feature would pass because it was looking in the wrong file.
+const APP_SRC = html;
 // Remove the embedded leaflet bundle (it fights jsdom); the stub replaces it.
 html = html.replace(/<!-- Leaflet 1\.9\.4 JS embedded for offline use -->\s*<script>[\s\S]*?<\/script>/, '');
 
@@ -512,7 +528,7 @@ T('planning prefs persist', () => {
 
 console.log('\n=== 19. Offline packaging ===');
 T('leaflet JS and CSS are embedded in the file itself', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(raw.includes('Leaflet 1.9.4 JS embedded'), 'js not embedded');
   assert(raw.includes('Leaflet 1.9.4 CSS embedded'), 'css not embedded');
   assert(!raw.includes('unpkg.com'), 'still references unpkg CDN');
@@ -767,7 +783,7 @@ T('fresh instance opens at ISA for 2500 ft (10C)', () => {
   assert(doc.getElementById('def-oat').value !== '', 'empty');
   // fresh-open value comes from the HTML default, before any test touched it —
   // verify against the raw file instead of the mutated live DOM
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(raw.includes('id="def-oat" value="10"'), 'HTML default is not ISA(2500)=10');
 });
 T('OAT tracks cruise altitude until touched', () => {
@@ -791,7 +807,7 @@ T('manual OAT edit stops the auto-tracking', () => {
 });
 T('built-in routes are fully removed from the file', () => {
   assert(ev("typeof EMBEDDED_SAVED_ROUTES") === 'undefined', 'constant still exists');
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(!raw.includes('FAKSFJORDEN') && !raw.includes('Aglapsvik'), 'route data still embedded');
 });
 T('ISA OAT hits the POH standard column exactly', () => {
@@ -1118,7 +1134,7 @@ T('view mode still locks inputs and disables dragging', () => {
 
 console.log('\n=== 31. Embedded app icon ===');
 T('favicon links are embedded as data URIs (still one file)', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(raw.includes('rel="icon" type="image/svg+xml" href="data:image/svg+xml,'), 'svg favicon missing');
   assert(raw.includes('rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,'), 'png fallback missing');
   assert(raw.includes('rel="apple-touch-icon"'), 'apple-touch-icon missing');
@@ -1131,7 +1147,7 @@ T('favicon links are embedded as data URIs (still one file)', () => {
 
 console.log('\n=== 32. Map label chips paint their full background ===');
 T('all divIcon containers override Leaflet 12px default sizing', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   const rule = raw.match(/\.toc-custom-icon[^}]+}/)[0];
   ['tod-custom-icon', 'wp-custom-icon', 'ruler-icon', 'ruler-seg-icon', 'ruler-total-icon']
     .forEach(c => assert(raw.match(/\.toc-custom-icon[\s\S]{0,200}?{/)[0].includes(c), 'selector missing ' + c));
@@ -1139,7 +1155,7 @@ T('all divIcon containers override Leaflet 12px default sizing', () => {
   assert(rule.includes('height: max-content !important'), 'height override missing');
 });
 T('every label chip is inline-block so its background covers all text', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   ['.toc-label', '.tod-label', '.pattern-label', '.ruler-label'].forEach(c => {
     const rule = raw.split(c + ' {')[1].split('}')[0];
     assert(rule.includes('display: inline-block') || rule.includes('inline-block;'), c + ' not inline-block');
@@ -1149,7 +1165,7 @@ T('every label chip is inline-block so its background covers all text', () => {
 
 console.log('\n=== 33. TOC/TOD: a tick across the track, plus a small chip ===');
 T('the mark is a tick rotated ACROSS the track, anchored on the exact point', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(raw.includes('class="prof-tick ${kindCls}"'), 'the TOC/TOD tick is gone');
   assert(!raw.includes('prof-point'), 'the old diamond dot is back');
   // a bar drawn along north, rotated to the local track and then a further
@@ -1167,7 +1183,7 @@ T('the mark is a tick rotated ACROSS the track, anchored on the exact point', ()
     'the tick is not a thin bar across the track: ' + w + 'x' + h);
 });
 T('the chip is just TOC / TOD, with the sentence on hover', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   // the chip text must be the bare kind, not the whole sentence
   assert(raw.includes('title="${tip}">${fTag}${prof.kind}</div>'), 'the chip is not just the kind + a tooltip');
   assert(!/TOC \$\{prof\.alt\}' /.test(raw), 'the old spelled-out chip is back');
@@ -1181,7 +1197,7 @@ T('the chip is just TOC / TOD, with the sentence on hover', () => {
 
 console.log('\n=== 34. Waypoint dots pinned to true coordinates ===');
 T('waypoint marker anchors dot exactly on the lat/lng', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(raw.includes(`class="wp-dot" style="position:absolute; left:-7px; top:-7px;`), 'dot not pinned to anchor');
   assert(raw.includes('transform:translateX(-50%); margin-top:0;'), 'label not centered under dot');
   const wpBlock = raw.split("className: 'wp-custom-icon'")[1].slice(0, 120);
@@ -1426,7 +1442,7 @@ T('2-minute marks work and the choice persists via profile', () => {
 
 console.log('\n=== 42. Map locked to one copy of the earth ===');
 T('map is bounded at the antimeridian with solid viscosity; tiles do not wrap', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   const mapInit = raw.split("L.map('map', {")[1].split('}).setView')[0];
   assert(mapInit.includes('maxBounds: [[-90, -180], [90, 180]]'), 'maxBounds missing');
   assert(mapInit.includes('maxBoundsViscosity: 1.0'), 'viscosity not solid');
@@ -1438,7 +1454,7 @@ T('the openAIP airspace overlay stays removed, stored keys purged', () => {
   // lagged the current VFR chart. v16.31 added an overlay again, but from the
   // OFFICIAL AIP Norge with a stated edition - so what must stay gone is
   // openAIP specifically, not the idea of drawing airspace.
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(!raw.includes('api.tiles.openaip.net'), 'the openAIP tile endpoint is back');
   assert(!raw.includes('qol-openaip-key'), 'the openAIP key field is back');
   // ...but the PURGE of the old stored key must still be there, so an upgrade
@@ -1482,7 +1498,7 @@ T('releasing the drag does the full recalc once', () => {
   ev(SEED); // restore the seed route for anything that runs after
 });
 T('drag handler stays lean (guard against the per-mousemove rebuild returning)', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   const seg = raw.split("marker.on('drag'")[1].split("marker.on('dragend'")[0];
   assert(!seg.includes('renderAllFlightTables'), 'renderAllFlightTables is back in the drag handler');
   assert(seg.includes('drawLiveLine'), 'route line no longer follows the drag');
@@ -1742,7 +1758,7 @@ T('live use without an epoch returns finite values inside the model validity', (
 });
 T('the retired regional polynomial is gone', () => {
   assert(ev('typeof getRegionalMagVar') === 'undefined', 'the old polynomial is still defined');
-  const built = fs.readFileSync(APP_HTML, 'utf8');
+  const built = APP_SRC;
   assert(!built.includes('secularVariationPerYear'), 'polynomial coefficients still shipped');
   assert(built.includes('WMM2025'), 'the artifact should name the magnetic model');
 });
@@ -1935,14 +1951,14 @@ T('region zoom (6-7) compacts labels and hides the TOC/TOD chips', () => {
   setZoom(6);
   const cl = doc.getElementById('map').classList;
   assert(cl.contains('zoom-mid') && !cl.contains('zoom-far'), 'wrong level at z6: ' + cl);
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(raw.includes('#map.zoom-mid .toc-label'), 'mid-zoom TOC chip rule missing');
   assert(/#map\.zoom-mid \.toc-label[^}]*display: none/.test(raw.replace(/\n/g, ' ')), 'TOC chips not hidden at mid zoom');
 });
 T('overview zoom (<=5) leaves only dots and lines', () => {
   setZoom(5);
   assert(doc.getElementById('map').classList.contains('zoom-far'), 'zoom-far missing at z5');
-  const raw = fs.readFileSync(APP_HTML, 'utf8').replace(/\n/g, ' ');
+  const raw = APP_SRC.replace(/\n/g, ' ');
   assert(/#map\.zoom-far \.wp-label[^}]*display: none/.test(raw), 'waypoint labels not hidden at far zoom');
   assert(!/#map\.zoom-far[^{]*\.wp-dot/.test(raw), 'the waypoint DOTS must never be hidden');
   setZoom(3);
@@ -2645,7 +2661,7 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
   const page = fs.readFileSync('src/index.html', 'utf8');
   assert(/cache: 'no-store'/.test(page), 'the METAR fetch does not disable the HTTP cache');
   // the licence MET Norway requires must be on screen
-  const built = fs.readFileSync(APP_HTML, 'utf8');
+  const built = APP_SRC;
   assert(built.includes('NLOD 2.0') && /Norwegian Meteorological Institute/.test(built),
     'MET Norway attribution is missing');
   assert(/obtain an official briefing before flight/i.test(built),
@@ -3150,7 +3166,7 @@ T('the hover card is content-sized, not collapsed to its minimum width', () => {
   // Leaflet tooltips are white-space:nowrap; overriding to `normal` alone
   // collapsed the card to 64px wide and 392 tall. `width: max-content` with a
   // max-width is the pattern .wp-label already uses, and the one that works.
-  const css = fs.readFileSync(APP_HTML, 'utf8');
+  const css = APP_SRC;
   const rule = css.split('.airspace-tip {')[1].split('}')[0];
   assert(/white-space:\s*normal/.test(rule), 'the card would not wrap');
   assert(/width:\s*max-content/.test(rule), 'the card will collapse to its minimum width');
@@ -3178,7 +3194,7 @@ T('the overlay is off by default, persists, and is in the export whitelist', () 
   assert(!/Benjamin/.test(json) && !/x@y\.z/.test(json), 'personal data leaked into the export');
 });
 T('airspace draws in its own pane, BELOW the route line', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(/createPane\('airspacePane'\)/.test(raw), 'no dedicated airspace pane');
   const m = raw.match(/getPane\('airspacePane'\)\.style\.zIndex = '(\d+)'/);
   assert(m, 'the airspace pane has no explicit z-index');
@@ -3189,7 +3205,7 @@ T('airspace draws in its own pane, BELOW the route line', () => {
   assert(/pane: 'airspacePane'/.test(raw), 'polygons are not put in that pane');
 });
 T('airspace takes hover but NOT clicks - the map click still adds a waypoint', () => {
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   // Bounded by the AIRSPACE section's own last line, not by whatever function
   // happens to follow it: section 2e (AIP fixes) was added in between, and its
   // markers DO take clicks - deliberately, because a 9 px symbol is not a
@@ -4213,7 +4229,7 @@ T('a "be level by" target overrides a bottom-of-climb pin on the same leg', () =
   assert(both.tocDerivedBoc && Math.abs(both.climbStartNM - 20) < 0.05,
     'the BOC pin won over the target: ' + both.climbStartNM);
   assert(both.tocTargetMet, 'the target was not met');
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(/leg-boc-note/.test(raw) && /syncLegBocState/.test(raw),
     'the panel does not tell the pilot the BOC is derived');
 });
@@ -4379,7 +4395,7 @@ T('a corrupt saved-route library does not brick the boot', () => {
   // H4: JSON.parse with no try/catch, called from populateRouteDropdown() at
   // boot BEFORE refreshMap/renderAllFlightTables - so a partial write meant no
   // map, no table, no way back.
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   const fn = raw.split('function readStoredLibrary')[1].split('\n    function ')[0];
   assert(/try\s*\{[^]{0,200}JSON\.parse/.test(fn), 'the library parse is unguarded again');
   assert(/Array\.isArray\(parsed\)/.test(fn), 'a JSON array is accepted as a name->entry map');
@@ -4416,13 +4432,13 @@ TA('a malformed saved route is refused BEFORE the live plan is touched', async (
 T('no house default elevation is invented anywhere', () => {
   // The author's rule: no hardcoded odd values. The four `|| 254` fallbacks were
   // ENDU's elevation standing in for "unknown".
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(!/\|\|\s*254/.test(raw), 'a hardcoded 254 ft fallback is back');
 });
 T('an unrecognised import file is not reported as a successful import', () => {
   // M2: {"hello":"world"} matched no branch, changed nothing, and said
   // "Import complete."
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   const fn = raw.split('function importMissionFile')[1].split('\n    function ')[0];
   assert(/Nothing in this file was recognised/.test(fn),
     'an unrecognised file is still reported as complete');
@@ -4500,7 +4516,7 @@ TA('a plan the app calls unusable prints a DO NOT USE band on every sheet', asyn
 T('the integrity check runs FIRST, and the daylight card cannot take it down', () => {
   // H1: the card ran before the check with nothing guarding it, so a throw
   // there skipped the banner AND left the previous plan's sheets on screen.
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   const tail = raw.split('sectorTimeWindows.push(')[1].split('function ')[0];
   const iCheck = tail.indexOf('runIntegrityCheck()');
   const iCard = tail.indexOf('updateDaylightCard(');
@@ -4512,7 +4528,7 @@ T('the integrity check runs FIRST, and the daylight card cannot take it down', (
 T('the wind matrix refuses to invent calm wind for an empty box', () => {
   // C2: Number(x) || 0 turned an unknown OAT/wind into 0, and the banner went
   // from naming the missing field to hidden.
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   const fn = raw.split('function saveWindModal()')[1].split('\n    function ')[0];
   assert(!/\|\|\s*0/.test(fn), 'saveWindModal still coerces a blank box to 0');
   assert(/wmodal-missing/.test(fn), 'an empty box is not highlighted');
@@ -5068,7 +5084,7 @@ TA('right-clicking a WAYPOINT renames it, and offers to delete it (v16.40)', asy
 T('a circuit stop is offered deletion only - renaming it would break the PATTERN marker', () => {
   // "PATTERN" is the name the add-flow and the return-leg builder test for, so
   // a renamed circuit stop would silently stop being one.
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   const fn = raw.split('async function openWaypointMenu')[1].split('function deleteWaypointFromFlight')[0];
   assert(/isPat \? \[\] : \[\{ id: 'rename'/.test(fn.replace(/\s+/g, ' ')) ||
          /isPat \? \[\] :/.test(fn),
@@ -5152,11 +5168,11 @@ T('the OFP row carries only the delete button', () => {
     const btns = [...tr.querySelectorAll('button')].map(b => b.textContent.trim());
     assert(JSON.stringify(btns) === '["\u00d7"]', 'row buttons are ' + JSON.stringify(btns));
   }
-  const raw = fs.readFileSync(APP_HTML, 'utf8');
+  const raw = APP_SRC;
   assert(!raw.includes('insertWaypointMidLeg'), 'the + button command is still in the build');
 });
 T('the guide explains both gestures', () => {
-  const built = fs.readFileSync(APP_HTML, 'utf8');
+  const built = APP_SRC;
   assert(/Grab a leg line and drag/.test(built), 'the guide does not mention the drag gesture');
   assert(/Forgot a waypoint in the middle of a route/.test(built),
     'the guide does not explain how to insert a waypoint mid-route');
@@ -5177,7 +5193,7 @@ T('nothing offers to download the chart', () => {
                       'tilesForBounds', 'routeBounds', 'c182_chart_download']) {
     assert(!page.includes(gone), 'the chart download is back in the page: ' + gone);
   }
-  const built = fs.readFileSync(APP_HTML, 'utf8');
+  const built = APP_SRC;
   assert(!/\u2b07 Chart/.test(built) && !built.includes('downloadRouteChart'),
     'the built app still offers a chart download');
   assert(!doc.getElementById('chart-dl-btn'), 'the download button is still in the DOM');
@@ -5202,7 +5218,7 @@ T('the guide does not offer topo as the offline chart', () => {
   // This is the promise the pilot actually acted on: they turned the wifi
   // off, saw a blank VFR chart, switched to Topo as instructed and found
   // nothing there either. Nothing has ever stored topo tiles for offline use.
-  const built = fs.readFileSync(APP_HTML, 'utf8');
+  const built = APP_SRC;
   assert(!/topo is the offline choice/i.test(built), 'the guide still calls topo the offline chart');
   assert(!/offline-cached/i.test(built), 'a control still claims a chart is cached offline');
   assert(/Both charts need internet/i.test(built), 'the guide does not say both charts need internet');
@@ -5284,7 +5300,7 @@ T('the source is navigable: styling and each calculation have ONE home', () => {
     assert(fs.existsSync('src/lib/' + lib), 'missing module: ' + lib);
   }
   // and the built artifact must still carry the styling inline
-  const built = fs.readFileSync(APP_HTML, 'utf8');
+  const built = APP_SRC;
   assert(/<style>[\s\S]{500,}<\/style>/.test(built), 'the built file lost its inlined CSS');
   assert(!/<!-- @STYLES:/.test(built), 'the style marker comment survived into the artifact');
   // exactly one <style> element: two would invite cascade surprises
@@ -5408,9 +5424,10 @@ T('the worker is version-stamped and only registers on a secure context', () => 
   const idx = fs.readFileSync('site/index.html', 'utf8');
   assert(idx.includes("'serviceWorker' in navigator") && idx.includes('self.isSecureContext'),
     'registration is not feature-detected: it would throw on file:// or a plain-http LAN address');
-  // the double-click build must NOT try to register one
-  assert(!fs.readFileSync(APP_HTML, 'utf8').includes("navigator.serviceWorker.register"),
-    'the file:// artifact must not attempt service-worker registration');
+  // v16.45: the single-file delivery is gone, so the hosted page IS the app and
+  // it MUST register the worker - that is the only way chart tiles are cached.
+  assert(idx.includes('navigator.serviceWorker.register'),
+    'the hosted page no longer registers the service worker - no tile caching at all');
 });
 T('the build survives a Windows clone (CRLF line endings)', () => {
   // git's core.autocrlf checks the source out as CRLF on Windows, which broke
@@ -5431,13 +5448,16 @@ T('the build survives a Windows clone (CRLF line endings)', () => {
   // and the build must EMIT lf whatever the tree uses, or a rebuild on a
   // Windows clone rewrites dist/ and blocks the next `git pull`
   assert(/replace\(\/\\r\\n\/g, '\\n'\)/.test(buildSrc), 'the build no longer normalizes its output to LF');
-  const built = fs.readFileSync(APP_HTML, 'utf8');
+  const built = APP_SRC;
   assert(!built.includes('\r\n'), 'the committed artifact contains CRLF line endings');
 });
-T('Windows can run both deliveries without a command line or git', () => {
+T('Windows can run the planner without a command line or git', () => {
   // The user downloads the repo as a ZIP and double-clicks; git and npm on
-  // the PATH cannot be assumed.
-  for (const f of ['build.cmd', 'serve.cmd']) assert(fs.existsSync(f), 'missing Windows helper: ' + f);
+  // the PATH cannot be assumed. v16.45: build.cmd went with the single-file
+  // delivery - its only job was opening it - so serve.cmd is the one entry
+  // point and must do the whole job on its own.
+  assert(fs.existsSync('serve.cmd'), 'missing Windows helper: serve.cmd');
+  assert(!fs.existsSync('build.cmd'), 'build.cmd is back - it only built the removed single-file delivery');
   const serve = fs.readFileSync('serve.cmd', 'utf8');
   assert(serve.includes('npm install'), 'serve.cmd does not install dependencies on first run');
   assert(/node tools\\serve\.mjs/.test(serve), 'serve.cmd does not start the server');
@@ -5455,15 +5475,26 @@ T('the runtime rules are actually verified somewhere, not just asserted here', (
   }
 });
 
-T('the built artifact is generated, self-contained and double-clickable', () => {
-  const built = fs.readFileSync(APP_HTML, 'utf8');
-  assert(built.includes('GENERATED by tools/build.mjs'), 'build banner missing');
-  assert(!built.includes('@BUNDLE'), 'bundle marker survived into the artifact');
-  // no external script/link srcs: everything needed is inline (data/ sidecars
-  // stay optional and are loaded lazily at runtime, not at parse time)
-  const externals = [...built.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m => m[1]);
-  assert(externals.length === 0, 'artifact loads external scripts: ' + externals.join(', '));
-  assert(built.includes('window.C182'), 'module namespace missing from the bundle');
+T('the built site links exactly its own assets, and every marker was replaced', () => {
+  // v16.45: this used to assert the artifact was SELF-CONTAINED (no external
+  // scripts), which was the single-file delivery's defining property. That
+  // delivery is gone. The property worth guarding now is the opposite and
+  // sharper: the page links the assets the build emits, and NOTHING else - a
+  // stray CDN or a forgotten sidecar would break the offline shell silently.
+  const idx = fs.readFileSync('site/index.html', 'utf8');
+  assert(idx.includes('GENERATED by tools/build.mjs'), 'build banner missing');
+  for (const marker of ['@BUNDLE', '@STYLES', '@AIPDATA'])
+    assert(!idx.includes(marker), marker + ' marker survived into the built page');
+  const externals = [...idx.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]).sort();
+  assert(JSON.stringify(externals) === JSON.stringify(['aip.js', 'app.js']),
+    'the page links something other than its own two assets: ' + externals.join(', '));
+  for (const f of ['site/app.js', 'site/aip.js', 'site/sw.js'])
+    assert(fs.existsSync(f), f + ' was not emitted');
+  // ...and the worker precaches all of them, or the overlay vanishes offline.
+  const sw = fs.readFileSync('site/sw.js', 'utf8');
+  for (const asset of externals)
+    assert(sw.includes(asset), 'the service worker does not precache ' + asset);
+  assert(APP_SRC.includes('window.C182'), 'module namespace missing from the bundle');
 });
 T('the page script no longer defines what the modules own', () => {
   const src = fs.readFileSync('src/index.html', 'utf8');
@@ -5484,12 +5515,12 @@ T('the page script no longer defines what the modules own', () => {
       fn + ' is still defined in the page script (duplicate of its module)');
   }
   assert(/-> src\/lib\/magvar\.js/.test(src) && /-> src\/lib\/geodesy\.js/.test(src), 'pointer comments missing');
-  const built = fs.readFileSync(APP_HTML, 'utf8');
+  const built = APP_SRC;
   assert(built.includes('geographiclib') || built.includes('InverseLine'), 'geodesy library not bundled into the artifact');
 });
 T('the build rejects a version mismatch between page and package.json', () => {
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
-  const page = fs.readFileSync(APP_HTML, 'utf8').match(/const APP_VERSION = '([^']+)'/)[1];
+  const page = APP_SRC.match(/const APP_VERSION = '([^']+)'/)[1];
   assert(pkg.split('.').slice(0, 2).join('.') === page, `page ${page} vs package ${pkg}`);
   const build = fs.readFileSync('tools/build.mjs', 'utf8');
   assert(build.includes('checkDuplicateIds') && build.includes('checkSyntax') && build.includes('checkVersion'),

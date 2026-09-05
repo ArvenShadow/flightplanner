@@ -22,7 +22,7 @@ let chromium;
 try { ({ chromium } = await import('playwright')); }
 catch (e) { console.error('playwright is not installed - see the header of this file.'); process.exit(2); }
 
-const APP = process.env.CURRENT || new URL('../dist/C182_FlightPlanner.html', import.meta.url).pathname;
+const APP = process.env.CURRENT || new URL('../site/index.html', import.meta.url).pathname;
 
 /**
  * Two points chosen from the dataset, both inside a Polaris CTA volume and

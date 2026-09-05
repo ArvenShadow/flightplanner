@@ -374,7 +374,7 @@
           <h3>📡 Offline</h3>
           <ul style="margin-left:16px;">
             <li><b>The planner works with no internet; the map does not.</b> Waypoints, tracks, distances, headings, fuel and times all keep working — only the background chart goes blank, and it reloads automatically when the connection returns. Winds aloft, METAR/TAF and the update check need a connection too.</li>
-            <li>Opened from the hosted address, the app itself is stored by your browser after the first visit and opens offline. The double-click file needs nothing at all — it is one self-contained file.</li>
+            <li>The app itself is stored by your browser after the first visit, so it opens offline afterwards — that includes the airspace and AIP fix data. The <b>map</b> still needs internet: both base charts are streamed.</li>
             <li><b>There is no chart download, on purpose.</b> A version of this existed and was removed: Avinor's chart tiles come without the header a browser needs to measure them, so the browser charges megabytes of storage for each one whatever its real size. A route's worth filled the storage allowance, and the browser then threw away everything for the site — the chart worked for a while and then vanished. A button promising an offline chart that quietly loses it is worse than no button. <b>Plan on the paper chart being your offline chart.</b></li>
           </ul>
         </div>
@@ -1032,7 +1032,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.44';
+    const APP_VERSION = '16.45';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 

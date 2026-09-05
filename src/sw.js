@@ -45,7 +45,10 @@ let knownEdition = null;
 const APP_VERSION = sw.__APP_VERSION__ || 'dev';
 const SHELL_CACHE = `c182-shell-v${APP_VERSION}`;
 const TILE_PREFIX = 'c182-tiles-';
-const SHELL_ASSETS = ['./', './index.html', './app.js'];
+// aip.js joined the shell at v16.45, when the dataset stopped being inlined
+// into index.html. It must be precached or the airspace overlay and the fix
+// layer silently vanish offline - which would look like a bug, not a gap.
+const SHELL_ASSETS = ['./', './index.html', './app.js', './aip.js'];
 
 // Chart tiles come only from this host; nothing else is cached at runtime.
 const TILE_HOST = 'avigis.avinor.no';

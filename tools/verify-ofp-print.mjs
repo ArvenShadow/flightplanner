@@ -14,7 +14,7 @@ let chromium;
 try { ({ chromium } = await import('playwright')); }
 catch { console.error('playwright is not installed'); process.exit(2); }
 
-const APP = process.env.CURRENT || new URL('../dist/C182_FlightPlanner.html', import.meta.url).pathname;
+const APP = process.env.CURRENT || new URL('../site/index.html', import.meta.url).pathname;
 const fails = [];
 const check = (ok, msg) => { console.log((ok ? '  ok    ' : '  FAIL  ') + msg); if (!ok) fails.push(msg); };
 
