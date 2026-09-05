@@ -1802,7 +1802,7 @@ job. What the cycle changed, and what it exposed:
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
 
-## The track, and reaching a plan from the map (v16.50, roadmap 7 - 9)
+## The track, and reaching a plan from the map (v16.50-v16.51, roadmap 7 - 9)
 
 - **THE DASHED ALTERNATE TRACK IS GONE, and this REVERSES a stated decision.**
   Every second flight used to be dashed so an identical return route drawn on
@@ -1843,6 +1843,19 @@ job. What the cycle changed, and what it exposed:
   - `verify-layout.mjs` asserts it by MEASURING: sidebar really hidden, both
     controls on screen with a real box, and the button actually adding a plan.
     Grepping for the id is what passed in v16.22 while the buttons sat at y=900.
+- **"," AND "." STEP BETWEEN PLANS, AND THEY DO NOT WRAP (v16.51, the pilot's
+  request).** A wrapping "next" on the last plan jumps silently to the first,
+  which on a five-sector mission reads as the key having done nothing - or as
+  having gone the wrong way. Stopping at the ends means a keystroke's effect is
+  always what its direction says, and the end is REPORTED rather than passing in
+  silence, which is the failure the pure resolver exists to prevent.
+  - **THE MAP BUTTON STILL CYCLES, and that difference is deliberate rather than
+    an oversight.** It is ONE control, and in the map-only view it is the only
+    way to change plan without a keyboard - so a non-wrapping version would
+    strand the pilot on the last plan with no way back. A cycle is the right
+    affordance for a single button; a directional pair is the right one for two
+    keys. Its tooltip says which it is, and a test asserts both behaviours so
+    the pair cannot quietly converge.
 - **1-9 ACTIVATE A FLIGHT PLAN (roadmap 9), and it was cheap because the trap
   was already handled.** `dialog.js` binds those same digits to pick a dialog
   option, and `ask()` is used everywhere - so a global digit binding would have

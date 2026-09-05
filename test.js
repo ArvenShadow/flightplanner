@@ -6568,6 +6568,89 @@ TA('pressing 2 switches to the second plan; an absent plan says so', async () =>
 });
 
 
+
+console.log('\n=== 62a000f. Stepping between flight plans (v16.51) ===');
+
+T('"." and "," resolve to next and previous, and only bare', () => {
+  const K = moduleExports.keys;
+  const R = (stroke, ctx) => { const a = K.resolveKey(stroke, ctx); return a && a.action; };
+  assert(R({ key: '.' }) === 'next-flight', '. should mean next');
+  assert(R({ key: ',' }) === 'prev-flight', ', should mean previous');
+  assert(K.resolveKey({ key: '.' }, {}).preventDefault, 'the key must not also reach the page');
+  // "<" and ">" are shift+comma/period - a different keystroke, and not ours.
+  assert(R({ key: '.', shiftKey: true }) === null, 'shift+. is not ours');
+  assert(R({ key: ',', ctrlKey: true }) === null, 'Ctrl+, is a browser preferences shortcut');
+  assert(R({ key: '.' }, { textLike: true }) === null, '. must type a full stop in a text field');
+  assert(R({ key: '.' }, { overlayOpen: true, dialogOpen: true }) === null,
+    '. fired through an open dialog');
+  // and the page must handle both, or the binding is silently dead
+  const handler = APP_SRC.split("document.addEventListener('keydown'")[1].split('\n    });')[0];
+  for (const a of ['next-flight', 'prev-flight'])
+    assert(handler.includes("case '" + a + "'"), 'the page has no case for ' + a);
+});
+
+TA('stepping stops at the ends instead of wrapping', async () => {
+  const mk = (n) => `flights = [` + Array.from({ length: n }, (_, i) =>
+    `{ id: ${i + 1}, title: 'P${i + 1}', depElev: 254, waypoints: [
+       { lat: ${69 + i * 0.1}, lng: 18.5, name: 'A${i}', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+       { lat: ${69.4 + i * 0.1}, lng: 18.9, name: 'B${i}', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 }]}`
+  ).join(',') + `]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+  const press = (k) => ev(`document.dispatchEvent(new window.KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true }))`);
+  ev(mk(3));
+
+  const host = () => doc.getElementById('app-toasts');
+  if (host()) host().innerHTML = '';
+
+  // FIRST plan: "," must NOT wrap round to the last one.
+  press(',');
+  await tick();
+  assert(ev('activeFlightIndex') === 0, ', wrapped backwards off the first plan');
+  assert(host() && /first flight plan/i.test(host().textContent),
+    'stepping past the start said nothing: ' + (host() ? host().textContent : ''));
+
+  press('.'); await tick();
+  assert(ev('activeFlightIndex') === 1, '. did not advance');
+  press('.'); await tick();
+  assert(ev('activeFlightIndex') === 2, '. did not advance to the last plan');
+
+  // LAST plan: "." must NOT wrap round to the first one.
+  if (host()) host().innerHTML = '';
+  press('.'); await tick();
+  assert(ev('activeFlightIndex') === 2, '. wrapped forwards off the last plan');
+  assert(host() && /last flight plan/i.test(host().textContent),
+    'stepping past the end said nothing: ' + (host() ? host().textContent : ''));
+
+  press(','); await tick();
+  assert(ev('activeFlightIndex') === 1, ', did not go back');
+  if (host()) host().innerHTML = '';
+  ev(SEED);
+});
+
+T('the map button still cycles, and that difference is deliberate', () => {
+  // ONE control, and in the map-only view it is the only way to change plan
+  // without a keyboard - so a non-wrapping version would strand the pilot on
+  // the last plan. The two KEYS are directional and stop; the button cycles.
+  ev(`flights = [
+    { id: 1, title: 'A', depElev: 254, waypoints: [
+      { lat: 69.05, lng: 18.54, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.67, lng: 18.91, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 }]},
+    { id: 2, title: 'B', depElev: 31, waypoints: [
+      { lat: 69.67, lng: 18.91, name: 'ENTC', alt: 31, oat: 10, wdir: 0, wspd: 0, var: -12 },
+      { lat: 69.05, lng: 18.54, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]}
+  ]; activeFlightIndex = 1; refreshMap(); renderAllFlightTables();`);
+  ev('cycleActiveFlight()');
+  assert(ev('activeFlightIndex') === 0, 'the map button stopped wrapping - it would now dead-end');
+  // ...while the key, from the same position, does not
+  ev(`activeFlightIndex = 1; refreshMap();`);
+  ev('stepActiveFlight(1)');
+  assert(ev('activeFlightIndex') === 1, 'the key wrapped off the last plan');
+  const btn = doc.getElementById('active-flight-btn');
+  assert(/wraps/.test(btn.title) && /do not wrap|without wrapping/.test(btn.title),
+    'the button does not explain how it differs from the keys: ' + btn.title);
+  ev(SEED);
+});
+
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');

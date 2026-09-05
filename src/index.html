@@ -77,7 +77,7 @@
              this control both NAMES the active plan and cycles to the next.
              It needs no CSS of its own: #map-controls has been a flex column
              since v16.24, precisely so a new control cannot fall off screen. -->
-        <button id="active-flight-btn" class="map-ctl" title="Which flight plan new waypoints are added to. Click to switch to the next plan; with only one plan there is nothing to switch to. The full list is in the sidebar." onclick="cycleActiveFlight()">✈ Plan 1</button>
+        <button id="active-flight-btn" class="map-ctl" title="Which flight plan new waypoints are added to. Click to cycle through your plans (it wraps at the end, because this is the only way to switch without a keyboard). The keys , and . step back and forward without wrapping, and 1-9 jump straight to a plan. The full list is in the sidebar." onclick="cycleActiveFlight()">✈ Plan 1</button>
         <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector). It begins at the last waypoint of the current one, so a multi-sector mission joins up. Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
       </div>
       <div id="chart-label"></div>
@@ -270,11 +270,11 @@
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
-            <li><b>Keyboard shortcuts.</b> <b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> (or <b>Ctrl+Y</b>) redoes, step by step up to 30 states — ⌘ on Mac, same stacks as the Undo/Redo buttons, and the buttons now <i>name the step</i> they will take back. <b>Ctrl+S</b> opens the save dialog, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> make that flight plan the active one, and <b>Delete</b> removes the selected waypoint (click one on the map to select it — Edit Mode only, since View Mode is read-only). <b>Esc</b> closes a dialog, abandons a line drag, or clears the selection.
+            <li><b>Keyboard shortcuts.</b> <b>Ctrl+Z</b> undoes and <b>Ctrl+Shift+Z</b> (or <b>Ctrl+Y</b>) redoes, step by step up to 30 states — ⌘ on Mac, same stacks as the Undo/Redo buttons, and the buttons now <i>name the step</i> they will take back. <b>Ctrl+S</b> opens the save dialog, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> make that flight plan the active one while <b>,</b> and <b>.</b> step back and forward through them (they stop at the first and last plan rather than wrapping, so the key always does what its direction says), and <b>Delete</b> removes the selected waypoint (click one on the map to select it — Edit Mode only, since View Mode is read-only). <b>Esc</b> closes a dialog, abandons a line drag, or clears the selection.
               <br><b>Two rules apply to all of them.</b> While any dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing else fires behind it. And inside a text field the keys keep their normal text-editing meaning (Ctrl+S is the exception: the browser's own Ctrl+S saves the web page, which is never what you want here).</li>
             <li><b>Undo now covers the whole plan, not just the route</b>: ETD, initial fuel, reserve, departure elevation and the flight date are snapshotted too, so changing an ETD — which moves every ETO and the daylight verdict — can be taken back like any other edit.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
-            <li><b>In the Map-only layout</b> the sidebar is hidden, so the two plan controls you need are on the map itself: <b>✈</b> names the active plan (and its colour) and clicks through to the next one, <b>＋ New plan</b> starts another sector. <b>1</b>–<b>9</b> do the same from the keyboard in any layout.</li>
+            <li><b>In the Map-only layout</b> the sidebar is hidden, so the two plan controls you need are on the map itself: <b>✈</b> names the active plan (and its colour) and clicks through to the next one, <b>＋ New plan</b> starts another sector. <b>1</b>–<b>9</b> jump straight to a plan from the keyboard in any layout, and <b>,</b> / <b>.</b> step through them. The map button <i>cycles</i> (it wraps) because it is the only way to switch without a keyboard; the two keys do not.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
             <li><b>Grab a leg line and drag</b> to bend it around terrain: a diamond <b>via point</b> appears under the cursor and follows it, with the route redrawing as you move — one motion, press to release. Let go where you want it. A plain click still drops a via point on the spot, and either way you can drag the diamond again later or right-click it to remove. The line has a generous invisible grab area, so you do not have to hit the 4-pixel stroke exactly.</li>
             <li>A via point <b>bends a leg without adding a row</b>. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
@@ -1087,7 +1087,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.50';
+    const APP_VERSION = '16.51';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2415,9 +2415,17 @@
       renderAllFlightTables();
     }
 
-    /** Step to the next plan (roadmap 7). The map-only view has no sidebar and
-     *  so no per-plan Select button; with one plan there is nothing to cycle
-     *  to, and saying so beats a button that appears to do nothing. */
+    /**
+     * The map control CYCLES, and that is deliberately different from "." and
+     * "," (v16.51).
+     *
+     * Those two are directional and stop at the ends, so a keystroke's effect
+     * is always what its direction says. This is ONE button, and in the
+     * map-only view it is the only way to change plan without a keyboard - so a
+     * non-wrapping version would strand the pilot on the last plan with no way
+     * back. A cycle is the right affordance for a single control; a next/prev
+     * pair is the right one for two keys. The tooltip says which this is.
+     */
     function cycleActiveFlight() {
       if (flights.length < 2) {
         say('This is the only flight plan. Use ＋ New plan to add a sector.', 'info', 3500);
@@ -4627,6 +4635,8 @@
         case 'focus-search': searchFixes(); break;
         case 'delete-waypoint': deleteHighlightedWaypoint(); break;
         case 'activate-flight': activateFlightByIndex(act.index); break;
+        case 'next-flight': stepActiveFlight(1); break;
+        case 'prev-flight': stepActiveFlight(-1); break;
       }
     });
 
@@ -4656,6 +4666,33 @@
       hoverLegLine = L.polyline(pts, {
         color: '#dd6b20', weight: 9, opacity: 0.45, interactive: false
       }).addTo(map);
+    }
+
+    /**
+     * "." and "," step one plan forward or back, and they do NOT wrap (the
+     * pilot's request, v16.51).
+     *
+     * A wrapping "next" on the last plan jumps silently to the first, which on
+     * a five-sector mission reads as the key having done nothing - or as having
+     * gone the wrong way. Stopping at the end means the key's effect is always
+     * what its direction says. The end is REPORTED, because a key that appears
+     * dead is the failure the pure resolver exists to prevent.
+     */
+    function stepActiveFlight(delta) {
+      if (flights.length < 2) {
+        say('This is the only flight plan. Use \uff0b New plan to add a sector.', 'info', 3000);
+        return;
+      }
+      const next = activeFlightIndex + delta;
+      if (next < 0 || next >= flights.length) {
+        say(delta > 0
+          ? 'Already on the last flight plan (' + flights.length + ' of ' + flights.length + ').'
+          : 'Already on the first flight plan.', 'info', 2500);
+        return;
+      }
+      setActiveFlight(next);
+      say('Active: ' + flightTitle(flights[next]) + ' (' + (next + 1) + ' of ' + flights.length + ')',
+          'good', 2500);
     }
 
     /** 1-9 picks a flight plan. A number with no plan behind it says so rather

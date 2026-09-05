@@ -64,7 +64,9 @@ export const KEY_ACTIONS = [
   'save',             // Ctrl/Cmd+S: the save-plan dialog
   'focus-search',     // "/": find a published fix
   'delete-waypoint',  // Delete/Backspace on the selected waypoint
-  'activate-flight'   // 1-9: make that flight plan the active one
+  'activate-flight',  // 1-9: make that flight plan the active one
+  'next-flight',      // ".": the plan after this one
+  'prev-flight'       // ",": the plan before this one
 ];
 
 /** A one-line description of each binding, for the guide and the ? overlay.
@@ -75,6 +77,7 @@ export const KEY_HELP = [
   { keys: '/', what: 'Find a published aerodrome or reporting point' },
   { keys: 'Delete', what: 'Remove the selected waypoint (click one on the map to select it)' },
   { keys: '1 - 9', what: 'Make that flight plan the active one' },
+  { keys: ', and .', what: 'Step to the previous / next flight plan (they do not wrap)' },
   { keys: 'Esc', what: 'Close a dialog, abandon a line drag, or clear the selection' }
 ];
 
@@ -145,6 +148,16 @@ export function resolveKey(ev, ctx) {
   // what an out-of-range number means.
   if (/^[1-9]$/.test(key) && !mod && !ev.altKey && !ev.shiftKey) {
     return { action: 'activate-flight', index: Number(key) - 1, preventDefault: true };
+  }
+
+  // "," AND "." STEP BETWEEN PLANS, AND THEY DELIBERATELY DO NOT WRAP (the
+  // pilot's request). A wrapping "next" on the last plan silently jumps to the
+  // first, which on a five-sector mission reads as the key having done nothing
+  // - or worse, as having gone the wrong way. Stopping at the ends means the
+  // key's effect is always what its direction says. The page reports the end
+  // rather than failing silently.
+  if ((key === ',' || key === '.') && !mod && !ev.altKey && !ev.shiftKey) {
+    return { action: key === '.' ? 'next-flight' : 'prev-flight', preventDefault: true };
   }
 
   return null;
