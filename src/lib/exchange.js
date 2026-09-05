@@ -24,6 +24,8 @@
 /** The ONLY profile keys that may cross the boundary, in either direction.
  *  Aircraft performance, units and display preference - nothing that
  *  identifies a person, a machine or a place. */
+import { normaliseKeymap } from './keys.js';
+
 export const PROFILE_KEYS = [
   'mode', 'cruiseRpm', 'cruiseMp', 'cruiseTas', 'cruiseFf',
   'climbMode', 'ccRoc', 'ccKias', 'ccFf',
@@ -146,9 +148,10 @@ function sanitiseWaypoint(/** @type {any} */ w) {
  */
 /** @param {{routes?: any, missions?: any, flights?: Flight[],
  *           profile?: Record<string, any>,
+ *           keybinds?: Record<string, string|null>,
  *           planningPrefs?: {fuel?: string, reserve?: string, etd?: string}}} input
  *  @returns {Record<string, any>} the exact contents of the exported file */
-export function buildExportPayload({ routes, missions, flights, profile, planningPrefs }) {
+export function buildExportPayload({ routes, missions, flights, profile, planningPrefs, keybinds }) {
   return {
     formatVersion: 2,
     routes: routes || {},
@@ -161,6 +164,15 @@ export function buildExportPayload({ routes, missions, flights, profile, plannin
       fuel: (planningPrefs && planningPrefs.fuel) || '',
       reserve: (planningPrefs && planningPrefs.reserve) || '',
       etd: (planningPrefs && planningPrefs.etd) || ''
-    }
+    },
+    // THE KEYBOARD TRAVELS WITH THE PILOT (v16.52). Bindings are a personal
+    // setting like the units and the fix colours, and re-teaching a new laptop
+    // a dozen shortcuts by hand is exactly the busywork an export exists to
+    // remove. It is normalised on the way OUT as well as in, so an export can
+    // never carry a chord the app would refuse to load.
+    //
+    // It identifies NOBODY - it is a list of keystrokes - so it does not touch
+    // the personal-data rule that PROFILE_KEYS enforces.
+    keybinds: normaliseKeymap(keybinds)
   };
 }

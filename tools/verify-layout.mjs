@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * The layout on a real screen, measured - `npm run verify:layout` (v16.49).
+ * The layout and the keyboard page on a real screen, measured
+ * - `npm run verify:layout` (v16.49, extended v16.52).
  *
  * WHY THIS FILE EXISTS. The audit's QoL 4 is a MEASUREMENT, not an opinion: at
  * 1280x720 the map was 300 px tall and the daylight card's top sat at 826 px in
@@ -151,6 +152,78 @@ check(short.map.height >= 140, `...and the map does not vanish: ${short.map.heig
   });
   check(added.after === added.before + 1,
     `the map-only New plan button starts a plan (${added.before} -> ${added.after})`);
+  await ctx.close();
+}
+
+// ---- THE KEYBOARD PAGE (v16.52, roadmap 10) -----------------------------
+// jsdom cannot prove the two things that matter here: that a 30-row list is
+// actually ON SCREEN with real boxes, and that pressing Ctrl+S to BIND it does
+// not also fire Ctrl+S. The second is why the capture listener runs in the
+// capture phase and stops the event dead.
+{
+  const ctx = await b.newContext({ viewport: { width: 1400, height: 950 } });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errs.push('keys: ' + e));
+  await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
+  await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => {
+    closeHelpModal();
+    flights = [{ id: 1, title: 'F', depElev: 254, waypoints: [
+      { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
+    refreshMap(); renderAllFlightTables();
+    // count the real save dialog, so "did binding it also fire it?" is measurable
+    window.__saveOpened = 0;
+    const orig = window.saveCurrentMission;
+    window.saveCurrentMission = function () { window.__saveOpened++; return orig.apply(this, arguments); };
+    openSettingsModal(); showSettingsPage('keys');
+  });
+  await page.waitForTimeout(250);
+
+  const list = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('#keybind-list .keybind-row')];
+    return { n: rows.length,
+             sized: rows.filter((r) => { const b = r.getBoundingClientRect();
+                                         return b.width > 0 && b.height > 0; }).length };
+  });
+  check(list.n >= 25, `the keyboard page lists every action: ${list.n} rows`);
+  check(list.sized === list.n, `every row has a real box on screen: ${list.sized}/${list.n}`);
+
+  // BINDING Ctrl+S MUST NOT ALSO SAVE.
+  await page.evaluate(() => beginKeybindCapture('print'));
+  await page.keyboard.press('Control+s');
+  await page.waitForTimeout(200);
+  const afterCtrlS = await page.evaluate(() => ({
+    saves: window.__saveOpened, capturing: keybindCapturing, print: keybinds['print'],
+    note: document.getElementById('keybind-capture-note').textContent }));
+  check(afterCtrlS.saves === 0, `capturing Ctrl+S did not also save (${afterCtrlS.saves} dialogs)`);
+  check(afterCtrlS.print === null && /already/.test(afterCtrlS.note),
+    'the clash with Save was refused and explained');
+  check(afterCtrlS.capturing === 'print', 'a refused chord leaves capture open to try again');
+
+  await page.keyboard.press('Alt+p');
+  await page.waitForTimeout(150);
+  check(await page.evaluate(() => keybinds['print'] === 'Alt+P' && keybindCapturing === null),
+    'a free chord is accepted and ends the capture');
+
+  // A REBOUND KEY FIRES AND THE OLD ONE GOES QUIET - measured on real presses.
+  await page.evaluate(() => beginKeybindCapture('undo'));
+  await page.keyboard.press('Alt+u');
+  await page.waitForTimeout(120);
+  await page.evaluate(() => closeSettingsModal());
+  await page.waitForTimeout(120);
+  await page.evaluate(() => {
+    pushUndoState('test'); flights[0].waypoints[1].name = 'CHANGED'; renderAllFlightTables();
+  });
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(150);
+  const afterOld = await page.evaluate(() => flights[0].waypoints[1].name);
+  await page.keyboard.press('Alt+u');
+  await page.waitForTimeout(150);
+  const afterNew = await page.evaluate(() => flights[0].waypoints[1].name);
+  check(afterOld === 'CHANGED', `the old chord went quiet after rebinding (got "${afterOld}")`);
+  check(afterNew === 'ENTC', `the new chord undoes (got "${afterNew}")`);
   await ctx.close();
 }
 

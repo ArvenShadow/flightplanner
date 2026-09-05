@@ -218,8 +218,12 @@ const tabs = await page.evaluate(() => {
   return { tabs: t, aircraftShown: !document.getElementById('settings-page-aircraft').hidden,
            mapShown: !document.getElementById('settings-page-map').hidden };
 });
-check(tabs.tabs.length === 2 && tabs.tabs.every((t) => t.w > 0 && t.y > 0 && t.y < 900),
-  'both settings tabs are on screen: ' + JSON.stringify(tabs.tabs.map((t) => t.text + '@' + t.y)));
+// Three since v16.52 (Aircraft, Map, Keyboard). The point of the check is that
+// every tab has a real box on screen, not how many there happen to be - but it
+// still states the count, so a tab going missing is a failure rather than a
+// silently shorter list.
+check(tabs.tabs.length === 3 && tabs.tabs.every((t) => t.w > 0 && t.y > 0 && t.y < 900),
+  'every settings tab is on screen: ' + JSON.stringify(tabs.tabs.map((t) => t.text + '@' + t.y)));
 check(tabs.aircraftShown && !tabs.mapShown, 'the modal opens on the aircraft page');
 
 await page.click('#settings-tab-map');
