@@ -106,6 +106,54 @@ check(short.map.height <= laptop.map.height,
   `a shorter window gives the map no more room: ${short.map.height} vs ${laptop.map.height}`);
 check(short.map.height >= 140, `...and the map does not vanish: ${short.map.height} px`);
 
+// ---- THE MAP-ONLY VIEW MUST BE ABLE TO START A PLAN (roadmap 7) ----------
+// This is the finding itself: `+ Add Flight Plan` lives inside #sidebar, and
+// layout-map HIDES the sidebar, so the one view where you draw on the chart had
+// no way to begin a plan. Asserted by measuring, not by grepping for the id -
+// v16.22 shipped two controls that were present in the DOM and off screen.
+{
+  const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errs.push('map-only: ' + e));
+  await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
+  await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => { closeHelpModal(); setLayoutMode('map', false); });
+  await page.waitForTimeout(250);
+  const seen = await page.evaluate(() => {
+    const sb = document.getElementById('sidebar');
+    const vis = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height),
+               x: Math.round(r.x), y: Math.round(r.y), text: el.textContent.trim() };
+    };
+    return {
+      sidebarHidden: !sb || getComputedStyle(sb).display === 'none',
+      add: vis('add-flight-btn'),
+      active: vis('active-flight-btn')
+    };
+  });
+  console.log('  map-only:', JSON.stringify(seen));
+  check(seen.sidebarHidden, 'the map-only layout really does hide the sidebar');
+  for (const [name, c] of [['New plan', seen.add], ['active-plan indicator', seen.active]]) {
+    check(!!c && c.w > 0 && c.h > 0 && c.y >= 0 && c.y < 900 && c.x >= 0 && c.x < 1400,
+      `${name} is on screen in the map-only view: ${c ? c.x + ',' + c.y + ' ' + c.w + 'x' + c.h : 'MISSING'}`);
+  }
+  check(!!seen.active && /\S/.test(seen.active.text), 'the indicator names a plan: ' +
+    (seen.active ? JSON.stringify(seen.active.text) : 'MISSING'));
+  // and it must actually work from here
+  const added = await page.evaluate(() => {
+    const before = flights.length;
+    document.getElementById('add-flight-btn').click();
+    return { before, after: flights.length };
+  });
+  check(added.after === added.before + 1,
+    `the map-only New plan button starts a plan (${added.before} -> ${added.after})`);
+  await ctx.close();
+}
+
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''));
 
 await b.close();
