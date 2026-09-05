@@ -138,12 +138,21 @@ export function ofpRowCells(row) {
     // A circuit is not a leg on the ground: no track, no distance, no speed.
     return {
       from: row.from, to: row.to + ' ×' + row.laps,
-      accTime: row.accTime, accBurn: row.accBurn,
+      // EVERY NUMERIC CELL GOES THROUGH THE SAME FORMATTER AS A LEG ROW (L10).
+      // `accBurn` was passed through RAW, so a running total of
+      // 3.4000000000000004 printed in full on the form while the leg rows above
+      // and below it read 3.4 - and `String(row.pl)` printed the literal "NaN"
+      // for a circuit with no altitude, which is H2 surviving in this one row.
+      // `accDist` arrives pre-formatted (or '' where the sector has no distance
+      // yet) and is passed on as a string: one('') would print 0.0, because
+      // Number('') is 0 and isFinite says yes.
+      accTime: row.accTime, accBurn: one(row.accBurn),
       ff: one(row.ff), legBurn: one(row.legBurn),
-      pl: row.pl === null || row.pl === undefined ? BLANK : String(row.pl),
+      pl: whole(row.pl),
       time: row.time, eto: row.eto || BLANK, estRem: one(row.rem),
       tas: BLANK, tt: BLANK, var: BLANK, mt: BLANK, wv: BLANK, wca: BLANK,
-      accDist: row.accDist, msa: BLANK, mh: BLANK, gs: BLANK, dist: BLANK,
+      accDist: row.accDist === '' || row.accDist == null ? BLANK : String(row.accDist),
+      msa: BLANK, mh: BLANK, gs: BLANK, dist: BLANK,
       ato: BLANK, diff: BLANK, actRem: BLANK, freq: BLANK
     };
   }

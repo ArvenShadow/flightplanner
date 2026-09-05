@@ -31,7 +31,7 @@
  * can never reach site/:
  *   - the bundle and the page script must both parse
  *   - no duplicate DOM ids
- *   - APP_VERSION must match package.json
+ *   - APP_VERSION must match package.json, and so must package-lock.json
  *   - every marker must actually have been replaced
  *
  *   node tools/build.mjs [--watch]
@@ -115,6 +115,18 @@ function checkVersion(html) {
   const norm = (v) => String(v).split('.').slice(0, 2).join('.');
   if (norm(m[1]) !== norm(pkg)) {
     fail(`APP_VERSION ${m[1]} does not match package.json ${pkg} - a release bumps both.`);
+  }
+  // THE LOCKFILE IS THE THIRD PLACE THE VERSION LIVES (L2). It sat at 16.33.0
+  // for eight releases, so every `npm install` rewrote it and dirtied the tree -
+  // which trains you to ignore a lockfile diff, which is the one diff worth
+  // reading. Nothing forced it to keep up, so it did not.
+  const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'));
+  const lockVersions = [lock.version, lock.packages && lock.packages[''] && lock.packages[''].version];
+  for (const v of lockVersions) {
+    if (v !== undefined && v !== pkg) {
+      fail(`package-lock.json says ${v}, package.json says ${pkg} - a release bumps both ` +
+           `(npm install --package-lock-only).`);
+    }
   }
   return m[1];
 }
