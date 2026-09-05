@@ -842,6 +842,14 @@
     // (Built-in demo routes removed - the planner starts blank; use
     //  Save/Export/Import to manage your own route library.)
 
+    // ESCAPING IS ONE HELPER, AND IT IS THIS ONE (v16.47, discipline rule 6).
+    // `escapeText` lives in src/lib/format.js and is the ONLY escaper in the
+    // app. Six near-identical local copies used to live inside the functions
+    // that needed one; three of them omitted `"` and one omitted `>`, so which
+    // characters were safe depended on which function you were in. Every string
+    // this script interpolates into innerHTML goes through `esc`.
+    const esc = escapeText;
+
     // formatTimeHHMM, toDMM and the ETO clock arithmetic -> src/lib/format.js
     // (pure, so the midnight rollover is tested without a browser). Only the
     // DOM read of the ETD field stays here.
@@ -924,7 +932,7 @@
                   : dl.kind === 'polar-night' ? 'none'
                   : `${fmtLocalHM(dl.mct)}–${fmtLocalHM(dl.ect)}`;
         return `<tr>
-          <td style="font-weight:700;">${label} ${wp.name}</td>
+          <td style="font-weight:700;">${label} ${esc(wp.name)}</td>
           <td>☀ ${fmtLocalHM(dl.sunrise)} / ${fmtLocalHM(dl.sunset)}</td>
           <td>Day-VFR window: <b>${win}</b></td>
           <td style="color:var(--text-muted);">${kindNote[dl.kind]}</td>
@@ -1003,8 +1011,8 @@
 
       body.innerHTML =
         `<table style="width:100%;">${rowsHtml}</table>` +
-        warns.map(m => `<div style="background:#e53e3e; color:#ffffff; font-weight:700; padding:4px 8px; border-radius:4px; margin-top:4px;">⛔ ${m}</div>`).join('') +
-        cautions.map(m => `<div style="background:#c05621; color:#ffffff; font-weight:600; padding:4px 8px; border-radius:4px; margin-top:4px;">⚠ ${m}</div>`).join('') +
+        warns.map(m => `<div style="background:#e53e3e; color:#ffffff; font-weight:700; padding:4px 8px; border-radius:4px; margin-top:4px;">⛔ ${esc(m)}</div>`).join('') +
+        cautions.map(m => `<div style="background:#c05621; color:#ffffff; font-weight:600; padding:4px 8px; border-radius:4px; margin-top:4px;">⚠ ${esc(m)}</div>`).join('') +
         `<div style="color:var(--text-muted); margin-top:4px;">Day VFR = start of morning to end of evening civil twilight (sun −6°) — SERA Art. 2(97), Reg. (EU) 923/2012, applied unchanged in Norway (BSL F 1-1). ` +
         `<b>All times local (${utcOffsetLabel(dateStr)})</b> for ${dateStr}, NOAA solar equations (±2 min). Verify official times in AIP Norge GEN 2.7 / almanac — note those tables are UTC. PIC responsibility.</div>`;
     }
@@ -1032,7 +1040,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.46';
+    const APP_VERSION = '16.47';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1068,8 +1076,8 @@
       const click = ' <span class="ver-recheck" onclick="checkForUpdate(true)" style="cursor:pointer; text-decoration:underline dotted;">';
 
       if (phase === 'done' && remote && compareVersions(APP_VERSION, remote) < 0) {
-        el.innerHTML = `v${APP_VERSION} · <a href="${REPO_URL}" target="_blank" rel="noopener" style="color:#ecc94b; font-weight:700;">⬆ v${remote} available on GitHub</a>`;
-        el.title = 'A newer version is on GitHub - download the latest dist/C182_FlightPlanner.html';
+        el.innerHTML = `v${APP_VERSION} · <a href="${REPO_URL}" target="_blank" rel="noopener" style="color:#ecc94b; font-weight:700;">⬆ v${esc(remote)} available on GitHub</a>`;
+        el.title = 'A newer version is on GitHub - reload the page to pick it up (the service worker fetches the new shell).';
       } else if (phase === 'done') {
         el.innerHTML = `v${APP_VERSION} ·${click}latest (${clock})</span>`;
         el.title = 'Checked GitHub at ' + clock + ' - this is the newest release. Click to check again.';
@@ -2284,9 +2292,9 @@
           // the name label hangs centered below it. Neither the label's width
           // nor the per-flight stagger can shift the dot off the coordinate.
           const markerHtml = isPattern 
-            ? `<div class="pattern-label" style="position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(0px,${fIdx * 15}px);">🔄 ${fPrefix}${wp.name} (${wp.laps} laps)</div>`
+            ? `<div class="pattern-label" style="position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(0px,${fIdx * 15}px);">🔄 ${fPrefix}${esc(wp.name)} (${wp.laps} laps)</div>`
             : `<div class="wp-dot" style="position:absolute; left:-7px; top:-7px; background:${dotColor};"></div>
-               <div class="wp-label" style="position:absolute; left:0; top:${7 + labelDrop}px; transform:translateX(-50%); margin-top:0; background:${labelBg}; color:${labelColor}; border:${labelBorder}; border-left:4px solid ${color};">${idx + 1}. ${fPrefix}${wp.name} (${wp.alt}')</div>`;
+               <div class="wp-label" style="position:absolute; left:0; top:${7 + labelDrop}px; transform:translateX(-50%); margin-top:0; background:${labelBg}; color:${labelColor}; border:${labelBorder}; border-left:4px solid ${color};">${idx + 1}. ${fPrefix}${esc(wp.name)} (${wp.alt}')</div>`;
 
           const marker = L.marker([wp.lat, wp.lng], {
             draggable: !isPattern && !isDoneMode && !dimmed,
@@ -2489,7 +2497,7 @@
           const kindCls = (prof.kind === 'TOC' || prof.kind === 'BOC') ? 'toc' : 'tod';
           const labelHtml =
             `<div class="prof-tick ${kindCls}" style="${tickStyle}"></div>` +
-            `<div class="${kindCls}-label" style="${chipStyle}" title="${tip}">${fTag}${prof.kind}</div>`;
+            `<div class="${kindCls}-label" style="${chipStyle}" title="${esc(tip)}">${fTag}${esc(prof.kind)}</div>`;
 
           const m = L.marker([prof.lat, prof.lng], {
             interactive: false,
@@ -2564,7 +2572,7 @@
       flights.forEach((fl, fIdx) => {
         const fieldset = document.createElement('div');
         fieldset.style.marginBottom = '12px';
-        fieldset.innerHTML = `<h3 style="font-size:11px; font-weight:700; color:#2b6cb0; text-transform:uppercase; margin-bottom:4px;">✈ ${flightTitle(fl)}</h3>`;
+        fieldset.innerHTML = `<h3 style="font-size:11px; font-weight:700; color:#2b6cb0; text-transform:uppercase; margin-bottom:4px;">✈ ${esc(flightTitle(fl))}</h3>`;
 
         if (fl.waypoints.length < 2) {
           fieldset.innerHTML += `<p style="font-size:11px; color:var(--text-muted); font-style:italic;">No legs plotted yet for this flight.</p>`;
@@ -2595,7 +2603,7 @@
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td style="text-align:left; padding-left:6px; font-weight:700; font-size:11px;">
-              ${from.name} &rarr; ${to.name}
+              ${esc(from.name)} &rarr; ${esc(to.name)}
             </td>
             <td>
               <input type="number" class="wind-input" id="wmodal-dir-${fIdx}-${i+1}" value="${to.wdir}" onfocus="this.select()">
@@ -3018,8 +3026,6 @@
      */
     function airspaceCardHTML(f, at) {
       const i = airspaceInfo(f, { sectors: (AIP && AIP.sectors) || [], at: at || null });
-      const esc = (t) => String(t == null ? '' : t)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       let h = '<div class="as-card" style="--as-accent:' + i.color + ';">';
       h += '<div class="as-head"><span class="as-name">' + esc(i.name) + '</span>';
       h += i.cls ? '<span class="as-class">' + esc(i.cls) + '</span>' : '';
@@ -3190,8 +3196,6 @@
     /** The hover card. The published coordinate leads, because being able to
      *  put a waypoint exactly there is the entire point of the feature. */
     function fixCardHTML(a) {
-      const esc = (t) => String(t == null ? '' : t)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       let h = '<b>' + esc(a.name) + '</b><br>' + esc(a.detail);
       if (a.published) h += '<br><span class="fix-pub">' + esc(a.published) + '</span>';
       h += '<br>Click to add as a waypoint.';
@@ -3459,8 +3463,6 @@
       const sch = computeFlightSchedule(trial);
       const S = sch[legPanel.legEnd - 1];
       if (!S) { host.innerHTML = ''; return; }
-      const esc = (t) => String(t == null ? '' : t)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const T = computeLegTotals(S.from, S.to, S);
       const f = (n, d) => Number(n).toFixed(d === undefined ? 1 : d);
       const rows = [];
@@ -3517,7 +3519,7 @@
         legPanel.suggestLevelByNM = null;
       }
       if (S.bodRefused) {
-        warn += '<div class="leg-warn">Cannot be level ' + f(S.bodPinNM) + ' NM before ' + S.to.name +
+        warn += '<div class="leg-warn">Cannot be level ' + f(S.bodPinNM) + ' NM before ' + esc(S.to.name) +
           ' \u2014 a descent for a later, lower fix runs through that stretch. Not applied.</div>';
       }
       if (S.shortfallMin > 0.001) {
@@ -3525,7 +3527,7 @@
           ' \u2014 you would arrive HIGH.</div>';
       }
       host.innerHTML = rows.map((r) =>
-        '<div class="lp-row"><span class="lp-k">' + r[0] + '</span><span class="lp-v">' + r[1] + '</span></div>'
+        '<div class="lp-row"><span class="lp-k">' + esc(r[0]) + '</span><span class="lp-v">' + esc(r[1]) + '</span></div>'
       ).join('') + warn;
     }
 
@@ -3737,7 +3739,6 @@
 
     function renderMetarCard(icaos, metars, tafs) {
       const body = document.getElementById('metar-body');
-      const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
       const parts = [];
       for (const icao of icaos) {
         const rawM = metars[icao], rawT = tafs[icao];
@@ -3779,6 +3780,15 @@
     function renderAllFlightTables() {
       const container = document.getElementById('flight-plans-container');
       container.innerHTML = '';
+      // THE PRINT HOST IS EMPTIED HERE, NOT ONLY REFILLED AT THE END (H1).
+      // v16.43 stopped the daylight card from skipping the banner, but the
+      // print sheets are written in the LAST statement of this function, so a
+      // throw anywhere between here and there still left the PREVIOUS plan's
+      // sheets sitting in #ofp-print - and Print OFP would put another
+      // route's figures on company paperwork. Clearing first means a failed
+      // render prints NOTHING, which is the honest outcome.
+      const printHost = document.getElementById('ofp-print');
+      if (printHost) printHost.innerHTML = '';
 
       const distUnit = aircraftProfile.distUnit || 'NM';
       const fuelUnit = aircraftProfile.fuelUnit || 'GAL';
@@ -3808,7 +3818,7 @@
         headerDiv.className = `flight-header ${isSelected ? 'flight-header-active' : ''}`;
         headerDiv.innerHTML = `
           <div style="display:flex; align-items:center; gap:8px;">
-            <span>✈ <b>${flightTitle(fl)}</b> ${isSelected ? '<small style="color:#ecc94b;">[ACTIVE]</small>' : ''}</span>
+            <span>✈ <b>${esc(flightTitle(fl))}</b> ${isSelected ? '<small style="color:#ecc94b;">[ACTIVE]</small>' : ''}</span>
             <span style="font-size:11px; font-weight:normal; background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px;">
               🛫 Dep. Elev: 
               <input type="number" class="flight-dep-input" value="${fl.depElev}" step="50" onfocus="this.select()" onchange="setFlightDepElevation(${fIdx}, this.value)"> ft
@@ -3910,7 +3920,7 @@
             tr.id = `row-${fIdx}-${i+1}`;
 
             tr.innerHTML = `
-              <td><b>${from.name}</b></td>
+              <td><b>${esc(from.name)}</b></td>
               <td><b>PATTERN</b></td>
               <td class="cc"><span class="type-pattern">PATTERN</span></td>
               <td><input type="number" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority)" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${i+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
@@ -4059,18 +4069,18 @@
       if (isHighlighted) tr.className = "row-highlight";
       tr.id = `row-${fIdx}-${wpIndex+1}`;
 
-      const typeBadge = `<span class="${type.includes('CLB') ? 'type-climb' : (type.includes('DES') ? 'type-desc' : 'type-cruise')}">${type}</span>`;
+      const typeBadge = `<span class="${type.includes('CLB') ? 'type-climb' : (type.includes('DES') ? 'type-desc' : 'type-cruise')}">${esc(type)}</span>`;
       
       tr.innerHTML = `
-        <td><b>${fromName}</b></td>
-        <td><b>${toName}</b></td>
+        <td><b>${esc(fromName)}</b></td>
+        <td><b>${esc(toName)}</b></td>
         <td class="cc">${typeBadge}</td>
         <td><input type="number" value="${flights[fIdx].waypoints[wpIndex+1].alt}" step="500" title="Target Alt" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="cc"><input type="number" value="${oat}" title="OAT" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].oat=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="calc-cell cc">${tas}</td>
         <td class="calc-cell cc">${String(tt).padStart(3, '0')}°</td>
-        <td class="cc" title="Declination Source: ${varIndicator}">
-          <input type="number" value="${magVar}" title="Mag VAR (${varIndicator})" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].var=Number(this.value); flights[${fIdx}].waypoints[${wpIndex+1}].varSource='MANUAL'; refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}>
+        <td class="cc" title="Declination Source: ${esc(varIndicator)}">
+          <input type="number" value="${magVar}" title="Mag VAR (${esc(varIndicator)})" onfocus="this.select()" onchange="pushUndoState(); flights[${fIdx}].waypoints[${wpIndex+1}].var=Number(this.value); flights[${fIdx}].waypoints[${wpIndex+1}].varSource='MANUAL'; refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}>
         </td>
         <td class="calc-cell">${mt}°</td>
         <td class="wv-cell" title="Click to open Quick Wind Matrix" onclick="${isDoneMode ? '' : 'openWindModal()'}">
@@ -4428,7 +4438,7 @@
       if (parts.length === 0) return null;
       const tr = document.createElement('tr');
       tr.className = 'sub-leg-row no-select';
-      tr.innerHTML = `<td colspan="${compactCols ? 13 : 22}">↳ ${parts.join(' &nbsp;|&nbsp; ')}</td>`;
+      tr.innerHTML = `<td colspan="${compactCols ? 13 : 22}">↳ ${parts.map(esc).join(' &nbsp;|&nbsp; ')}</td>`;
       return tr;
     }
 
@@ -4457,8 +4467,6 @@
     // limits, the real sheet) that has not been done.
     // =========================================================================
     function ofpSheetHTML(sheet) {
-      const esc = (t) => String(t == null ? '' : t)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const widths = columnWidthsPct();
       const cols = widths.map((w) => `<col style="width:${w.toFixed(3)}%">`).join('');
       const groups = groupSpans().map((g) => g.label
@@ -4550,8 +4558,6 @@
       const host = document.getElementById('ofp-print');
       if (!host) return;
       const bad = Array.isArray(problems) && problems.length > 0;
-      const esc = (t) => String(t == null ? '' : t)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const band = bad
         ? '<div class="ofp-void"><b>INTEGRITY CHECK FAILED — DO NOT USE</b>' +
           '<span>' + esc(problems[0]) +
@@ -4617,7 +4623,7 @@
         wpRows += `
           <tr>
             <td style="width:4%;">${i + 1}</td>
-            <td style="width:24%;"><input type="text" value="${wp.name.replace(/"/g, '&quot;')}" onfocus="this.select()" onchange="renameWaypoint(${fIdx}, ${i}, this.value)" ${isDoneMode ? 'disabled' : ''} style="text-align:left; font-weight:700;"></td>
+            <td style="width:24%;"><input type="text" value="${esc(wp.name)}" onfocus="this.select()" onchange="renameWaypoint(${fIdx}, ${i}, this.value)" ${isDoneMode ? 'disabled' : ''} style="text-align:left; font-weight:700;"></td>
             <td style="width:20%; font-family:monospace;">${toDMM(wp.lat, true)}</td>
             <td style="width:20%; font-family:monospace;">${toDMM(wp.lng, false)}</td>
             <td style="width:10%;">${wp.alt}'</td>
@@ -4645,11 +4651,11 @@
           const hasProf = segMarks.length > 0;
           const prof = segMarks[0];
           const profTxt = hasProf
-            ? segMarks.map(p => `${MARK_GLYPH[p.kind] || p.kind} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`).join(' · ')
+            ? segMarks.map(p => esc(`${MARK_GLYPH[p.kind] || p.kind} ${convertDist(p.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)} ${p.rel} ${p.refName}`)).join(' · ')
             : '—';
           legRows += `
           <tr>
-            <td style="text-align:left; padding-left:6px;"><b>${nameA}</b> → <b>${nameB}</b>${nViaSegs > 1 ? ` <span style="color:var(--text-muted); font-size:9px;">(leg ${from.name}–${to.name})</span>` : ''}</td>
+            <td style="text-align:left; padding-left:6px;"><b>${esc(nameA)}</b> → <b>${esc(nameB)}</b>${nViaSegs > 1 ? ` <span style="color:var(--text-muted); font-size:9px;">(leg ${esc(from.name)}–${esc(to.name)})</span>` : ''}</td>
             <td>${String(sg.tt).padStart(3, '0')}°</td>
             <td class="highlight-cell">${smt}°</td>
             <td>${convertDist(sg.distNM, distUnit).toFixed(1)} ${distLabel(distUnit)}</td>

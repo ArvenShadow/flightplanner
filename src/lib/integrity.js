@@ -13,6 +13,7 @@
  * flagging it: a pilot who cannot see the reason cannot judge the risk.
  */
 import { computeFlightSchedule, computeLegTotals } from './legs.js';
+import { escapeText } from './format.js';
 
 /** Route-derived name: first and last real waypoint, e.g. "ENDU-ENTC". */
 /** @param {Flight} fl @returns {string} e.g. "ENDU-ENTC" */
@@ -144,7 +145,9 @@ export function collectIntegrityProblems(flights, signals) {
 /** @param {string[]} problems @param {number} [maxShown] @returns {string} */
 export function integrityBannerHTML(problems, maxShown) {
   const shown = problems.slice(0, maxShown || 5);
+  // Problem messages NAME the waypoint at fault (v16.20), so a waypoint
+  // called `Bodø <VOR>` would otherwise put a tag in the banner.
   return '\u26d4 <u>INTEGRITY CHECK FAILED - DO NOT USE THESE FIGURES</u><br>' +
-    shown.map(m => '\u2022 ' + m).join('<br>') +
+    shown.map(m => '\u2022 ' + escapeText(m)).join('<br>') +
     (problems.length > shown.length ? `<br>\u2026 and ${problems.length - shown.length} more (see console).` : '');
 }
