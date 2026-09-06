@@ -472,7 +472,12 @@ function ringOf(outline, label, border, report) {
  */
 function codeFromCallsign(callsign) {
   const t = String(callsign || '');
-  if (/\bApproach\b|\bRadar\b|\bDirector\b/i.test(t)) return 'APP';
+  // "Final" and "Arrival" are approach positions too, and they are the ONLY
+  // two callsigns in the edition that reached no code at all (v16.60): Oslo
+  // TMA's Final 128.905 and Sola TMA's Sola Arrival 119.405 were published,
+  // imported, and then never shown, because the card collects by code. Reading
+  // a published NAME to pick a LABEL - the rule this function already states.
+  if (/\bApproach\b|\bRadar\b|\bDirector\b|\bFinal\b|\bArrival\b/i.test(t)) return 'APP';
   if (/\bTower\b/i.test(t)) return 'TWR';
   if (/\bInformation\b/i.test(t)) return 'AFIS';
   if (/\bControl\b/i.test(t)) return 'ACC';

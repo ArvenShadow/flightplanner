@@ -181,6 +181,24 @@ export const VHF_MAX_MHZ = 137;
  */
 export const GUARD_MHZ = ['121.500', '243.000'];
 
+/**
+ * A STANDBY FREQUENCY IS NOT ONE YOU DIAL (v16.60).
+ *
+ * The eAIP publishes these `HO` with the remark "AVBL only when <primary> U/S"
+ * - Oslo's 119.980 stands in for Final/Director, 129.305 for Approach E/W,
+ * Gardermoen Tower's 118.705 and 123.330 for its two sector frequencies. 103 of
+ * the 1673 frequencies in the 2026-09-03 edition carry that remark. They are
+ * kept in the DATA (nothing published is discarded) and left off the card,
+ * exactly as the guard frequencies are: a pilot planning at a desk wants the
+ * frequency to call, and six numbers where three are conditional is how the
+ * one that matters gets lost.
+ *
+ * @param {{mhz: string, remarks?: string}} q @returns {boolean}
+ */
+export function isStandbyFrequency(q) {
+  return /\bAVBL\s+only\b|\bU\/S\b/i.test(String((q && q.remarks) || ''));
+}
+
 /** @param {{mhz: string, remarks?: string}} q @returns {boolean} */
 export function isUsableFrequency(q) {
   const n = Number(String((q && q.mhz) || '').trim());
@@ -378,31 +396,83 @@ function fallbackRows(f, opts) {
   return { rows: sect.rows.concat(others), note: sect.note };
 }
 
-/** @param {AirspaceFeature} f @param {string[]} codes
- *  @returns {{tag: string, freqs: string[], callsign: string|null}[]} */
+/**
+ * Two published services are the SAME position when their callsigns differ only
+ * in spacing, case or punctuation. That is not a guess: Ørland publishes its one
+ * approach position as both "Ørland Approach/radar" and "Ørland Approach/ Radar"
+ * in the same edition, and merging those is right where merging Director with
+ * Oslo Approach is wrong.
+ *
+ * @param {string|null|undefined} callsign @returns {string}
+ */
+function positionKey(callsign) {
+  return String(callsign || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * ONE ROW PER PUBLISHED POSITION, NOT PER SERVICE CODE (v16.60).
+ *
+ * This used to union every service sharing a code into a single row and label it
+ * with the FIRST callsign it found. At the 47 aerodromes publishing one approach
+ * position that is the same thing; at the six that publish several it is a
+ * plausible wrong answer of exactly the kind this project refuses. Gardermoen
+ * publishes four - Final, Director, Oslo Approach sector E, Oslo Approach sector
+ * W - and the card read:
+ *
+ *   APP · Final · 128.905 · 119.980 · 118.480 · 129.305 · 136.405 · 120.455
+ *
+ * A pilot reads that and calls Final on 118.480, which is Oslo Approach sector
+ * E. It is the same defect as the v16.33 Polaris card (all 26 frequencies, no
+ * position) and the v16.42 Kjevik one (a frequency landing on the wrong
+ * service), and the v16.32 rule already names it: a frequency is only usable
+ * PAIRED WITH ITS SERVICE.
+ *
+ * @param {AirspaceFeature} f @param {string[]} codes
+ * @returns {{tag: string, freqs: string[], callsign: string|null}[]}
+ */
 function collectServices(f, codes) {
   /** @type {{tag: string, freqs: string[], callsign: string|null}[]} */
   const rows = [];
   for (const code of codes) {
-    /** @type {string[]} */
-    const freqs = [];
-    /** @type {string|null} */
-    let callsign = null;
+    /** @type {Map<string, {callsign: string|null, freqs: string[]}>} */
+    const positions = new Map();
     for (const sv of f.services || []) {
       if ((sv.code || '').toUpperCase() !== code) continue;
+      const key = positionKey(sv.callsign);
+      let pos = positions.get(key);
+      if (!pos) { pos = { callsign: sv.callsign || null, freqs: [] }; positions.set(key, pos); }
       for (const q of sv.freqs || []) {
-        if (isUsableFrequency(q) && !freqs.includes(q.mhz)) freqs.push(q.mhz);
+        if (!isUsableFrequency(q) || isStandbyFrequency(q)) continue;
+        if (!pos.freqs.includes(q.mhz)) pos.freqs.push(q.mhz);
       }
-      if (!callsign && sv.callsign) callsign = sv.callsign;
     }
-    if (!freqs.length) continue;        // a service with nothing dialable
-    rows.push({
-      tag: SERVICE_TAGS[code] || code,
-      freqs,
-      callsign: code === 'ATIS' ? (f.icao ? `${f.icao} ATIS` : 'ATIS') : callsign
-    });
+    for (const pos of positions.values()) {
+      if (!pos.freqs.length) continue;        // a position with nothing dialable
+      rows.push({
+        tag: SERVICE_TAGS[code] || code,
+        freqs: pos.freqs,
+        // AN ATIS IS LISTENED TO, NOT CALLED (v16.31), so it is labelled by the
+        // aerodrome rather than by Norway's "<place> Information" callsign, which
+        // reads exactly like an AFIS. Where a field publishes an arrival AND a
+        // departure ATIS, the published callsign is the only thing that tells
+        // them apart, so it is kept beside the code.
+        callsign: code === 'ATIS'
+          ? atisLabel(f, pos.callsign, positions.size)
+          : pos.callsign
+      });
+    }
   }
   return rows;
+}
+
+/** @param {AirspaceFeature} f @param {string|null} callsign @param {number} n
+ *  @returns {string} */
+function atisLabel(f, callsign, n) {
+  const base = f.icao ? `${f.icao} ATIS` : 'ATIS';
+  if (n < 2) return base;
+  const role = /\barr(iv\w*)?\b/i.test(String(callsign || '')) ? 'arrival'
+    : /\bdep(art\w*)?\b/i.test(String(callsign || '')) ? 'departure' : null;
+  return role ? `${base} (${role})` : (callsign || base);
 }
 
 /**
