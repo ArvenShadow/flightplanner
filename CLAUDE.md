@@ -1842,6 +1842,28 @@ and what stops a binding being added without saying where it may fire.
   says so. The chord's canonical spelling has a FIXED modifier order
   (`Ctrl+Alt+Shift+X`), so one keystroke cannot sit in the map under two names
   and shadow itself.
+- **THE ROW HAS NO INLINE HANDLERS, AND THAT IS A FIX (v16.53).** v16.52 shipped
+  a list whose Set and Clear buttons were COMPLETELY INERT. They were built as
+  `onclick="beginKeybindCapture(' + JSON.stringify(id) + ')"` - and
+  `JSON.stringify` emits DOUBLE quotes, which closed the `onclick` attribute on
+  the spot, leaving the handler as `beginKeybindCapture(`. It is the same
+  attribute-quoting failure v16.47 was written about, in code written after it.
+  - **IT GOT THROUGH BECAUSE THE TESTS DROVE THE FUNCTIONS, NOT THE CONTROLS.**
+    Both the jsdom tests and `verify-layout.mjs` called `beginKeybindCapture()`
+    and `clearKeybind()` directly, so all of them passed against a list of dead
+    buttons. Driving the function proves the function; only a real CLICK proves
+    the control. Both now click, and reinstating the v16.52 markup fails the
+    suite by name.
+  - Listeners are attached to the elements, so there is no attribute for a
+    quote to escape from, and a test asserts NO `on*` attribute exists anywhere
+    in the list. The handler count guard catches it independently.
+  - Checked rather than assumed: every OTHER inline handler in the page
+    interpolates a number (`${fIdx}`) or a hand-written single-quoted literal.
+    The keybind list was the only place a string was serialised into one.
+- **THE CHORD BOX IS THE CONTROL** (the pilot's request): click the shortcut you
+  want to change, rather than aiming at a separate Set button beside it. While
+  capturing, **Cancel takes the Clear button's place**, so the row never grows a
+  third control and the way out is where the hand already is.
 - **CAPTURE RUNS IN THE CAPTURE PHASE AND SWALLOWS THE EVENT.** Binding Ctrl+S
   must not also SAVE, and binding Delete must not also delete a waypoint. jsdom
   cannot prove that, so `verify-layout.mjs` presses Ctrl+S at a real browser

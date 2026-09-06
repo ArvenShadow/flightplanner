@@ -863,10 +863,18 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .keybind-row.is-capturing { border-color: #dd6b20; background: rgba(221,107,32,0.12); }
     .keybind-what { flex: 1; min-width: 0; font-size: 11px; line-height: 1.35; }
     .keybind-what small { display: block; font-size: 9.5px; color: var(--text-muted); }
+    /* The chord box IS the control (v16.53): click what you want to change. */
     .keybind-chord { font-family: inherit; font-size: 10.5px; font-weight: 700; white-space: nowrap;
-      min-width: 108px; text-align: center; padding: 2px 6px; border-radius: 3px;
-      border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main); }
+      min-width: 112px; text-align: center; padding: 3px 6px; border-radius: 3px;
+      border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main);
+      cursor: pointer; }
+    .keybind-chord:hover:not(:disabled) { border-color: #3182ce; background: #ebf8ff; color: #2a4365; }
+    body.dark-mode .keybind-chord:hover:not(:disabled) { background: #2a4365; color: #bee3f8; }
+    .keybind-chord:disabled { cursor: default; opacity: 0.75; }
     .keybind-chord.is-unbound { font-weight: 400; font-style: italic; color: var(--text-muted); }
+    .keybind-row.is-capturing .keybind-chord { border-color: #dd6b20; background: #fffaf0;
+      color: #7b341e; font-style: normal; font-weight: 700; }
+    body.dark-mode .keybind-row.is-capturing .keybind-chord { background: #652b19; color: #fbd38d; }
     .keybind-actions { display: flex; gap: 4px; }
     .keybind-fixed { font-size: 9.5px; color: var(--text-muted); font-style: italic; padding: 0 6px; }
     .keybind-note { font-size: 10.5px; padding: 6px 8px; border-radius: 4px; margin-bottom: 8px;
