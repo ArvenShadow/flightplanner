@@ -298,6 +298,52 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
   });
   check(opened.open && opened.after > opened.before * 2,
     `clicking the summary expands it (${opened.before} -> ${opened.after} px)`);
+
+  // THE PATH SETTING CHANGES WHAT IS DRAWN (v16.63). jsdom has no projection,
+  // so only a real browser can show that the great-circle line actually bows
+  // away from the straight Mercator segment the rhumb draws.
+  const paths = await page.evaluate(async () => {
+    closeSettingsModal();
+    flights = [{ id: 1, title: 'P', depElev: 0, waypoints: [
+      { lat: 69.67895, lng: 18.91143, name: 'ENTC', alt: 5000, oat: 5, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.72578, lng: 29.89135, name: 'ENKR', alt: 5000, oat: 5, wdir: 0, wspd: 0, var: -11 }] }];
+    activeFlightIndex = 0;
+    map.setView([69.9, 24.4], 7, { animate: false });
+    const read = async (mode) => {
+      aircraftProfile.navPath = mode;
+      setNavPath(mode);
+      refreshMap(); renderAllFlightTables();
+      await new Promise((r) => setTimeout(r, 350));
+      const pts = polylines[0].getLatLngs();
+      const a = map.latLngToContainerPoint(pts[0]);
+      const z = map.latLngToContainerPoint(pts[pts.length - 1]);
+      // how far the drawn line bows off the straight screen chord
+      let bow = 0;
+      for (const ll of pts) {
+        const p = map.latLngToContainerPoint(ll);
+        const t = ((p.x - a.x) * (z.x - a.x) + (p.y - a.y) * (z.y - a.y)) /
+                  ((z.x - a.x) ** 2 + (z.y - a.y) ** 2);
+        bow = Math.max(bow, Math.hypot(p.x - (a.x + (z.x - a.x) * t), p.y - (a.y + (z.y - a.y) * t)));
+      }
+      const row = document.querySelector('#flight-tables tbody tr');
+      return { pts: pts.length, bowPx: Math.round(bow),
+               text: row ? row.textContent.replace(/\s+/g, ' ').slice(0, 120) : '' };
+    };
+    const gc = await read('gc');
+    const rh = await read('rhumb');
+    aircraftProfile.navPath = 'gc'; setNavPath('gc'); refreshMap();
+    return { gc, rh };
+  });
+  check(paths.rh.bowPx <= 1,
+    `a rhumb line is drawn dead straight on screen (${paths.rh.bowPx} px of bow)`);
+  check(paths.gc.bowPx > 4,
+    `a great circle is drawn bowed away from it (${paths.gc.bowPx} px of bow)`);
+  // BOTH modes are densified - one code path, deliberately - so the point count
+  // is the SAME and it is where the points LIE that differs. Asserting a bigger
+  // count for the great circle would be asserting an implementation this
+  // module does not have.
+  check(paths.gc.pts === paths.rh.pts && paths.gc.pts > 2,
+    `both paths are drawn from the same densified helper (${paths.gc.pts} points each)`);
   await ctx.close();
 }
 

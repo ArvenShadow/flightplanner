@@ -24,7 +24,7 @@
  * scope: it comes from performance.js, which the page hands the live
  * object once via setAircraftProfile().
  */
-import { calcDistanceNM, calcTrueTrack, interpolateGeo } from './geodesy.js';
+import { calcDistanceNM, calcTrueTrack, interpolateGeo, distanceNMExact } from './geodesy.js';
 import { cruisePerf, climbPerf, climbCumulative, calcWCA, activeAircraftProfile, toRad } from './performance.js';
 
 // How close to a fix a corner has to fall before it IS that fix. It is the
@@ -118,6 +118,55 @@ export function flightLineCoords(fl) {
   });
   return out;
 }
+
+/**
+ * How far apart the points of the DRAWN route line are, in NM.
+ *
+ * Leaflet joins its points with straight lines in Web Mercator, and a straight
+ * line in Mercator is a RHUMB - so in rhumb mode two points per leg is already
+ * exact and this densification is invisible. In great-circle mode it is what
+ * makes the drawn line the great circle the numbers describe: measured at 69 N,
+ * the two paths lie 0.06 NM apart on a 38 NM leg, 0.30 NM on a 53 NM leg and
+ * 5.16 NM on the 229 NM Tromso-Kirkenes leg, so an undensified line is visibly
+ * the wrong line on anything long.
+ *
+ * 25 NM is not picked: see the test, which walks the drawn polyline against the
+ * true path and requires it within 0.02 NM - 37 m, or 0.07 mm on a 1:500 000
+ * chart, the same threshold the airspace border simplification uses.
+ */
+export const DRAW_STEP_NM = 25;
+
+/**
+ * The route line as DRAWN, following whichever path model is in force.
+ *
+ * ONE CODE PATH FOR BOTH MODES, deliberately: `interpolateGeo` already follows
+ * the setting, so in great-circle mode the extra points curve the line and in
+ * rhumb mode they land on the straight Mercator segment and change nothing. A
+ * mode branch here would be a second place for the two to disagree.
+ *
+ * The LOGICAL path is untouched - hit-testing, `alongLegNM`, `legMidpoint` and
+ * the leg indices all still work on waypoint-to-waypoint segments. This is for
+ * drawing only.
+ *
+ * @param {Flight} fl
+ * @returns {[number, number][]}
+ */
+export function drawnLineCoords(fl) {
+  const pts = flightLineCoords(fl);
+  if (pts.length < 2) return pts;
+  /** @type {[number, number][]} */
+  const out = [pts[0]];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const L = distanceNMExact(a[0], a[1], b[0], b[1]);
+    const steps = Math.max(1, Math.ceil(L / DRAW_STEP_NM));
+    for (let k = 1; k < steps; k++) out.push(interpolateGeo(a[0], a[1], b[0], b[1], (L * k) / steps, L));
+    out.push(b);
+  }
+  return out;
+}
+
+
 
 /**
  * Which span of which leg a point on the map is nearest to.

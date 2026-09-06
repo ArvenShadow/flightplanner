@@ -2024,6 +2024,81 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## Great circle or rhumb line - the pilot chooses (v16.63)
+
+The pilot asked which model the distances used, and the answer exposed a
+disagreement the planner had always had.
+
+- **THE NUMBERS SAID ONE PATH AND THE PICTURE SHOWED ANOTHER.** Every distance
+  and track was a GEODESIC; the route line drawn on the map was a RHUMB, because
+  Leaflet draws straight segments in Web Mercator and a straight line in
+  Mercator IS a constant-heading line. Verified in the browser, not assumed: the
+  drawn midpoint of ENDU-ENEV sits 1.5 px from the rhumb midpoint and 4.3 px
+  from the geodesic one.
+- **MEASURED AT 69 N**, and the three effects are different sizes:
+  | | 38 NM leg | 53 NM leg | 229 NM E-W leg |
+  |---|---|---|---|
+  | distance | +0.000 NM | +0.002 NM | +0.308 NM |
+  | track | +0.2 deg | -0.9 deg | **+5.1 deg** |
+  | how far apart the paths lie | 0.057 NM | 0.301 NM | **5.16 NM** |
+  Distance is a non-issue - below the 0.1 NM the OFP prints. The TRACK and WHERE
+  THE LINE LIES are what matter, and east-west legs are where they show.
+- **THE FIRST COMPARISON OF THE TWO WAS WRONG, and in an instructive way.** It
+  put a SPHERICAL rhumb beside an ELLIPSOIDAL geodesic and reported the rhumb as
+  0.12 NM SHORTER - which is impossible, a rhumb is never shorter. What it had
+  measured was the v16.9 sphere-versus-ellipsoid bias wearing a rhumb costume.
+  Compare like with like before drawing a conclusion from a table.
+- **IT IS A SETTING, AND IT GOVERNS FOUR THINGS AT ONCE** - line, corridor,
+  distance and track. A mode that drew a rhumb and printed the great-circle
+  heading would hand the pilot a course that does not fly the line in front of
+  them, which is the plausible-wrong-answer failure in its purest form. Default
+  is the great circle: it is what a GPS flies, and the paper ICAO 1:500 000 is
+  Lambert conformal, on which a ruler line between two fixes is very nearly a
+  great circle.
+- **`src/lib/rhumb.js` IS ELLIPSOIDAL**, and that is not pedantry. A spherical
+  rhumb would reintroduce the exact 0.3% short bias v16.9 removed. The meridian
+  arc comes from GeographicLib itself - a geodesic due north IS the meridian -
+  so no series is hand-rolled and the ellipsoid matches every other distance.
+- **EQUAL FRACTIONS ARE NOT EQUAL DISTANCES ALONG A RHUMB.** Isometric latitude
+  interpolates linearly along a loxodrome, but distance is proportional to the
+  MERIDIAN ARC, and the two are different functions of latitude. Hence two point
+  functions: `rhumbPoint` (by fraction) and `rhumbPointAtDistance` (by distance,
+  which is what TOC/TOD marks and the corridor walk need).
+- **THE EAST-WEST CASE IS NOT A SPECIAL CASE BOLTED ON.** As the course
+  approaches 090 the meridian arc and `cos(course)` both go to zero and the
+  quotient is 0/0. A rhumb along a parallel is an arc of that parallel, whose
+  ellipsoidal radius is `a*cos(phi)/sqrt(1 - e^2 sin^2 phi)`.
+- **THE PATH MODEL IS INJECTED, NOT THREADED** (`setNavPath`), the same
+  arrangement performance.js uses for the aircraft profile. Threading a mode
+  through computeLegTotals, computeFlightSchedule, computeLegMarkers and every
+  caller would touch dozens of signatures to carry one word.
+- **THE CORRIDOR NEEDED NO CHANGES AT ALL.** It walks through `interpolateGeo`
+  and `trueTrackExact`, both of which consult the setting - so it followed for
+  free. That is what the v16.61 decision to build it on the shared geodesy
+  primitives bought.
+- **ONE DENSIFIER FOR BOTH MODES** (`drawnLineCoords`). In great-circle mode the
+  extra points curve the line; in rhumb mode they land on the straight Mercator
+  segment and change nothing. A mode branch there would be a second place for
+  the two to disagree - and a browser check asserts the point count is the SAME
+  in both modes, because asserting otherwise would assert an implementation this
+  does not have. Measured in Chromium on Tromso-Kirkenes: 1 px of bow for the
+  rhumb, 22 px for the great circle.
+- THE LOGICAL PATH IS UNTOUCHED: hit-testing, `alongLegNM`, `legMidpoint` and
+  the leg indices all still work waypoint-to-waypoint. The densification is for
+  DRAWING only.
+
+### THE tsc TRAP, THREE TIMES IN ONE SITTING
+
+Five mutations reported "not caught" and every one of them had been killed by
+the TYPECHECKER before a single test ran - zero FAIL lines, which reads exactly
+like a missing guard. Three distinct variants:
+1. removing a call left an import unused (`noUnusedLocals`);
+2. `navPath === 'never'` has no overlap with `'gc'|'rhumb'` (TS2367);
+3. dropping a term left a local unused.
+The pattern that works is to keep the call and discard its result
+(`void rhumbBearing(...)`). **Count the `error TS` lines as well as the FAIL
+lines** - a mutation run that produces neither has proved nothing.
+
 ## The corridor ring (v16.61-v16.62, roadmap item 2)
 
 A band of a chosen radius either side of the WHOLE flown track. The author's

@@ -355,6 +355,7 @@
             <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b> — always a <b>whole hundred feet</b>, rounded <i>up</i>, because the figure is a minimum and the nearest hundred would be below it half the time — with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Taking it gives you <b>one continuous climb</b>: the earlier leg's climb is delayed so it tops out exactly on that fix and runs straight on, rather than levelling off there and climbing again. The rounding buys you a little height, so you top out slightly <i>before</i> the distance you asked for rather than exactly on it — "be level by" is a deadline, and early is safe. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
             <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
+            <li><b>Great circle or rhumb line — your choice</b>, on the <b>Map page of Settings</b>. It governs the <b>route line, the corridor, the distance and the track together</b>, because a plan that drew one line and printed the heading for another would be worse than either. <b>Great circle</b> (the default) is the shortest path and what a GPS flies — the heading changes along the leg, and the track shown is the one you set out on. <b>Rhumb line</b> is one constant heading fix to fix. Measured at 69°N: the <i>distance</i> difference is negligible (0.002 NM on a 53 NM leg, below what the OFP prints), but the <i>track</i> differs by up to 1° on a Troms leg and <b>5.1°</b> on the 229 NM Tromsø–Kirkenes leg, and the two paths lie up to <b>5.2 NM</b> apart there. East–west legs are where it shows. Your paper ICAO chart is Lambert conformal, where a ruler line is nearly a great circle — which is why that is the default. In great-circle mode a long leg is drawn slightly curved on screen: that is correct, because the map is Mercator and a straight line on Mercator is the rhumb.</li>
             <li><b>◫ Corridor</b> draws a band of a radius you choose either side of the <b>whole flown track</b>, vias and all — for finding the <b>MSA along your route</b> by reading the chart's own contours and MEF figures inside it. Default <b>1 NM</b>; set the radius and the transparency on the <b>Map page of Settings</b>.
               <br><b>It is geometry and nothing else.</b> It shows you <i>where</i> to look; it does not compute a safe altitude and never states one. This planner holds no terrain data by an explicit decision — the chart is the reference, and a number invented here would be exactly the plausible wrong answer this tool refuses to give.
               <br>The band is <b>round at every turn and round at both ends</b>, because that is genuinely the shape of "within X of the route" — a squared-off end would stop the corridor flat across your departure fix. It is drawn <b>under everything else</b> and takes no clicks, so route building inside it is unaffected. Inactive flight plans draw theirs at half your chosen transparency.</li>
@@ -851,6 +852,40 @@
           </div>
 
           <div class="setting-section">
+            <h3>Route path</h3>
+            <div class="setting-row">
+              <label for="map-nav-path">Measure and draw along</label>
+              <select id="map-nav-path" onchange="updateNavPath()" style="width:210px;">
+                <option value="gc">Great circle (shortest)</option>
+                <option value="rhumb">Rhumb line (constant heading)</option>
+              </select>
+            </div>
+            <details class="setting-help">
+              <summary>Which path the whole plan follows</summary>
+              <div>
+              This governs the <b>route line, the corridor ring, the distance and the track
+              together</b> — they always describe the same path, because a plan that drew one
+              line and printed the heading for another would be worse than either.
+              <br><b>Great circle</b> is the shortest path and the one a GPS flies; the heading
+              changes continuously along the leg, and the track shown is the one you set out on.
+              <b>Rhumb line</b> is a single constant heading from fix to fix — slightly longer,
+              but you set the heading once.
+              <br><b>How much it matters, measured at 69°N.</b> <i>Distance:</i> almost nothing —
+              0.002 NM on a 53 NM leg, below the 0.1 NM the OFP prints. <i>Track:</i> up to 1° on
+              a Troms leg, and <b>5.1°</b> on the 229 NM Tromsø–Kirkenes leg. <i>Where the line
+              lies:</i> 0.06 NM apart on a 38 NM leg, 0.30 NM on 53 NM, and 5.2 NM on that
+              229 NM leg. East–west legs at these latitudes are where it shows; north–south legs
+              barely move.
+              <br>Your paper ICAO 1:500 000 is a Lambert conformal chart, on which a ruler line
+              between two fixes is very nearly a <b>great circle</b> — so that is the default and
+              the one that matches a straight line drawn on the chart. In great-circle mode the
+              route line on screen is drawn slightly curved on a long leg; that is correct, not a
+              glitch, because the map is Mercator and a straight line on Mercator is the rhumb.
+              </div>
+            </details>
+          </div>
+
+          <div class="setting-section">
             <h3>Corridor ring</h3>
             <div class="setting-row">
               <label for="map-corridor-nm">Radius either side of the track</label>
@@ -985,7 +1020,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 131 inline on*= handlers - 101 written
+    // map, markers, undoStack...) plus 132 inline on*= handlers - 102 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1210,7 +1245,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.62';
+    const APP_VERSION = '16.63';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2068,8 +2103,8 @@
     // Used by every live drag; the OFP tables deliberately do not rebuild
     // here, because that fires per mousemove and makes the drag stutter.
     function drawLiveLine(fIdx) {
-      if (polylines[fIdx]) polylines[fIdx].setLatLngs(flightLineCoords(flights[fIdx]));
-      if (hitLines[fIdx]) hitLines[fIdx].setLatLngs(flightLineCoords(flights[fIdx]));
+      if (polylines[fIdx]) polylines[fIdx].setLatLngs(drawnLineCoords(flights[fIdx]));
+      if (hitLines[fIdx]) hitLines[fIdx].setLatLngs(drawnLineCoords(flights[fIdx]));
     }
 
     // -------------------------------------------------------------------------
@@ -2644,7 +2679,10 @@
         // The drawn path, vias included -> src/lib/legs.js. Every live drag
         // redraws from the same function, so a drag can never straighten a
         // bent leg on screen.
-        const lineCoords = flightLineCoords(fl);
+        // DRAWN, not logical: in great-circle mode the line is densified so it
+        // is the path the numbers describe. Hit-testing still works on the
+        // waypoint-to-waypoint segments, so leg indices are unaffected.
+        const lineCoords = drawnLineCoords(fl);
 
         fl.waypoints.forEach((wp, idx) => {
           const isPattern = wp.isPattern;
@@ -3421,6 +3459,25 @@
     function corridorEnabled() { return aircraftProfile.corridorOn === true; }
 
     function corridorRadiusNM() { return normaliseCorridorNM(aircraftProfile.corridorNM); }
+
+    /**
+     * Change the path model. It governs the LINE, the CORRIDOR, the DISTANCE and
+     * the TRACK together (v16.63) - a mode that drew a rhumb and printed the
+     * great-circle heading would hand the pilot a course that does not fly the
+     * line in front of them.
+     *
+     * Everything downstream is recomputed, because the wind triangle, the
+     * ground speed, the times and the fuel all hang off the track.
+     */
+    function updateNavPath() {
+      const el = document.getElementById('map-nav-path');
+      if (!el) return;
+      aircraftProfile.navPath = normaliseNavPath(el.value);
+      setNavPath(aircraftProfile.navPath);
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
+    }
 
     /** How see-through the band is. A PREFERENCE (the pilot's request): the
      *  right value depends on the chart underneath, and the whole point of the
@@ -4568,6 +4625,7 @@
       document.getElementById('set-auto-plan').value =
         normaliseBool(aircraftProfile.autoPlanAfterStop, true) ? 'yes' : 'no';
       updateRouteWeightPreview();
+      document.getElementById('map-nav-path').value = normaliseNavPath(aircraftProfile.navPath);
       document.getElementById('map-corridor-nm').value = String(corridorRadiusNM());
       document.getElementById('map-corridor-fill').value =
         String(normaliseCorridorFillPct(aircraftProfile.corridorFillPct));
@@ -5260,6 +5318,11 @@
       // The corridor radius is applied live as it is typed, but Save must also
       // commit it: a pilot who edits the box and presses Save & Recalculate
       // without leaving the field would otherwise lose the change.
+      const navEl = document.getElementById('map-nav-path');
+      if (navEl) {
+        aircraftProfile.navPath = normaliseNavPath(navEl.value);
+        setNavPath(aircraftProfile.navPath);
+      }
       const corrEl = document.getElementById('map-corridor-nm');
       if (corrEl) aircraftProfile.corridorNM = normaliseCorridorNM(corrEl.value);
       const corrFill = document.getElementById('map-corridor-fill');
@@ -6411,6 +6474,9 @@
     drawAirspace();
     updateFixesBtn();
     drawFixes();
+    // THE PATH MODEL IS INJECTED BEFORE ANYTHING IS DRAWN OR COMPUTED, because
+    // every distance and track in the first render depends on it.
+    setNavPath(aircraftProfile.navPath);
     updateCorridorBtn();    // same: the label carries the persisted radius
     drawCorridor();
     updateChartDetailBtn();
