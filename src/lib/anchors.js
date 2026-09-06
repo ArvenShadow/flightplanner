@@ -62,7 +62,8 @@ export function foldName(s) {
  * @property {string} label          what to draw on the map
  * @property {string} detail         one line for the picker and the tooltip
  * @property {number|null} elevFt    aerodrome elevation; null for a point
- * @property {string} [city]         the town, for naming a fly-by waypoint
+ * @property {string} [city]         the town, published
+ * @property {string} [civil]        the name it is CALLED, from its ATS callsign
  * @property {string|null} published the printed DMS, where there is one
  * @property {string[]} folds        every spelling this anchor answers to,
  *                                   folded. An aerodrome answers to its ICAO
@@ -95,6 +96,9 @@ export function buildAnchors(dataset) {
         // to `name` - which for an aerodrome anchor IS the code - and a fly-by
         // over Tromsø would have been called "Entc".
         city: a.city || a.name || '',
+        // The name the aerodrome is CALLED, resolved once here from its
+        // published ATS callsign (v16.55). This is what a fly-by is named.
+        civil: aerodromeCallName(a.icao, dataset) || publishedFieldName(a) || '',
         detail: a.name + (a.elevFt !== null && a.elevFt !== undefined ? ` · ${a.elevFt} ft` : '') +
           (a.situation ? ` · ${a.situation}` : ''),
         elevFt: typeof a.elevFt === 'number' ? a.elevFt : null,
@@ -306,6 +310,73 @@ export function normaliseStopMinutes(kind, min) {
 }
 
 /**
+ * THE NAME A PILOT SAYS IS THE ATS CALLSIGN (v16.55, the pilot's correction).
+ *
+ * v16.54 used the AIP's `city` field and was wrong about a third of the time -
+ * ENEV came out "Harstad/Narvik" where the chart and the radio say EVENES. The
+ * pilot asked whether the information exists anywhere. It does, and we already
+ * ship it: every aerodrome's own station is published with a CALLSIGN in the
+ * airspace data ("Evenes Tower", "Skagen Information", "Helle Information"),
+ * and the place part of that callsign IS the name.
+ *
+ * MEASURED over the edition: 49 of 53 aerodromes publish a station of their own,
+ * and 22 of those give a name the `city` field does not - Vigra, Flesland,
+ * Kjevik, Gardermoen, Banak, Værnes, Sola, Torp, Skagen, Helle, Evenes...
+ *
+ * THE OTHER CANDIDATE WAS TRIED AND IS WORSE. `name` carries the aerodrome
+ * after a " / " ("TROMSØ / Langnes"), which agrees with the callsign on 40 of
+ * the 49 - but where they differ the callsign is the one flown: Tromsø not
+ * Langnes, Kirkenes not Høybuktmoen, Molde not Årø, Vardø not Svartnes. It is
+ * used only as the fallback for the 4 uncontrolled fields with no station at
+ * all (Eggemoen, Gullknapp, Kjeller, Rena), where it IS the name pilots use.
+ *
+ * ONLY THE AERODROME'S OWN STATION COUNTS - tower, AFIS, or the ATIS. An
+ * approach service can be an area control centre ("Polaris Control" answers for
+ * Skagen's TIZ), and taking that would name half of Norway "Polaris".
+ */
+const ATS_SERVICE_WORD =
+  /\s+(Tower|Information|Ground|Delivery|Approach|Radar|Control|Director|Apron|Traffic)\b.*$/i;
+
+/** The place part of a published callsign: "Evenes Tower" -> "Evenes".
+ *  @param {any} callsign @returns {string} */
+export function callsignPlace(callsign) {
+  const raw = String(callsign || '').trim();
+  if (!raw) return '';
+  const place = raw.replace(ATS_SERVICE_WORD, '').trim();
+  // A callsign that is NOTHING but a service word names no place; better to
+  // say so and let the caller fall back than to return an empty waypoint name.
+  return place === raw && ATS_SERVICE_WORD.test(' ' + raw) ? '' : place;
+}
+
+/** The stations an aerodrome answers on itself, in the order we trust them. */
+const OWN_STATION_CODES = ['TWR', 'AFIS', 'ATIS'];
+
+/** @param {string} icao @param {any} dataset @returns {string} */
+export function aerodromeCallName(icao, dataset) {
+  if (!icao || !dataset || !Array.isArray(dataset.features)) return '';
+  for (const code of OWN_STATION_CODES) {
+    for (const f of dataset.features) {
+      if (f.icao !== icao) continue;
+      for (const sv of f.services || []) {
+        if ((sv.code || '') !== code) continue;
+        const place = callsignPlace(sv.callsign);
+        if (place) return place;
+      }
+    }
+  }
+  return '';
+}
+
+/** The published aerodrome name where the AIP gives one after a " / ", e.g.
+ *  "HØNEFOSS / Eggemoen" -> "Eggemoen". Only used where no station is
+ *  published; see aerodromeCallName for why the callsign wins where both exist.
+ *  @param {any} ad @returns {string} */
+export function publishedFieldName(ad) {
+  const m = / \/ (.+)$/.exec(String((ad && ad.name) || ''));
+  return m ? m[1].trim() : '';
+}
+
+/**
  * The civil name of an aerodrome, for a fly-by waypoint.
  *
  * THE AIP PUBLISHES TWO NAMES AND NEITHER IS ALWAYS THE ONE PILOTS SAY.
@@ -320,11 +391,22 @@ export function normaliseStopMinutes(kind, min) {
  * The dialog SHOWS the name before the pilot commits, and a waypoint is
  * renameable in one right-click, so nothing here is a trap.
  *
- * @param {any} ad an aerodrome record from the dataset
+ * @param {any} ad an aerodrome record or anchor
+ * @param {any} [dataset] the AIP dataset, when `ad` has no resolved name yet
  * @returns {string}
  */
-export function civilName(ad) {
-  const raw = String((ad && (ad.city || ad.name)) || '').trim();
+export function civilName(ad, dataset) {
+  if (!ad) return '';
+  // 1. the callsign the aerodrome answers on - already resolved onto the anchor
+  //    by buildAnchors, or looked up here when given the dataset.
+  const called = ad.civil || (dataset ? aerodromeCallName(ad.icao, dataset) : '');
+  if (called) return called;
+  // 2. the published aerodrome name, for the fields with no station at all
+  const field = publishedFieldName(ad);
+  if (field) return field;
+  // 3. the town. Nothing is invented: if the AIP publishes no name at all,
+  //    neither do we.
+  const raw = String((ad.city || ad.name) || '').trim();
   if (!raw) return '';
   // Title-case each word, keeping "/" and "-" as separators: HARSTAD/NARVIK
   // becomes Harstad/Narvik, not Harstad/narvik.

@@ -1805,7 +1805,7 @@ job. What the cycle changed, and what it exposed:
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
 
-## What happens at an aerodrome (v16.54, roadmap item 17)
+## What happens at an aerodrome (v16.54-v16.55, roadmap item 17)
 
 Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 **fly-by**. They are three different plans, and only the pilot knows which.
@@ -1837,15 +1837,33 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   question CLAUDE.md left open at v16.43: the old note guessed that a touch & go
   would resume from the circuit altitude, and the pilot's answer is that both
   resume from the field - you are on the runway either way.
-- **A FLY-BY IS NAMED AFTER THE PLACE, AND THE NAME IS A PUBLISHED FIELD.**
-  `civilName` returns the AIP's own `city`, title-cased. **NO SINGLE FIELD GIVES
-  EVERY COLLOQUIAL NAME** and this file will not pretend otherwise: `city` is the
-  town (TROMSØ, HARSTAD/NARVIK) and `name` adds the aerodrome after a " / " on
-  35 of the 53 (TROMSØ / Langnes, HARSTAD/NARVIK / Evenes). A pilot says
-  "Tromsø" for the first and "Evenes" for the second, so no rule reproduces
-  both. The dialog therefore SHOWS the name before the pilot commits, and a
-  waypoint is renameable in one right-click.
-  - **THE ANCHOR HAD TO CARRY `city`, and the test caught that it did not.**
+- **A FLY-BY IS NAMED FROM THE PUBLISHED ATS CALLSIGN (v16.55, the pilot's
+  correction), AND THE ANSWER WAS IN THE DATA ALL ALONG.**
+  v16.54 used the AIP's `city` field and was wrong about a third of the time -
+  ENEV came out "Harstad/Narvik" where the chart and the radio both say EVENES.
+  The pilot asked whether that information exists anywhere. It does, and this
+  project already ships it: every aerodrome's own station is published with a
+  CALLSIGN in the airspace data, and the place part of it IS the name.
+  - MEASURED: 49 of 53 aerodromes publish a station of their own, and 22 of
+    those give a name `city` does not - Vigra, Flesland, Kjevik, Gardermoen,
+    Banak, Værnes, Sola, Torp, Skagen, Helle, Evenes.
+  - **THE OTHER CANDIDATE WAS TRIED AND MEASURED, NOT ASSUMED.** `name` carries
+    the aerodrome after a " / " and agrees with the callsign on 40 of the 49 -
+    but where they differ the callsign is the one flown: Tromsø not Langnes,
+    Kirkenes not Høybuktmoen, Molde not Årø, Vardø not Svartnes. It is used only
+    for the 4 uncontrolled fields with no station (Eggemoen, Gullknapp, Kjeller,
+    Rena), where it IS what pilots call them. 53 of 53 now resolve, and a test
+    asserts none of them falls back to the ICAO code.
+  - **ONLY THE AERODROME'S OWN STATION COUNTS** - tower, AFIS or the ATIS. An
+    APPROACH service can be an area centre: "Polaris Control" answers for
+    Skagen's TIZ, and taking it would name half of Norway "Polaris". A test
+    asserts no aerodrome is called Polaris.
+  - THE LESSON, and it is the NO GUESSTIMATES rule in a new place: v16.54
+    reached for the field with the likeliest-sounding NAME (`city`) instead of
+    asking which published field actually carries the thing wanted. "No single
+    field gives every colloquial name" was true of the two fields I looked at,
+    and false of the dataset.
+  - **THE ANCHOR HAD TO CARRY THE NAME, and the test caught that it did not.**
     `buildAnchors` built an aerodrome anchor whose `name` IS the ICAO code, so
     `civilName` fell back to it and a fly-by over Tromsø would have been called
     "Entc". Written before the test ran; found the moment it did.

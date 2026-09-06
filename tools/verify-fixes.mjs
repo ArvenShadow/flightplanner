@@ -151,6 +151,18 @@ check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point
   // The dialog must NAME the fly-by waypoint, because the AIP publishes two
   // names and neither is always the one pilots say.
   check(/Troms\u00f8/.test(asked), 'the fly-by option names the place: ' + asked.slice(0, 140));
+  // v16.55: the name is the published CALLSIGN's place, not the town. ENTC
+  // happens to agree; ENEV is the case that proves the rule, so it is checked
+  // through the same resolver the dialog uses.
+  const named = await page.evaluate(() => {
+    const ads = buildAnchors(window.C182_AIP).filter((a) => a.kind === 'AD');
+    const of = (i) => { const a = ads.find((x) => x.icao === i); return a ? civilName(a) : null; };
+    return { ENEV: of('ENEV'), ENSK: of('ENSK'), ENSH: of('ENSH'),
+             codeNamed: ads.filter((a) => civilName(a).toUpperCase() === a.icao).length };
+  });
+  check(named.ENEV === 'Evenes' && named.ENSK === 'Skagen' && named.ENSH === 'Helle',
+    'the callsign names them: ' + JSON.stringify(named));
+  check(named.codeNamed === 0, `no aerodrome falls back to its ICAO code (${named.codeNamed})`);
 
   await page.locator('#app-dialog .dlg-btn', { hasText: 'Full stop' }).click();
   await page.waitForTimeout(400);

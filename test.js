@@ -6950,20 +6950,53 @@ T('a stop is a validated kind and a validated number of minutes', () => {
   assert(A.normaliseStopMinutes(null, 30) === null, 'minutes without a kind mean nothing');
 });
 
-T('a fly-by is named after the place, from a published field', () => {
+T('a fly-by is named from the published ATS callsign', () => {
+  // THE PILOT'S CORRECTION (v16.55): the name a pilot says IS the callsign.
+  // v16.54 used the AIP's `city` and came out "Harstad/Narvik" where the chart
+  // and the radio both say EVENES.
   const A = moduleExports.anchors;
-  assert(A.civilName({ city: 'BARDUFOSS' }) === 'Bardufoss', 'simple name');
-  assert(A.civilName({ city: 'TROMSØ' }) === 'Tromsø', 'Norwegian letters');
-  // HARSTAD/NARVIK must not become Harstad/narvik.
-  assert(A.civilName({ city: 'HARSTAD/NARVIK' }) === 'Harstad/Narvik', 'slash-separated name');
-  assert(A.civilName({ name: 'ALTA' }) === 'Alta', 'falls back to the published name');
-  assert(A.civilName({}) === '' && A.civilName(null) === '', 'nothing published, nothing invented');
-  // and the dataset really does carry a city for every aerodrome
+  assert(A.callsignPlace('Evenes Tower') === 'Evenes', 'tower');
+  assert(A.callsignPlace('Skagen Information') === 'Skagen', 'AFIS');
+  assert(A.callsignPlace('Bardufoss Approach/ Radar') === 'Bardufoss', 'a compound service name');
+  assert(A.callsignPlace('Ny-Ålesund Information') === 'Ny-Ålesund', 'a hyphenated place');
+  assert(A.callsignPlace('') === '' && A.callsignPlace(null) === '', 'nothing published, nothing invented');
+  // A callsign that is only a service word names no place.
+  assert(A.callsignPlace('Information') === '', 'a bare service word became a place name');
+
   const set = aipDataset();
-  assert(set.aerodromes.length > 40, 'only ' + set.aerodromes.length + ' aerodromes');
-  const noName = set.aerodromes.filter((a) => !A.civilName(a));
-  assert(noName.length === 0, noName.length + ' aerodromes have no civil name');
+  const ads = A.buildAnchors(set).filter((x) => x.kind === 'AD');
+  assert(ads.length > 40, 'only ' + ads.length + ' aerodromes');
+  // THE THREE THE PILOT NAMED, plus the two the old rule got right anyway.
+  const want = { ENEV: 'Evenes', ENSK: 'Skagen', ENSH: 'Helle',
+                 ENTC: 'Tromsø', ENDU: 'Bardufoss' };
+  for (const [icao, name] of Object.entries(want)) {
+    const a = ads.find((x) => x.icao === icao);
+    assert(a, 'no anchor for ' + icao);
+    assert(A.civilName(a) === name, icao + ' should be ' + name + ', got ' + A.civilName(a));
+  }
+  // An APPROACH service can be an area centre - "Polaris Control" answers for
+  // Skagen's TIZ - and taking it would name half of Norway "Polaris".
+  assert(!ads.some((a) => /Polaris/i.test(A.civilName(a))), 'an ACC callsign became an aerodrome name');
+  // EVERY aerodrome gets a name, and none of them is an ICAO code.
+  const unnamed = ads.filter((a) => !A.civilName(a));
+  assert(unnamed.length === 0, unnamed.length + ' aerodromes have no name');
+  const codeNamed = ads.filter((a) => A.civilName(a).toUpperCase() === a.icao);
+  assert(codeNamed.length === 0, codeNamed.map((a) => a.icao).join() + ' fell back to the ICAO code');
+
+  // THE FOUR UNCONTROLLED FIELDS have no station, so the published aerodrome
+  // name is used - which for those IS what pilots call them.
+  assert(A.publishedFieldName({ name: 'HØNEFOSS / Eggemoen' }) === 'Eggemoen', 'name suffix');
+  assert(A.publishedFieldName({ name: 'BARDUFOSS' }) === '', 'no suffix to take');
+  for (const [icao, name] of Object.entries({ ENKJ: 'Kjeller', ENRE: 'Rena' })) {
+    const a = ads.find((x) => x.icao === icao);
+    assert(a && A.civilName(a) === name, icao + ' should fall back to ' + name + ', got ' +
+      (a && A.civilName(a)));
+  }
+  // ...and the town remains the last resort, title-cased, for anything with
+  // neither a station nor a published aerodrome name.
+  assert(A.civilName({ city: 'HARSTAD/NARVIK' }) === 'Harstad/Narvik', 'the last-resort title-case');
 });
+
 
 T('the stop travels through the sanitiser, and an unknown one does not', () => {
   const E = moduleExports.exch;
