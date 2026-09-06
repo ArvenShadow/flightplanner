@@ -78,7 +78,7 @@
              It needs no CSS of its own: #map-controls has been a flex column
              since v16.24, precisely so a new control cannot fall off screen. -->
         <button id="active-flight-btn" class="map-ctl" title="Which flight plan new waypoints are added to. Click to cycle through your plans (it wraps at the end, because this is the only way to switch without a keyboard). The keys , and . step back and forward without wrapping, and 1-9 jump straight to a plan. The full list is in the sidebar." onclick="cycleActiveFlight()">✈ Plan 1</button>
-        <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector). It begins at the last waypoint of the current one, so a multi-sector mission joins up. Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
+        <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector) at the end of the mission. It begins at the last waypoint of the LAST plan, so a multi-sector mission joins up. (A touch &amp; go or a full stop opens its next sector right after the plan it was made on instead.) Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
       </div>
       <div id="chart-label"></div>
       <div id="airspace-attribution" class="no-print" style="display:none;"></div>
@@ -1140,7 +1140,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.58';
+    const APP_VERSION = '16.59';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2390,9 +2390,27 @@
       setFlightDepElevation(activeFlightIndex, val);
     }
 
-    function addNewFlightPlan() {
+    /**
+     * Begin another sector.
+     *
+     * WHICH PLAN IT CONTINUES FROM IS AN ARGUMENT, NOT AN ASSUMPTION (v16.59).
+     * It used to seed from `flights[flights.length - 1]` and append at the end
+     * ALWAYS - fine on a one-sector mission, wrong the moment there are several.
+     * A full stop made on plan 2 of 3 then created plan 4, seeded from plan 3's
+     * last waypoint: the sector that should follow the stop never existed, its
+     * ground time landed on an unrelated plan's header, and the pilot was jumped
+     * to a plan with nothing to do with the aerodrome they had just landed at.
+     * That is the reported "a full stop does not start a new flight plan".
+     *
+     * @param {number} [afterIdx] Insert the new plan directly AFTER this one and
+     *   seed it from that plan's last waypoint. Omitted (the + New plan button):
+     *   append at the end, continuing the last plan.
+     */
+    function addNewFlightPlan(afterIdx) {
       pushUndoState('add a flight plan');
-      const lastFlight = flights[flights.length - 1];
+      const srcIdx = (typeof afterIdx === 'number' && flights[afterIdx])
+        ? afterIdx : flights.length - 1;
+      const lastFlight = flights[srcIdx];
       let newDepElev = Number(document.getElementById('def-dep-elev').value);
       let initialWPs = [];
 
@@ -2427,14 +2445,15 @@
       // Use max-existing-id + 1. flights.length + 1 produced duplicate IDs and
       // duplicate titles as soon as any plan had been deleted.
       const newId = flights.reduce((max, f) => Math.max(max, f.id || 0), 0) + 1;
-      flights.push({
+      const insertAt = srcIdx + 1;
+      flights.splice(insertAt, 0, {
         id: newId,
         title: `Flight Plan ${newId}`,
         depElev: newDepElev,
         waypoints: initialWPs
       });
 
-      activeFlightIndex = flights.length - 1;
+      activeFlightIndex = insertAt;
       document.getElementById('def-dep-elev').value = newDepElev;
       refreshMap();
       renderAllFlightTables();
@@ -3735,6 +3754,10 @@
      */
     async function addAerodromeStop(a, kind) {
       addAnchorWaypoint(a, { stop: kind });
+      // AN INDEX IS NOT AN IDENTITY ACROSS AN AWAIT (discipline rule 7). The
+      // circuits dialog below can leave and re-enter the plan list, so the
+      // sector the stop was made on is remembered by ITS ID and found again.
+      const stopFlightId = flights[activeFlightIndex].id;
       if (kind === 'touch-go') {
         // The circuits are the EXISTING pattern mechanism, untouched - a touch
         // and go is one pass, circuits are laps, and the pilot says which.
@@ -3748,10 +3771,16 @@
             { id: 'cancel', label: 'Cancel' }
           ]
         });
-        if (laps && laps.id === 'yes') addPatternStop();
+        // AWAITED: the circuits belong to THIS sector, so they have to be on
+        // it before the next one opens. Unawaited, the new plan was created
+        // while the laps dialog was still on screen.
+        if (laps && laps.id === 'yes') await addPatternStop();
       }
       if (normaliseBool(aircraftProfile.autoPlanAfterStop, true)) {
-        addNewFlightPlan();
+        // The next sector goes directly AFTER the one the stop was made on -
+        // not at the end of the list. See addNewFlightPlan.
+        const stopIdx = flights.findIndex((f) => f.id === stopFlightId);
+        addNewFlightPlan(stopIdx < 0 ? undefined : stopIdx);
         say('Next sector opened, departing ' + (a.icao || a.name) +
             (typeof a.elevFt === 'number' ? ' at ' + a.elevFt + ' ft' : '') +
             '. Ground time is editable in its header.', 'good', 6000);

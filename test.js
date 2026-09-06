@@ -7388,6 +7388,63 @@ TA('a stop opens the next sector from the field elevation, unless turned off', a
   ev(SEED);
 });
 
+TA('the next sector follows the plan the stop was made on, not the last plan', async () => {
+  // THE REPORTED BUG (v16.59): "a full stop does not start a new flight plan".
+  // addNewFlightPlan always seeded from flights[flights.length - 1] and appended
+  // at the END, so a stop made on plan 2 of 3 created plan 4 out of plan 3's
+  // last waypoint. The sector that should follow the stop never existed, its
+  // ground time landed on an unrelated plan's header (stopBeforeHTML reads
+  // flights[fIdx - 1]) and the pilot was jumped to a plan with nothing to do
+  // with the aerodrome they had just landed at. One plan hid it completely,
+  // which is why every earlier test passed.
+  const A = moduleExports.anchors;
+  const entc = A.buildAnchors(aipDataset()).find((x) => x.kind === 'AD' && x.icao === 'ENTC');
+  const wp = (n, la, ln, alt) =>
+    `{ lat: ${la}, lng: ${ln}, name: '${n}', alt: ${alt}, oat: 5, wdir: 0, wspd: 0, var: -11 }`;
+  ev(`delete aircraftProfile.autoPlanAfterStop;`);
+  ev(`flights = [
+        { id: 1, title: 'One',   depElev: 254, waypoints: [${wp('ENDU', 69.055, 18.544, 254)}, ${wp('A', 69.3, 18.6, 3500)}] },
+        { id: 2, title: 'Two',   depElev: 254, waypoints: [${wp('A', 69.3, 18.6, 254)}, ${wp('B', 69.5, 18.8, 3500)}] },
+        { id: 3, title: 'Three', depElev: 254, waypoints: [${wp('B', 69.5, 18.8, 254)}, ${wp('C', 69.6, 19.0, 3500)}] }];
+      activeFlightIndex = 1; refreshMap(); renderAllFlightTables();`);
+
+  const p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🛩 Full stop');
+  await p; await tick();
+
+  assert(ev('flights.length') === 4, 'the next sector did not open: ' + ev('flights.length'));
+  const names = ev('flights.map(f => f.waypoints.map(w => w.name).join(">"))');
+  assert(ev('flights[1].waypoints').slice(-1)[0].name === 'ENTC',
+    'the stop did not land on the plan it was made on: ' + JSON.stringify(names));
+  // THE NEW SECTOR SITS DIRECTLY AFTER IT, seeded from the aerodrome stopped at.
+  assert(names[2] === 'ENTC', 'the new sector is not after the stop: ' + JSON.stringify(names));
+  assert(ev('activeFlightIndex') === 2,
+    'the pilot was not taken to the new sector: ' + ev('activeFlightIndex'));
+  assert(ev('flights[2].depElev') === 32,
+    'the new sector does not depart from the field: ' + ev('flights[2].depElev'));
+  // ...and the plan that already followed is untouched, still after the new one.
+  assert(names[3] === 'B>C', 'the following sector was disturbed: ' + JSON.stringify(names));
+  // The ground time belongs to the sector that departs after the stop, and
+  // stopBeforeHTML finds it at flights[fIdx - 1] only because the new plan is
+  // in the right PLACE.
+  // NOTE: no whitespace tidy-up here. Inside a template literal `\s` collapses
+  // to a bare `s`, so the obvious `.replace(/\s+/g, ' ')` silently replaces the
+  // LETTER s ("Full stop" -> "Full  top") and the assert fails for the wrong
+  // reason - which is exactly what it did when this test was written.
+  const hdrs = ev(`[...document.querySelectorAll('.flight-header')].map(h => h.textContent)`);
+  assert(/Full stop ENTC/.test(hdrs[2] || ''),
+    'the ground time is not on the sector that departs after the stop: ' + (hdrs[2] || ''));
+  assert(!/Full stop/.test(hdrs[3] || ''),
+    'the ground time also landed on an unrelated plan: ' + (hdrs[3] || ''));
+
+  // The + New plan button is unchanged: no argument means "continue the last".
+  ev(`activeFlightIndex = 0; addNewFlightPlan();`);
+  assert(ev('flights.length') === 5 && ev('activeFlightIndex') === 4,
+    'the plain button no longer appends at the end: ' + ev('activeFlightIndex'));
+  ev(SEED);
+});
+
 T('the next sector departs from the PUBLISHED field, not the arrival altitude', () => {
   // THIS HAS TO BE TESTED WITH THE TWO FIGURES DIFFERENT, or it passes for the
   // wrong reason: the old rule inherited the last waypoint's altitude, and for
