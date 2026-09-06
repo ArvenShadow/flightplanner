@@ -2309,7 +2309,7 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const anchorsModule = require('./src/lib/anchors.js');
   const corridorModule = require('./src/lib/corridor.js');
   const skinsModule = require('./src/lib/skins.js');
-  assert(skinsModule.normaliseSkin('topbar') === 'topbar', 'skins: a real skin was rejected');
+  assert(skinsModule.normaliseSkin('menu') === 'menu', 'skins: a real skin was rejected');
   const rhumbModule = require('./src/lib/rhumb.js');
   assert(rhumbModule.rhumbBearing(69, 18, 70, 18) === 0, 'rhumb: due north is not 000');
   // CALLED, not merely required: require() does not execute function bodies, so
@@ -3347,19 +3347,84 @@ T('a skin is CSS only - it can never take a control away', () => {
   // PROFILE_KEYS and can arrive from a settings file somebody else wrote.
   assert(S.normaliseSkin(undefined) === 'default', 'no value must give the default');
   assert(S.normaliseSkin('rubbish') === 'default', 'an unknown skin must fall back');
-  assert(S.normaliseSkin('topbar') === 'topbar', 'a real skin was rejected');
+  assert(S.normaliseSkin('menu') === 'menu', 'a real skin was rejected');
   assert(S.skinById('nope').id === 'default', 'skinById must fall back');
   assert(moduleExports.exch.PROFILE_KEYS.includes('skin'), 'skin is not in PROFILE_KEYS');
+});
+
+T('a skin may move a control between panels, and only a movable one', () => {
+  const S = moduleExports.skins;
+  // TIER 2 (v16.66). CSS cannot reparent, but appendChild can - and the moved
+  // node keeps its id, its inline on*= attribute and every listener, which is
+  // why this needs neither the compiler nor a handler rewrite.
+  assert(S.SLOTS.length >= 2, 'only ' + S.SLOTS.length + ' slots');
+  assert(S.MOVABLE.length >= 5, 'only ' + S.MOVABLE.length + ' movable controls');
+  // A whitelist both ways: a skin cannot move something the layout depends on,
+  // and cannot drop a control somewhere unstyled.
+  const ok = S.normalisePlacement({ 'undo-btn': 'map-controls' });
+  assert(ok['undo-btn'] === 'map-controls', 'a legal placement was dropped');
+  assert(!('flight-tables' in S.normalisePlacement({ 'flight-tables': 'map-controls' })),
+    'a control that is not on MOVABLE was allowed to move');
+  assert(!('undo-btn' in S.normalisePlacement({ 'undo-btn': 'nowhere' })),
+    'a slot that does not exist was accepted');
+  assert(Object.keys(S.normalisePlacement(null)).length === 0, 'null placement must be empty');
+  assert(Object.keys(S.normalisePlacement('rubbish')).length === 0, 'a string placement must be empty');
+  // Every slot a skin names must be a real one, or the placement silently
+  // does nothing while looking as though it worked.
+  for (const sk of S.SKINS) {
+    for (const [c, slot] of Object.entries(sk.place || {})) {
+      assert(S.MOVABLE.includes(c), `skin "${sk.id}" moves "${c}", which is not movable`);
+      assert(S.SLOTS.includes(slot), `skin "${sk.id}" moves "${c}" into "${slot}", which is not a slot`);
+    }
+  }
+  assert(S.SKINS.some((sk) => sk.place && Object.keys(sk.place).length),
+    'no skin actually uses a placement, so the mechanism is untested in anger');
+});
+
+T('a moved control keeps its wiring, and goes home exactly', () => {
+  ev(SEED);
+  // THE POINT OF THE WHOLE MECHANISM: the node is MOVED, not recreated, so the
+  // handler comes with it. jsdom can prove the reparenting and the identity;
+  // verify-skins.mjs clicks it in a real browser.
+  // THE HOME PARENT HAS NO ID, so identity has to be established some other
+  // way - comparing `parentElement.id` on both sides compares '' with '' and
+  // proves nothing. The INDEX among its siblings is what "exactly home" means.
+  const where = () => ev(`(() => {
+    const el = document.getElementById('undo-btn');
+    const kids = [...el.parentElement.children];
+    return { idx: kids.indexOf(el), n: kids.length,
+             next: el.nextElementSibling ? (el.nextElementSibling.id || el.nextElementSibling.tagName) : null,
+             parentIsMap: el.parentElement.id === 'map-controls' };
+  })()`);
+  const home = where();
+  const before = ev(`document.getElementById('undo-btn').getAttribute('onclick')`);
+  ev(`applySkin('menu');`);
+  assert(where().parentIsMap, 'the Menu skin did not move Undo onto the map');
+  assert(ev(`document.getElementById('undo-btn').getAttribute('onclick')`) === before,
+    'the moved control lost its handler attribute - it was recreated, not moved');
+  // ...and back home EXACTLY, not merely to the right parent. Returning with
+  // appendChild would put it at the end of the row and quietly reorder the
+  // header every time a skin was tried.
+  ev(`applySkin('default');`);
+  assert(JSON.stringify(where()) === JSON.stringify(home),
+    'the control did not go back to the same place: ' + JSON.stringify(where()) + ' vs ' + JSON.stringify(home));
+  // ...and it stays exact however many times the skin is switched. Returning
+  // with appendChild would put it at the END of the row and drift the header
+  // one place further every round trip.
+  for (let i = 0; i < 3; i++) ev(`applySkin('menu'); applySkin('default');`);
+  assert(JSON.stringify(where()) === JSON.stringify(home),
+    'switching skins repeatedly drifted the control: ' + JSON.stringify(where()));
+  ev(SEED);
 });
 
 T('choosing a skin swaps one body class and nothing else', () => {
   ev(SEED);
   const before = ev('flights[0].waypoints.length');
-  ev(`applySkin('topbar');`);
-  assert(ev(`document.body.classList.contains('skin-topbar')`), 'the class was not applied');
+  ev(`applySkin('compact');`);
+  assert(ev(`document.body.classList.contains('skin-compact')`), 'the class was not applied');
   ev(`applySkin('menu');`);
   assert(ev(`document.body.classList.contains('skin-menu')`), 'the second skin was not applied');
-  assert(!ev(`document.body.classList.contains('skin-topbar')`),
+  assert(!ev(`document.body.classList.contains('skin-compact')`),
     'the previous skin class was left behind - two skins would fight in the cascade');
   ev(`applySkin('rubbish');`);
   assert(ev(`document.body.classList.contains('skin-default')`), 'an unknown skin did not fall back');

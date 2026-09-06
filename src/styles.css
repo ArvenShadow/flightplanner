@@ -1353,3 +1353,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .setting-help[open] > summary::after { content: ' (collapse)'; }
 .setting-help > summary:hover { color: var(--text-main); }
 .setting-help > div { margin-top: 4px; line-height: 1.5; }
+
+/* SKIN SLOTS (v16.66). Empty in the shipped design and taking no space, so
+   adding them changed nothing - which verify:visual proves rather than
+   assumes. A skin that moves a control into one styles it there. */
+/* THE :empty RULE HAS TO OUT-SPECIFY THE ID RULE, or it loses silently. A bare
+   `.skin-slot:empty` is 0-2-0 against `#slot-header` at 1-0-0, so the empty
+   slot kept `display: flex` and took a row's worth of space in the shipped
+   design - caught by verify:visual, invisible to every other check. */
+#slot-header, #slot-sidebar-top { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+#slot-header:empty, #slot-sidebar-top:empty { display: none; }

@@ -38,10 +38,10 @@
       <button id="compact-btn" class="btn btn-outline btn-sm" style="color:white; border-color:#718096;" onclick="toggleCompactCols()" title="Hide secondary columns (Profile, OAT, TAS, TT, VAR, WCA, minute-marks, FF, Acc) for small screens">▤ Compact</button>
       <button id="done-mode-btn" class="btn btn-done btn-sm" onclick="toggleDoneMode()" title="View Mode locks all editing for in-flight use — tapping a map waypoint then highlights its OFP row. Click again to return to Edit Mode.">👁 View Mode</button>
       <button id="ruler-btn" class="btn btn-ruler btn-sm" onclick="toggleRulerMode()">📏 Draw Ruler</button>
-      <button class="btn btn-outline btn-sm" style="color:white; border-color:#718096;" onclick="openHelpModal()">❓ Help</button>
-      <button class="btn btn-sera btn-sm" onclick="openSeraModal()">🇪🇺 SERA Rules</button>
-      <button class="btn btn-wind btn-sm" onclick="openWindModal()">💨 Input Wind</button>
-      <button class="btn btn-settings btn-sm" onclick="openSettingsModal()">⚙ Settings & Units</button>
+      <button id="guide-btn" class="btn btn-outline btn-sm" style="color:white; border-color:#718096;" onclick="openHelpModal()">❓ Help</button>
+      <button id="sera-btn" class="btn btn-sera btn-sm" onclick="openSeraModal()">🇪🇺 SERA Rules</button>
+      <button id="wind-btn" class="btn btn-wind btn-sm" onclick="openWindModal()">💨 Input Wind</button>
+      <button id="settings-btn" class="btn btn-settings btn-sm" onclick="openSettingsModal()">⚙ Settings & Units</button>
       <button id="undo-btn" class="btn btn-secondary btn-sm" onclick="undoLast()">Undo</button>
       <button id="redo-btn" class="btn btn-secondary btn-sm" onclick="redoLast()">Redo</button>
       <button class="btn btn-danger btn-sm" onclick="clearAllFlights()">Clear All</button>
@@ -50,7 +50,7 @@
            print dialog, which renders the form exactly as it will print and
            lets it be cancelled. The audit read the only route as Ctrl+P and
            missed the button; the title now says what it opens. -->
-      <button class="btn btn-primary btn-sm" onclick="window.print()"
+      <button id="print-btn" class="btn btn-primary btn-sm" onclick="window.print()"
               title="Preview and print the company Operational flightplan form, filled from this plan. Opens the browser's print dialog, so you see the sheet before any paper - one sheet per sector, landscape A4.">Print / preview OFP</button>
     </div>
   </div>
@@ -62,6 +62,7 @@
            one by id with hardcoded top offsets, so a button added without a
            matching CSS rule silently fell to the bottom of the page and was
            invisible - which is exactly what happened to the two below. -->
+      <div id="slot-header" class="skin-slot no-print"></div>
       <div id="map-controls" class="no-print">
         <button id="declutter-btn" class="map-ctl" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
         <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo or the official ICAO VFR 1:500 000 from Avinor. Both are streamed and need internet. Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
@@ -87,6 +88,7 @@
     </div>
 
     <div id="sidebar">
+      <div id="slot-sidebar-top" class="skin-slot no-print"></div>
       <div class="card no-print">
         <div class="card-title">
           <span>Flight Defaults <span id="perf-model-badge" style="font-weight:600; color:var(--highlight-text); background:var(--highlight-bg); padding:1px 6px; border-radius:3px; margin-left:4px; text-transform:none;" title="Active performance model — change in Settings"></span></span>
@@ -355,7 +357,7 @@
             <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b> — always a <b>whole hundred feet</b>, rounded <i>up</i>, because the figure is a minimum and the nearest hundred would be below it half the time — with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Taking it gives you <b>one continuous climb</b>: the earlier leg's climb is delayed so it tops out exactly on that fix and runs straight on, rather than levelling off there and climbing again. The rounding buys you a little height, so you top out slightly <i>before</i> the distance you asked for rather than exactly on it — "be level by" is a deadline, and early is safe. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
             <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
-            <li><b>Skins — the same planner, arranged differently.</b> <b>Settings → 🗺 Map → Look</b> offers <b>Default</b> (the shipped design), <b>Top bar</b> (the plan becomes a band across the top with the map below), <b>Menu</b> (the plan collapses to a narrow rail and opens when you hover or tab into it, giving the map the whole window), <b>Compact</b> (smaller type and tighter rows for a 13&quot; laptop) and <b>Bold</b> (larger hit targets and heavier type for a touchscreen). A skin is <b>pure CSS</b>: nothing moves in the page, so every button does exactly what it did before and no action can be lost by choosing one. It is a standing preference, and it travels in your exported settings; the <b>layout</b> selector in the header is a separate, per-session choice and still wins.</li>
+            <li><b>Skins — the same planner, arranged differently.</b> <b>Settings → 🗺 Map → Look</b> offers <b>Default</b> (the shipped design), <b>Menu</b> (the plan collapses to a narrow rail and opens when you hover or tab into it, giving the map the whole window), <b>Compact</b> (smaller type and tighter rows for a 13&quot; laptop) and <b>Bold</b> (larger hit targets and heavier type for a touchscreen). A skin is <b>appearance only</b>: it never changes what a button does. Most of it is pure CSS; a skin may also <b>move a control into another panel</b> (Menu puts Undo, Redo and Settings on the map, since the plan is collapsed) — and that moves the <i>same</i> button, handler and all, then puts it back exactly where it came from when you switch away. It is a standing preference, and it travels in your exported settings; the <b>layout</b> selector in the header is a separate, per-session choice and still wins.</li>
             <li><b>Great circle or rhumb line — your choice</b>, on the <b>Map page of Settings</b>. It governs the <b>route line, the corridor, the distance and the track together</b>, because a plan that drew one line and printed the heading for another would be worse than either. <b>Great circle</b> (the default) is the shortest path and what a GPS flies — the heading changes along the leg, and the track shown is the one you set out on. <b>Rhumb line</b> is one constant heading fix to fix. Measured at 69°N: the <i>distance</i> difference is negligible (0.002 NM on a 53 NM leg, below what the OFP prints), but the <i>track</i> differs by up to 1° on a Troms leg and <b>5.1°</b> on the 229 NM Tromsø–Kirkenes leg, and the two paths lie up to <b>5.2 NM</b> apart there. East–west legs are where it shows. Your paper ICAO chart is Lambert conformal, where a ruler line is nearly a great circle — which is why that is the default. In great-circle mode a long leg is drawn slightly curved on screen: that is correct, because the map is Mercator and a straight line on Mercator is the rhumb.</li>
             <li><b>◫ Corridor</b> draws a band of a radius you choose either side of the <b>whole flown track</b>, vias and all — for finding the <b>MSA along your route</b> by reading the chart's own contours and MEF figures inside it. Default <b>1 NM</b>; set the radius and the transparency on the <b>Map page of Settings</b>.
               <br><b>It is geometry and nothing else.</b> It shows you <i>where</i> to look; it does not compute a safe altitude and never states one. This planner holds no terrain data by an explicit decision — the chart is the reference, and a number invented here would be exactly the plausible wrong answer this tool refuses to give.
@@ -1270,7 +1272,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.65';
+    const APP_VERSION = '16.66';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3502,10 +3504,70 @@
      * and both apply: the layout is what you want for THIS session (the plan
      * full-width on a small screen), the skin is a standing preference.
      */
+    /**
+     * Where each movable control lives in the SHIPPED design, remembered the
+     * first time it is moved.
+     *
+     * PARENT AND NEXT SIBLING, not just the parent: putting a button back with
+     * appendChild would return it to the END of its row, so switching skins
+     * twice would quietly reorder the header. The sibling is what makes going
+     * home exact.
+     */
+    const skinHome = new Map();
+
+    /**
+     * TIER 2: a skin may MOVE a control into another panel (v16.66).
+     *
+     * appendChild moves the LIVE node - it keeps its id, its inline on*=
+     * attribute and every listener - so this reparents real controls without
+     * touching the markup or the wiring. Only ids on MOVABLE may move and only
+     * SLOTS may receive, so a skin cannot relocate something the layout depends
+     * on, and cannot drop a control somewhere unstyled.
+     */
+    function applySkinPlacement(skin) {
+      const want = normalisePlacement(skin && skin.place);
+      // Remember home BEFORE anything moves, or a control captured while a skin
+      // is already on would learn the slot as its home and never come back.
+      for (const id of MOVABLE) {
+        const el = document.getElementById(id);
+        if (!el || skinHome.has(id)) continue;
+        const kids = el.parentElement ? [...el.parentElement.children] : [];
+        skinHome.set(id, { parent: el.parentElement, next: el.nextElementSibling, idx: kids.indexOf(el) });
+      }
+      /** @type {string[]} */
+      const send = [], bring = [];
+      for (const id of MOVABLE) {
+        if (!document.getElementById(id)) continue;
+        (want[id] ? send : bring).push(id);
+      }
+      // OUT FIRST, so a row that is losing controls has finished shrinking
+      // before anything is put back into it.
+      for (const id of send) {
+        const el = document.getElementById(id);
+        const slot = document.getElementById(want[id]);
+        if (slot && el.parentElement !== slot) slot.appendChild(el);
+      }
+      // ...AND HOME IN REVERSE ORDER, which is the whole trick. A control is
+      // put back BEFORE the sibling it used to precede - but if that sibling
+      // moved too, it is not there yet and the insert falls through to the END
+      // of the row. Measured: Undo came home at index 11 instead of 8, and one
+      // more place adrift on every switch. Restoring right-to-left means each
+      // control's next sibling is already back by the time it is needed.
+      bring.sort((a, bId) => (skinHome.get(bId).idx || 0) - (skinHome.get(a).idx || 0));
+      for (const id of bring) {
+        const el = document.getElementById(id);
+        const home = skinHome.get(id);
+        if (!home || !home.parent || el.parentElement === home.parent) continue;
+        const anchor = home.next && home.next.parentElement === home.parent ? home.next : null;
+        home.parent.insertBefore(el, anchor);
+      }
+    }
+
     function applySkin(id) {
       const want = normaliseSkin(id);
       SKIN_CLASSES.forEach((c) => document.body.classList.remove(c));
       document.body.classList.add('skin-' + want);
+      applySkinPlacement(skinById(want));
       const note = document.getElementById('map-skin-note');
       if (note) note.textContent = skinById(want).note;
       return want;

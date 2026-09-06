@@ -19,6 +19,13 @@
    item 18 (`src/page.js` under the compiler). Until then, a skin that wants a
    control somewhere else must move the whole PANEL it lives in.
 
+   TOP BAR WAS TRIED AND REMOVED at v16.66. It put the plan in a band above the
+   map, which is the author's own phrasing of what they wanted - and having seen
+   it, "didn't do any wonders". Recorded because the mechanism worked perfectly:
+   the skin was deleted in one block with nothing else touched, which is exactly
+   what this arrangement is for. A look that is cheap to try is also cheap to
+   throw away.
+
    ADDING ONE: append a `body.skin-<name>` block here, add the name to
    SKINS in src/lib/skins.js, and it appears in the picker. Nothing else.
    `tools/verify-skins.mjs` then holds it to the same bar as the rest: every
@@ -30,35 +37,6 @@
    and a tokenising or skinning change must leave it pixel-identical - which
    `npm run verify:visual` proves rather than assumes.
    =========================================================================== */
-
-/* --------------------------------------------------------------------------
-   TOP BAR - the sidebar becomes a band across the top, map below.
-   The author's own example of "full restructuring". Note that this is done
-   entirely by grid placement: #sidebar is still the second child of #main in
-   the markup, exactly where every handler expects it.
-   -------------------------------------------------------------------------- */
-body.skin-topbar #main {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: minmax(0, 2fr) minmax(0, 3fr);
-}
-body.skin-topbar #sidebar {
-  grid-row: 1;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  overflow-x: auto;
-  border-bottom: 2px solid var(--border-color);
-}
-body.skin-topbar #sidebar > .card { flex: 1 1 320px; min-width: 280px; }
-body.skin-topbar #map-container {
-  grid-row: 2;
-  border-right: none;
-}
-/* The stacked/plan/map layouts still win - they are the user's explicit choice
-   for THIS session, where a skin is a standing preference. */
-body.skin-topbar.layout-plan #map-container { display: none; }
-body.skin-topbar.layout-map #sidebar { display: none; }
 
 /* --------------------------------------------------------------------------
    COMPACT - the same arrangement, less of everything. For a 13" laptop where
