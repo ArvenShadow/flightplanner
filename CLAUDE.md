@@ -1805,7 +1805,7 @@ job. What the cycle changed, and what it exposed:
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
 
-## What happens at an aerodrome (v16.54-v16.55, roadmap item 17)
+## What happens at an aerodrome (v16.54-v16.56, roadmap item 17)
 
 Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 **fly-by**. They are three different plans, and only the pilot knows which.
@@ -1837,6 +1837,20 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   question CLAUDE.md left open at v16.43: the old note guessed that a touch & go
   would resume from the circuit altitude, and the pilot's answer is that both
   resume from the field - you are on the runway either way.
+- **AN AERODROME IS AT FIELD ELEVATION ONLY WHEN THE AIRCRAFT IS ON IT (v16.56,
+  the pilot's bug report).** `anchorWaypoint` gave EVERY aerodrome waypoint its
+  published elevation, which is right for a departure and for a stop - the
+  aircraft is on the runway - and wrong for a FLY-BY: it planned a descent to
+  the deck and a climb back out over an aerodrome that was only overflown. The
+  caller now says which, with `atField`, because only the caller knows.
+  - `atField` is `first || !!stop`: the first waypoint of a plan IS the
+    departure whichever option was chosen, so it stays on the field.
+  - The bug rode in with v16.54: before that, an aerodrome anchor was only ever
+    added as a departure or an arrival, so "always the field elevation" and
+    "always on the field" were the same statement. Adding the fly-by made them
+    different and nothing noticed - the existing test asserted the old rule
+    verbatim, which is what a test does when the rule it encodes was true for a
+    reason that has since expired.
 - **A FLY-BY IS NAMED FROM THE PUBLISHED ATS CALLSIGN (v16.55, the pilot's
   correction), AND THE ANSWER WAS IN THE DATA ALL ALONG.**
   v16.54 used the AIP's `city` field and was wrong about a third of the time -

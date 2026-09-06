@@ -272,7 +272,7 @@
             <li><b>Click a published aerodrome and say what happens there.</b> Three things mean three different plans, so the planner asks rather than guessing:
               <b>🔁 Touch &amp; go</b> — the aircraft never stops. It costs <b>5 minutes</b> of circuit time (priced at your <i>pattern</i> fuel flow, since that is what it is), then you are asked whether to fly <b>circuits</b> here; say yes and the laps are added at the derived circuit altitude.
               <b>🛩 Full stop</b> — <b>10 minutes</b> on the ground, and the next sector pays a fresh <b>start-up and taxi</b>, because the engine was shut down and started again.
-              <b>➡ Fly-by</b> — nothing happens: an ordinary waypoint named after the <b>place</b> rather than the code (Bardufoss, Tromsø, Harstad/Narvik).
+              <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing.
               <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
@@ -1139,7 +1139,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.55';
+    const APP_VERSION = '16.56';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3706,7 +3706,12 @@
       const fl = flights[activeFlightIndex];
       pushUndoState('add a published fix');
       const first = fl.waypoints.length === 0;
+      // ON THE FIELD, OR OVER IT? The published elevation belongs to a
+      // waypoint the aircraft is ON - the departure, or a touch & go / full
+      // stop. A FLY-BY is en route and keeps the planned altitude (v16.56).
+      const atField = first || !!o.stop;
       const wp = anchorWaypoint(a, {
+        atField,
         alt: first ? fl.depElev : Number(document.getElementById('def-alt').value),
         oat: Number(document.getElementById('def-oat').value),
         wdir: Number(document.getElementById('def-wdir').value),

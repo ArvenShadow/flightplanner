@@ -543,13 +543,16 @@ export { escapeText };
  * The waypoint an anchor becomes.
  *
  * The coordinate is the PUBLISHED one, unrounded - that is the entire reason
- * this feature exists. An aerodrome also carries its published elevation,
- * which is the altitude the first and last waypoint of a flight should have;
- * a reporting point publishes no elevation and so is given the caller's
- * default rather than an invented one.
+ * this feature exists. A reporting point publishes no elevation and so is
+ * given the caller's default rather than an invented one.
+ *
+ * An AERODROME takes its published elevation only when `atField` says the
+ * aircraft is on it - departing, or stopping there. Overflying one is an
+ * ordinary waypoint at the planned altitude.
  *
  * @param {Anchor} a
- * @param {{alt?: number, oat?: number, wdir?: number, wspd?: number}} defaults
+ * @param {{alt?: number, oat?: number, wdir?: number, wspd?: number,
+ *          atField?: boolean}} defaults
  * @returns {{lat: number, lng: number, name: string, alt: number, oat: number,
  *            wdir: number, wspd: number, anchor: string}}
  */
@@ -557,7 +560,15 @@ export function anchorWaypoint(a, defaults) {
   const d = defaults || {};
   return {
     lat: a.lat, lng: a.lng, name: a.name,
-    alt: a.kind === 'AD' && typeof a.elevFt === 'number' ? a.elevFt : Number(d.alt || 0),
+    // AN AERODROME IS ONLY AT FIELD ELEVATION WHEN THE AIRCRAFT IS ON IT
+    // (v16.56, the pilot's bug report). Departing from it, or stopping there,
+    // puts the waypoint on the runway - so the published elevation is exactly
+    // the number wanted. FLYING OVER it does not: a fly-by is an ordinary
+    // en-route waypoint, and forcing it to ground level planned a descent to
+    // the deck and a climb back out over an aerodrome the aircraft never
+    // touched. The caller says which, because only the caller knows.
+    alt: d.atField && a.kind === 'AD' && typeof a.elevFt === 'number'
+      ? a.elevFt : Number(d.alt || 0),
     oat: Number(d.oat || 0), wdir: Number(d.wdir || 0), wspd: Number(d.wspd || 0),
     // Stamped so the row can say the coordinate came from the AIP and not
     // from a click. Never a person, a machine or a place beyond the fix name.

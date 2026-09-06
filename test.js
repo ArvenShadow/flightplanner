@@ -3479,13 +3479,20 @@ T('an anchored waypoint carries the PUBLISHED coordinate, unrounded', () => {
   const anchors = A.buildAnchors(set);
   const endu = anchors.find((a) => a.kind === 'AD' && a.icao === 'ENDU');
   const ad = set.aerodromes.find((a) => a.icao === 'ENDU');
-  const wp = A.anchorWaypoint(endu, { alt: 3500, oat: 5, wdir: 240, wspd: 18 });
+  const wp = A.anchorWaypoint(endu, { alt: 3500, oat: 5, wdir: 240, wspd: 18, atField: true });
   assert(wp.lat === ad.lat && wp.lng === ad.lng, 'the coordinate was altered on the way through');
   assert(wp.name === 'ENDU', wp.name);
-  // An AERODROME anchor uses its PUBLISHED elevation, not the caller's default
-  // altitude: that is the number a departure or arrival waypoint needs.
-  assert(wp.alt === ad.elevFt && wp.alt === 254, 'aerodrome altitude: ' + wp.alt);
+  // ON the field - a departure, or a touch & go / full stop - the PUBLISHED
+  // elevation is the number wanted, not the caller's cruise default.
+  assert(wp.alt === ad.elevFt && wp.alt === 254, 'aerodrome altitude at the field: ' + wp.alt);
   assert(wp.anchor === 'AIP-AD', wp.anchor);
+  // OVER it, the aircraft is at the planned altitude (v16.56). Forcing ground
+  // level here planned a descent to the deck and a climb back out over an
+  // aerodrome that was only overflown.
+  const over = A.anchorWaypoint(endu, { alt: 3500, oat: 5, wdir: 240, wspd: 18 });
+  assert(over.alt === 3500, 'a fly-by was dragged to ground level: ' + over.alt);
+  assert(A.anchorWaypoint(endu, { alt: 3500, atField: false }).alt === 3500,
+    'an explicit atField:false still used the field elevation');
   // A reporting point publishes NO elevation, so it takes the default rather
   // than being given an invented one.
   const rp = anchors.find((a) => a.kind === 'RP' && a.name === 'SODA');
@@ -7156,6 +7163,52 @@ TA('clicking an aerodrome asks what happens, and each answer does its own thing'
   wps = ev('flights[0].waypoints');
   assert(wps[3].stop === 'touch-go' && wps[3].stopMin === 5, 'the touch & go was not recorded');
   assert(wps.length === 4, 'saying no to circuits still added a pattern stop');
+  ev(`delete aircraftProfile.autoPlanAfterStop;`);
+  ev(SEED);
+});
+
+TA('a fly-by keeps the planned altitude; a stop sits on the field', async () => {
+  // THE BUG (v16.55, reported): every aerodrome waypoint took the published
+  // field elevation, so a fly-by over Bardufoss at 4500 ft was planned at
+  // 254 ft - a descent to the deck and a climb back out over an aerodrome the
+  // aircraft never touched.
+  const A = moduleExports.anchors;
+  const ads = A.buildAnchors(aipDataset()).filter((x) => x.kind === 'AD');
+  const endu = ads.find((x) => x.icao === 'ENDU');
+  const entc = ads.find((x) => x.icao === 'ENTC');
+  ev(SEED);
+  ev(`aircraftProfile.autoPlanAfterStop = false;
+      document.getElementById('def-alt').value = '4500';`);
+
+  let p = ev(`clickAnchor(${JSON.stringify(endu)})`);
+  await tick();
+  answerDialog('➡ Fly-by');
+  await p; await tick();
+  let wp = ev('flights[0].waypoints[flights[0].waypoints.length - 1]');
+  assert(wp.name === 'Bardufoss', 'the fly-by name changed: ' + wp.name);
+  assert(wp.alt === 4500, 'the fly-by was dragged to ground level: ' + wp.alt +
+    ' (ENDU publishes 254 ft)');
+
+  // ...while a STOP at the same aerodrome IS on the runway.
+  p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🛩 Full stop');
+  await p; await tick();
+  wp = ev('flights[0].waypoints[flights[0].waypoints.length - 1]');
+  assert(wp.alt === 32, 'a full stop is not on the field: ' + wp.alt);
+
+  // and the FIRST waypoint of a plan is the departure, so it is on the field
+  // whichever option was chosen.
+  ev(`flights = [{ id: 1, title: 'X', depElev: 0, waypoints: [] }]; activeFlightIndex = 0;
+      refreshMap(); renderAllFlightTables();`);
+  p = ev(`clickAnchor(${JSON.stringify(endu)})`);
+  await tick();
+  answerDialog('➡ Fly-by');
+  await p; await tick();
+  wp = ev('flights[0].waypoints[0]');
+  assert(wp.alt === 254, 'the departure is not at the field elevation: ' + wp.alt);
+  assert(ev('flights[0].depElev') === 254, 'the departure elevation did not follow');
+
   ev(`delete aircraftProfile.autoPlanAfterStop;`);
   ev(SEED);
 });
