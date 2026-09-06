@@ -479,6 +479,34 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
     return out;
   });
   check(!hidden.plan && !hidden.map, 'no divider when only one panel is on screen');
+
+  // ...AND THE PANEL THAT IS LEFT FILLS THE WINDOW. This is the check v16.67
+  // needed and did not have: it asserted that the DIVIDER disappears in a
+  // one-panel layout and never that the remaining panel takes the space. The
+  // map used to carry a grow factor, which filled whatever the hidden sidebar
+  // left; a fixed basis keeps it at the dragged fraction and leaves the rest of
+  // the window blank. Measured at 645-1050 px of dead space before the fix, and
+  // invisible until a divider had actually been dragged.
+  for (const ratio of [null, 0.57, 0.15, 0.85]) {
+    const gaps = await page.evaluate(async (ratio) => {
+      applyPaneRatio(false, ratio);
+      const out = {};
+      for (const mode of ['map', 'plan']) {
+        setLayoutMode(mode, false);
+        await new Promise((x) => setTimeout(x, 250));
+        const main = document.getElementById('main').getBoundingClientRect();
+        const m = document.getElementById('map-container').getBoundingClientRect();
+        const sb = document.getElementById('sidebar').getBoundingClientRect();
+        out[mode] = Math.round(main.width - m.width - sb.width);
+      }
+      setLayoutMode('split', false);
+      applyPaneRatio(false, null);
+      return out;
+    }, ratio);
+    check(Math.abs(gaps.map) <= 2 && Math.abs(gaps.plan) <= 2,
+      `no dead space in a one-panel layout with the divider at ${ratio === null ? 'the default' : ratio}` +
+      ` (map ${gaps.map} px, plan ${gaps.plan} px)`);
+  }
   check(!hidden.menu, 'no divider under the Menu skin, whose plan is a hover rail');
   check(hidden.back, 'and it comes back with the default skin');
   await ctx.close();

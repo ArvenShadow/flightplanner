@@ -819,6 +819,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
     body.layout-stacked #sidebar { flex: 1; }
     body.layout-plan #map-container { display: none; }
     body.layout-map #sidebar { display: none; }
+    /* MAP-ONLY HAS NOTHING TO SHARE WITH, so the divider's fraction must not
+       apply there (v16.72). The map used to carry a GROW factor, which filled
+       whatever the hidden sidebar left behind; v16.67 made it a fixed BASIS so
+       the bar could land under the cursor, and a fixed basis keeps the map at
+       the dragged fraction with the rest of the window blank. An undragged app
+       never showed it, because the fallback grow factor was still in force. */
+    body.layout-map #map-container { flex: 1 1 auto; }
 
 
     /* On-map ruler measurement chips */

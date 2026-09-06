@@ -2024,6 +2024,31 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+### A FIXED BASIS DOES NOT FILL A WINDOW THE WAY A GROW FACTOR DID (v16.72)
+
+The pilot: *"the map only view is broken, the sidebar is removed and leaves a
+blank space in front of the map."* A v16.67 regression, and one nobody could see
+until a divider had actually been dragged.
+
+- **WHAT CHANGED UNDER IT.** Map-only hides the sidebar with `display: none` and
+  has always relied on the map's `flex: 1.05` - a GROW factor - to take the space
+  the hidden panel left behind. v16.67 made the map a fixed BASIS
+  (`flex: 0 0 X%`) so the divider could land under the cursor, and a fixed basis
+  holds the map at the dragged fraction with the rest of the window blank.
+  Measured: **645 px of dead space at a 0.57 divider, 1050 px at 0.30.**
+- **AN UNDRAGGED APP NEVER SHOWED IT**, because with nothing stored the
+  stylesheet's own `var(--map-flex, 1.05)` fallback is still a grow factor. So
+  the bug needed the feature to have been USED, which no check did.
+- **THE CHECK v16.67 SHOULD HAVE HAD.** It asserted that the DIVIDER disappears
+  in a one-panel layout, and never that the panel which is LEFT fills the window.
+  Testing that the thing you changed went away is not the same as testing that
+  what remains still works. `verify:layout` now measures the dead space in
+  Map-only and Plan-only at four stored ratios, and removing the one-line fix
+  fails it three times.
+- One line: `body.layout-map #map-container { flex: 1 1 auto; }`. Plan-only was
+  never affected - the map is `display: none` there and the sidebar's own grow
+  factor was untouched.
+
 ### THE FLOOR IS TEXT PLUS CHROME, AND THE CHROME IS NOT A CONSTANT (v16.71)
 
 Four rounds on one report, and the last one produced the actual cause. The
