@@ -7298,16 +7298,40 @@ TA('a fly-by keeps the planned altitude; a stop sits on the field', async () => 
   wp = ev('flights[0].waypoints[flights[0].waypoints.length - 1]');
   assert(wp.alt === 32, 'a full stop is not on the field: ' + wp.alt);
 
-  // and the FIRST waypoint of a plan is the departure, so it is on the field
-  // whichever option was chosen.
-  ev(`flights = [{ id: 1, title: 'X', depElev: 0, waypoints: [] }]; activeFlightIndex = 0;
-      refreshMap(); renderAllFlightTables();`);
+  // AN EMPTY PLAN IS ASKED A DIFFERENT QUESTION (v16.58), and this is where
+  // the v16.56 fix did NOT reach. Until Departure existed the dialog offered
+  // no way to say "I take off from here", so Fly-by was the only sensible pick
+  // on a fresh plan - and `first ||` then turned it into a departure on the
+  // deck, which is the very bug v16.56 was written to fix. The test written
+  // with it asserted that behaviour as CORRECT, so the suite stayed green
+  // while the reported case stayed broken.
+  const fresh = `flights = [{ id: 1, title: 'X', depElev: 0, waypoints: [] }]; activeFlightIndex = 0;
+      refreshMap(); renderAllFlightTables();`;
+  ev(fresh);
   p = ev(`clickAnchor(${JSON.stringify(endu)})`);
   await tick();
+  assert(/first waypoint of the plan/.test(openDlg().textContent),
+    'an empty plan was not asked the departure question: ' + openDlg().textContent);
+  assert(!/Touch & go|Full stop/.test(openDlg().textContent),
+    'a touch & go or a full stop was offered before there was a departure');
   answerDialog('➡ Fly-by');
   await p; await tick();
   wp = ev('flights[0].waypoints[0]');
+  assert(wp.alt === 4500, 'a fly-by on an empty plan went to the deck: ' + wp.alt +
+    ' (ENDU publishes 254 ft)');
+  assert(wp.name === 'Bardufoss', 'the fly-by name changed: ' + wp.name);
+  assert(ev('flights[0].depElev') === 0,
+    'a fly-by set the departure elevation: ' + ev('flights[0].depElev'));
+
+  // ...and DEPARTURE is the option that puts it on the runway.
+  ev(fresh);
+  p = ev(`clickAnchor(${JSON.stringify(endu)})`);
+  await tick();
+  answerDialog('🛫 Departure');
+  await p; await tick();
+  wp = ev('flights[0].waypoints[0]');
   assert(wp.alt === 254, 'the departure is not at the field elevation: ' + wp.alt);
+  assert(wp.name === 'ENDU', 'a departure should keep the ICAO code: ' + wp.name);
   assert(ev('flights[0].depElev') === 254, 'the departure elevation did not follow');
 
   ev(`delete aircraftProfile.autoPlanAfterStop;`);

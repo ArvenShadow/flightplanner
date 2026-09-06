@@ -203,6 +203,58 @@ check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point
     `refuelling raised the final remaining (${remBefore} -> ${fuelled.rem})`);
 }
 
+// THE FIRST WAYPOINT OF A PLAN IS ASKED A DIFFERENT QUESTION (v16.58), and it
+// is clicked for real for the same reason as everything above: v16.56 fixed
+// the fly-by altitude with a jsdom test that ASSERTED the broken case as
+// correct, so the suite was green while the reported bug was untouched.
+{
+  await page.evaluate(() => {
+    flights = [{ id: 1, title: 'F', depElev: 500, waypoints: [] }];
+    activeFlightIndex = 0;
+    document.getElementById('def-alt').value = '4500';
+    map.setView([69.679, 18.911], 10, { animate: false });
+    refreshMap(); renderAllFlightTables();
+  });
+  await page.waitForTimeout(400);
+  await page.locator('.fix-icon.fix-ad').first().click();
+  await page.waitForTimeout(300);
+  const asked = await page.evaluate(() => {
+    const d = document.getElementById('app-dialog');
+    return d ? d.textContent.replace(/\s+/g, ' ') : '';
+  });
+  check(/first waypoint of the plan/.test(asked),
+    'an empty plan is asked the departure question: ' + asked.slice(0, 80));
+  check(/Departure/.test(asked) && !/Touch & go/.test(asked) && !/Full stop/.test(asked),
+    'Departure replaces the two stop options before there is a departure');
+
+  await page.locator('#app-dialog .dlg-btn', { hasText: 'Fly-by' }).click();
+  await page.waitForTimeout(400);
+  const flew = await page.evaluate(() => ({
+    alt: flights[0].waypoints[0].alt, name: flights[0].waypoints[0].name,
+    depElev: flights[0].depElev
+  }));
+  // ENTC publishes 32 ft. A fly-by is overhead at the planned altitude.
+  check(flew.alt === 4500, `a fly-by on an empty plan keeps its altitude (${flew.alt} ft, ENTC publishes 32)`);
+  check(flew.depElev === 500, `a fly-by left the departure elevation alone (${flew.depElev} ft)`);
+
+  await page.evaluate(() => {
+    flights = [{ id: 1, title: 'F', depElev: 500, waypoints: [] }];
+    activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+  });
+  await page.waitForTimeout(300);
+  await page.locator('.fix-icon.fix-ad').first().click();
+  await page.waitForTimeout(300);
+  await page.locator('#app-dialog .dlg-btn', { hasText: 'Departure' }).click();
+  await page.waitForTimeout(400);
+  const dep = await page.evaluate(() => ({
+    alt: flights[0].waypoints[0].alt, name: flights[0].waypoints[0].name,
+    depElev: flights[0].depElev
+  }));
+  check(dep.alt === 32 && dep.depElev === 32,
+    `Departure puts it on the runway and moves the plan's datum (${dep.alt} ft / ${dep.depElev} ft)`);
+  check(dep.name === 'ENTC', 'a departure keeps the ICAO code: ' + dep.name);
+}
+
 // The hover card must appear, be readable, and lead with the published fix.
 // Whichever reporting point is actually DRAWN here - naming one by hand ties
 // this check to a viewport, and the point of the layer is that it culls.
