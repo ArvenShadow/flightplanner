@@ -613,6 +613,59 @@ export function anchorWaypoint(a, defaults) {
 // CIRCUIT (PATTERN) ALTITUDE
 // ---------------------------------------------------------------------------
 
+/**
+ * HOW MUCH OF THE WINDOW THE MAP GETS, when the pilot has dragged the divider
+ * between the two panels (v16.67).
+ *
+ * A FRACTION OF THE MAIN AXIS, not a pixel width, so the same number means the
+ * same thing when the window is resized - and so Split (a row) and Stacked (a
+ * column) can each keep their own without one being expressed in the other's
+ * units.
+ *
+ * THE BOUNDS ARE ARGUED. Below 0.15 the map is a strip too narrow to read a
+ * chart in, and the plan panel has more width than its table needs; above 0.85
+ * the OFP table is squeezed past the point where its columns fit, which is the
+ * one thing `verify:ofp` exists to prevent. Neither end is allowed to reduce a
+ * panel to nothing, because a divider you cannot find again is a trap.
+ */
+export const PANE_MIN = 0.15;
+export const PANE_MAX = 0.85;
+
+/** @param {unknown} v @param {number} dflt @returns {number} */
+export function normalisePaneRatio(v, dflt) {
+  const n = Number(v);
+  if (!isFinite(n) || n <= 0) return dflt;
+  return Math.min(PANE_MAX, Math.max(PANE_MIN, Math.round(n * 1000) / 1000));
+}
+
+/**
+ * Where a pointer sits along the panel axis, as the FIRST panel's fraction of
+ * the container. Pure, so the whole of the divider's arithmetic is testable
+ * without a browser - the browser only has to prove the wiring.
+ *
+ * IT IS THE FIRST PANEL'S SHARE OF THE WHOLE CONTAINER, THE DIVIDER INCLUDED,
+ * and that is what makes the bar land under the cursor. The first attempt made
+ * it a share of the space LEFT OVER after the divider and fed it to flex-grow;
+ * measured in Chromium, the bar came to rest 11 px left of where it was
+ * dragged. Growth factors share out FREE space, so the panels' own borders and
+ * padding (2 px of map border, 20 px of sidebar padding) shift the answer, and
+ * nothing in the page can see those numbers to correct for them. A share of the
+ * container is a length the browser resolves the same way we compute it.
+ *
+ * Half the divider comes off the position because the bar is CENTRED on the
+ * boundary: leave it in and the divider trails the cursor by its own width.
+ *
+ * @param {number} pos   pointer position along the axis (client coords)
+ * @param {number} start container's leading edge along that axis
+ * @param {number} span  container's length along that axis
+ * @param {number} bar   the divider's thickness along that axis
+ * @returns {number|null} null when there is no room to divide
+ */
+export function paneRatioFromPoint(pos, start, span, bar) {
+  if (!isFinite(span) || span <= 0) return null;
+  return normalisePaneRatio((pos - start - bar / 2) / span, PANE_MIN);
+}
+
 /** The convention a circuit altitude is derived from when nothing is published
  *  to us: 1000 ft above the field. */
 export const PATTERN_AGL_FT = 1000;

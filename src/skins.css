@@ -112,6 +112,10 @@ body.skin-menu #sidebar:focus-within::before { display: none; }
 body.skin-menu #sidebar:hover > *,
 body.skin-menu #sidebar:focus-within > * { display: revert; }
 body.skin-menu #map-container { flex: 1; border-right: none; }
+/* The Menu skin hides the divider, so in Stacked the map draws its own
+   boundary again - the sidebar's border-left is a vertical line and says
+   nothing about a horizontal split. */
+body.skin-menu.layout-stacked #map-container { border-bottom: 2px solid var(--border-color); }
 /* The explicit layout choices still win over the skin. */
 body.skin-menu.layout-plan #sidebar { flex: 1; padding: 10px; overflow-y: auto; }
 body.skin-menu.layout-plan #sidebar::before { display: none; }

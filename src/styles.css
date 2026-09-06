@@ -815,7 +815,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     /* View modes: split (default) / stacked / plan-only / map-only */
     body.layout-stacked #main { flex-direction: column; }
-    body.layout-stacked #map-container { flex: none; height: 42vh; min-height: 240px; border-right: none; border-bottom: 2px solid var(--border-color); }
+    body.layout-stacked #map-container { flex: none; height: var(--map-h, 42vh); min-height: var(--map-min-h, 240px); border-right: none; border-bottom: none; }
     body.layout-stacked #sidebar { flex: 1; }
     body.layout-plan #map-container { display: none; }
     body.layout-map #sidebar { display: none; }
@@ -834,7 +834,12 @@ svg.leaflet-image-layer.leaflet-interactive path {
     /* Compact columns: hide secondary data, keep the flying essentials
        (From, To, Alt, MT, W/V, MH, GS, Dist, Time, AccT, Burn, Rem) */
     body.compact-cols .cc { display: none; }
-    #map-container { flex: 1.05; position: relative; border-right: 2px solid var(--border-color); }
+    #map-container { flex: var(--map-flex, 1.05); position: relative; border-right: 2px solid var(--border-color); }
+    /* THE DIVIDER IS THE BOUNDARY WHERE IT IS SHOWN, so the panel does not
+       draw one as well - two grey lines where the design has one, and the
+       plan panel pushed sideways for nothing. Where the divider is hidden
+       (Plan-only, Map-only, the Menu skin) the panel's own border stands. */
+    body.layout-split #map-container { border-right: none; }
     /* Map controls. ONE rule for all of them, stacked by the container, so
        adding a button needs no new CSS. They were previously positioned
        individually by id with hardcoded top offsets (10px, 40px, ...), and a
@@ -1204,7 +1209,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
        so the map's share and the header's padding both shrink with it. The
        figures are measured in tools/verify-layout.mjs, not guessed. */
     @media (max-height: 800px) {
-      body.layout-stacked #map-container { height: 32vh; min-height: 190px; }
+      body.layout-stacked #map-container { height: var(--map-h, 32vh); min-height: var(--map-min-h, 190px); }
       #header { padding: 4px 12px; gap: 4px 10px; }
       #header h1 { font-size: 14px; }
       .tick-box { padding: 4px 8px; }
@@ -1215,7 +1220,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       .input-grid { gap: 6px 10px; }
     }
     @media (max-height: 650px) {
-      body.layout-stacked #map-container { height: 28vh; min-height: 160px; }
+      body.layout-stacked #map-container { height: var(--map-h, 28vh); min-height: var(--map-min-h, 160px); }
     }
 
     @media print {
@@ -1363,3 +1368,40 @@ svg.leaflet-image-layer.leaflet-interactive path {
    design - caught by verify:visual, invisible to every other check. */
 #slot-header, #slot-sidebar-top { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 #slot-header:empty, #slot-sidebar-top:empty { display: none; }
+
+/* THE PANEL DIVIDER (v16.67). Drag it to give more of the window to the map or
+   to the plan; double-click to put it back.
+
+   IT IS ONLY THERE WHEN THERE ARE TWO PANELS TO DIVIDE. Plan and Map layouts
+   hide one of them, and the Menu skin collapses the plan to a rail that opens
+   on hover - a divider would fight the hover and resize something that is
+   about to slide away. */
+#splitter {
+  /* IT IS EXACTLY AS WIDE AS THE BORDER IT REPLACES, and that is deliberate.
+     A fatter handle would be easier to see, but it would push the whole plan
+     panel sideways and re-lay the map out narrower - measured against v16.66 at
+     6 px, 75 648 pixels of the window changed for a feature that adds a
+     gesture. The shipped design is the author's, not a side effect of adding a
+     drag; what makes the divider findable is the CURSOR and the hover
+     highlight, both of which cost no layout. */
+  flex: 0 0 2px;
+  background: var(--border-color);
+  cursor: col-resize;
+  position: relative;
+  z-index: 450;
+  touch-action: none;
+}
+#splitter::after {
+  /* A 2 px bar is a 2 px target. This widens the GRAB area without widening
+     the line - the same trick the 20 px invisible hit-line uses on the route
+     (v16.27), for the same reason. */
+  content: '';
+  position: absolute;
+  inset: 0 -6px;
+}
+#splitter:hover, #splitter:focus-visible { background: var(--accent-line); outline: none; }
+body.splitter-dragging { cursor: col-resize; user-select: none; }
+body.layout-stacked #splitter { flex: 0 0 2px; cursor: row-resize; }
+body.layout-stacked #splitter::after { inset: -6px 0; }
+body.layout-stacked.splitter-dragging { cursor: row-resize; }
+body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter { display: none; }

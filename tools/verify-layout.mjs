@@ -347,6 +347,143 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
   await ctx.close();
 }
 
+// THE PANEL DIVIDER (v16.67). CSS variables with fallbacks, pointer capture and
+// a percentage height that has to resolve against a flex item are three things
+// a grep cannot check. This drags the real bar with the real mouse and reads
+// the boxes back, which is the only way to know the pilot got the panel they
+// pulled to.
+{
+  const ctx = await b.newContext({ viewport: { width: 1500, height: 950 } });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errs.push('splitter: ' + e));
+  await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
+  await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => { try { closeHelpModal(); } catch (e) {} setLayoutMode('split'); });
+  await page.waitForTimeout(250);
+
+  const boxes = () => page.evaluate(() => {
+    const r = (id) => { const el = document.getElementById(id); const q = el.getBoundingClientRect();
+      return { x: q.x, y: q.y, w: q.width, h: q.height, shown: q.width > 0 && q.height > 0 }; };
+    return { map: r('map-container'), bar: r('splitter'), side: r('sidebar'),
+             flex: document.body.style.getPropertyValue('--map-flex'),
+             mapH: document.body.style.getPropertyValue('--map-h'),
+             stored: JSON.parse(localStorage.getItem('c182_perf_profile') || '{}') };
+  });
+
+  // AN UNTOUCHED APP WRITES NOTHING. The stylesheet's fallbacks are the shipped
+  // design, so verify:visual can still compare an undragged build byte for byte.
+  const before = await boxes();
+  check(before.flex === '' && before.mapH === '',
+    'an undragged app sets no pane variables at all');
+  check(before.bar.shown && before.bar.w > 0 && before.bar.w < 12,
+    `the divider is a thin bar between the panels (${Math.round(before.bar.w)} px wide)`);
+  check(before.bar.x > before.map.x && before.side.x > before.bar.x,
+    'the divider sits between the map and the plan');
+
+  // Drag it 260 px to the right: the map gains, the plan loses, and the BAR
+  // ends up under the cursor rather than trailing it by its own width.
+  const target = Math.round(before.bar.x + before.bar.w / 2) + 260;
+  await page.mouse.move(before.bar.x + before.bar.w / 2, 500);
+  await page.mouse.down();
+  await page.mouse.move(target, 500, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+  const after = await boxes();
+  const centre = after.bar.x + after.bar.w / 2;
+  check(Math.abs(centre - target) <= 4,
+    `the bar lands under the cursor (asked ${target}, got ${Math.round(centre)})`);
+  check(after.map.w > before.map.w + 200 && after.side.w < before.side.w - 200,
+    `the map gained what the plan lost (${Math.round(before.map.w)} -> ${Math.round(after.map.w)} px)`);
+  check(after.flex !== '' && Number(after.stored.splitRatio) > 0,
+    `the split is remembered (${after.stored.splitRatio})`);
+
+  // A RELOAD PUTS IT BACK. It travels in the profile, so it survives the app
+  // being closed - which is the whole reason it is a setting and not a session.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => { try { closeHelpModal(); } catch (e) {} setLayoutMode('split'); });
+  await page.waitForTimeout(250);
+  const reloaded = await boxes();
+  check(Math.abs(reloaded.map.w - after.map.w) <= 3,
+    `the divider is where it was left after a reload (${Math.round(reloaded.map.w)} px)`);
+
+  // Double-click resets by CLEARING the stored figure, so the stylesheet is
+  // once again the only place the default lives.
+  await page.dblclick('#splitter');
+  await page.waitForTimeout(250);
+  const reset = await boxes();
+  check(reset.flex === '' && (reset.stored.splitRatio === null || reset.stored.splitRatio === undefined),
+    'double-click clears the stored split rather than writing a default');
+  check(Math.abs(reset.map.w - before.map.w) <= 2,
+    `and the panels are back to the shipped proportions (${Math.round(reset.map.w)} px)`);
+
+  // ARROW KEYS. role="separator" with a tab stop promises they work.
+  await page.focus('#splitter');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(200);
+  const nudged = await boxes();
+  check(nudged.map.w > reset.map.w + 20,
+    `arrow keys nudge the divider (${Math.round(reset.map.w)} -> ${Math.round(nudged.map.w)} px)`);
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(200);
+  check(Math.abs((await boxes()).map.w - reset.map.w) <= 2, 'Home puts it back');
+
+  // STACKED IS THE OTHER AXIS, and it is where the risky bit is: the map's
+  // height is a PERCENTAGE of #main, which only resolves because #main's own
+  // height is definite. Measure it rather than trust it.
+  await page.evaluate(() => setLayoutMode('stacked'));
+  await page.waitForTimeout(300);
+  const s0 = await boxes();
+  check(s0.bar.h > 0 && s0.bar.h < 12 && s0.bar.y > s0.map.y,
+    'stacked puts the divider under the map');
+  const targetY = Math.round(s0.bar.y + s0.bar.h / 2) + 180;
+  await page.mouse.move(750, s0.bar.y + s0.bar.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(750, targetY, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+  const s1 = await boxes();
+  check(Math.abs((s1.bar.y + s1.bar.h / 2) - targetY) <= 4,
+    `the stacked bar lands under the cursor (asked ${targetY}, got ${Math.round(s1.bar.y + s1.bar.h / 2)})`);
+  check(s1.map.h > s0.map.h + 140,
+    `the map grew downwards (${Math.round(s0.map.h)} -> ${Math.round(s1.map.h)} px)`);
+  check(/%$/.test(s1.mapH) && Number(s1.stored.stackRatio) > 0,
+    `the stacked ratio is stored separately from the split one (${s1.stored.stackRatio}, split ${s1.stored.splitRatio})`);
+
+  // THE 240 px FLOOR IS FOR THE AUTOMATIC LAYOUT, NOT FOR THE PILOT. Drag the
+  // map well under it: a floor that silently won would pull the divider back
+  // with nothing said, which is the failure this project refuses.
+  await page.mouse.move(750, s1.bar.y + s1.bar.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(750, 200, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+  const s2 = await boxes();
+  check(s2.map.h < 200,
+    `a hand-placed divider beats the 240 px auto floor (${Math.round(s2.map.h)} px)`);
+
+  // ONE PANEL, NO DIVIDER. Plan-only and Map-only hide one of them, and the
+  // Menu skin collapses the plan to a hover rail.
+  const hidden = await page.evaluate(async () => {
+    const out = {};
+    const seen = (mode, skin) => {
+      const el = document.getElementById('splitter');
+      return { mode, skin, shown: el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 };
+    };
+    setLayoutMode('plan'); out.plan = seen('plan').shown;
+    setLayoutMode('map'); out.map = seen('map').shown;
+    setLayoutMode('split'); applySkin('menu'); out.menu = seen('split', 'menu').shown;
+    applySkin('default'); out.back = seen('split', 'default').shown;
+    return out;
+  });
+  check(!hidden.plan && !hidden.map, 'no divider when only one panel is on screen');
+  check(!hidden.menu, 'no divider under the Menu skin, whose plan is a hover rail');
+  check(hidden.back, 'and it comes back with the default skin');
+  await ctx.close();
+}
+
 await b.close();
 console.log(fails.length ? `\n${fails.length} layout check(s) FAILED` : '\nall layout checks passed');
 process.exit(fails.length ? 1 : 0);
