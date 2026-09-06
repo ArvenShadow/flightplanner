@@ -147,3 +147,48 @@ export function rhumbPoint(lat1, lon1, lat2, lon2, f) {
   const lat = Math.abs(dPsi) < 1e-12 ? lat1 : latFromIsometric(psi1 + dPsi * f);
   return [lat, lon1 + dLon * f];
 }
+
+/**
+ * The point a given DISTANCE along the rhumb line - not a fraction.
+ *
+ * EQUAL FRACTIONS ARE NOT EQUAL DISTANCES, which is why this is separate from
+ * rhumbPoint. Isometric latitude interpolates linearly along a loxodrome, but
+ * the distance travelled is proportional to the MERIDIAN ARC, and the two are
+ * different functions of latitude. Stepping by fraction and calling it distance
+ * would put every TOC, TOD and corridor sample slightly off its mark.
+ *
+ * The latitude at a given meridian arc comes from GeographicLib - a geodesic
+ * due north IS the meridian - so no series is hand-rolled and the ellipsoid
+ * matches every other distance in the project.
+ *
+ * @param {number} lat1 @param {number} lon1 @param {number} lat2 @param {number} lon2
+ * @param {number} distNM how far along
+ * @returns {[number, number]}
+ */
+export function rhumbPointAtDistance(lat1, lon1, lat2, lon2, distNM) {
+  if (!(distNM > 0)) return [lat1, lon1];
+  const dLon = wrapLon(lon2 - lon1);
+  const psi1 = isometricLat(lat1);
+  const dPsi = isometricLat(lat2) - psi1;
+  const course = Math.atan2(dLon * D2R, dPsi);
+  const cosC = Math.cos(course);
+  if (Math.abs(cosC) <= 1e-8) {
+    // Along a parallel: latitude does not move, longitude scales with the arc.
+    const phi = lat1 * D2R;
+    const sn = Math.sin(phi);
+    const rParallel = A_M * Math.cos(phi) / Math.sqrt(1 - E * E * sn * sn);
+    const dl = (distNM * M_PER_NM) / rParallel * R2D;
+    return [lat1, lon1 + (dLon >= 0 ? dl : -dl)];
+  }
+  // Walk the MERIDIAN by the north-south component of the distance, using the
+  // same solver the geodesic distances use.
+  const dm = distNM * M_PER_NM * cosC;
+  const p = geod.Direct(lat1, lon1, dm >= 0 ? 0 : 180, Math.abs(dm));
+  const lat = p.lat2 === undefined ? lat1 : p.lat2;
+  const newPsi = isometricLat(lat);
+  // ...and take the longitude straight off the line's own constant slope.
+  const lon = Math.abs(dPsi) < 1e-12
+    ? lon1
+    : lon1 + dLon * ((newPsi - psi1) / dPsi);
+  return [lat, lon];
+}

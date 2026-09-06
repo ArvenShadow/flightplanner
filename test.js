@@ -1516,7 +1516,21 @@ T('drag handler stays lean (guard against the per-mousemove rebuild returning)',
   // ...and the live redraw must use the FULL path. Rebuilding from waypoints
   // alone made via points visibly vanish for the duration of every drag.
   const live = raw.split('function drawLiveLine')[1].split('\n    }')[0];
-  assert(live.includes('flightLineCoords'), 'the live redraw dropped the via points again');
+  // drawnLineCoords IS flightLineCoords plus the densification the path model
+  // needs (v16.63) - it calls it - so either name satisfies the rule this guard
+  // exists for. What must never come back is a rebuild from the WAYPOINTS
+  // alone, which is what made the vias vanish mid-drag.
+  assert(/drawnLineCoords|flightLineCoords/.test(live),
+    'the live redraw dropped the via points again');
+  assert(!/\bfl\.waypoints\.map\b|\bflights\[[^\]]+\]\.waypoints\.map\b/.test(live),
+    'the live redraw is rebuilding the line from waypoints alone again');
+  // ...and the shared helper really does keep the vias. Driven through the
+  // PAGE, because this test runs before the module requires happen.
+  const drawn = ev(`drawnLineCoords({ waypoints: [
+    { lat: 69, lng: 18, name: 'A' },
+    { lat: 69.5, lng: 18.5, name: 'B', via: [{ lat: 69.2, lng: 18.9 }] }] })`);
+  assert(drawn.some((p) => Math.abs(p[0] - 69.2) < 1e-9 && Math.abs(p[1] - 18.9) < 1e-9),
+    'drawnLineCoords lost the via point');
 });
 T('base tiles keep a wider buffer so panning shows fewer grey gaps', () => {
   assert(ev('baseTiles._opts.keepBuffer') === 4, 'keepBuffer not 4: ' + ev('baseTiles._opts.keepBuffer'));
@@ -2294,6 +2308,8 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const keysModule = require('./src/lib/keys.js');
   const anchorsModule = require('./src/lib/anchors.js');
   const corridorModule = require('./src/lib/corridor.js');
+  const rhumbModule = require('./src/lib/rhumb.js');
+  assert(rhumbModule.rhumbBearing(69, 18, 70, 18) === 0, 'rhumb: due north is not 000');
   // CALLED, not merely required: require() does not execute function bodies, so
   // a free identifier inside one only throws when invoked. That is how toRad,
   // OM_LEVELS and flights were caught. Every module in this list gets a real
@@ -2305,7 +2321,7 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
                     exch: exchModule, plot: plotModule, metar: metarModule,
                     airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
-                    keys: keysModule, corridor: corridorModule };
+                    keys: keysModule, corridor: corridorModule, rhumb: rhumbModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3156,6 +3172,135 @@ T('the corridor toggles, follows the track, and takes no clicks', () => {
 
   ev(`aircraftProfile.corridorOn = false; delete aircraftProfile.corridorNM;`);
   ev(SEED);
+});
+
+T('the rhumb maths agrees with GeographicLib wherever the two must', () => {
+  const R = moduleExports.rhumb;
+  const G = moduleExports.geodesy;
+  // A MERIDIAN IS BOTH a rhumb and a geodesic, so they must agree exactly.
+  for (const [a, b, c] of [[69.05, 18.54, 69.68], [0, 0, 10], [-30, 120, -45]]) {
+    const g = G.distanceNMExact(a, b, c, b);
+    const r = R.rhumbDistanceNM(a, b, c, b);
+    assert(Math.abs(g - r) < 1e-6, `meridian ${a}->${c}: geodesic ${g} vs rhumb ${r}`);
+  }
+  assert(R.rhumbBearing(69, 18, 70, 18) === 0, 'due north is not 000');
+  assert(R.rhumbBearing(70, 18, 69, 18) === 180, 'due south is not 180');
+  assert(R.rhumbBearing(69.5, 18, 69.5, 22) === 90, 'due east is not 090');
+  // ALONG A PARALLEL the rhumb IS the parallel arc - walked in 2000 geodesic
+  // steps, which is an independent measurement of the same thing.
+  let walk = 0;
+  for (let k = 0; k < 2000; k++) {
+    walk += G.distanceNMExact(69.5, 18 + (4 * k) / 2000, 69.5, 18 + (4 * (k + 1)) / 2000);
+  }
+  const arc = R.rhumbDistanceNM(69.5, 18, 69.5, 22);
+  assert(Math.abs(walk - arc) / arc < 1e-6, `parallel: walked ${walk} vs formula ${arc}`);
+  // A RHUMB IS NEVER SHORTER than the geodesic. If it ever were, the rhumb
+  // model would be under-reporting distance - the v16.9 failure again.
+  let worst = 0;
+  for (let i = 0; i < 300; i++) {
+    const a = -80 + (i * 53) % 160, b = -179 + (i * 97) % 358;
+    const c = -80 + (i * 31) % 160, d = -179 + (i * 71) % 358;
+    worst = Math.min(worst, R.rhumbDistanceNM(a, b, c, d) - G.distanceNMExact(a, b, c, d));
+  }
+  assert(worst > -1e-6, 'a rhumb came out shorter than the geodesic by ' + worst);
+  // THE DEFINING PROPERTY: one course, held all the way.
+  let drift = 0;
+  for (const [a, b, c, d] of [[69.05, 18.54, 68.49, 16.68], [69.68, 18.91, 69.73, 29.89]]) {
+    const brg = R.rhumbBearing(a, b, c, d);
+    for (let k = 1; k < 20; k++) {
+      const p = R.rhumbPoint(a, b, c, d, k / 20);
+      drift = Math.max(drift, Math.abs(R.rhumbBearing(p[0], p[1], c, d) - brg));
+    }
+  }
+  assert(drift < 1e-6, 'the course drifts along the line by ' + drift + ' deg');
+  // EQUAL FRACTIONS ARE NOT EQUAL DISTANCES, which is why the two point
+  // functions are separate. rhumbPointAtDistance must be exact in DISTANCE.
+  for (const [a, b, c, d] of [[69.05, 18.54, 68.49, 16.68], [69.5, 18, 69.5, 22]]) {
+    const L = R.rhumbDistanceNM(a, b, c, d);
+    for (let k = 1; k < 10; k++) {
+      const want = (L * k) / 10;
+      const p = R.rhumbPointAtDistance(a, b, c, d, want);
+      assert(Math.abs(R.rhumbDistanceNM(a, b, p[0], p[1]) - want) < 1e-6,
+        'rhumbPointAtDistance is off by ' + (R.rhumbDistanceNM(a, b, p[0], p[1]) - want));
+    }
+  }
+  let rt = 0;
+  for (let lat = -85; lat <= 85; lat += 5) {
+    rt = Math.max(rt, Math.abs(R.latFromIsometric(R.isometricLat(lat)) - lat));
+  }
+  assert(rt < 1e-9, 'isometric latitude does not round-trip: ' + rt);
+});
+
+T('the path setting governs the line, the corridor, the distance and the track together', () => {
+  const G = moduleExports.geodesy;
+  const C = moduleExports.corridor;
+  const Lg = moduleExports.legs;
+  // A PLAN THAT DREW ONE LINE AND PRINTED THE HEADING FOR ANOTHER would be
+  // worse than either model, so the setting moves all four or none.
+  const A = [69.67895, 18.91143], B = [69.72578, 29.89135];   // Tromso -> Kirkenes, E-W
+  try {
+    G.setNavPath('gc');
+    const gcDist = G.distanceNMExact(A[0], A[1], B[0], B[1]);
+    const gcTrk = G.trueTrackExact(A[0], A[1], B[0], B[1]);
+    const gcMid = G.interpolateGeo(A[0], A[1], B[0], B[1], gcDist / 2, gcDist);
+    const gcLine = Lg.drawnLineCoords({ waypoints: [
+      { lat: A[0], lng: A[1] }, { lat: B[0], lng: B[1] }] });
+
+    G.setNavPath('rhumb');
+    const rhDist = G.distanceNMExact(A[0], A[1], B[0], B[1]);
+    const rhTrk = G.trueTrackExact(A[0], A[1], B[0], B[1]);
+    const rhMid = G.interpolateGeo(A[0], A[1], B[0], B[1], rhDist / 2, rhDist);
+    const rhLine = Lg.drawnLineCoords({ waypoints: [
+      { lat: A[0], lng: A[1] }, { lat: B[0], lng: B[1] }] });
+
+    // DISTANCE barely moves - 0.3 NM on 229 - and the rhumb is the longer.
+    assert(rhDist > gcDist, 'the rhumb should be the longer path');
+    assert(rhDist - gcDist < 1, 'the two distances should be within a mile: ' + (rhDist - gcDist));
+    // TRACK is the figure that genuinely differs on an east-west leg.
+    assert(Math.abs(rhTrk - gcTrk) > 4,
+      'the two tracks should differ by about 5 deg here: ' + gcTrk + ' vs ' + rhTrk);
+    // THE PATHS THEMSELVES separate by miles in the middle.
+    G.setNavPath('gc');
+    const sep = G.distanceNMExact(gcMid[0], gcMid[1], rhMid[0], rhMid[1]);
+    assert(sep > 4, 'the two paths should be about 5 NM apart mid-leg: ' + sep);
+
+    // THE DRAWN LINE follows: curved (densified) for a great circle, and in
+    // rhumb mode the extra points land on the straight Mercator segment.
+    assert(gcLine.length > 5, 'the great circle was not densified: ' + gcLine.length);
+    let bulge = 0;
+    for (const p of gcLine) {
+      // distance from the straight lat/lng chord - the rhumb - in degrees
+      const f = (p[1] - A[1]) / (B[1] - A[1]);
+      bulge = Math.max(bulge, Math.abs(p[0] - (A[0] + (B[0] - A[0]) * f)));
+    }
+    assert(bulge > 0.01, 'the drawn great circle is still straight in lat/lng: ' + bulge);
+    let flat = 0;
+    for (const p of rhLine) {
+      const f = (p[1] - A[1]) / (B[1] - A[1]);
+      flat = Math.max(flat, Math.abs(p[0] - (A[0] + (B[0] - A[0]) * f)));
+    }
+    assert(flat < 0.01, 'the drawn rhumb bulged away from the straight segment: ' + flat);
+
+    // THE CORRIDOR follows too, without a line of its own: it walks through
+    // interpolateGeo and trueTrackExact, which both consult the setting.
+    G.setNavPath('rhumb');
+    const rhBand = C.corridorPieces([A, B], 2)[0];
+    G.setNavPath('gc');
+    const gcBand = C.corridorPieces([A, B], 2)[0];
+    let bandSep = 0;
+    for (let i = 0; i < Math.min(rhBand.length, gcBand.length); i++) {
+      bandSep = Math.max(bandSep,
+        G.distanceNMExact(rhBand[i][0], rhBand[i][1], gcBand[i][0], gcBand[i][1]));
+    }
+    assert(bandSep > 4, 'the corridor did not follow the setting: ' + bandSep + ' NM apart');
+  } finally {
+    G.setNavPath('gc');
+  }
+  assert(G.getNavPath() === 'gc', 'the default path model is not the great circle');
+  assert(G.normaliseNavPath('rubbish') === 'gc', 'an unknown mode must fall back to the great circle');
+  assert(G.normaliseNavPath('rhumb') === 'rhumb', 'rhumb was not accepted');
+  assert(moduleExports.exch.PROFILE_KEYS.includes('navPath'),
+    'the path setting is not in PROFILE_KEYS');
 });
 
 T('the corridor encloses everything within its radius, and nothing beyond', () => {
