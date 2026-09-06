@@ -2097,6 +2097,42 @@ thing is 6 px of bar plus one number per layout.
   clamp at all - and all six fail the suite by name, none of them only through
   `tsc`.
 
+### A NUMBER CELL HAS TO BE ABLE TO HOLD ITS NUMBER (v16.68, the pilot's report)
+
+Dragging the divider inwards showed something that had been wrong all along:
+*"the increase / decrease button space hides the values of altitude, OAT, VAR"*.
+Two causes, and the divider only made the second one obvious.
+
+- **THE NATIVE SPIN BUTTON COSTS ~18 px INSIDE THE BOX.** Measured on the OFP
+  table at the SHIPPED panel width, before any dragging: the Alt input had 22 px
+  of content box against 45 px of content, and every numeric cell rendered as a
+  dash. With the divider dragged in it was 11 px. The stepper was never paying
+  for itself either - the UP and DOWN keys already step by the field's own
+  `step`, which is where the 500 ft came from in the first place - so it is
+  suppressed everywhere and the fields stay `type="number"` (validation, and a
+  numeric keypad on a touch device, both survive). The titles now say which keys
+  step, because the arrows used to say it for themselves.
+- **`width: 100%` ON A FORM CONTROL GIVES ITS COLUMN NO MINIMUM**, so the table
+  crushed exactly the editable columns while From and To kept their text. That
+  is the half a screenshot does not explain: `.table-container` has been
+  `overflow-x: auto` all along and simply never had to scroll, because those
+  columns collapsed first. `td input[type="number"]` now has a floor of 3.4ch
+  and the altitude a wider 5.4ch - the widest value each column can legitimately
+  hold, a five-digit altitude and a signed two-digit OAT or variation - and the
+  table scrolls instead.
+- MEASURED AFTER: 0 of 6 number cells clipped at 901, 598, 418 and 223 px of
+  plan panel, against 6 of 6 clipped at every one of those widths before.
+- **THE WHEEL WAS CHECKED, NOT ASSUMED.** A scroll that silently re-planned an
+  altitude would be the plausible wrong answer this project exists to refuse.
+  Chromium does not step a number field on wheel here (13000 -> 13000 over a
+  focused Alt cell), so no guard was added - but the verifier asserts it, so a
+  browser change would surface as a failure rather than as a wrong number.
+- BOTH HALVES WERE PROVED LOAD-BEARING: restoring the stepper and removing the
+  column floors each fail four checks in `verify:layout`. The FIRST attempt at
+  the stepper mutation reported "not caught" and was wrong - it flipped
+  `appearance` and left `::-webkit-inner-spin-button` still hiding the arrows.
+  A mutation that does not actually restore the old behaviour proves nothing.
+
 ## SKINS, and the plan for restyling the whole shell (v16.65)
 
 The author wants to try WHOLE DIFFERENT LOOKS - "sidebar becoming top bar",
