@@ -565,6 +565,68 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
     .find((e) => e.closest('td') && /Target Alt/.test(e.title)).value);
   check(wheeled === after,
     `scrolling over a focused altitude does not change it (${after} -> ${wheeled})`);
+
+  // TYPING IS NOT A SHORTCUT (v16.69, the pilot's report). jsdom can dispatch a
+  // KeyboardEvent, but only a real browser proves that a real keypress reaches
+  // the field, leaves the plan alone, AND actually enters the digit.
+  const typed = await page.evaluate(async () => {
+    addNewFlightPlan(); addNewFlightPlan(); setActiveFlight(0);
+    await new Promise((x) => setTimeout(x, 200));
+    return { plans: flights.length, active: activeFlightIndex };
+  });
+  check(typed.plans >= 3 && typed.active === 0, `three plans, the first active (${typed.plans})`);
+  await page.click('td input.alt-input');
+  await page.evaluate(() => { document.querySelector('td input.alt-input').value = ''; });
+  await page.keyboard.type('4500');
+  await page.waitForTimeout(200);
+  const typedAlt = await page.evaluate(() => ({
+    active: activeFlightIndex,
+    value: document.querySelector('td input.alt-input').value
+  }));
+  check(typedAlt.active === 0,
+    `typing an altitude did not jump to another plan (active ${typedAlt.active})`);
+  check(typedAlt.value === '4500',
+    `and the digits actually went into the box ("${typedAlt.value}")`);
+  // A DECIMAL POINT IS THE SAME BUG: "." steps to the next plan.
+  const reserveWas = await page.evaluate(() => document.getElementById('fuel-reserve').value);
+  await page.click('#fuel-reserve');
+  await page.evaluate(() => { document.getElementById('fuel-reserve').value = ''; });
+  await page.keyboard.type('8.5');
+  await page.waitForTimeout(200);
+  const dec = await page.evaluate(() => ({ active: activeFlightIndex, value: document.getElementById('fuel-reserve').value }));
+  check(dec.active === 0, `a decimal point in the reserve did not step plan (active ${dec.active})`);
+  check(dec.value === '8.5', `and the reserve reads what was typed ("${dec.value}")`);
+
+  // RULE 2 IS INTACT, and it is the whole reason number fields were left out of
+  // `textLike`: a pilot reaches for undo right after editing a figure, with the
+  // cursor still in the box. THE EDIT HAS TO BE COMMITTED FIRST - these fields
+  // push their undo state on `change`, so typing alone leaves nothing to undo
+  // and a check run before the commit passes for the wrong reason.
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  await page.click('#fuel-reserve');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  const undone = await page.evaluate(() => document.getElementById('fuel-reserve').value);
+  check(undone === reserveWas,
+    `Ctrl+Z undid from inside a number field, cursor still in the box (8.5 -> ${undone}, was ${reserveWas})`);
+
+  // THE COLUMN FLOORS: the editable columns must be the roomiest of the numeric
+  // group, not the narrowest. They were pinned to a PERCENTAGE of the table
+  // (Alt 5%, OAT and VAR 4%) and shrank with the panel.
+  const cols = await page.evaluate(async () => {
+    applyPaneRatio(false, 0.8);
+    await new Promise((x) => setTimeout(x, 250));
+    const tbl = [...document.querySelectorAll('table')].find((t) => t.querySelector('input[type=number]'));
+    const heads = [...tbl.querySelectorAll('thead th')];
+    const w = (t) => { const th = heads.find((h) => h.textContent.trim() === t); return th ? Math.round(th.getBoundingClientRect().width) : 0; };
+    return { Alt: w('Alt'), OAT: w('OAT'), VAR: w('VAR'), MT: w('MT'), TAS: w('TAS') };
+  });
+  check(cols.Alt > cols.MT && cols.Alt > cols.TAS,
+    `the altitude column is wider than the read-only ones beside it ${JSON.stringify(cols)}`);
+  check(cols.OAT >= cols.MT && cols.VAR >= cols.MT,
+    `OAT and VAR are no longer the narrowest columns in the table ${JSON.stringify(cols)}`);
+  await page.evaluate(() => applyPaneRatio(false, null));
   await ctx.close();
 }
 

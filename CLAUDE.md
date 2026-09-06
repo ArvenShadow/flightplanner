@@ -2024,6 +2024,61 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+### TYPING IS NOT A SHORTCUT, AND THE COLUMN IS WHAT HOLDS THE NUMBER (v16.69)
+
+Two reports from the same session with the OFP table.
+
+**1. THE DIGITS SWITCHED FLIGHT PLAN WHILE THE PILOT WAS TYPING.** *"The numbers
+keys change between flightplans when trying to type a number in the editable
+number values."* v16.51 bound 1-9 to the flight plans; `isTextLikeTarget` lists
+only genuinely free-text input types, so a NUMBER field is not text-like, and
+every digit typed into an altitude also picked a plan.
+
+- **IT WAS NEVER ONLY THE DIGITS.** `.` and `,` are the next and previous plan,
+  so a decimal point typed into the fuel or the reserve stepped sector; `/`
+  jumps to the fix search; and `Delete` removes the selected waypoint, so
+  erasing a digit forward could take a fix out of the route.
+- **RULE 2 WAS DRAWN ONE NOTCH TOO WIDE, NOT WRONGLY.** Its reason still holds:
+  a pilot reaches for undo right after editing an altitude, and the cursor is
+  still in the box - which is why number fields must NOT be treated as text.
+  **THE LINE IS THE MODIFIER.** A chord with Ctrl, Alt or Cmd is a shortcut
+  wherever it is pressed; a BARE key belongs to the field being typed in.
+  `isBareKey` in `keys.js` says which, `editing` is the new context flag, and
+  `textLike` stays the stricter free-text test that blocks modified chords too.
+- SHIFT IS NOT A MODIFIER HERE, because Shift+2 is how a keyboard types `@`.
+  Escape is answered before any of this, so it is still the way out.
+- **A TEST THAT DISPATCHES ON `document` PROVES NOTHING.** The guard reads
+  `e.target`, so the event has to be dispatched ON the focused field, the way a
+  real keypress arrives. The first version of the page test fired one event at
+  `document` first and then blamed the code for the plan it had itself switched.
+- `verify-layout.mjs` TYPES FOR REAL: 4500 into an altitude with three plans
+  open, 8.5 into the reserve, and asserts the active plan never moved and the
+  digits actually landed in the box.
+
+**2. THE EDITABLE COLUMNS WERE PINNED TO A PERCENTAGE OF THE TABLE.** *"The real
+estate the numbers get is still insufficient compared to the other values."*
+Every header carries an inline percentage width - `Alt` **5%**, `OAT` and `VAR`
+**4%**, against **10% each** for From and To - so the columns holding the widest
+typed values shrank with the panel and were the first to starve.
+
+- v16.68's `min-width` on the nested INPUT was arguing with the column's own
+  declared width instead of setting it. On the `th` it IS the column minimum,
+  and the percentages go on distributing whatever is left.
+- **THE ch COUNT IS MEASURED, NOT ARITHMETIC.** `ch` on a `th` resolves against
+  the header's 10 px font while the value is typed at 11 px in an input that
+  also spends 4 px on padding and 2 px on its border. Working it out on paper
+  crosses two font sizes and gets it wrong: 7ch measured 39 px where a
+  five-digit altitude needs 44.
+- MEASURED AFTER, at panel widths from 901 px down to 163 px: Alt **47 px**,
+  OAT and VAR **36**, against MT 28 and TAS 24 - the editable columns are now
+  the roomiest of the numeric group rather than the narrowest, and nothing
+  clips at any width.
+- **A `|| true` IN A CHECK IS NOT A CHECK.** The first Ctrl+Z assertion here was
+  written as `check(a !== b || true, ...)` and passed unconditionally. Worse,
+  the thing it meant to assert was untestable as written: these fields push
+  their undo state on `change`, so typing without committing leaves nothing to
+  undo. It commits with Enter first now, and asserts the value really reverts.
+
 ## The panel divider (v16.67)
 
 The pilot asked whether the edge of the plan panel could be dragged to give more

@@ -32,6 +32,22 @@
  *    when a pilot reaches for undo. Only fields with real free-text editing
  *    keep their native behaviour, and the caller decides that with `textLike`.
  *
+ * 2b. BUT AN UNMODIFIED KEY IN AN EDITABLE FIELD IS TYPING, NOT A SHORTCUT
+ *    (v16.69, the pilot's report: "the numbers keys change between flightplans
+ *    when trying to type a number"). Rule 2 was drawn one notch too wide. A
+ *    number field is not free text, so `textLike` is false there - and 1-9 are
+ *    bound to the flight plans, so every digit typed into an altitude ALSO
+ *    switched plan. It was never only the digits: `.` and `,` are bound to the
+ *    next and previous plan, so a decimal point typed into a fuel or a reserve
+ *    did it too, and Delete is bound to removing the selected waypoint, so
+ *    erasing a digit forward could remove a fix from the route.
+ *    THE LINE IS THE MODIFIER, and it keeps everything rule 2 was protecting:
+ *    Ctrl+Z carries one, so undo still works with the cursor in an altitude,
+ *    which is the whole reason number fields were left out of `textLike`. A
+ *    BARE key does not, so it belongs to the field the pilot is typing in.
+ *    `editing` is true for every field that takes typed keys; `textLike`
+ *    remains the stricter free-text test and still blocks modified chords.
+ *
  * 3. A BINDING THE BROWSER OWNS IS A PROMISE THE PLATFORM REVOKES. Ctrl+W,
  *    Ctrl+T, Ctrl+N and friends cannot be stopped with preventDefault in any
  *    mainstream browser - the tab closes anyway. Offering them in the menu
@@ -57,6 +73,7 @@
  * @property {boolean} [dialogOpen]   dialog.js has something on screen
  * @property {boolean} [overlayOpen]  any overlay at all (includes dialogOpen)
  * @property {boolean} [textLike]     focus is in a free-text field
+ * @property {boolean} [editing]      focus is in ANY field that takes typed keys
  * @property {boolean} [viewMode]     the read-only "View Mode" is on
  * @property {boolean} [hasHighlight] a waypoint is selected
  */
@@ -280,6 +297,27 @@ export function chordProblem(km, chord, actionId) {
   return null;
 }
 
+/** Keys a focused field consumes itself when nothing is held down: a printable
+ *  character, and the editing keys that move or erase around it. Escape is not
+ *  here on purpose - it is answered before any of this, because it is the way
+ *  out of a dialog and out of a stuck drag.
+ *  @param {KeyStroke} ev */
+export function isBareKey(ev) {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
+  const k = ev.key;
+  if (!k) return false;
+  // A single character is a character the field will insert - digits, a decimal
+  // point, a minus sign, a comma in a locale that uses one.
+  if (k.length === 1) return true;
+  return EDIT_KEYS.has(k);
+}
+
+/** @type {Set<string>} */
+const EDIT_KEYS = new Set([
+  'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+  'Home', 'End', 'Tab', 'Enter'
+]);
+
 /**
  * @param {KeyStroke} ev
  * @param {KeyContext} [ctx]
@@ -310,6 +348,8 @@ export function resolveKey(ev, ctx, keymap) {
     // Rule 2: free-text fields keep their native editing, unless the action
     // says otherwise (only Ctrl+S does, and it says why).
     if (c.textLike && !spec.inText) return null;
+    // Rule 2b: in ANY editable field, only a modified chord is a shortcut.
+    if (c.editing && !spec.inText && isBareKey(ev)) return null;
     if (spec.needsEdit && c.viewMode) return null;
     if (spec.needsSelection && !c.hasHighlight) return null;
     /** @type {KeyAction} */

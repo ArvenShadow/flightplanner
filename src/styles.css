@@ -1038,7 +1038,23 @@ svg.leaflet-image-layer.leaflet-interactive path {
        From and To kept their text - and `.table-container` was already set to
        scroll rather than squeeze. The floors are the widest value each column
        can hold: five digits for an altitude, three for a signed OAT or VAR. */
-    td input[type="number"] { min-width: 3.4ch; }
+    /* THE FLOOR BELONGS ON THE COLUMN, NOT ONLY ON THE INPUT (v16.69). Every
+       header carries a PERCENTAGE width - Alt 5%, OAT and VAR 4%, against 10%
+       each for From and To - so those columns shrink with the panel, and at a
+       narrow one 5% of the table is less than the five digits an altitude
+       holds. A min-width on the nested input was arguing with the column's own
+       declared width instead of setting it; on the th it IS the column's
+       minimum, and the percentages go on distributing whatever is left over.
+
+       THE ch COUNT IS MEASURED, NOT ARITHMETIC. `ch` on a `th` resolves against
+       the HEADER's 10 px font while the value is typed at 11 px in an input
+       that also spends 4 px on padding and 2 px on its border, so working it
+       out on paper crosses two font sizes and gets it wrong - 7ch measured
+       39 px where a five-digit altitude needs 44. These are the numbers that
+       fit the widest legitimate value at every panel width tested. */
+    th.col-alt { min-width: 8.5ch; }
+    th.col-num { min-width: 6.5ch; }
+    td input[type="number"] { min-width: 3.4ch; padding-left: 2px; padding-right: 2px; }
     td input.alt-input { min-width: 5.4ch; }
     td input:focus { border-color: #3182ce; outline: none; background: var(--highlight-bg); color: var(--text-main); }
 

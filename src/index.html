@@ -293,7 +293,7 @@
               <br>Two things the menu will refuse, and it says why: a chord the <b>browser owns</b> (Ctrl+W, Ctrl+T, F5 …), because <i>preventDefault</i> cannot stop those and the binding would look like it worked and then not; and a chord <b>already used by another action</b>, because whichever came second would silently never fire. Your bindings are saved with your settings and <b>travel in the exported JSON</b>.</li>
             <li><b>Undo now covers the whole plan, not just the route</b>: ETD, initial fuel, reserve, departure elevation and the flight date are snapshotted too, so changing an ETD — which moves every ETO and the daylight verdict — can be taken back like any other edit.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
-            <li><b>In the Map-only layout</b> the sidebar is hidden, so the two plan controls you need are on the map itself: <b>✈</b> names the active plan (and its colour) and clicks through to the next one, <b>＋ New plan</b> starts another sector. <b>1</b>–<b>9</b> jump straight to a plan from the keyboard in any layout, and <b>,</b> / <b>.</b> step through them. The map button <i>cycles</i> (it wraps) because it is the only way to switch without a keyboard; the two keys do not.</li>
+            <li><b>In the Map-only layout</b> the sidebar is hidden, so the two plan controls you need are on the map itself: <b>✈</b> names the active plan (and its colour) and clicks through to the next one, <b>＋ New plan</b> starts another sector. <b>1</b>–<b>9</b> jump straight to a plan from the keyboard in any layout, and <b>,</b> / <b>.</b> step through them. Those keys are inert while you are <b>typing in any field</b> — a digit in an altitude is a digit, and a decimal point in the fuel box is a decimal point — but shortcuts with <b>Ctrl</b> still work there, so Ctrl+Z undoes with the cursor still in the box. The map button <i>cycles</i> (it wraps) because it is the only way to switch without a keyboard; the two keys do not.</li>
             <li>With several flight plans, <b>only the active one is clickable in Edit Mode</b> — the others fade so a return route can be drawn straight over its outbound (ENDU→ENEV→ENDU) without grabbing the wrong line. Switch flights with the ✏ button on each plan; View Mode shows every flight at full strength.</li>
             <li><b>Grab a leg line and drag</b> to bend it around terrain: a diamond <b>via point</b> appears under the cursor and follows it, with the route redrawing as you move — one motion, press to release. Let go where you want it. A plain click still drops a via point on the spot, and either way you can drag the diamond again later or right-click it to remove. The line has a generous invisible grab area, so you do not have to hit the 4-pixel stroke exactly.</li>
             <li>A via point <b>bends a leg without adding a row</b>. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
@@ -1278,7 +1278,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.68';
+    const APP_VERSION = '16.69';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -5233,11 +5233,11 @@
               <th style="width:10%">From</th>
               <th style="width:10%">To</th>
               <th class="cc" style="width:6%">Profile</th>
-              <th style="width:5%">Alt</th>
-              <th class="cc" style="width:4%">OAT</th>
+              <th class="col-alt" style="width:5%">Alt</th>
+              <th class="cc col-num" style="width:4%">OAT</th>
               <th class="cc" style="width:4%">TAS</th>
               <th class="cc" style="width:4%">TT</th>
-              <th class="cc" style="width:4%">VAR</th>
+              <th class="cc col-num" style="width:4%">VAR</th>
               <th style="width:4%">MT</th>
               <th style="width:7%">W/V (Dir/Spd)</th>
               <th class="cc" style="width:4%">WCA</th>
@@ -5781,6 +5781,24 @@
         (tag === 'INPUT' && /^(text|search|email|password|url|tel)$/i.test(t.type || 'text'));
     }
 
+    /** ANY field that takes typed keys, which is a WIDER set than textLike and
+     *  exists for a different question (keys.js rule 2b). textLike asks "would
+     *  the browser's own text editing be broken by taking this chord" - a
+     *  number field says no, which is why Ctrl+Z still undoes with the cursor in
+     *  an altitude. This asks "is the pilot typing here", and in a number, date
+     *  or time field they are: the digits, the decimal point and Delete all
+     *  belong to the field, not to the flight-plan shortcuts. A SELECT is
+     *  included because it type-selects by letter. */
+    function isEditableTarget(t) {
+      const tag = t && t.tagName ? t.tagName.toUpperCase() : '';
+      if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (t && t.isContentEditable) return true;
+      if (tag !== 'INPUT') return false;
+      // A button, checkbox or radio dressed as an <input> types nothing.
+      return !/^(button|submit|reset|checkbox|radio|file|image|range|color)$/i
+        .test(t.type || 'text');
+    }
+
     // THE MAPPING ITSELF IS PURE -> src/lib/keys.js, so every binding is tested
     // without a browser, including the cases that only arise with a dialog up
     // or the cursor in a field. This handler only describes the situation and
@@ -5811,6 +5829,7 @@
         dialogOpen: typeof dialogIsOpen === 'function' && dialogIsOpen(),
         overlayOpen: anyOverlayOpen(),
         textLike: isTextLikeTarget(e.target),
+        editing: isEditableTarget(e.target),
         viewMode: isDoneMode,
         hasHighlight: !!highlightedWaypoint
       }, keybinds);
