@@ -7155,6 +7155,112 @@ T('a number cell can hold its value: no stepper, and a floor under its column', 
   ev(SEED);
 });
 
+console.log('\n=== 62a000j. Typing is not a shortcut (v16.69) ===');
+
+T('an unmodified key in an editable field belongs to the field', () => {
+  const K = moduleExports.keys;
+  const R = (stroke, ctx) => { const a = K.resolveKey(stroke, ctx); return a && a.action; };
+  const editing = { editing: true };
+  // THE PILOT'S BUG: 1-9 activate a flight plan, a number field is not
+  // free text, so every digit typed into an altitude also switched plan.
+  assert(R({ key: '2' }) === 'activate-flight-2', 'a bare digit no longer picks a plan');
+  assert(R({ key: '2' }, editing) === null, 'a digit typed into a field still switches flight plan');
+  // IT WAS NEVER ONLY THE DIGITS. `.` and `,` step between plans, so a decimal
+  // point typed into a fuel or a reserve did it too.
+  assert(R({ key: '.' }) === 'next-flight', 'the plain "." binding is gone');
+  assert(R({ key: '.' }, editing) === null, 'a decimal point typed into a field still steps plan');
+  assert(R({ key: ',' }, editing) === null, 'a comma typed into a field still steps plan');
+  assert(R({ key: '/' }, editing) === null, 'a slash typed into a field still jumps to the search box');
+  // ...and Delete removes the selected waypoint, so erasing a digit forward
+  // could take a fix out of the route.
+  const sel = { hasHighlight: true };
+  assert(R({ key: 'Delete' }, sel) === 'delete-waypoint', 'Delete no longer removes a waypoint');
+  assert(R({ key: 'Delete' }, { ...sel, ...editing }) === null,
+    'Delete while typing in a field still removes a waypoint from the route');
+
+  // RULE 2 IS INTACT, and this is the whole reason number fields were left out
+  // of textLike in the first place: a pilot reaches for undo right after
+  // editing an altitude, and the cursor is still in the box.
+  assert(R({ key: 'z', ctrlKey: true }, editing) === 'undo',
+    'Ctrl+Z stopped working with the cursor in a number field - rule 2 was lost');
+  assert(R({ key: 'z', ctrlKey: true, shiftKey: true }, editing) === 'redo',
+    'Ctrl+Shift+Z stopped working in a number field');
+  assert(R({ key: 's', ctrlKey: true }, editing) === 'save',
+    'Ctrl+S stopped working in a number field');
+  // A free-text field is still stricter: it blocks modified chords too, except
+  // the ones that say inText.
+  assert(R({ key: 'z', ctrlKey: true }, { textLike: true, editing: true }) === null,
+    'a free-text field stopped keeping its own editing chords');
+  assert(R({ key: 's', ctrlKey: true }, { textLike: true, editing: true }) === 'save',
+    'Ctrl+S must still be claimed in a text field - the browser would save the PAGE');
+
+  // Escape is answered before any of this, so it is the way out either way.
+  assert(R({ key: 'Escape' }, editing) === 'close-overlays', 'Escape stopped working while typing');
+});
+
+T('isBareKey draws the line at the modifier, not at the key', () => {
+  const K = moduleExports.keys;
+  assert(K.isBareKey({ key: '5' }), 'a digit is a bare key');
+  assert(K.isBareKey({ key: '.' }) && K.isBareKey({ key: '-' }), 'a decimal point and a minus are typed');
+  assert(K.isBareKey({ key: 'Backspace' }) && K.isBareKey({ key: 'Delete' }), 'erasing is editing');
+  assert(K.isBareKey({ key: 'ArrowUp' }), 'the arrows step a number field, so they are its own');
+  assert(!K.isBareKey({ key: '5', ctrlKey: true }), 'a modifier makes it a shortcut');
+  assert(!K.isBareKey({ key: '5', altKey: true }), 'Alt makes it a shortcut');
+  assert(!K.isBareKey({ key: '5', metaKey: true }), 'Cmd makes it a shortcut');
+  // SHIFT IS NOT A MODIFIER HERE: Shift+2 is how a keyboard types "@".
+  assert(K.isBareKey({ key: '@', shiftKey: true }), 'Shift is how a character is typed, not a chord');
+  assert(!K.isBareKey({ key: 'Escape' }), 'Escape is answered before this and must not be swallowed');
+  assert(!K.isBareKey({ key: 'F5' }), 'a function key types nothing');
+});
+
+TA('typing a digit into an altitude does not change the flight plan', async () => {
+  // THE PAGE'S OWN ANSWER, not just the resolver's: `isEditableTarget` has to
+  // report a number input as a field the pilot is typing in, and the dispatcher
+  // has to hand it over. Driving resolveKey alone would prove the module and
+  // leave the wiring untested - the v16.53 lesson.
+  ev(SEED);
+  ev(`addNewFlightPlan(); addNewFlightPlan(); setActiveFlight(0);`);
+  assert(ev('flights.length') >= 3, 'the probe needs three plans');
+  const alt = ev(`(() => {
+    const i = [...document.querySelectorAll('td input.alt-input')][0];
+    i.focus();
+    return !!i;
+  })()`);
+  assert(alt, 'no altitude cell to type into');
+  // The event has to carry the FOCUSED field as its target for the guard to see
+  // it, which is what a real keypress does - dispatching on `document` would
+  // give it the document as target and prove nothing.
+  ev(`(() => {
+    const i = [...document.querySelectorAll('td input.alt-input')][0];
+    i.dispatchEvent(new window.KeyboardEvent('keydown', { key: '2', bubbles: true }));
+  })()`);
+  await tick();
+  assert(ev('activeFlightIndex') === 0,
+    'typing a digit into an altitude jumped to another flight plan: ' + ev('activeFlightIndex'));
+  // ...and the binding still works when the pilot is NOT in a field.
+  ev(`document.body.dispatchEvent(new window.KeyboardEvent('keydown', { key: '2', bubbles: true }))`);
+  await tick();
+  assert(ev('activeFlightIndex') === 1,
+    'the digit stopped picking a plan when nothing was focused: ' + ev('activeFlightIndex'));
+  ev(SEED);
+});
+
+T('the editable number columns are the roomiest of the numeric group', () => {
+  // jsdom has no layout, so the WIDTHS are measured in verify-layout.mjs. What
+  // is guarded here is that the column floors exist and are attached to the
+  // three headers that carry a typed value - a percentage width alone shrinks
+  // with the panel, which is what starved them.
+  const fs = require('fs');
+  const css = fs.readFileSync('src/styles.css', 'utf8');
+  assert(/th\.col-alt\s*\{[^}]*min-width/.test(css), 'the altitude column lost its floor');
+  assert(/th\.col-num\s*\{[^}]*min-width/.test(css), 'the OAT and VAR columns lost their floor');
+  ev(SEED);
+  assert(ev(`document.querySelectorAll('th.col-alt').length`) >= 1, 'no header carries col-alt');
+  assert(ev(`document.querySelectorAll('th.col-num').length`) >= 2,
+    'OAT and VAR no longer carry col-num: ' + ev(`document.querySelectorAll('th.col-num').length`));
+  ev(SEED);
+});
+
 console.log('\n=== 62a000d. Quality of life, one batch (v16.49, item 16) ===');
 
 T('the key mapping is a pure decision, and every action has a home', () => {
