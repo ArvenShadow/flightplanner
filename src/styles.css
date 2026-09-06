@@ -1032,7 +1032,30 @@ svg.leaflet-image-layer.leaflet-interactive path {
     th { background: var(--bg-table-head); color: var(--text-main); font-weight: 700; padding: 5px 2px; border: 1px solid var(--border-color); font-size: 10px; }
     td { padding: 3px 2px; border: 1px solid var(--border-color); font-size: 11px; }
     td input { width: 100%; border: 1px solid transparent; text-align: center; font-size: 11px; padding: 2px 0; background: var(--bg-input); color: var(--text-main); border-radius: 2px; }
+    /* A NUMBER CELL HAS A FLOOR, or it is the first thing the table crushes.
+       `width: 100%` on a form control gives the column NO minimum content
+       width, so the browser shrank Alt to 11 px and OAT and VAR to 18 px while
+       From and To kept their text - and `.table-container` was already set to
+       scroll rather than squeeze. The floors are the widest value each column
+       can hold: five digits for an altitude, three for a signed OAT or VAR. */
+    td input[type="number"] { min-width: 3.4ch; }
+    td input.alt-input { min-width: 5.4ch; }
     td input:focus { border-color: #3182ce; outline: none; background: var(--highlight-bg); color: var(--text-main); }
+
+    /* NO NATIVE SPIN BUTTONS (v16.68, the pilot's report: they "hide the values
+       of altitude, OAT, VAR"). Chromium draws a two-arrow stepper inside every
+       number field and it takes ~18 px of the box. MEASURED on the OFP table:
+       at the shipped panel width the Alt input had 22 px of content box against
+       45 px of content, and every numeric cell read as a dash; with the divider
+       dragged in it was 11 px. Removing the stepper made OAT and VAR fit
+       exactly at every width tested.
+       NOTHING IS LOST BUT THE ARROWS. The field is still type=number, so it
+       still validates, still offers a numeric keypad on a touch device, and the
+       UP and DOWN keys still step it by the field's own `step` - 500 ft on an
+       altitude, which is the increment the stepper offered. */
+    input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     .calc-cell { background: var(--bg-calc); font-weight: 600; color: var(--text-main); }
     .acc-fuel-cell { background: var(--acc-fuel-bg); color: var(--acc-fuel-text); font-weight: 700; }
     .low-fuel { background: #e53e3e !important; color: #ffffff !important; }

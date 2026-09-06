@@ -7127,6 +7127,34 @@ T('there is no divider when there is only one panel to divide', () => {
   ev(SEED);
 });
 
+T('a number cell can hold its value: no stepper, and a floor under its column', () => {
+  // jsdom HAS NO LAYOUT, so it cannot see a crushed cell - verify-layout.mjs
+  // measures scrollWidth against clientWidth at four divider positions in a
+  // real browser. What is worth guarding here is that the two rules the
+  // measurement depends on are still present and still have something to bind
+  // to, because both are silent when they go: a browser drops CSS it cannot
+  // apply, and a class that stops being emitted takes its rule with it.
+  const fs = require('fs');
+  const css = fs.readFileSync('src/styles.css', 'utf8');
+  assert(/input\[type="number"\]::-webkit-inner-spin-button/.test(css),
+    'the native spin button is back, and it takes ~18 px out of every number cell');
+  assert(/td input\[type="number"\]\s*\{[^}]*min-width/.test(css),
+    'the number columns lost their floor, so the table crushes them before it scrolls');
+  assert(/td input\.alt-input\s*\{[^}]*min-width/.test(css),
+    'the altitude column lost its wider floor - five digits no longer fit');
+  assert(/\.table-container\s*\{[^}]*overflow-x:\s*auto/.test(css),
+    'the table stopped scrolling, so a narrow plan panel has nowhere to put the columns');
+  // ...and the class the floor binds to is really emitted, on BOTH altitude
+  // cells - the leg row and the circuit row are separate interpolations.
+  ev(SEED);
+  const alts = ev(`[...document.querySelectorAll('td input.alt-input')].length`);
+  assert(alts >= 2, 'the altitude cells no longer carry alt-input: ' + alts);
+  // The hint replaces what the arrows used to say for themselves.
+  assert(/steps 500 ft/.test(ev(`document.querySelector('td input.alt-input').title`)),
+    'the altitude cell no longer says the up and down keys step it');
+  ev(SEED);
+});
+
 console.log('\n=== 62a000d. Quality of life, one batch (v16.49, item 16) ===');
 
 T('the key mapping is a pure decision, and every action has a home', () => {

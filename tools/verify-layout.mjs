@@ -484,6 +484,90 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
   await ctx.close();
 }
 
+// NO NUMBER CELL IS EVER CRUSHED (v16.68, the pilot's report: the stepper
+// arrows "hide the values of altitude, OAT, VAR"). Two causes, both invisible
+// to a grep: Chromium's native spin button eats ~18 px inside the box, and
+// `width: 100%` on a form control gives its column no minimum, so the table
+// crushed those columns while From and To kept their text.
+{
+  const ctx = await b.newContext({ viewport: { width: 1500, height: 950 } });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errs.push('numcells: ' + e));
+  await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
+  await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => {
+    try { closeHelpModal(); } catch (e) {}
+    setLayoutMode('split');
+    // The widest values a cell can legitimately hold: a five-digit altitude and
+    // a signed two-digit OAT and variation.
+    flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+      { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 14, wdir: 240, wspd: 25, var: -11 },
+      { lat: 69.237, lng: 17.979, name: 'FINNSNES', alt: 12500, oat: -15, wdir: 240, wspd: 25, var: -11 },
+      { lat: 69.678, lng: 18.911, name: 'ENTC', alt: 2500, oat: 10, wdir: 240, wspd: 25, var: -12 }]}];
+    activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+  });
+  await page.waitForTimeout(400);
+  const at = (r) => page.evaluate(async (r) => {
+    applyPaneRatio(false, r);
+    await new Promise((x) => setTimeout(x, 250));
+    const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('td'));
+    const wrap = document.querySelector('.table-container');
+    return { side: Math.round(document.getElementById('sidebar').getBoundingClientRect().width),
+             n: ins.length,
+             scrolls: !!wrap && wrap.scrollWidth > wrap.clientWidth,
+             clipped: ins.filter((i) => i.scrollWidth > i.clientWidth)
+                         .map((i) => i.title.slice(0, 12) + '="' + i.value + '"') };
+  }, r);
+  // Every divider position from the shipped default to the far end.
+  for (const r of [null, 0.6, 0.72, 0.85]) {
+    const m = await at(r);
+    check(m.n === 6, `the probe plan renders its number cells (${m.n})`);
+    check(m.clipped.length === 0,
+      `no number cell is clipped with the plan panel at ${m.side} px` +
+      (m.clipped.length ? ': ' + m.clipped.join(', ') : ''));
+  }
+  // THE TABLE SCROLLS RATHER THAN SQUEEZING. `.table-container` was always set
+  // to `overflow-x: auto`; without a floor on the number columns it never had
+  // to, because those columns collapsed first.
+  check((await at(0.72)).scrolls,
+    'a narrow plan panel squeezes the table instead of scrolling it');
+
+  // NOTHING WAS LOST BUT THE ARROWS: the field still steps by its own `step`.
+  const stepped = await page.evaluate(async () => {
+    applyPaneRatio(false, null);
+    await new Promise((x) => setTimeout(x, 200));
+    const i = [...document.querySelectorAll('input[type=number]')]
+      .find((e) => e.closest('td') && /Target Alt/.test(e.title));
+    i.focus();
+    return i.value;
+  });
+  await page.keyboard.press('ArrowUp');
+  const after = await page.evaluate(() => [...document.querySelectorAll('input[type=number]')]
+    .find((e) => e.closest('td') && /Target Alt/.test(e.title)).value);
+  check(Number(after) === Number(stepped) + 500,
+    `the up key still steps the altitude by its own step (${stepped} -> ${after})`);
+
+  // ...AND THE WHEEL STILL DOES NOT. Chromium only steps a number field on
+  // wheel in some configurations, and a scroll that silently changed a planned
+  // altitude would be exactly the wrong number this project refuses. Measured
+  // rather than assumed, so a browser change would be caught here.
+  const box = await page.evaluate(() => {
+    const i = [...document.querySelectorAll('input[type=number]')]
+      .find((e) => e.closest('td') && /Target Alt/.test(e.title));
+    const r = i.getBoundingClientRect();
+    return [r.x + r.width / 2, r.y + r.height / 2];
+  });
+  await page.mouse.move(box[0], box[1]);
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(200);
+  const wheeled = await page.evaluate(() => [...document.querySelectorAll('input[type=number]')]
+    .find((e) => e.closest('td') && /Target Alt/.test(e.title)).value);
+  check(wheeled === after,
+    `scrolling over a focused altitude does not change it (${after} -> ${wheeled})`);
+  await ctx.close();
+}
+
 await b.close();
 console.log(fails.length ? `\n${fails.length} layout check(s) FAILED` : '\nall layout checks passed');
 process.exit(fails.length ? 1 : 0);

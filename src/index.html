@@ -392,7 +392,7 @@
         <div class="setting-section">
           <h3>🖥 Layout &amp; Display</h3>
           <ul style="margin-left:16px;">
-            <li>The <b>view selector</b> offers Split, Stacked, Plan-only and Map-only — Stacked/Plan give the OFP the full window width on laptops. In <b>Split</b> and <b>Stacked</b> the <b>divider between the two panels can be dragged</b> to give more of the window to the map or to the plan; <b>double-click</b> it to put it back, and with it focused the <b>arrow keys</b> nudge it and <b>Home</b> resets it. Each of the two layouts remembers its own position, and both travel in your exported settings.</li>
+            <li>The <b>view selector</b> offers Split, Stacked, Plan-only and Map-only — Stacked/Plan give the OFP the full window width on laptops. In <b>Split</b> and <b>Stacked</b> the <b>divider between the two panels can be dragged</b> to give more of the window to the map or to the plan; <b>double-click</b> it to put it back, and with it focused the <b>arrow keys</b> nudge it and <b>Home</b> resets it. Each of the two layouts remembers its own position, and both travel in your exported settings. The editable number cells (Alt, OAT, VAR) have <b>no stepper arrows</b> — they took about 18&nbsp;px out of every cell, which is the whole cell once the plan panel is narrow. Type the value, or use <b>↑</b>/<b>↓</b>, which step by the same amount the arrows did (500&nbsp;ft on an altitude, 100&nbsp;ft on a circuit altitude, 1&nbsp;°C on an OAT). When the panel gets too narrow for the table, the table <b>scrolls sideways</b> rather than squeezing the numbers away.</li>
             <li><b>▤ Compact</b> hides secondary columns, leaving the flying essentials. Both choices are remembered per browser.</li>
           </ul>
         </div>
@@ -1278,7 +1278,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.67';
+    const APP_VERSION = '16.68';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -5318,7 +5318,7 @@
               <td><b>${esc(from.name)}</b></td>
               <td><b>PATTERN</b></td>
               <td class="cc"><span class="type-pattern">PATTERN</span></td>
-              <td><input type="number" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority)" onfocus="this.select()" onchange="pushUndoState('change the circuit altitude'); flights[${fIdx}].waypoints[${i+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+              <td><input type="number" class="alt-input" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority; \u2191/\u2193 steps 100 ft)" onfocus="this.select()" onchange="pushUndoState('change the circuit altitude'); flights[${fIdx}].waypoints[${i+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
               <td class="cc">${to.oat}°</td>
               <td class="cc">-</td>
               <td class="cc">-</td>
@@ -5514,8 +5514,8 @@
         <td><b>${esc(fromName)}</b></td>
         <td><b>${esc(toName)}</b></td>
         <td class="cc">${typeBadge}</td>
-        <td><input type="number" value="${flights[fIdx].waypoints[wpIndex+1].alt}" step="500" title="Target Alt" onfocus="this.select()" onchange="pushUndoState('change an altitude'); flights[${fIdx}].waypoints[${wpIndex+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
-        <td class="cc"><input type="number" value="${oat}" title="OAT" onfocus="this.select()" onchange="pushUndoState('change an OAT'); flights[${fIdx}].waypoints[${wpIndex+1}].oat=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+        <td><input type="number" class="alt-input" value="${flights[fIdx].waypoints[wpIndex+1].alt}" step="500" title="Target Alt (\u2191/\u2193 steps 500 ft)" onfocus="this.select()" onchange="pushUndoState('change an altitude'); flights[${fIdx}].waypoints[${wpIndex+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+        <td class="cc"><input type="number" value="${oat}" title="OAT (\u2191/\u2193 steps 1 \u00b0C)" onfocus="this.select()" onchange="pushUndoState('change an OAT'); flights[${fIdx}].waypoints[${wpIndex+1}].oat=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="calc-cell cc">${tas}</td>
         <td class="calc-cell cc">${String(tt).padStart(3, '0')}°</td>
         <td class="cc" title="Declination Source: ${esc(varIndicator)}">
