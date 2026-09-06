@@ -298,7 +298,7 @@ check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point
   // be read beside the track; an opaque one defeats its own purpose.
   const fills = await page.evaluate(async () => {
     const out = {};
-    for (const pct of [8, 40, 100]) {
+    for (const pct of [8, 40, 60, 100]) {
       aircraftProfile.corridorFillPct = pct;
       drawCorridor();
       await new Promise((r) => setTimeout(r, 150));
@@ -309,7 +309,37 @@ check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point
   });
   check(fills[8] === 0.08, `the default band is 8% opaque (got ${fills[8]})`);
   check(fills[40] === 0.4, `the transparency setting reaches the band (got ${fills[40]})`);
-  check(fills[100] === 0.4, `an out-of-range value clamps rather than hiding the chart (got ${fills[100]})`);
+  check(fills[60] === 0.6, `60% is reachable, as the pilot asked (got ${fills[60]})`);
+  check(fills[100] === 0.6, `an out-of-range value clamps to the ceiling (got ${fills[100]})`);
+
+  // COLOUR: the route's own, or one for every plan (v16.62).
+  const cols = await page.evaluate(async () => {
+    flights.push({ id: 2, title: 'Q', depElev: 0, waypoints: [
+      { lat: 69.25, lng: 18.90, name: 'C', alt: 3000, oat: 5, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.45, lng: 18.90, name: 'D', alt: 3000, oat: 5, wdir: 0, wspd: 0, var: -11 }] });
+    const read = () => [...document.querySelectorAll('.leaflet-corridor-pane path')]
+      .map((p) => (p.getAttribute('fill') || '').toLowerCase());
+    delete aircraftProfile.corridorColorMode;
+    refreshMap(); await new Promise((r) => setTimeout(r, 250));
+    const route = read();
+    aircraftProfile.corridorColorMode = 'single';
+    aircraftProfile.corridorColor = '#112233';
+    refreshMap(); await new Promise((r) => setTimeout(r, 250));
+    const single = read();
+    aircraftProfile.corridorColor = 'javascript:alert(1)';
+    refreshMap(); await new Promise((r) => setTimeout(r, 250));
+    const hostile = read();
+    flights.pop();
+    delete aircraftProfile.corridorColorMode; delete aircraftProfile.corridorColor;
+    refreshMap();
+    return { route, single, hostile };
+  });
+  check(cols.route.length === 2 && cols.route[0] !== cols.route[1],
+    `each plan's band takes its own route colour (${cols.route.join(' ')})`);
+  check(cols.single.length === 2 && cols.single.every((c) => c === '#112233'),
+    `one colour for all applies to every plan (${cols.single.join(' ')})`);
+  check(cols.hostile.every((c) => c !== 'javascript:alert(1)'),
+    `a hostile colour is rejected before it reaches the map (${cols.hostile.join(' ')})`);
 
   // AND IT MUST NEVER TAKE A CLICK. The band covers the whole route, so an
   // interactive one would swallow every press meant for a leg or for bare map.

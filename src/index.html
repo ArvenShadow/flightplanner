@@ -791,10 +791,13 @@
                 <span id="map-fix-size-val" style="font-size:11px; font-weight:700; min-width:34px;"></span>
               </div>
             </div>
-            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+            <details class="setting-help">
+              <summary>Size limits, and how the preview works</summary>
+              <div>
               Below 6 px a symbol is not a reliable click target; above 18 px it covers the chart
               it is meant to sit on.
-            </div>
+              </div>
+            </details>
             <div id="map-fix-preview" class="fix-preview"></div>
             <div class="setting-row" style="margin-top:8px;">
               <label>Reset:</label>
@@ -813,12 +816,15 @@
                 </select>
               </div>
             </div>
-            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+            <details class="setting-help">
+              <summary>What happens after a touch &amp; go or a full stop</summary>
+              <div>
               A touch &amp; go or a full stop ends a sector, so the planner offers to start the
               next one for you — departing from that aerodrome's published field elevation, with
               its ground time editable in the new plan's header. Turn it off if you would rather
               add sectors yourself. <b>Fly-by never opens a plan</b>: nothing happens there.
-            </div>
+              </div>
+            </details>
           </div>
 
           <div class="setting-section">
@@ -832,13 +838,16 @@
               </div>
             </div>
             <div id="map-route-preview" class="route-preview" aria-hidden="true"></div>
-            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+            <details class="setting-help">
+              <summary>Thickness limits, and how plans are told apart</summary>
+              <div>
               Below 2 px the track is hard to follow across chart ink; above 10 px it covers the
               frequencies, MEF and airspace limits it is drawn over. The invisible grab area stays
               20 px wide either way, so a thin track is no harder to grab than a thick one.
               <b>Every flight plan draws in its own colour</b> and the inactive ones fade in Edit
               Mode — since v16.50 none of them is dashed.
-            </div>
+              </div>
+            </details>
           </div>
 
           <div class="setting-section">
@@ -855,13 +864,26 @@
             <div class="setting-row">
               <label for="map-corridor-fill">Band transparency</label>
               <div style="display:flex; align-items:center; gap:8px;">
-                <input type="range" id="map-corridor-fill" min="2" max="40" step="1"
+                <input type="range" id="map-corridor-fill" min="2" max="60" step="1"
                        oninput="updateCorridorPreview()" onchange="updateCorridorPreview()"
                        style="width:150px;">
                 <span id="map-corridor-fill-val" style="font-size:11px; font-weight:700; min-width:34px;"></span>
               </div>
             </div>
-            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+            <div class="setting-row">
+              <label for="map-corridor-mode">Band colour</label>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <select id="map-corridor-mode" onchange="updateCorridorPreview()" style="width:150px;">
+                  <option value="route">Each plan's route colour</option>
+                  <option value="single">One colour for all</option>
+                </select>
+                <input type="color" id="map-corridor-color" onchange="updateCorridorPreview()"
+                       oninput="updateCorridorPreview()" style="width:44px; height:24px; padding:0;">
+              </div>
+            </div>
+            <details class="setting-help">
+              <summary>Shows a ring around the track</summary>
+              <div>
               Turn the band on and off with <b>◫ Corridor</b> on the map. It draws everything
               within this distance of the whole flown track — round at the turns and round at
               both ends, because that is genuinely the shape of &ldquo;within X of the route&rdquo;.
@@ -871,12 +893,18 @@
               Below <b>0.1 NM</b> the band is narrower than the track symbol itself at the zooms you
               read the chart at; above <b>25 NM</b> it is wider than a screenful, so both edges are
               off screen at once and it has stopped being a corridor you can see the sides of.
-              <br><b>Transparency is yours to set</b> — the right value depends on the chart under
-              it. Below <b>2%</b> the band is not reliably visible against the topo raster; above
-              <b>40%</b> the contours and MEF figures stop being legible through it, which is the
-              whole point of drawing it. Inactive flight plans draw their band at half whatever you
-              choose.
-            </div>
+              <br><b>Transparency and colour are yours to set</b> — the right values depend on
+              the chart under the band and on your own eyes. Below <b>2%</b> it is not reliably
+              visible against the topo raster; the ceiling is <b>60%</b>, but be aware that past
+              roughly 40% the contours and MEF figures start to wash out, which is the whole point
+              of drawing it. Inactive flight plans draw their band at half whatever you choose.
+              <br><b>Colour</b> is either each plan's own route colour, or one colour for every
+              plan. The band is background rather than an identifier — unlike the track itself
+              there is rarely any need to tell one plan's corridor from another — and some route
+              colours read badly against chart ink. The default single colour is a slate grey that
+              is not used anywhere else on the map.
+              </div>
+            </details>
           </div>
 
           <div class="setting-section">
@@ -957,7 +985,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 128 inline on*= handlers - 98 written
+    // map, markers, undoStack...) plus 131 inline on*= handlers - 101 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1182,7 +1210,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.61';
+    const APP_VERSION = '16.62';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3445,7 +3473,13 @@
         const dimmed = !isDoneMode && fIdx !== activeFlightIndex;
         const pieces = corridorPieces(path, r);
         if (!pieces.length) return;
-        const colour = ROUTE_COLORS[fIdx % ROUTE_COLORS.length];
+        // ROUTE COLOUR OR ONE OF YOUR OWN (v16.62). The band is background, not
+        // an identifier - unlike the track itself there is rarely a need to tell
+        // one plan's corridor from another, and some route colours read badly
+        // against chart ink at some transparencies.
+        const colour = normaliseCorridorColorMode(aircraftProfile.corridorColorMode) === 'single'
+          ? normaliseCorridorColor(aircraftProfile.corridorColor)
+          : ROUTE_COLORS[fIdx % ROUTE_COLORS.length];
         // NESTED ONE LEVEL DEEPER ON PURPOSE. L.polygon([[ringA],[ringB]]) means
         // "ringB is a HOLE in ringA"; L.polygon([[[ringA]],[[ringB]]]) means two
         // separate polygons. The pieces are a UNION, not a shape with holes, so
@@ -4537,6 +4571,10 @@
       document.getElementById('map-corridor-nm').value = String(corridorRadiusNM());
       document.getElementById('map-corridor-fill').value =
         String(normaliseCorridorFillPct(aircraftProfile.corridorFillPct));
+      document.getElementById('map-corridor-mode').value =
+        normaliseCorridorColorMode(aircraftProfile.corridorColorMode);
+      document.getElementById('map-corridor-color').value =
+        normaliseCorridorColor(aircraftProfile.corridorColor);
       document.getElementById('map-zoom-ad').textContent = String(AERODROME_MIN_ZOOM);
       document.getElementById('map-zoom-rp').textContent = String(REPORTING_POINT_MIN_ZOOM);
       document.getElementById('map-zoom-as').textContent = String(AIRSPACE_MIN_ZOOM);
@@ -4562,6 +4600,17 @@
         aircraftProfile.corridorFillPct = normaliseCorridorFillPct(fill.value);
         const out = document.getElementById('map-corridor-fill-val');
         if (out) out.textContent = aircraftProfile.corridorFillPct + '%';
+      }
+      const mode = document.getElementById('map-corridor-mode');
+      const col = document.getElementById('map-corridor-color');
+      if (mode) aircraftProfile.corridorColorMode = normaliseCorridorColorMode(mode.value);
+      if (col) {
+        aircraftProfile.corridorColor = normaliseCorridorColor(col.value);
+        // The swatch only means anything in single-colour mode. Dimmed rather
+        // than hidden, so the row does not jump about as the mode changes.
+        const single = normaliseCorridorColorMode(aircraftProfile.corridorColorMode) === 'single';
+        col.disabled = !single;
+        col.style.opacity = single ? '1' : '0.35';
       }
       updateCorridorBtn();
       drawCorridor();
@@ -5215,6 +5264,10 @@
       if (corrEl) aircraftProfile.corridorNM = normaliseCorridorNM(corrEl.value);
       const corrFill = document.getElementById('map-corridor-fill');
       if (corrFill) aircraftProfile.corridorFillPct = normaliseCorridorFillPct(corrFill.value);
+      const corrMode = document.getElementById('map-corridor-mode');
+      if (corrMode) aircraftProfile.corridorColorMode = normaliseCorridorColorMode(corrMode.value);
+      const corrCol = document.getElementById('map-corridor-color');
+      if (corrCol) aircraftProfile.corridorColor = normaliseCorridorColor(corrCol.value);
 
       // The performance figures above are always stored internally in GPH/gal.
       // Only the *initial fuel on board* box is in display units, so convert it

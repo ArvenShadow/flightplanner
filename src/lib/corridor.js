@@ -73,16 +73,22 @@ export function normaliseCorridorNM(v) {
  * How see-through the band is, as a percentage.
  *
  * A PREFERENCE, because the right answer depends on the chart underneath and on
- * the eyes reading it (the pilot's request). The BOUNDS are argued, though:
- * below 2% the band is not reliably visible against the topo raster at all, and
- * above 40% the chart's contour lines and MEF figures stop being legible
- * through it - which is the entire purpose of the feature. Defaulting to 8%
- * matches the airspace overlay's fill, which was itself chosen so the ICAO
- * chart could be read through it.
+ * the eyes reading it (the pilot's request). Below 2% the band is not reliably
+ * visible against the topo raster at all. Defaulting to 8% matches the airspace
+ * overlay's fill, which was itself chosen so the ICAO chart could be read
+ * through it.
+ *
+ * THE CEILING WAS 40% AND IS NOW 60% (v16.62, the pilot's request). The old
+ * limit was argued from legibility - past it the contour lines and MEF figures
+ * start to wash out, which is the entire purpose of the band. That argument is
+ * unchanged and the setting says so; but which is worse, a band you cannot see
+ * or a chart you can only just read, is a judgement about the pilot's own eyes
+ * and their own chart, and it is theirs to make. Raising the ceiling does not
+ * move the default.
  */
 export const CORRIDOR_FILL_DEFAULT_PCT = 8;
 export const CORRIDOR_FILL_MIN_PCT = 2;
-export const CORRIDOR_FILL_MAX_PCT = 40;
+export const CORRIDOR_FILL_MAX_PCT = 60;
 
 /**
  * Clamp the fill percentage, re-validated on every read for the same reason the
@@ -96,6 +102,45 @@ export function normaliseCorridorFillPct(v) {
   const n = Number(v);
   if (!isFinite(n)) return CORRIDOR_FILL_DEFAULT_PCT;
   return Math.min(CORRIDOR_FILL_MAX_PCT, Math.max(CORRIDOR_FILL_MIN_PCT, Math.round(n)));
+}
+
+/**
+ * WHICH COLOUR THE BAND TAKES (v16.62, the pilot's request: "some colours are
+ * harder to read than others").
+ *
+ * 'route' - the flight plan's own ROUTE_COLORS entry, so on a multi-sector
+ * mission each band matches the track it belongs to. That is the default and
+ * what v16.61 always did.
+ * 'single' - one colour for every plan, chosen by the pilot. Some of the six
+ * route colours sit badly against chart ink at some transparencies, and a
+ * corridor is a background band rather than an identifier: unlike the track
+ * itself, there is rarely any need to tell one plan's band from another.
+ */
+export const CORRIDOR_COLOR_MODES = ['route', 'single'];
+
+/** Not one of ROUTE_COLORS on purpose: a corridor drawn in a route colour would
+ *  read as belonging to THAT plan. Slate grey sits under chart ink without
+ *  competing with it and is not used anywhere else on the map. */
+export const CORRIDOR_DEFAULT_COLOR = '#4a5568';
+
+/** @param {unknown} v @returns {string} */
+export function normaliseCorridorColorMode(v) {
+  return typeof v === 'string' && CORRIDOR_COLOR_MODES.includes(v) ? v : 'route';
+}
+
+/**
+ * The single-colour value, validated on every read.
+ *
+ * It reaches Leaflet as an option rather than as markup, so the risk here is a
+ * band that vanishes rather than injection - but the rule that every map
+ * preference is re-validated has no exceptions, and this one is in PROFILE_KEYS
+ * so it can arrive from a settings file somebody else wrote.
+ *
+ * @param {unknown} v @returns {string}
+ */
+export function normaliseCorridorColor(v) {
+  return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)
+    ? v.toLowerCase() : CORRIDOR_DEFAULT_COLOR;
 }
 
 /** Signed turn from `a` to `b`, in (-180, 180]. Positive is a right turn.
