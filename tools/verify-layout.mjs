@@ -527,6 +527,43 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
       `no number cell is clipped with the plan panel at ${m.side} px` +
       (m.clipped.length ? ': ' + m.clipped.join(', ') : ''));
   }
+
+  // EVERY SKIN, NOT JUST THE ONE I DEVELOP IN (v16.71). This check tested the
+  // default skin only, and the pilot uses Bold - whose inputs carry 14 px of
+  // padding and border against the default's 6, so a floor stated purely in
+  // `ch` was 8 px short there and a five-digit altitude clipped. A cell check
+  // that does not vary the skin does not cover the app.
+  //
+  // AND IT MEASURES REAL SLACK, not `scrollWidth`: an input that fits reports
+  // scrollWidth === clientWidth, so the old comparison could only ever say
+  // "not clipped" and never "cramped". The text is measured in the input's own
+  // font and must leave a character of room inside the content box.
+  for (const skin of ['default', 'compact', 'bold']) {
+    const m = await page.evaluate(async (skin) => {
+      applySkin(skin);
+      applyPaneRatio(false, 0.8);
+      await new Promise((x) => setTimeout(x, 320));
+      const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('td'));
+      const c = document.createElement('canvas').getContext('2d');
+      const out = ins.map((i) => {
+        const s = getComputedStyle(i);
+        c.font = s.fontWeight + ' ' + s.fontSize + ' ' + s.fontFamily;
+        const text = c.measureText(i.value).width;
+        const room = i.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+        return { v: i.value, slack: +(room - text).toFixed(1), ch: +c.measureText('0').width.toFixed(2),
+                 clipped: i.scrollWidth > i.clientWidth };
+      });
+      applySkin('default'); applyPaneRatio(false, null);
+      return out;
+    }, skin);
+    const clipped = m.filter((x) => x.clipped);
+    const tight = m.filter((x) => x.slack < x.ch);
+    check(clipped.length === 0,
+      `${skin.padEnd(8)} clips no number cell` + (clipped.length ? ': ' + clipped.map((x) => x.v).join(', ') : ''));
+    check(tight.length === 0,
+      `${skin.padEnd(8)} leaves a character of room in every number cell` +
+      (tight.length ? ': ' + tight.map((x) => x.v + ' has ' + x.slack + 'px, needs ' + x.ch).join(', ') : ''));
+  }
   // THE TABLE SCROLLS RATHER THAN SQUEEZING. `.table-container` was always set
   // to `overflow-x: auto`; without a floor on the number columns it never had
   // to, because those columns collapsed first.

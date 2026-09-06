@@ -2024,6 +2024,43 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+### THE FLOOR IS TEXT PLUS CHROME, AND THE CHROME IS NOT A CONSTANT (v16.71)
+
+Four rounds on one report, and the last one produced the actual cause. The
+pilot's console output was decisive where three screenshots had not been:
+
+    "12500 ... box=41 needs=45 min=42.05px font=12px appear=textfield"
+
+- **THE FONT WAS 12 px, NOT 11 - THEY USE THE BOLD SKIN.** And the Bold skin
+  puts **14 px** of padding and border inside a number input against the default
+  skin's **6 px**. A floor stated purely in `ch` therefore sizes itself against
+  ONE skin: measured on the default it was 8 px short on Bold, and a five-digit
+  altitude clipped there. Three fixes in a row were sized in the skin I develop
+  in, for a pilot who does not use it.
+- **THE FIX STATES THE TWO PARTS SEPARATELY**: `calc(<characters>ch + 16px)`.
+  The `ch` term is the widest value the column can legitimately hold plus a
+  character of slack; the 16 px covers the most box chrome any skin adds (14 px,
+  measured on Bold). The `th` floors carry 20 px because they also swallow the
+  cell's own 4 px of padding.
+- **THE VERIFIER TESTED ONE SKIN, WHICH IS WHY THE SUITE WAS GREEN THROUGHOUT.**
+  It now runs the number-cell check under **default, compact and bold**. A cell
+  check that does not vary the skin does not cover the app - and the skins exist
+  precisely so the shell can be restyled, so anything measured in pixels has to
+  be measured in each of them.
+- **`scrollWidth` CAN ONLY SAY "CLIPPED", NEVER "CRAMPED".** An input that fits
+  reports `scrollWidth === clientWidth`, so the old check went green while every
+  value sat hard against its border with zero slack - which is what the pilot
+  kept reporting and what the assertion was structurally unable to see. The
+  check now measures the TEXT in the input's own font with a canvas and requires
+  a character of room inside the content box. Reverting to the v16.70 floors
+  fails it by name.
+- **THE LESSON ABOUT THE PROCESS, not the CSS: three fixes were shipped for a
+  symptom that had never been reproduced.** Each widened a number and called it
+  measured - measured on the wrong machine, in the wrong skin, against a failure
+  that was not happening there. One console read-out from the pilot's own
+  browser settled it in a single round. When a report survives one fix, stop
+  widening and get the failing measurement.
+
 ### WHY TEXT DEFENDS ITSELF AND AN INPUT DOES NOT (v16.70, the pilot's question)
 
 *"What is different between the OAT field and say, the TAS field which is always
