@@ -66,6 +66,7 @@
         <button id="declutter-btn" class="map-ctl" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
         <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo or the official ICAO VFR 1:500 000 from Avinor. Both are streamed and need internet. Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
         <button id="airspace-btn" class="map-ctl" title="Show published AIP airspace - CTR, TIZ, TMA, TIA, CTA and the mandatory zones. Hover an airspace for its class, vertical limits, callsign and frequency. Needs zoom 7 or closer. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleAirspace()">⬢ Airspace: Off</button>
+        <button id="corridor-btn" class="map-ctl" title="Draw a band of a chosen radius either side of the whole track, so you can see which terrain and airspace actually lies beside your route. It is GEOMETRY ONLY - it shows you where to read the chart's contours and MEF, and never states a safe altitude of its own. Radius is set on the Map page of Settings." onclick="toggleCorridor()">◫ Corridor: Off</button>
         <button id="fixes-btn" class="map-ctl" title="Show published AIP fixes - aerodromes (from zoom 7) and VFR reporting points (from zoom 9). Click one to add it as a waypoint at its PUBLISHED coordinate instead of clicking an approximate spot. Reporting points come from the printed table on each aerodrome's Visual Approach Chart; 29 aerodromes publish theirs graphically only and have none here. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleFixes()">⌖ Fixes: Off</button>
         <button id="fix-search-btn" class="map-ctl" title="Find a published aerodrome or VFR reporting point by name or ICAO and add it as a waypoint at its published coordinate. Norwegian letters are optional - SORKJOSEN finds SØRKJOSEN." onclick="searchFixes()">🔎 Find fix</button>
         <button id="chart-detail-btn" class="map-ctl" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
@@ -354,6 +355,9 @@
             <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b> — always a <b>whole hundred feet</b>, rounded <i>up</i>, because the figure is a minimum and the nearest hundred would be below it half the time — with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Taking it gives you <b>one continuous climb</b>: the earlier leg's climb is delayed so it tops out exactly on that fix and runs straight on, rather than levelling off there and climbing again. The rounding buys you a little height, so you top out slightly <i>before</i> the distance you asked for rather than exactly on it — "be level by" is a deadline, and early is safe. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
             <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
+            <li><b>◫ Corridor</b> draws a band of a radius you choose either side of the <b>whole flown track</b>, vias and all — for finding the <b>MSA along your route</b> by reading the chart's own contours and MEF figures inside it. Default <b>1 NM</b>; set the radius and the transparency on the <b>Map page of Settings</b>.
+              <br><b>It is geometry and nothing else.</b> It shows you <i>where</i> to look; it does not compute a safe altitude and never states one. This planner holds no terrain data by an explicit decision — the chart is the reference, and a number invented here would be exactly the plausible wrong answer this tool refuses to give.
+              <br>The band is <b>round at every turn and round at both ends</b>, because that is genuinely the shape of "within X of the route" — a squared-off end would stop the corridor flat across your departure fix. It is drawn <b>under everything else</b> and takes no clicks, so route building inside it is unaffected. Inactive flight plans draw theirs at half your chosen transparency.</li>
             <li><b>What the airspace layer will not do.</b> Vertical limits are shown <b>exactly as published</b> — GND, UNL and flight levels stay as they are, and a flight level is never converted to an altitude. Where the source states no class, the card says so rather than guessing. Airspaces whose published boundary cannot be resolved are <b>absent rather than approximated</b>: the offshore zones defined as a circle radius, the <i>maritime</i> stretch of the Norway–Sweden boundary in the Skagerrak, and one citing the Finland–Sweden border. Where the AIP does say a boundary <b>follows the national border</b>, the real border is drawn from Kartverket’s official line — 51 such stretches in this edition, on 41 airspaces. <b>ATS delegation areas are not drawn at all</b>, and that is deliberate: ENR 2.2 section 5 publishes the areas where two states have agreed to transfer <i>who provides the service</i>, not the airspace itself. Silver 1 and Silver 2 are inside SWEDEN FIR, Halti and Manto inside HELSINKI FIR — 13 of the 17 lie in a foreign FIR, and drawing them as class-C volumes made them look like controlled airspace you had to clear. The card lists only the frequencies you would dial: clearance delivery and ground are left out, military channels are excluded (both the flagged ones and everything outside the 118–137 MHz civil band), and <b>121.500 is never listed</b> — you know it. <b>Standby frequencies are left off too</b>: the AIP publishes some as "AVBL only when &lt;primary&gt; U/S" (103 of them in this edition), and they are not frequencies you choose — listing them beside the real one is how the real one gets lost. They stay in the data. An airspace worked only by an area control centre still shows that frequency, because otherwise there would be nobody to call. <b>Polaris CTA is a special case</b>: it is one airspace over the whole country, so the AIP lists all 26 sector frequencies against it. The card therefore names the <b>sector your cursor is in</b> — ENR 2.2 publishes each Polaris sector as its own volume, so this is a lookup, not a guess, and the frequency shown is always one the hovered airspace itself publishes. Where the AIP stacks sectors vertically you get one row per sector, each labelled with the band it works, so you pick by planned level. Over the Oslofjord, where Sectors 3 and 4 cannot be drawn (their boundary follows the <i>maritime</i> Norway–Sweden line, which is not in Kartverket’s land-border data), the card says so and shows no frequency rather than reciting all 26. ATIS rows are labelled <b>&lt;ICAO&gt; ATIS</b> rather than by the published callsign, which in Norway is often "…Information" and reads exactly like the AFIS service you would actually talk to. Every published service and frequency remains in the data. <b>This is a planning aid — verify against the current AIP and NOTAM.</b></li>
             <li><b>Zooming out declutters automatically</b>: at region zoom the waypoint labels compact and the TOC/TOD chips hide (the tick across the track stays); zoomed further out only waypoint dots and route lines stay. Zoom back in and everything returns — nothing is lost, it's display-only. The <b>🔎 Declutter button on the map</b> changes this: <b>Auto</b> follows the zoom, or lock <b>Full / Mid / Far</b> regardless of zoom. The choice is remembered with your settings.</li>
           </ul>
@@ -838,6 +842,44 @@
           </div>
 
           <div class="setting-section">
+            <h3>Corridor ring</h3>
+            <div class="setting-row">
+              <label for="map-corridor-nm">Radius either side of the track</label>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="number" id="map-corridor-nm" min="0.1" max="25" step="0.1"
+                       onchange="updateCorridorPreview()" oninput="updateCorridorPreview()"
+                       style="width:80px;">
+                <span style="font-size:11px; font-weight:700;">NM</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <label for="map-corridor-fill">Band transparency</label>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="range" id="map-corridor-fill" min="2" max="40" step="1"
+                       oninput="updateCorridorPreview()" onchange="updateCorridorPreview()"
+                       style="width:150px;">
+                <span id="map-corridor-fill-val" style="font-size:11px; font-weight:700; min-width:34px;"></span>
+              </div>
+            </div>
+            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+              Turn the band on and off with <b>◫ Corridor</b> on the map. It draws everything
+              within this distance of the whole flown track — round at the turns and round at
+              both ends, because that is genuinely the shape of &ldquo;within X of the route&rdquo;.
+              <b>It is geometry only.</b> It shows you <i>where</i> to read the chart&rsquo;s contours
+              and MEF beside your route; it does not compute an MSA and never states a safe
+              altitude — this planner holds no terrain data, by an explicit decision.
+              Below <b>0.1 NM</b> the band is narrower than the track symbol itself at the zooms you
+              read the chart at; above <b>25 NM</b> it is wider than a screenful, so both edges are
+              off screen at once and it has stopped being a corridor you can see the sides of.
+              <br><b>Transparency is yours to set</b> — the right value depends on the chart under
+              it. Below <b>2%</b> the band is not reliably visible against the topo raster; above
+              <b>40%</b> the contours and MEF figures stop being legible through it, which is the
+              whole point of drawing it. Inactive flight plans draw their band at half whatever you
+              choose.
+            </div>
+          </div>
+
+          <div class="setting-section">
             <h3>Zoom thresholds <span style="font-weight:normal; text-transform:none; font-size:10px;">— fixed, and why</span></h3>
             <p style="font-size:10px; color:var(--text-muted); margin:0; line-height:1.5;">
               Aerodromes appear from zoom <b id="map-zoom-ad">7</b>, reporting points from
@@ -915,7 +957,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 123 inline on*= handlers - 93 written
+    // map, markers, undoStack...) plus 128 inline on*= handlers - 98 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1140,7 +1182,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.60';
+    const APP_VERSION = '16.61';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1243,6 +1285,14 @@
     // and bubble to the map as "add a waypoint" instead of bending the line.
     map.createPane('airspacePane');
     map.getPane('airspacePane').style.zIndex = '380';
+    // THE CORRIDOR SITS UNDER EVERYTHING (v16.61). It is a background band, so
+    // it goes below the airspace overlay (380) and far below Leaflet's own
+    // overlayPane (400) that carries the route line and its 20 px grab line.
+    // Above them, a press meant for a leg would hit the band first and bubble
+    // to the map as "add a waypoint" - the pane-order trap the v16.31 airspace
+    // entry describes, which was found by dragging a real line in Chromium.
+    map.createPane('corridorPane');
+    map.getPane('corridorPane').style.zIndex = '370';
     const baseTiles = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
       maxZoom: 18,
       noWrap: true,
@@ -2834,6 +2884,9 @@
           });
         }
       });
+      // THE CORRIDOR FOLLOWS THE TRACK, so it is redrawn wherever the line is -
+      // including every live drag, which is what refreshMap is for.
+      drawCorridor();
     }
 
     /**
@@ -3325,6 +3378,93 @@
             'inside Polaris CTA the card names the sector your cursor is in. ' +
             'Published limits only - verify against the current AIP and NOTAM.', 'info', 7000);
       }
+    }
+
+    // ---- 2h. THE CORRIDOR RING (v16.61, roadmap item 2) -------------------
+    //
+    // A band of a chosen radius either side of the WHOLE flown track, so the
+    // pilot can see which contours, MEF figures and airspace actually lie
+    // beside their route. It is geometry and nothing else: this tool has no
+    // terrain data by an explicit decision, so it says WHERE to read the chart
+    // and never what the safe altitude is. The maths is in src/lib/corridor.js.
+
+    let corridorLayers = [];
+
+    function corridorEnabled() { return aircraftProfile.corridorOn === true; }
+
+    function corridorRadiusNM() { return normaliseCorridorNM(aircraftProfile.corridorNM); }
+
+    /** How see-through the band is. A PREFERENCE (the pilot's request): the
+     *  right value depends on the chart underneath, and the whole point of the
+     *  band is that the contours and MEF stay readable through it. */
+    function corridorFill() { return normaliseCorridorFillPct(aircraftProfile.corridorFillPct) / 100; }
+
+    function updateCorridorBtn() {
+      const b = document.getElementById('corridor-btn');
+      if (!b) return;
+      b.textContent = corridorEnabled()
+        ? '\u25eb Corridor: ' + corridorRadiusNM() + ' NM'
+        : '\u25eb Corridor: Off';
+      b.classList.toggle('active', corridorEnabled());
+    }
+
+    function toggleCorridor() {
+      aircraftProfile.corridorOn = !corridorEnabled();
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      updateCorridorBtn();
+      drawCorridor();
+      if (corridorEnabled()) {
+        say('Corridor on: ' + corridorRadiusNM() + ' NM either side of the track. It shows ' +
+            'you where to read the chart - it does not compute an MSA. Radius is on the Map ' +
+            'page of Settings.', 'info', 7000);
+      }
+    }
+
+    function clearCorridor() {
+      corridorLayers.forEach(l => map.removeLayer(l));
+      corridorLayers = [];
+    }
+
+    /**
+     * ONE POLYGON, MANY RINGS. corridorPieces returns a band per segment and a
+     * disc per turn; their UNION is the corridor. Handing them to a single
+     * L.polygon gives one fill, so overlaps cannot double-darken the chart the
+     * band is drawn over - and `fillRule: 'nonzero'` is load-bearing, because
+     * under the default evenodd every overlap would punch a hole straight
+     * through the band at exactly the turns.
+     */
+    function drawCorridor() {
+      clearCorridor();
+      if (!corridorEnabled() || !map) return;
+      const r = corridorRadiusNM();
+      flights.forEach((fl, fIdx) => {
+        const path = flightLineCoords(fl);
+        if (path.length < 1) return;
+        // Same rule as the route line: an inactive plan's corridor fades, or
+        // several overlapping bands would be a wash.
+        const dimmed = !isDoneMode && fIdx !== activeFlightIndex;
+        const pieces = corridorPieces(path, r);
+        if (!pieces.length) return;
+        const colour = ROUTE_COLORS[fIdx % ROUTE_COLORS.length];
+        // NESTED ONE LEVEL DEEPER ON PURPOSE. L.polygon([[ringA],[ringB]]) means
+        // "ringB is a HOLE in ringA"; L.polygon([[[ringA]],[[ringB]]]) means two
+        // separate polygons. The pieces are a UNION, not a shape with holes, so
+        // the discs at the turns would have been punched OUT of the bands.
+        const poly = L.polygon(pieces.map((ring) => [ring]), {
+          pane: 'corridorPane',
+          color: colour,
+          weight: 1,
+          opacity: dimmed ? 0.25 : 0.7,
+          dashArray: '6, 5',
+          fill: true,
+          fillColor: colour,
+          fillOpacity: dimmed ? corridorFill() / 2 : corridorFill(),
+          fillRule: 'nonzero',
+          interactive: false            // never take a click meant for the map
+        });
+        poly.addTo(map);
+        corridorLayers.push(poly);
+      });
     }
 
     function clearAirspace() {
@@ -4394,10 +4534,37 @@
       document.getElementById('set-auto-plan').value =
         normaliseBool(aircraftProfile.autoPlanAfterStop, true) ? 'yes' : 'no';
       updateRouteWeightPreview();
+      document.getElementById('map-corridor-nm').value = String(corridorRadiusNM());
+      document.getElementById('map-corridor-fill').value =
+        String(normaliseCorridorFillPct(aircraftProfile.corridorFillPct));
       document.getElementById('map-zoom-ad').textContent = String(AERODROME_MIN_ZOOM);
       document.getElementById('map-zoom-rp').textContent = String(REPORTING_POINT_MIN_ZOOM);
       document.getElementById('map-zoom-as').textContent = String(AIRSPACE_MIN_ZOOM);
       updateFixPreview();
+    }
+
+    /**
+     * The corridor radius, applied as you type.
+     *
+     * RE-VALIDATED ON EVERY READ rather than trusted from the box, the same
+     * rule normaliseFixStyle and normaliseRouteWeight follow: the value is in
+     * PROFILE_KEYS, so it travels in an exported settings file and can arrive
+     * from one somebody else wrote, or from a hand-edited localStorage. It
+     * reaches Leaflet as a distance rather than as markup, so the risk is a NaN
+     * or an absurd band rather than injection - but the rule has no exceptions.
+     */
+    function updateCorridorPreview() {
+      const el = document.getElementById('map-corridor-nm');
+      if (!el) return;
+      aircraftProfile.corridorNM = normaliseCorridorNM(el.value);
+      const fill = document.getElementById('map-corridor-fill');
+      if (fill) {
+        aircraftProfile.corridorFillPct = normaliseCorridorFillPct(fill.value);
+        const out = document.getElementById('map-corridor-fill-val');
+        if (out) out.textContent = aircraftProfile.corridorFillPct + '%';
+      }
+      updateCorridorBtn();
+      drawCorridor();
     }
 
     /** The live preview, over a chart-ish background so the halo is visible.
@@ -5041,6 +5208,13 @@
         routeWeight: Number(document.getElementById('map-route-weight').value)
       });
       aircraftProfile.autoPlanAfterStop = document.getElementById('set-auto-plan').value !== 'no';
+      // The corridor radius is applied live as it is typed, but Save must also
+      // commit it: a pilot who edits the box and presses Save & Recalculate
+      // without leaving the field would otherwise lose the change.
+      const corrEl = document.getElementById('map-corridor-nm');
+      if (corrEl) aircraftProfile.corridorNM = normaliseCorridorNM(corrEl.value);
+      const corrFill = document.getElementById('map-corridor-fill');
+      if (corrFill) aircraftProfile.corridorFillPct = normaliseCorridorFillPct(corrFill.value);
 
       // The performance figures above are always stored internally in GPH/gal.
       // Only the *initial fuel on board* box is in display units, so convert it
@@ -6184,6 +6358,8 @@
     drawAirspace();
     updateFixesBtn();
     drawFixes();
+    updateCorridorBtn();    // same: the label carries the persisted radius
+    drawCorridor();
     updateChartDetailBtn();
     applyBaseChart();       // also needs aircraftProfile (persisted chart choice)
     renderVersionBadge();

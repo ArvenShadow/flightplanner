@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 36 shared mutable
+    decision, not unfinished work: it is one web of 37 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -1434,8 +1434,9 @@ scoped. In the user's order:
    BOC and BOD placeable. See "PINNED CLIMB AND DESCENT CORNERS" above.
    The insert-a-waypoint gesture moved INTO the panel rather than being
    replaced, so nothing was lost.
-2. **An editable radius ring (default 1 NM) around the whole track**, for
-   MSA planning - a corridor buffer drawn along the route.
+2. **DONE at v16.61** - an editable radius ring (default 1 NM) around the whole
+   track, for MSA planning. See "The corridor ring" above. Radius and
+   transparency are Map settings; it draws geometry only and computes no MSA.
 3. **DONE at v16.34** — AIP reimplementation with anchored waypoints:
    aerodromes with their reporting points and the information for each. See
    "AIP FIXES" above. 53 aerodromes, 243 reporting points, clickable and
@@ -2022,6 +2023,88 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 - CLAUDE.md said "ENTC's published 32 ft gives 1000 ft" - the published figure is **32 ft**
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
+
+## The corridor ring (v16.61, roadmap item 2)
+
+A band of a chosen radius either side of the WHOLE flown track. The author's
+purpose, in their words: *"to easily find the MSA around my track by referencing
+the altitudes on the chart, its supposed to be [see-through] to be able to read
+off the chart"*.
+
+- **IT IS GEOMETRY, AND IT SAYS SO EVERYWHERE.** It shows WHERE to read the
+  chart's contours and MEF; it computes no MSA and states no altitude. That is
+  the terrain decision (Kartverket's elevation API was offered and DECLINED)
+  applied consistently - a height invented here would be the plausible wrong
+  answer this project exists to refuse. The guide, the setting's help text and
+  the button tooltip all say it.
+- **ROUND JOINS AND ROUND CAPS ARE NOT A STYLE CHOICE.** "Within 1 NM of the
+  track" is a SET, and the boundary of that set is genuinely circular at every
+  vertex and both ends. A squared end would stop the corridor flat across the
+  departure fix; a mitred outer corner would claim ground further away than the
+  radius.
+- **THE UNION IS DRAWN AS PIECES, NOT AS ONE TRAVERSAL.** `corridorPieces`
+  returns a band per leg plus a disc per turn, handed to ONE `L.polygon` so
+  there is one fill and nothing double-darkens (the v16.30 defect). A single
+  traversal has to fold back at the inside of a turn, and where the fold is
+  tight the winding cancels and the fill punches a NOTCH out of the band -
+  measured at 2-9 of 224 boundary samples once the turn approaches a hairpin
+  and the radius reaches half the leg length. Rare, and a hole in the corridor
+  at the corner a pilot looks hardest at.
+- **`fillRule: 'nonzero'` IS LOAD-BEARING.** Under the default evenodd every
+  overlap between pieces becomes a hole, at exactly the turns.
+- **`L.polygon([[ringA],[ringB]])` MEANS "ringB IS A HOLE IN ringA".** The discs
+  were being punched OUT of the bands until the pieces were nested one level
+  deeper as a MultiPolygon. Nothing in the maths was wrong; the handoff was.
+- **A MITER AT INNER CORNERS WAS WRITTEN AND THEN DELETED.** Removing it changed
+  no test, because the disc at every turn already covers that pocket. Two
+  mechanisms for one job, one of them limited at sharp angles and untested
+  because the other hid it. Prefer the deletion to the second mechanism.
+- **THE EDGE IS WALKED, NOT STEPPED END TO END.** A leg's bearing changes along
+  it - a third of a degree over 38 NM at 69 N, and miles over a 600 NM leg - so
+  offsetting only the two endpoints draws an edge that leaves the corridor in
+  the middle. The step is capped BOTH absolutely (10 NM) and at twice the
+  radius, because what matters is the chord sag as a FRACTION of the radius.
+- **THE TRANSPARENCY IS A SETTING** (2-40%, default 8%, the pilot's request):
+  the right value depends on the chart underneath. The bounds are argued -
+  below 2% the band is not reliably visible, above 40% the contours and MEF stop
+  being legible through it, which is the whole point.
+- Radius 0.1-25 NM: below 0.1 the band is narrower than the track symbol at
+  reading zoom; above 25 it is wider than a screenful, so both edges are off
+  screen and it has stopped being a corridor you can see the sides of.
+- Its own pane at z-index **370** - below airspace (380) and far below the route
+  line (400). Above them, a press meant for a leg would hit the band first and
+  bubble to the map as "add a waypoint". `interactive: false` as well.
+
+### THREE TEST FAILURES THAT WERE THE TEST, NOT THE CODE
+
+Worth recording, because each cost a cycle and each has the same shape - the
+harness being less exact than the thing it measures:
+
+1. A sampler walking a CONSTANT INITIAL BEARING instead of the geodesic. Over
+   600 NM it is a different line, so a correct corridor failed.
+2. A distance-to-track search sampling COARSER THAN THE RADIUS: 400 steps over
+   a 604 NM leg is 1.5 NM apart, and it reported a 0.1 NM corridor as reaching
+   0.761 NM. Replaced with a coarse scan plus a bisection.
+3. `isPointInFill` fed container coordinates. Leaflet transforms its pane, so
+   `getScreenCTM` did not account for it and every probe came back false.
+   Measuring the band's WIDTH against Leaflet's own projection needs no
+   coordinate gymnastics and proves the same thing.
+
+### AND FOUR MUTATIONS THAT REVEALED MORE THAN THE FEATURE
+
+- **A MUTATION KILLED BY `tsc` PROVES NOTHING.** Twice a mutation made a local
+  unused, so `noUnusedLocals` failed the run BEFORE the tests - zero FAIL lines,
+  which reads exactly like "not caught". Mutate so the identifier stays
+  referenced (`Math.min(1, ...)` rather than `1`).
+- **`grep ... | head` ALWAYS EXITS 0**, so `|| echo "not caught"` never fires.
+  Count the FAIL lines instead.
+- **TESTING RING VERTICES CANNOT CATCH CHORD SAG.** Every vertex of a
+  chord-only edge is at exactly r by construction; it is the straight line
+  BETWEEN them that leaves the corridor. The test now checks segment midpoints
+  too, which is what finally caught the un-densified build.
+- **A THRESHOLD JUST ABOVE THE BROKEN VALUE IS NOT A GUARD.** `band.length >
+  L / 10` was 62 for a 604 NM leg and the broken build produced 66, so it
+  passed. It is `> 300` now, against a real value in the thousands.
 
 ## The keyboard belongs to the pilot (v16.52, roadmap item 10)
 
