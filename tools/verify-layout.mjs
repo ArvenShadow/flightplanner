@@ -626,6 +626,28 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
     `the altitude column is wider than the read-only ones beside it ${JSON.stringify(cols)}`);
   check(cols.OAT >= cols.MT && cols.VAR >= cols.MT,
     `OAT and VAR are no longer the narrowest columns in the table ${JSON.stringify(cols)}`);
+
+  // WHICH HALF IS LOAD-BEARING, measured rather than assumed. `min-width` on a
+  // table CELL is honoured differently between engines, so the floors on the
+  // th cannot be the guarantee - they are the tidier allocation. Turning them
+  // off is what an engine that ignores them would do, and the floors on the
+  // INPUT (an ordinary box, honoured everywhere) must still clip nothing.
+  const withoutThFloors = await page.evaluate(async () => {
+    const st = document.createElement('style');
+    st.id = 'kill-th-floors';
+    st.textContent = 'th.col-alt, th.col-num { min-width: 0 !important; }';
+    document.head.appendChild(st);
+    applyPaneRatio(false, 0.85);
+    await new Promise((x) => setTimeout(x, 300));
+    const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('td'));
+    const out = ins.filter((i) => i.scrollWidth > i.clientWidth).map((i) => i.value);
+    st.remove();
+    applyPaneRatio(false, null);
+    return out;
+  });
+  check(withoutThFloors.length === 0,
+    'with the column floors ignored, the floors on the input alone must still hold' +
+    (withoutThFloors.length ? ': ' + withoutThFloors.join(', ') : ''));
   await page.evaluate(() => applyPaneRatio(false, null));
   await ctx.close();
 }

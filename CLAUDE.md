@@ -2024,6 +2024,34 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+### WHY TEXT DEFENDS ITSELF AND AN INPUT DOES NOT (v16.70, the pilot's question)
+
+*"What is different between the OAT field and say, the TAS field which is always
+visible when narrowing the sidebar?"* It is the right question and it names the
+mechanism: **TAS is TEXT in a cell, OAT is an `<input>`.**
+
+- A table column can never be squeezed below its content's MIN-CONTENT width,
+  and text has one for free - the browser will not take the TAS column below the
+  width of `119`. An `<input>` with `width: 100%` contributes essentially NONE,
+  so the column is free to shrink and the value is clipped INSIDE the box rather
+  than overflowing it. Every editable column in this table needs its minimum
+  stated explicitly, because text gets one and a control does not.
+- **THE FLOOR ON THE INPUT IS THE GUARANTEE; THE FLOOR ON THE `th` IS THE TIDIER
+  ALLOCATION.** Measured by disabling each half in turn: with the `th` floors
+  ignored - which is what an engine that does not honour `min-width` on a table
+  CELL would do - the input floors alone still clip nothing. The reverse is not
+  true. A verifier check now disables the `th` floors and re-measures, so which
+  half is load-bearing is asserted rather than believed.
+- **THE FLOORS COUNT THE BOX, NOT THE DIGITS**, and v16.69 left that out: 4 px
+  of padding and 2 px of border is about a character on top of the value, so a
+  5.4ch floor gave a five-digit altitude 4.4ch of room. 6.5ch and 4.5ch now.
+- **TWO ALTERNATIVES WERE TRIED AND MEASURED AND ARE NOT SHIPPED.** The `size`
+  attribute does NOTHING while `width: 100%` stands - it was added, measured
+  with both CSS floors off, left the value clipped, and was removed rather than
+  left in place looking like a safeguard. `min-width: fit-content` on a form
+  control resolves to nothing useful for the same reason. Shipping either as
+  belt-and-braces would be documentation getting ahead of the code.
+
 ### TYPING IS NOT A SHORTCUT, AND THE COLUMN IS WHAT HOLDS THE NUMBER (v16.69)
 
 Two reports from the same session with the OFP table.
