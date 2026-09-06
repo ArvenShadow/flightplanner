@@ -25,7 +25,7 @@
  *  Aircraft performance, units and display preference - nothing that
  *  identifies a person, a machine or a place. */
 import { normaliseKeymap } from './keys.js';
-import { normaliseStopKind, normaliseStopMinutes } from './anchors.js';
+import { normaliseStopKind, normaliseStopMinutes, normaliseRefuelGal } from './anchors.js';
 
 export const PROFILE_KEYS = [
   'mode', 'cruiseRpm', 'cruiseMp', 'cruiseTas', 'cruiseFf',
@@ -133,7 +133,14 @@ function sanitiseWaypoint(/** @type {any} */ w) {
   // guessed at - a stop the app does not understand must not silently become
   // one it does. The minutes follow the kind, so clearing the kind clears both.
   const stop = normaliseStopKind(w.stop);
-  if (stop) { out.stop = stop; out.stopMin = normaliseStopMinutes(stop, w.stopMin); }
+  if (stop) {
+    out.stop = stop;
+    out.stopMin = normaliseStopMinutes(stop, w.stopMin);
+    // Refuelling belongs to a FULL STOP only: a touch & go never stops moving.
+    // Stored in gallons, so switching display units cannot reinterpret it.
+    const gal = stop === 'full-stop' ? normaliseRefuelGal(w.fuelAfterGal) : null;
+    if (gal !== null) out.fuelAfterGal = gal;
+  }
   if (out.isPattern) out.laps = Math.max(1, Math.floor(num(w.laps)) || 1);
   // Pins: cleared is null, never 0, so a route saved before pins existed reads
   // identically to one made after.

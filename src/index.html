@@ -271,7 +271,7 @@
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Click a published aerodrome and say what happens there.</b> Three things mean three different plans, so the planner asks rather than guessing:
               <b>🔁 Touch &amp; go</b> — the aircraft never stops. It costs <b>5 minutes</b> of circuit time (priced at your <i>pattern</i> fuel flow, since that is what it is), then you are asked whether to fly <b>circuits</b> here; say yes and the laps are added at the derived circuit altitude.
-              <b>🛩 Full stop</b> — <b>10 minutes</b> on the ground, and the next sector pays a fresh <b>start-up and taxi</b>, because the engine was shut down and started again.
+              <b>🛩 Full stop</b> — <b>10 minutes</b> on the ground, and the next sector pays a fresh <b>start-up and taxi</b>, because the engine was shut down and started again. If you refuel there, put the fuel on board into the <b>⛽ Fuel after</b> box in the next plan's header and that sector departs with it; leave it empty and whatever is left carries over. It is <b>not</b> checked against tank capacity — the planner holds no published usable-fuel figure for the aircraft, so what fits in the tanks is your call. (A touch & go gets no such box: the engine never stops.)
               <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing.
               <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
@@ -914,8 +914,8 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 121 inline on*= handlers - 93 written
-    // into the markup and 28 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 123 inline on*= handlers - 93 written
+    // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -1139,7 +1139,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.56';
+    const APP_VERSION = '16.57';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3566,6 +3566,20 @@
       if (!kind) return '';
       const mins = normaliseStopMinutes(kind, wp.stopMin);
       const label = kind === 'full-stop' ? '\ud83d\udee9 Full stop' : '\ud83d\udd01 Touch \u0026 go';
+      const unit = aircraftProfile.fuelUnit || 'GAL';
+      const refuelGal = kind === 'full-stop' ? normaliseRefuelGal(wp.fuelAfterGal) : null;
+      // THE REFUEL BOX IS OFFERED ONLY AT A FULL STOP - a touch & go never
+      // stops moving. Empty means "carry on with what is left".
+      const refuel = kind !== 'full-stop' ? '' :
+        '<span style="font-size:11px; font-weight:normal; background:rgba(0,0,0,0.2); ' +
+        'padding:2px 6px; border-radius:4px;" title="Fuel on board when this sector departs. ' +
+        'Leave empty to carry on with whatever is left. This is NOT checked against tank ' +
+        'capacity - the planner holds no published usable-fuel figure for the aircraft, so ' +
+        'what fits in the tanks is your call.">\u26fd Fuel after ' + esc(wp.name) + ': ' +
+        '<input type="number" class="flight-dep-input" min="0" step="1" placeholder="carry over" ' +
+        'value="' + (refuelGal === null ? '' : convertFuel(refuelGal, unit).toFixed(1)) +
+        '" onfocus="this.select()" onchange="setStopRefuel(' + (fIdx - 1) + ', this.value)"> ' +
+        esc(fuelLabel(unit)) + '</span>';
       const why = kind === 'full-stop'
         ? 'Minutes on the ground at ' + esc(wp.name) + ' before this sector departs. The next ' +
           'sector also pays a fresh start-up and taxi fuel.'
@@ -3574,7 +3588,32 @@
       return '<span style="font-size:11px; font-weight:normal; background:rgba(0,0,0,0.2); ' +
         'padding:2px 6px; border-radius:4px;" title="' + why + '">' + label + ' ' + esc(wp.name) +
         ': <input type="number" class="flight-dep-input" min="1" max="600" step="5" value="' + mins +
-        '" onfocus="this.select()" onchange="setStopMinutes(' + (fIdx - 1) + ', this.value)"> min</span>';
+        '" onfocus="this.select()" onchange="setStopMinutes(' + (fIdx - 1) + ', this.value)"> min</span>' +
+        refuel;
+    }
+
+    /** Fuel on board after a refuelling stop. Typed in DISPLAY units, stored in
+     *  gallons - the one conversion point, so a later change of units cannot
+     *  reinterpret a figure already written into a saved route. */
+    function setStopRefuel(prevIdx, val) {
+      const prev = flights[prevIdx];
+      if (!prev) return;
+      const wp = [...prev.waypoints].reverse().find((w) => !w.isPattern);
+      if (!wp || normaliseStopKind(wp.stop) !== 'full-stop') return;
+      pushUndoState('change the fuel after a stop');
+      const unit = aircraftProfile.fuelUnit || 'GAL';
+      const raw = String(val).trim();
+      if (raw === '') {
+        delete wp.fuelAfterGal;
+      } else {
+        const asGal = unit === 'LITERS' ? Number(raw) / 3.78541
+                    : unit === 'KG' ? Number(raw) / 2.72
+                    : Number(raw);
+        const gal = normaliseRefuelGal(asGal);
+        if (gal === null) delete wp.fuelAfterGal; else wp.fuelAfterGal = gal;
+      }
+      renderAllFlightTables();
+      saveActiveState();
     }
 
     function setStopMinutes(prevIdx, val) {
@@ -4754,6 +4793,14 @@
           runningAccTime += stopMin;
           if (stopKind === 'full-stop') {
             taxiFuelApplied = false;      // the next departure pays for its own start-up
+            // A REFUELLING STOP SETS THE FUEL ON BOARD OUTRIGHT (v16.57). It is
+            // stored in gallons and converted here, so the figure survives a
+            // change of display units. Absent means "carry on with what is
+            // left", which is what every plan did before this existed.
+            const refuelGal = normaliseRefuelGal(lastReal.fuelAfterGal);
+            if (refuelGal !== null) {
+              runningFuelRemaining = Number(convertFuel(refuelGal, fuelUnit).toFixed(1));
+            }
           } else {
             const gal = (Number(aircraftProfile.patternFf) || 0) * (stopMin / 60);
             const burn = Number(convertFuel(gal, fuelUnit).toFixed(1));

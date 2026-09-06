@@ -294,6 +294,39 @@ export const STOP_DEFAULT_MIN = { 'touch-go': 5, 'full-stop': 10 };
 export const STOP_MIN_MINUTES = 1;
 export const STOP_MAX_MINUTES = 600;
 
+/**
+ * REFUELLING AT A FULL STOP (v16.57, the pilot's request).
+ *
+ * A full stop is where fuel goes in, so the fuel on board for the next sector
+ * can be set outright rather than carried over. Stored in GALLONS like every
+ * other fuel figure in this project - the POH's unit - and converted only for
+ * display, so a pilot switching to litres cannot silently reinterpret a number
+ * already written into a saved route.
+ *
+ * A TOUCH & GO CANNOT REFUEL and the field is not offered there: the engine
+ * never stops and the aircraft never leaves the runway. That is a real
+ * constraint, not a UI simplification.
+ *
+ * THE CAP IS A TYPO GUARD, NOT A TANK LIMIT, and the difference matters. This
+ * planner holds no published usable-fuel figure for the aircraft - the profile
+ * carries rates and a taxi burn, never a capacity - so it cannot tell 87
+ * gallons from 90. 1000 gal is roughly eleven times a C182's full tanks: it
+ * cannot reject a real figure, and it still catches a slipped decimal point or
+ * a corrupted file. The pilot is the authority on what fits in the tanks, and
+ * the field says so.
+ */
+export const REFUEL_MAX_GAL = 1000;
+
+/** Fuel on board after a stop, in gallons. null means "carry on with what is
+ *  left", which is what every plan did before this existed.
+ *  @param {any} v @returns {number|null} */
+export function normaliseRefuelGal(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  if (!isFinite(n) || n < 0) return null;
+  return Math.min(REFUEL_MAX_GAL, Math.round(n * 10) / 10);
+}
+
 /** @param {any} kind @returns {string|null} */
 export function normaliseStopKind(kind) {
   return typeof kind === 'string' && STOP_KINDS.includes(kind) ? kind : null;

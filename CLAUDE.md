@@ -1805,7 +1805,7 @@ job. What the cycle changed, and what it exposed:
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
 
-## What happens at an aerodrome (v16.54-v16.56, roadmap item 17)
+## What happens at an aerodrome (v16.54-v16.57, roadmap item 17)
 
 Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 **fly-by**. They are three different plans, and only the pilot knows which.
@@ -1837,6 +1837,27 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   question CLAUDE.md left open at v16.43: the old note guessed that a touch & go
   would resume from the circuit altitude, and the pilot's answer is that both
   resume from the field - you are on the runway either way.
+- **A FULL STOP CAN REFUEL (v16.57, the pilot's request), AND A TOUCH & GO
+  CANNOT.** The fuel on board for the next sector is set outright in the `⛽ Fuel
+  after` box beside the ground time; empty means "carry on with what is left",
+  which is what every plan did before this existed. The touch & go gets no box
+  at all - the engine never stops and the aircraft never leaves the runway -
+  and the sanitiser drops a refuel figure on one, so a hand-edited file cannot
+  smuggle it in either.
+  - **STORED IN GALLONS, TYPED AND SHOWN IN THE PILOT'S UNIT.** Every fuel
+    figure in this project is held in the POH's unit and converted only for
+    display; a refuel value travels in saved routes, so storing it in display
+    units would let a later switch to litres silently reinterpret a number
+    already written down. `setStopRefuel` is the one conversion point.
+  - **THE CAP IS A TYPO GUARD, NOT A TANK LIMIT**, and the difference is the
+    same one MAX_ARP_NM turns on. This planner holds NO published usable-fuel
+    figure for the aircraft - the profile carries rates and a taxi burn, never a
+    capacity - so it cannot tell 87 gallons from 90 and must not pretend to.
+    1000 gal is roughly eleven times a C182's full tanks: it cannot reject a
+    real figure and still catches a slipped decimal. The field says outright
+    that what fits in the tanks is the pilot's call.
+  - ZERO IS A REAL ANSWER, not "unset". A sector that departs with empty tanks
+    must show it rather than silently carrying the previous figure over.
 - **AN AERODROME IS AT FIELD ELEVATION ONLY WHEN THE AIRCRAFT IS ON IT (v16.56,
   the pilot's bug report).** `anchorWaypoint` gave EVERY aerodrome waypoint its
   published elevation, which is right for a departure and for a stop - the
