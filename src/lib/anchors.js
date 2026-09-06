@@ -62,6 +62,7 @@ export function foldName(s) {
  * @property {string} label          what to draw on the map
  * @property {string} detail         one line for the picker and the tooltip
  * @property {number|null} elevFt    aerodrome elevation; null for a point
+ * @property {string} [city]         the town, for naming a fly-by waypoint
  * @property {string|null} published the printed DMS, where there is one
  * @property {string[]} folds        every spelling this anchor answers to,
  *                                   folded. An aerodrome answers to its ICAO
@@ -89,6 +90,11 @@ export function buildAnchors(dataset) {
       out.push({
         kind: 'AD', name: a.icao, icao: a.icao, lat: a.lat, lng: a.lng,
         label: a.icao,
+        // The town, carried through so a FLY-BY can be named after the place
+        // rather than the ICAO code (v16.54). Without it civilName() fell back
+        // to `name` - which for an aerodrome anchor IS the code - and a fly-by
+        // over Tromsø would have been called "Entc".
+        city: a.city || a.name || '',
         detail: a.name + (a.elevFt !== null && a.elevFt !== undefined ? ` · ${a.elevFt} ft` : '') +
           (a.situation ? ` · ${a.situation}` : ''),
         elevFt: typeof a.elevFt === 'number' ? a.elevFt : null,
@@ -254,6 +260,77 @@ export const FIX_SIZE_MAX = 18;
 export const ROUTE_WEIGHT_MIN = 2;
 export const ROUTE_WEIGHT_MAX = 10;
 export const ROUTE_WEIGHT_DEFAULT = 4;
+
+/**
+ * WHAT HAPPENS AT AN AERODROME (v16.54, roadmap item 17).
+ *
+ * Clicking a published aerodrome offers three things, because they mean three
+ * different things to the plan:
+ *
+ *  - TOUCH & GO   the aircraft never stops. It costs circuit time and then
+ *                 climbs out again, so the next sector departs from the FIELD
+ *                 ELEVATION. Optionally followed by circuits (the existing
+ *                 PATTERN mechanism, unchanged).
+ *  - FULL STOP    the aircraft is on the ground. It costs ground time AND a
+ *                 fresh start-up and taxi, which is why taxi fuel is charged
+ *                 per full stop rather than once per mission - the author
+ *                 settled that in AUDIT.md.
+ *  - FLY-BY       nothing happens at all. It is an ordinary waypoint that
+ *                 happens to be over an aerodrome, named after the place.
+ *
+ * THE DEFAULT MINUTES ARE THE PILOT'S FIGURES, not measured ones - 5 for a
+ * touch and go, 10 for a full stop - and both are editable per stop, because
+ * how long a turnaround takes is a fact about the day, not about the aircraft.
+ */
+export const STOP_KINDS = ['touch-go', 'full-stop'];
+/** @type {Record<string, number>} */
+export const STOP_DEFAULT_MIN = { 'touch-go': 5, 'full-stop': 10 };
+/** Nobody turns a C182 round in under a minute, and a stop longer than a
+ *  working day is a typo rather than a plan. */
+export const STOP_MIN_MINUTES = 1;
+export const STOP_MAX_MINUTES = 600;
+
+/** @param {any} kind @returns {string|null} */
+export function normaliseStopKind(kind) {
+  return typeof kind === 'string' && STOP_KINDS.includes(kind) ? kind : null;
+}
+
+/** Minutes for a stop, validated. Absent means the kind's default.
+ *  @param {any} kind @param {any} min @returns {number|null} */
+export function normaliseStopMinutes(kind, min) {
+  const k = normaliseStopKind(kind);
+  if (!k) return null;
+  const n = Number(min);
+  if (!isFinite(n)) return STOP_DEFAULT_MIN[k];
+  return Math.min(STOP_MAX_MINUTES, Math.max(STOP_MIN_MINUTES, Math.round(n)));
+}
+
+/**
+ * The civil name of an aerodrome, for a fly-by waypoint.
+ *
+ * THE AIP PUBLISHES TWO NAMES AND NEITHER IS ALWAYS THE ONE PILOTS SAY.
+ * `city` is the town (TROMSØ, HARSTAD/NARVIK); `name` adds the aerodrome after
+ * a " / " on 35 of the 53 (TROMSØ / Langnes, HARSTAD/NARVIK / Evenes). A pilot
+ * says "Tromsø" for the first and "Evenes" for the second, so no single field
+ * reproduces both - which is exactly the kind of gap this project refuses to
+ * paper over with a guess.
+ *
+ * So this returns the published CITY, title-cased: it is a real published
+ * value, it is the shorter of the two, and it is the town the point is over.
+ * The dialog SHOWS the name before the pilot commits, and a waypoint is
+ * renameable in one right-click, so nothing here is a trap.
+ *
+ * @param {any} ad an aerodrome record from the dataset
+ * @returns {string}
+ */
+export function civilName(ad) {
+  const raw = String((ad && (ad.city || ad.name)) || '').trim();
+  if (!raw) return '';
+  // Title-case each word, keeping "/" and "-" as separators: HARSTAD/NARVIK
+  // becomes Harstad/Narvik, not Harstad/narvik.
+  return raw.toLocaleLowerCase('nb')
+    .replace(/(^|[\s/\-])([^\s/\-])/g, (m, sep, ch) => sep + ch.toLocaleUpperCase('nb'));
+}
 
 /** @param {any} profile @returns {number} px */
 export function normaliseRouteWeight(profile) {

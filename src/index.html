@@ -266,9 +266,16 @@
           <h3>🚀 Quick Start</h3>
           <ul style="margin-left:16px;">
             <li><b>Click the map</b> to add a waypoint. Name it in the prompt — the first click is your departure.</li>
-            <li>Type <b>PATTERN</b> as the name — or press the <b>traffic-circuit</b> option — to log circuit laps (time &amp; fuel, no distance). The <b>circuit altitude is filled in from the aerodrome you are at</b>: the published field elevation rounded to the nearest 100 ft, plus 1000 ft — so ENTC's 31 ft gives 1000 ft. ENDU is set to <b>1500 ft</b>, the figure the school flies. This is a <b>derived default, not a published value</b> — the eAIP gives us elevations, never circuit altitudes, so check the VAC and edit the cell if it differs. More than 5 NM from any aerodrome nothing is derived and the cell is yours to fill.</li>
+            <li>Type <b>PATTERN</b> as the name — or press the <b>traffic-circuit</b> option — to log circuit laps (time &amp; fuel, no distance). The <b>circuit altitude is filled in from the aerodrome you are at</b>: the published field elevation rounded to the nearest 100 ft, plus 1000 ft — so ENTC's published 32 ft gives 1000 ft. ENDU is set to <b>1500 ft</b>, the figure the school flies. This is a <b>derived default, not a published value</b> — the eAIP gives us elevations, never circuit altitudes, so check the VAC and edit the cell if it differs. More than 5 NM from any aerodrome nothing is derived and the cell is yours to fill.</li>
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
+            <li><b>Click a published aerodrome and say what happens there.</b> Three things mean three different plans, so the planner asks rather than guessing:
+              <b>🔁 Touch &amp; go</b> — the aircraft never stops. It costs <b>5 minutes</b> of circuit time (priced at your <i>pattern</i> fuel flow, since that is what it is), then you are asked whether to fly <b>circuits</b> here; say yes and the laps are added at the derived circuit altitude.
+              <b>🛩 Full stop</b> — <b>10 minutes</b> on the ground, and the next sector pays a fresh <b>start-up and taxi</b>, because the engine was shut down and started again.
+              <b>➡ Fly-by</b> — nothing happens: an ordinary waypoint named after the <b>place</b> rather than the code (Bardufoss, Tromsø, Harstad/Narvik).
+              <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
+              <br><b>The fly-by name comes from the AIP's own "city" field</b>, title-cased. The AIP publishes two names and neither is always the one pilots say — Tromsø's aerodrome is <i>Langnes</i>, and Evenes' town is <i>Harstad/Narvik</i> — so the dialog shows the exact name before you choose, and you can right-click to rename.
+              <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
             <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only.
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
@@ -791,6 +798,25 @@
           </div>
 
           <div class="setting-section">
+            <h3>At an aerodrome</h3>
+            <div class="setting-row">
+              <label>After a touch &amp; go or full stop:</label>
+              <div>
+                <select id="set-auto-plan" style="width:210px;">
+                  <option value="yes">Open the next flight plan</option>
+                  <option value="no">Stay on this one</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">
+              A touch &amp; go or a full stop ends a sector, so the planner offers to start the
+              next one for you — departing from that aerodrome's published field elevation, with
+              its ground time editable in the new plan's header. Turn it off if you would rather
+              add sectors yourself. <b>Fly-by never opens a plan</b>: nothing happens there.
+            </div>
+          </div>
+
+          <div class="setting-section">
             <h3>Route track</h3>
             <div class="setting-row">
               <label>Track thickness:</label>
@@ -888,8 +914,8 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 119 inline on*= handlers - 93 written
-    // into the markup and 26 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 121 inline on*= handlers - 93 written
+    // into the markup and 28 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -1113,7 +1139,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.53';
+    const APP_VERSION = '16.54';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2372,6 +2398,15 @@
       if (lastFlight && lastFlight.waypoints.length > 0) {
         const lastWP = lastFlight.waypoints[lastFlight.waypoints.length - 1];
         newDepElev = lastWP.isPattern ? (lastFlight.waypoints[lastFlight.waypoints.length - 2]?.alt || 300) : (lastWP.alt || 300);
+        // AFTER A TOUCH & GO OR A FULL STOP THE NEXT SECTOR DEPARTS FROM THE
+        // FIELD (v16.54). The aircraft was on (or on to) the runway, so the
+        // climb starts at the published field elevation - not at the circuit
+        // altitude, and not at whatever the arrival row happened to say.
+        const stopWp = lastWP.isPattern ? lastFlight.waypoints[lastFlight.waypoints.length - 2] : lastWP;
+        if (stopWp && stopWp.stop) {
+          const ad = aerodromeAt(stopWp);
+          if (ad && typeof ad.elevFt === 'number') newDepElev = ad.elevFt;
+        }
         
         initialWPs.push({
           lat: lastWP.lat,
@@ -3497,7 +3532,7 @@
           keyboard: false
         }).addTo(map);
         m.bindTooltip(fixCardHTML(a), { className: 'fix-tip', direction: 'top', offset: [0, -6] });
-        m.on('click', function() { addAnchorWaypoint(a); });
+        m.on('click', function() { clickAnchor(a); });
         fixLayers.push(m);
       }
       if (label) {
@@ -3514,7 +3549,160 @@
      * HAS its published name, and asking "what shall we call SØRREISA?" is a
      * click for nothing. It is undoable like every other edit.
      */
-    function addAnchorWaypoint(a) {
+    /**
+     * "Ground time before this sector", shown in the FOLLOWING plan's header.
+     *
+     * THE MINUTES LIVE ON THE STOP WAYPOINT - one source of truth, and they
+     * still count when the auto-open setting is off and there is no next plan.
+     * But the pilot asked to edit them "in the next plan", and that is the
+     * right place to look: it is the sector whose off-block time moves.
+     */
+    function stopBeforeHTML(fIdx) {
+      if (fIdx === 0) return '';
+      const prev = flights[fIdx - 1];
+      if (!prev || !prev.waypoints.length) return '';
+      const wp = [...prev.waypoints].reverse().find((w) => !w.isPattern);
+      const kind = wp ? normaliseStopKind(wp.stop) : null;
+      if (!kind) return '';
+      const mins = normaliseStopMinutes(kind, wp.stopMin);
+      const label = kind === 'full-stop' ? '\ud83d\udee9 Full stop' : '\ud83d\udd01 Touch \u0026 go';
+      const why = kind === 'full-stop'
+        ? 'Minutes on the ground at ' + esc(wp.name) + ' before this sector departs. The next ' +
+          'sector also pays a fresh start-up and taxi fuel.'
+        : 'Minutes in the circuit at ' + esc(wp.name) + ' before climbing out again, priced at ' +
+          'your pattern fuel flow.';
+      return '<span style="font-size:11px; font-weight:normal; background:rgba(0,0,0,0.2); ' +
+        'padding:2px 6px; border-radius:4px;" title="' + why + '">' + label + ' ' + esc(wp.name) +
+        ': <input type="number" class="flight-dep-input" min="1" max="600" step="5" value="' + mins +
+        '" onfocus="this.select()" onchange="setStopMinutes(' + (fIdx - 1) + ', this.value)"> min</span>';
+    }
+
+    function setStopMinutes(prevIdx, val) {
+      const prev = flights[prevIdx];
+      if (!prev) return;
+      const wp = [...prev.waypoints].reverse().find((w) => !w.isPattern);
+      if (!wp || !normaliseStopKind(wp.stop)) return;
+      pushUndoState('change the ground time');
+      wp.stopMin = normaliseStopMinutes(wp.stop, val);
+      renderAllFlightTables();
+      saveActiveState();
+    }
+
+    /** The published aerodrome a stop waypoint sits on, or null. Matched by
+     *  POSITION, using the same 5 NM rule the circuit altitude uses - a stop is
+     *  placed by clicking the aerodrome, so it is on the ARP, and the radius is
+     *  only there to tolerate a later drag. */
+    function aerodromeAt(wp) {
+      if (!wp || !isFinite(wp.lat) || !isFinite(wp.lng) || !AIP || !AIP.aerodromes) return null;
+      let best = null, bestNM = Infinity;
+      for (const ad of AIP.aerodromes) {
+        const d = roughNM([wp.lat, wp.lng], [ad.lat, ad.lng]);
+        if (d < bestNM) { bestNM = d; best = ad; }
+      }
+      return bestNM <= PATTERN_AD_MAX_NM ? best : null;
+    }
+
+    /** Only an explicit false turns a flag off; an absent key means the default,
+     *  so a route file made before the setting existed behaves as it always did. */
+    function normaliseBool(v, dflt) {
+      if (v === undefined || v === null) return dflt;
+      return v !== false && v !== 'false';
+    }
+
+    /**
+     * Circuits after a touch & go: the EXISTING pattern mechanism, unchanged.
+     * The altitude is derived from the field below (v16.40), and the laps are
+     * asked for the same way the map's own pattern option asks.
+     */
+    async function addPatternStop() {
+      const fl = flights[activeFlightIndex];
+      const prev = fl.waypoints[fl.waypoints.length - 1];
+      if (!prev) return;
+      const lapsInput = await promptDialog('Traffic circuit', 'Number of laps', '3',
+        { message: 'Priced at your pattern time and fuel figures in Settings.', okLabel: 'Add circuits' });
+      if (lapsInput === null) return;
+      const laps = Math.max(1, parseInt(lapsInput, 10) || 1);
+      const patAlt = patternAltitudeAt(prev.lat, prev.lng, AIP_ANCHORS);
+      pushUndoState('add circuits');
+      fl.waypoints.push({
+        lat: prev.lat, lng: prev.lng, name: 'PATTERN',
+        alt: patAlt ? patAlt.alt : prev.alt,
+        oat: prev.oat, wdir: prev.wdir, wspd: prev.wspd,
+        var: prev.var, varSource: prev.varSource, isPattern: true, laps: laps
+      });
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
+      if (patAlt) say('Circuit at ' + patAlt.name + ': ' + patAlt.alt + ' ft (derived - check the VAC).', 'info', 5000);
+    }
+
+    /**
+     * CLICKING AN AERODROME ASKS WHAT HAPPENS THERE (v16.54, roadmap item 17).
+     *
+     * A reporting point is still added with no dialog - it has a published name
+     * and there is nothing to decide. An AERODROME is different: overflying one,
+     * touching down and going, and shutting down for ten minutes are three
+     * different plans, and only the pilot knows which. That reverses the v16.34
+     * "no dialog on add" rule for aerodromes ONLY, and on purpose.
+     *
+     * The fly-by option NAMES the waypoint it will create in the dialog, because
+     * the AIP publishes two names and neither is always the one pilots say - see
+     * civilName() in anchors.js.
+     */
+    async function clickAnchor(a) {
+      if (!a || a.kind !== 'AD') { addAnchorWaypoint(a); return; }
+      const civil = civilName(a);
+      const chosen = await ask({
+        title: (a.icao || a.name) + ' - what happens here?',
+        message: 'A touch & go or a full stop ends this sector at the aerodrome and starts ' +
+                 'the next one from its field elevation' +
+                 (typeof a.elevFt === 'number' ? ' (' + a.elevFt + ' ft)' : '') + '.',
+        buttons: [
+          { id: 'touch-go', label: '\ud83d\udd01 Touch & go', variant: 'primary',
+            hint: STOP_DEFAULT_MIN['touch-go'] + ' min, then climb out again' },
+          { id: 'full-stop', label: '\ud83d\udee9 Full stop',
+            hint: STOP_DEFAULT_MIN['full-stop'] + ' min on the ground, plus start-up and taxi fuel' },
+          { id: 'flyby', label: '\u27a1 Fly-by',
+            hint: civil ? 'an ordinary waypoint named ' + civil : 'an ordinary waypoint' },
+          { id: 'cancel', label: 'Cancel' }
+        ]
+      });
+      if (!chosen || chosen.id === 'cancel') return;
+      if (chosen.id === 'flyby') { addAnchorWaypoint(a, { flyby: true }); return; }
+      await addAerodromeStop(a, chosen.id);
+    }
+
+    /**
+     * A touch & go or a full stop: end the sector here, then (unless the pilot
+     * turned it off) open the next one departing from this field.
+     */
+    async function addAerodromeStop(a, kind) {
+      addAnchorWaypoint(a, { stop: kind });
+      if (kind === 'touch-go') {
+        // The circuits are the EXISTING pattern mechanism, untouched - a touch
+        // and go is one pass, circuits are laps, and the pilot says which.
+        const laps = await ask({
+          title: 'Circuits at ' + (a.icao || a.name) + '?',
+          message: 'A touch & go on its own is one pass. Flying the circuit adds ' +
+                   'laps at the published circuit altitude, priced at your pattern figures.',
+          buttons: [
+            { id: 'no', label: 'No - straight out again', variant: 'primary' },
+            { id: 'yes', label: 'Yes - fly circuits here' },
+            { id: 'cancel', label: 'Cancel' }
+          ]
+        });
+        if (laps && laps.id === 'yes') addPatternStop();
+      }
+      if (normaliseBool(aircraftProfile.autoPlanAfterStop, true)) {
+        addNewFlightPlan();
+        say('Next sector opened, departing ' + (a.icao || a.name) +
+            (typeof a.elevFt === 'number' ? ' at ' + a.elevFt + ' ft' : '') +
+            '. Ground time is editable in its header.', 'good', 6000);
+      }
+    }
+
+    function addAnchorWaypoint(a, opts) {
+      const o = opts || {};
       const fl = flights[activeFlightIndex];
       pushUndoState('add a published fix');
       const first = fl.waypoints.length === 0;
@@ -3529,6 +3717,10 @@
       wp.varSource = magData.source;
       wp.isPattern = false;
       wp.laps = 3;
+      // A FLY-BY IS NAMED AFTER THE PLACE, not the ICAO code: nothing happens
+      // at the aerodrome, so the code would be misleading on the OFP.
+      if (o.flyby) { const c = civilName(a); if (c) wp.name = c; }
+      if (o.stop) { wp.stop = normaliseStopKind(o.stop); wp.stopMin = normaliseStopMinutes(o.stop); }
       // An AERODROME as the first waypoint also sets the flight's departure
       // elevation: the published field elevation IS that number, and leaving
       // the two disagreeing would put a climb profile on the wrong datum.
@@ -3541,7 +3733,7 @@
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
-      say('Added ' + a.name + ' at its published coordinate' +
+      say('Added ' + wp.name + ' at its published coordinate' +
         (a.published ? ' (' + a.published + ')' : '') + '.', 'info', 4500);
     }
 
@@ -3602,7 +3794,7 @@
       });
       if (chosen.id === 'cancel') return;
       const a = hits[Number(chosen.id)];
-      if (a) { addAnchorWaypoint(a); map.setView([a.lat, a.lng], Math.max(map.getZoom(), 9)); }
+      if (a) { map.setView([a.lat, a.lng], Math.max(map.getZoom(), 9)); clickAnchor(a); }
     }
 
     // Redrawn on every view change, for the same reason the airspace is:
@@ -4099,6 +4291,8 @@
       document.getElementById('map-fix-labels').value   = st.labels ? 'yes' : 'no';
       document.getElementById('map-fix-size').value     = String(st.size);
       document.getElementById('map-route-weight').value = String(normaliseRouteWeight(aircraftProfile));
+      document.getElementById('set-auto-plan').value =
+        normaliseBool(aircraftProfile.autoPlanAfterStop, true) ? 'yes' : 'no';
       updateRouteWeightPreview();
       document.getElementById('map-zoom-ad').textContent = String(AERODROME_MIN_ZOOM);
       document.getElementById('map-zoom-rp').textContent = String(REPORTING_POINT_MIN_ZOOM);
@@ -4315,6 +4509,7 @@
               🛫 Dep. Elev: 
               <input type="number" class="flight-dep-input" value="${fl.depElev}" step="50" onfocus="this.select()" onchange="setFlightDepElevation(${fIdx}, this.value)"> ft
             </span>
+            ${stopBeforeHTML(fIdx)}
           </div>
           <div class="flight-actions no-print">
             <button class="btn btn-wind btn-sm" onclick="openWindModal()">💨 Winds</button>
@@ -4461,7 +4656,12 @@
           const varIndicator = `Auto (${window.WMM_MODEL || "WMM"}) - editable`;
           const legTime = Math.round(res.timeMin);
 
-          // Startup/taxi/takeoff burn is a one-off for the whole mission.
+          // TAXI FUEL BELONGS TO A DEPARTURE, NOT TO THE MISSION (v16.54).
+          // It used to be charged once for the whole mission, which under-read
+          // the fuel of every sector after a FULL STOP - the engine is shut
+          // down and started again, and that start-up and taxi costs what it
+          // costs. The author settled this in AUDIT.md. A TOUCH & GO never
+          // stops, so it is charged nothing here: its cost is the circuit time.
           const taxiGal = taxiFuelApplied ? 0 : aircraftProfile.taxiFuel;
           taxiFuelApplied = true;
           const legBurnGal = res.burnGal + taxiGal;
@@ -4529,6 +4729,35 @@
         grandTotalTime += sectorTime;
         grandTotalBurn += sectorBurn;
         sectorTimeWindows.push({ fIdx, startMin: sectorStartMin, endMin: runningAccTime });
+
+        // WHAT HAPPENS AT THE END OF THIS SECTOR (v16.54, roadmap item 17).
+        //
+        // The ground or circuit time of a touch & go / full stop sits BETWEEN
+        // two sectors, so it is added to the running clock here rather than
+        // being a row of its own: every ETO in the next sector moves by it,
+        // which is exactly what a turnaround does to a plan.
+        //
+        // A FULL STOP RE-ARMS THE TAXI FUEL, because the next sector starts
+        // with a start-up and a taxi. A touch & go does not - the engine never
+        // stopped - and its minutes are priced at the PATTERN fuel flow, which
+        // is the rate the pilot already set for circuit work. Neither figure is
+        // invented here.
+        const lastReal = [...fl.waypoints].reverse().find((w) => !w.isPattern);
+        const stopKind = lastReal ? normaliseStopKind(lastReal.stop) : null;
+        if (stopKind) {
+          const stopMin = normaliseStopMinutes(stopKind, lastReal.stopMin);
+          runningAccTime += stopMin;
+          if (stopKind === 'full-stop') {
+            taxiFuelApplied = false;      // the next departure pays for its own start-up
+          } else {
+            const gal = (Number(aircraftProfile.patternFf) || 0) * (stopMin / 60);
+            const burn = Number(convertFuel(gal, fuelUnit).toFixed(1));
+            runningAccBurn = Number((runningAccBurn + burn).toFixed(1));
+            runningFuelRemaining = Number((runningFuelRemaining - burn).toFixed(1));
+            grandTotalBurn = Number((grandTotalBurn + burn).toFixed(1));
+          }
+          grandTotalTime += stopMin;
+        }
       });
 
       // Global Mission Summary
@@ -4703,6 +4932,7 @@
       aircraftProfile.routeWeight = normaliseRouteWeight({
         routeWeight: Number(document.getElementById('map-route-weight').value)
       });
+      aircraftProfile.autoPlanAfterStop = document.getElementById('set-auto-plan').value !== 'no';
 
       // The performance figures above are always stored internally in GPH/gal.
       // Only the *initial fuel on board* box is in display units, so convert it
