@@ -2024,7 +2024,7 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
-## The corridor ring (v16.61, roadmap item 2)
+## The corridor ring (v16.61-v16.62, roadmap item 2)
 
 A band of a chosen radius either side of the WHOLE flown track. The author's
 purpose, in their words: *"to easily find the MSA around my track by referencing
@@ -2064,7 +2064,7 @@ off the chart"*.
   offsetting only the two endpoints draws an edge that leaves the corridor in
   the middle. The step is capped BOTH absolutely (10 NM) and at twice the
   radius, because what matters is the chord sag as a FRACTION of the radius.
-- **THE TRANSPARENCY IS A SETTING** (2-40%, default 8%, the pilot's request):
+- **THE TRANSPARENCY IS A SETTING** (2-60%, default 8%, the pilot's request):
   the right value depends on the chart underneath. The bounds are argued -
   below 2% the band is not reliably visible, above 40% the contours and MEF stop
   being legible through it, which is the whole point.
@@ -2074,6 +2074,35 @@ off the chart"*.
 - Its own pane at z-index **370** - below airspace (380) and far below the route
   line (400). Above them, a press meant for a leg would hit the band first and
   bubble to the map as "add a waypoint". `interactive: false` as well.
+
+### v16.62 - the pilot flying it, three days later
+
+- **THE MAP SETTINGS PAGE WAS A WALL OF PROSE.** Every bound and default in this
+  project is argued in the UI on purpose - "the page says both, rather than
+  presenting a slider with mystery ends" (v16.35). Four settings' worth of that
+  reasoning stacked up is a page nobody reads. Each help block is now a native
+  `<details>` whose summary says what the setting does in a few words ("Shows a
+  ring around the track"); the argument is one click away and still there.
+  Measured collapsed at 13 px a block.
+  - **MEASURE THE `<details>` BOX, NOT THE INNER DIV.** A closed details hides
+    its content with `content-visibility`, and a descendant's rect under that is
+    not a reliable zero - the first check read 15/45/60/225 px for four blocks
+    that were all correctly closed. What matters is how much page the block
+    occupies anyway.
+- **THE BAND'S COLOUR IS SETTABLE: route colour, or one for all.** The pilot's
+  words: *"some colours are harder to read than others"*. The corridor is
+  BACKGROUND rather than an identifier - unlike the track itself there is rarely
+  a need to tell one plan's band from another - so one colour for the lot is a
+  legitimate default position. It follows the fix-style precedent exactly:
+  validated hex, re-checked on every read, falling back to a default rather than
+  to invisible markup. The default single colour is slate grey, deliberately NOT
+  one of ROUTE_COLORS, so it cannot read as belonging to a particular plan.
+- **THE TRANSPARENCY CEILING WENT 40% -> 60%, AT THE PILOT'S REQUEST.** The
+  legibility argument behind 40 is unchanged and the setting still states it -
+  past roughly 40% the contours and MEF start to wash out, which is the whole
+  point of the band. But which is worse, a band you cannot see or a chart you
+  can only just read, is a judgement about their own eyes and their own chart.
+  Raising the ceiling did not move the default.
 
 ### THREE TEST FAILURES THAT WERE THE TEST, NOT THE CODE
 

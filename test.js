@@ -3394,6 +3394,30 @@ T('the corridor radius is re-validated on every read', () => {
     'the default should match the airspace fill, chosen so the chart reads through');
   assert(moduleExports.exch.PROFILE_KEYS.includes('corridorFillPct'),
     'the transparency setting is not in PROFILE_KEYS');
+  // THE CEILING WENT 40 -> 60 AT THE PILOT'S REQUEST (v16.62). The legibility
+  // argument behind 40 still holds and the setting says so; which is worse - a
+  // band you cannot see, or a chart you can only just read - is a judgement
+  // about their own eyes and their own chart. Raising it did not move the
+  // default.
+  assert(C.CORRIDOR_FILL_MAX_PCT === 60, 'the ceiling is ' + C.CORRIDOR_FILL_MAX_PCT + ', not 60');
+  assert(C.normaliseCorridorFillPct(60) === 60, '60% must be reachable');
+  assert(C.CORRIDOR_FILL_DEFAULT_PCT === 8, 'raising the ceiling must not move the default');
+
+  // COLOUR: the route's own, or one of the pilot's choosing (v16.62).
+  assert(C.normaliseCorridorColorMode(undefined) === 'route', 'the default is the route colour');
+  assert(C.normaliseCorridorColorMode('single') === 'single', 'single mode not accepted');
+  assert(C.normaliseCorridorColorMode('rubbish') === 'route', 'an unknown mode must fall back');
+  assert(C.normaliseCorridorColor('#AABBCC') === '#aabbcc', 'a valid colour must survive, lowercased');
+  assert(C.normaliseCorridorColor('red') === C.CORRIDOR_DEFAULT_COLOR, 'a name is not a hex colour');
+  assert(C.normaliseCorridorColor('#xyz') === C.CORRIDOR_DEFAULT_COLOR, 'a malformed colour must fall back');
+  assert(C.normaliseCorridorColor('"><img src=x onerror=alert(1)>') === C.CORRIDOR_DEFAULT_COLOR,
+    'a hostile colour must not survive validation');
+  assert(!moduleExports.anchors.ROUTE_COLORS ||
+    !moduleExports.anchors.ROUTE_COLORS.includes(C.CORRIDOR_DEFAULT_COLOR),
+    'the default single colour must not be one of the route colours');
+  const keys = moduleExports.exch.PROFILE_KEYS;
+  assert(keys.includes('corridorColorMode') && keys.includes('corridorColor'),
+    'the colour settings are not in PROFILE_KEYS');
   // Degenerate routes must not throw or invent a band.
   assert(C.corridorPieces([], 1).length === 0, 'an empty route drew something');
   assert(C.corridorPieces([[69, 18]], 1).length === 1, 'a single waypoint should still give a circle');

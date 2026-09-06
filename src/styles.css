@@ -1271,3 +1271,30 @@ svg.leaflet-image-layer.leaflet-interactive path {
       .ofp-note-box + .ofp-note-box { border-top: none; }
       .ofp-note-box.ofp-tall { height: 31mm; min-width: 82mm; }
     }
+
+/* MAP SETTINGS HELP IS COLLAPSED BY DEFAULT (v16.62, the pilot's request: the
+   page was a wall of prose). The summary says what the setting does in a few
+   words; the reasoning behind every bound and default is one click away and
+   still there, because a slider with mystery ends is what these paragraphs
+   exist to prevent. Native <details>, so it needs no JavaScript and keeps its
+   keyboard behaviour. */
+.setting-help {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.setting-help > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 1px 0;
+}
+.setting-help > summary::-webkit-details-marker { display: none; }
+.setting-help > summary::after {
+  content: ' (expand)';
+  opacity: 0.75;
+  font-style: italic;
+}
+.setting-help[open] > summary::after { content: ' (collapse)'; }
+.setting-help > summary:hover { color: var(--text-main); }
+.setting-help > div { margin-top: 4px; line-height: 1.5; }

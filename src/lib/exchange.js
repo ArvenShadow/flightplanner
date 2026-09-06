@@ -46,6 +46,8 @@ export const PROFILE_KEYS = [
   'corridorOn',
   'corridorNM',
   'corridorFillPct',
+  'corridorColorMode',
+  'corridorColor',
   // The route line's thickness (v16.50). Validated by normaliseRouteWeight on
   // every read, because a route file can carry it.
   'routeWeight'

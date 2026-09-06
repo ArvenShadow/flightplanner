@@ -250,6 +250,57 @@ check(short.map.height >= 140, `...and the map does not vanish: ${short.map.heig
 
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''));
 
+// THE MAP SETTINGS PAGE IS NOT A WALL OF PROSE (v16.62, the pilot's request).
+// Every help block starts COLLAPSED behind a one-line summary; the reasoning is
+// one click away and still there, because a slider with mystery ends is exactly
+// what those paragraphs exist to prevent. Measured, not grepped: a <details>
+// that is open by default would pass a source check and fail the request.
+{
+  const ctx = await b.newContext({ viewport: { width: 1400, height: 950 } });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errs.push('help: ' + e));
+  await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
+  await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => { try { closeHelpModal(); } catch (e) {} });
+  await page.evaluate(() => { openSettingsModal(); showSettingsPage('map'); });
+  await page.waitForTimeout(300);
+  const help = await page.evaluate(() => {
+    const out = [];
+    for (const d of document.querySelectorAll('#settings-page-map .setting-help')) {
+      const sum = d.querySelector('summary');
+      const body = d.querySelector('div');
+      // MEASURE THE <details> BOX, not the inner div. A closed details hides its
+      // content with content-visibility, and a descendant's rect under that is
+      // not a reliable zero - the first attempt read 15/45/60/225 px for four
+      // blocks that were all correctly closed. What matters for "the page is
+      // not a wall of prose" is how much page the block OCCUPIES anyway.
+      out.push({ open: d.open, summary: (sum && sum.textContent || '').trim(),
+                 h: Math.round(d.getBoundingClientRect().height),
+                 hasBody: !!body });
+    }
+    return out;
+  });
+  check(help.length >= 4, `the Map page has collapsible help (${help.length} blocks)`);
+  check(help.every((h) => !h.open), 'every help block starts collapsed');
+  check(help.every((h) => h.hasBody), 'every summary has a body to expand');
+  check(help.every((h) => h.h <= 26),
+    'a collapsed block is one line: ' + JSON.stringify(help.map((h) => h.h)));
+  check(help.some((h) => /ring around the track/i.test(h.summary)),
+    'the corridor summary says what it does: ' + JSON.stringify(help.map((h) => h.summary)));
+  // ...and it really opens.
+  const opened = await page.evaluate(async () => {
+    const d = document.querySelector('#settings-page-map .setting-help');
+    const before = Math.round(d.getBoundingClientRect().height);
+    d.querySelector('summary').click();
+    await new Promise((r) => setTimeout(r, 150));
+    return { open: d.open, before, after: Math.round(d.getBoundingClientRect().height) };
+  });
+  check(opened.open && opened.after > opened.before * 2,
+    `clicking the summary expands it (${opened.before} -> ${opened.after} px)`);
+  await ctx.close();
+}
+
 await b.close();
 console.log(fails.length ? `\n${fails.length} layout check(s) FAILED` : '\nall layout checks passed');
 process.exit(fails.length ? 1 : 0);
