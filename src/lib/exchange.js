@@ -45,6 +45,7 @@ export const PROFILE_KEYS = [
   // reason - it can arrive from a settings file somebody else wrote.
   'corridorOn',
   'corridorNM',
+  'corridorFillPct',
   // The route line's thickness (v16.50). Validated by normaliseRouteWeight on
   // every read, because a route file can carry it.
   'routeWeight'

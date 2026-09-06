@@ -3224,6 +3224,97 @@ T('the corridor encloses everything within its radius, and nothing beyond', () =
     }
   }
   assert(checked > 3000, 'only ' + checked + ' points checked');
+
+  // A DISC AT EVERY TURN, and it is what covers the inside of the corner. The
+  // enclosure sweep above does NOT catch its removal on its own - a route has
+  // to turn sharply enough, at a radius wide enough, for the pocket to open -
+  // so the count is asserted directly as well as behaviourally below.
+  const turns = C.corridorPieces(routes.manyVias, 1);
+  assert(turns.length === (routes.manyVias.length - 1) + (routes.manyVias.length - 2),
+    'a band per leg plus a disc per turn is ' + (2 * routes.manyVias.length - 3) +
+    ' pieces, got ' + turns.length);
+  // ...and behaviourally: the inside of a hairpin is exactly the pocket the
+  // disc fills, so a point just inside the corner must be covered.
+  const hair = [[69.0, 18.0], [69.3, 18.0], [69.0, 18.02]];
+  const hp = C.corridorPieces(hair, 5);
+  const corner = G.destinationPoint(hair[1][0], hair[1][1], 180, 4.5);
+  assert(hp.some((ring) => inRing(ring, corner)),
+    'the inside of a sharp turn is not covered - the disc at the turn is missing');
+});
+
+T('the corridor edge follows the geodesic, not the chord between its ends', () => {
+  const C = moduleExports.corridor;
+  const G = moduleExports.geodesy;
+  // A LEG'S BEARING CHANGES ALONG IT. Offsetting only the two ends draws an
+  // edge that leaves the corridor in the middle - by 0.1 NM over 38 NM at 69 N,
+  // and by MILES over a leg the length of the country. So the edge is walked,
+  // and the step is capped BOTH absolutely and as a multiple of the radius:
+  // 10 NM is invisible on a 5 NM corridor and coarser than the whole band on a
+  // 0.1 NM one.
+  const long = [[60.20, 11.08], [69.68, 18.91]];
+  const L = G.distanceNMExact(long[0][0], long[0][1], long[1][0], long[1][1]);
+  assert(L > 600, 'the fixture leg is only ' + L.toFixed(0) + ' NM - too short to bend');
+
+  // THE POINT COUNT IS THE MEASUREMENT: a chord-only edge would emit two points
+  // per side, whatever the leg.
+  const band = C.corridorPieces(long, 1)[0];
+  // A chord-only edge emits two points per side whatever the leg, so with the
+  // two 180-degree caps it comes to about 66 points however long the route is.
+  // The threshold has to sit clearly above that, not just above L/10 - which a
+  // 620 NM leg squeaks past at 62 and is how this assert first passed against a
+  // deliberately broken build.
+  assert(band.length > 300, 'the edge was not walked: ' + band.length +
+    ' points for a ' + L.toFixed(0) + ' NM leg');
+
+  // ...and the step really does scale with the radius, or a narrow corridor is
+  // drawn with a coarser edge than it is wide.
+  const narrow = C.corridorPieces([[69.0, 18.0], [69.5, 18.0]], 0.1)[0];
+  const wide = C.corridorPieces([[69.0, 18.0], [69.5, 18.0]], 10)[0];
+  assert(narrow.length > wide.length,
+    'a 0.1 NM corridor must be walked more finely than a 10 NM one: ' +
+    narrow.length + ' vs ' + wide.length);
+
+  // The honest check: no point of the drawn edge may sit outside the corridor.
+  //
+  // MEASURED WITH A REFINEMENT, NOT A FIXED GRID. A first version of this
+  // assert walked the 700 NM leg in 400 steps - 1.75 NM apart - and then
+  // reported a 0.1 NM corridor as reaching 0.761 NM, which is the SAMPLING
+  // error and not the edge. A coarse scan followed by a bisection costs a
+  // fraction of the samples and is accurate to metres at any radius.
+  const distToLeg = (p) => {
+    let lo = 0, hi = L;
+    const at = (d) => {
+      const on = G.interpolateGeo(long[0][0], long[0][1], long[1][0], long[1][1], d, L);
+      return G.distanceNMExact(p[0], p[1], on[0], on[1]);
+    };
+    let best = Infinity, bestD = 0;
+    for (let k = 0; k <= 200; k++) {
+      const d = (L * k) / 200, v = at(d);
+      if (v < best) { best = v; bestD = d; }
+    }
+    lo = Math.max(0, bestD - L / 200); hi = Math.min(L, bestD + L / 200);
+    for (let i = 0; i < 60; i++) {
+      const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+      if (at(m1) < at(m2)) hi = m2; else lo = m1;
+    }
+    return Math.min(best, at((lo + hi) / 2));
+  };
+  //
+  // AND THE MIDPOINTS OF THE DRAWN SEGMENTS, NOT JUST THE VERTICES. This is the
+  // whole point: every vertex of a chord-only edge is at exactly r by
+  // construction - it is the straight line BETWEEN them that sags away from the
+  // track. Testing the vertices alone passed a build with the densification
+  // ripped out.
+  for (const r of [0.1, 1, 10]) {
+    const ring = C.corridorPieces(long, r)[0];
+    let worst = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      worst = Math.max(worst, distToLeg(a), distToLeg([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]));
+    }
+    assert(worst <= r * 1.03, 'at ' + r + ' NM the drawn edge reaches ' + worst.toFixed(3) +
+      ' NM from the track - it is following the chord, not the geodesic');
+  }
 });
 
 T('the corridor is round at the turns and round at the ends', () => {
@@ -3289,6 +3380,20 @@ T('the corridor radius is re-validated on every read', () => {
   assert(C.normaliseCorridorNM(9999) === C.CORRIDOR_MAX_NM, 'above the maximum must clamp down');
   assert(C.normaliseCorridorNM('2.5') === 2.5, 'a typed string must parse');
   assert(C.CORRIDOR_DEFAULT_NM === 1, 'the roadmap asked for a 1 NM default');
+  // THE BAND'S TRANSPARENCY IS A PREFERENCE (the pilot's request), because the
+  // right value depends on the chart underneath. It is still bounded: below 2%
+  // it is not reliably visible, above 40% the contours and MEF stop being
+  // legible through it - which is the only reason the band exists.
+  assert(C.normaliseCorridorFillPct(undefined) === C.CORRIDOR_FILL_DEFAULT_PCT, 'no value must default');
+  assert(C.normaliseCorridorFillPct('rubbish') === C.CORRIDOR_FILL_DEFAULT_PCT, 'a non-number must default');
+  assert(C.normaliseCorridorFillPct(0) === C.CORRIDOR_FILL_MIN_PCT, 'an invisible band must clamp up');
+  assert(C.normaliseCorridorFillPct(100) === C.CORRIDOR_FILL_MAX_PCT,
+    'an opaque band would hide the chart it is drawn over');
+  assert(C.normaliseCorridorFillPct('15') === 15, 'a typed string must parse');
+  assert(C.CORRIDOR_FILL_DEFAULT_PCT === 8,
+    'the default should match the airspace fill, chosen so the chart reads through');
+  assert(moduleExports.exch.PROFILE_KEYS.includes('corridorFillPct'),
+    'the transparency setting is not in PROFILE_KEYS');
   // Degenerate routes must not throw or invent a band.
   assert(C.corridorPieces([], 1).length === 0, 'an empty route drew something');
   assert(C.corridorPieces([[69, 18]], 1).length === 1, 'a single waypoint should still give a circle');

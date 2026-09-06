@@ -69,6 +69,35 @@ export function normaliseCorridorNM(v) {
   return Math.min(CORRIDOR_MAX_NM, Math.max(CORRIDOR_MIN_NM, Math.round(n * 100) / 100));
 }
 
+/**
+ * How see-through the band is, as a percentage.
+ *
+ * A PREFERENCE, because the right answer depends on the chart underneath and on
+ * the eyes reading it (the pilot's request). The BOUNDS are argued, though:
+ * below 2% the band is not reliably visible against the topo raster at all, and
+ * above 40% the chart's contour lines and MEF figures stop being legible
+ * through it - which is the entire purpose of the feature. Defaulting to 8%
+ * matches the airspace overlay's fill, which was itself chosen so the ICAO
+ * chart could be read through it.
+ */
+export const CORRIDOR_FILL_DEFAULT_PCT = 8;
+export const CORRIDOR_FILL_MIN_PCT = 2;
+export const CORRIDOR_FILL_MAX_PCT = 40;
+
+/**
+ * Clamp the fill percentage, re-validated on every read for the same reason the
+ * radius is: it is in PROFILE_KEYS and can arrive from a settings file somebody
+ * else wrote.
+ *
+ * @param {unknown} v
+ * @returns {number} a percentage, 2-40
+ */
+export function normaliseCorridorFillPct(v) {
+  const n = Number(v);
+  if (!isFinite(n)) return CORRIDOR_FILL_DEFAULT_PCT;
+  return Math.min(CORRIDOR_FILL_MAX_PCT, Math.max(CORRIDOR_FILL_MIN_PCT, Math.round(n)));
+}
+
 /** Signed turn from `a` to `b`, in (-180, 180]. Positive is a right turn.
  *  @param {number} a @param {number} b @returns {number} */
 function turnDelta(a, b) {

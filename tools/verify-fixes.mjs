@@ -255,6 +255,81 @@ check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point
   check(dep.name === 'ENTC', 'a departure keeps the ICAO code: ' + dep.name);
 }
 
+// THE CORRIDOR RING (v16.61). jsdom has no geometry and no projection, so it
+// cannot tell whether the band is drawn at the right SIZE on the chart - which
+// is the only thing that matters for a feature you read distances off.
+{
+  const drawn = await page.evaluate(async () => {
+    // A due-north leg, so the band's on-screen WIDTH is exactly twice the radius.
+    flights = [{ id: 1, title: 'P', depElev: 0, waypoints: [
+      { lat: 69.20, lng: 18.50, name: 'A', alt: 3000, oat: 5, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.50, lng: 18.50, name: 'B', alt: 3000, oat: 5, wdir: 0, wspd: 0, var: -11 }] }];
+    activeFlightIndex = 0;
+    aircraftProfile.corridorOn = true;
+    map.setView([69.35, 18.50], 10, { animate: false });
+    const out = [];
+    for (const R of [1, 2, 5]) {
+      aircraftProfile.corridorNM = R;
+      refreshMap();
+      await new Promise((r) => setTimeout(r, 350));
+      const path = document.querySelector('.leaflet-corridor-pane path');
+      if (!path) { out.push({ R, err: 'nothing drawn' }); continue; }
+      const w = path.getBoundingClientRect().width;
+      // What 2R actually is in pixels here, from Leaflet's OWN projection.
+      const e = destinationPoint(69.35, 18.50, 90, R);
+      const wst = destinationPoint(69.35, 18.50, 270, R);
+      const pe = map.latLngToContainerPoint(L.latLng(e[0], e[1]));
+      const pw = map.latLngToContainerPoint(L.latLng(wst[0], wst[1]));
+      out.push({ R, drawn: w, expect: Math.abs(pe.x - pw.x),
+                 fillRule: path.getAttribute('fill-rule'),
+                 fillOpacity: path.getAttribute('fill-opacity') });
+    }
+    return out;
+  });
+  for (const d of drawn) {
+    const err = d.err ? 999 : Math.abs(100 * (d.drawn - d.expect) / d.expect);
+    check(!d.err && err < 3,
+      `a ${d.R} NM corridor is drawn ${Math.round(d.drawn || 0)} px wide against ${Math.round(d.expect || 0)} px projected (${err.toFixed(1)}%)`);
+  }
+  check(drawn.every((d) => d.fillRule === 'nonzero'),
+    'the band fills with nonzero - evenodd punches a hole through it at every turn');
+
+  // IT MUST BE SEE-THROUGH. The band exists so the chart's contours and MEF can
+  // be read beside the track; an opaque one defeats its own purpose.
+  const fills = await page.evaluate(async () => {
+    const out = {};
+    for (const pct of [8, 40, 100]) {
+      aircraftProfile.corridorFillPct = pct;
+      drawCorridor();
+      await new Promise((r) => setTimeout(r, 150));
+      const p = document.querySelector('.leaflet-corridor-pane path');
+      out[pct] = p ? Number(p.getAttribute('fill-opacity')) : null;
+    }
+    return out;
+  });
+  check(fills[8] === 0.08, `the default band is 8% opaque (got ${fills[8]})`);
+  check(fills[40] === 0.4, `the transparency setting reaches the band (got ${fills[40]})`);
+  check(fills[100] === 0.4, `an out-of-range value clamps rather than hiding the chart (got ${fills[100]})`);
+
+  // AND IT MUST NEVER TAKE A CLICK. The band covers the whole route, so an
+  // interactive one would swallow every press meant for a leg or for bare map.
+  const clicks = await page.evaluate(async () => {
+    aircraftProfile.corridorFillPct = 8;
+    aircraftProfile.corridorNM = 5;
+    refreshMap();
+    await new Promise((r) => setTimeout(r, 300));
+    const p = document.querySelector('.leaflet-corridor-pane path');
+    const mid = map.latLngToContainerPoint(L.latLng(69.35, 18.52));
+    const mr = document.getElementById('map').getBoundingClientRect();
+    const top = document.elementFromPoint(mr.left + mid.x, mr.top + mid.y);
+    return { pe: p ? getComputedStyle(p).pointerEvents : null,
+             topIsCorridor: !!(top && top.closest && top.closest('.leaflet-corridor-pane')) };
+  });
+  check(clicks.pe === 'none', `the band takes no pointer events (got ${clicks.pe})`);
+  check(!clicks.topIsCorridor, 'a point over the band does not hit-test to the band');
+  await page.evaluate(() => { aircraftProfile.corridorOn = false; refreshMap(); });
+}
+
 // The hover card must appear, be readable, and lead with the published fix.
 // Whichever reporting point is actually DRAWN here - naming one by hand ties
 // this check to a viewport, and the point of the layer is that it culls.
