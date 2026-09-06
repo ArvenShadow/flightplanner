@@ -87,6 +87,12 @@
       <div id="fixes-attribution" class="no-print" style="display:none;"></div>
     </div>
 
+    <!-- THE DIVIDER. It sits BETWEEN the two panels in #main, so it is a
+         sibling of both and its drag can never be mistaken for a map gesture -
+         the map's own handlers are inside #map-container and the pointer is
+         captured here for the length of the drag. -->
+    <div id="splitter" class="no-print" role="separator" aria-orientation="vertical"
+         tabindex="0" title="Drag to give more of the window to the map or to the plan. Double-click to reset."></div>
     <div id="sidebar">
       <div id="slot-sidebar-top" class="skin-slot no-print"></div>
       <div class="card no-print">
@@ -386,7 +392,7 @@
         <div class="setting-section">
           <h3>🖥 Layout &amp; Display</h3>
           <ul style="margin-left:16px;">
-            <li>The <b>view selector</b> offers Split, Stacked, Plan-only and Map-only — Stacked/Plan give the OFP the full window width on laptops.</li>
+            <li>The <b>view selector</b> offers Split, Stacked, Plan-only and Map-only — Stacked/Plan give the OFP the full window width on laptops. In <b>Split</b> and <b>Stacked</b> the <b>divider between the two panels can be dragged</b> to give more of the window to the map or to the plan; <b>double-click</b> it to put it back, and with it focused the <b>arrow keys</b> nudge it and <b>Home</b> resets it. Each of the two layouts remembers its own position, and both travel in your exported settings.</li>
             <li><b>▤ Compact</b> hides secondary columns, leaving the flying essentials. Both choices are remembered per browser.</li>
           </ul>
         </div>
@@ -1272,7 +1278,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.66';
+    const APP_VERSION = '16.67';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1909,6 +1915,206 @@
       const auto = (window.innerWidth && window.innerWidth < 1500) ? 'stacked' : 'split';
       setLayoutMode(savedLayout || auto, false);
       applyCompactCols(localStorage.getItem('c182_compact') === '1');
+      applyStoredPaneRatios();
+      initSplitter();
+    }
+
+    // ---- The panel divider (v16.67) ----
+    // Split and Stacked put two panels on screen; the divider decides how the
+    // window is shared between them. What is stored is the MAP's fraction of
+    // #main, so the number means the same thing on either axis - and the two
+    // layouts keep SEPARATE figures, because a good split for a side-by-side
+    // window is not a good one for a stacked short window.
+    //
+    // AN UNDRAGGED APP SETS NOTHING AT ALL. The stylesheet's own fallbacks
+    // (`var(--map-flex, 1.05)`, `var(--map-h, 42vh)`) are the shipped design,
+    // so a pilot who never touches the divider gets the same PROPORTIONS the
+    // app has always had - and a reset clears the stored figure rather than
+    // writing a default one, so there is no second place for the default to
+    // live and drift. The bar is exactly as wide as the map border it replaces,
+    // so nothing on screen moves either - see the note in styles.css.
+
+    /** @type {{vertical:boolean, rect:DOMRect, bar:number, ratio:(number|null)}|null} */
+    let paneDrag = null;
+    let paneRaf = 0;
+
+    function splitterVertical() { return document.body.classList.contains('layout-stacked'); }
+
+    /** Two panels on screen? Plan-only and Map-only hide one of them, and the
+     *  Menu skin collapses the plan to a hover rail - resizing a panel that is
+     *  about to slide away is not a gesture with a meaning. */
+    function splitterActive() {
+      if (document.body.classList.contains('skin-menu')) return false;
+      return document.body.classList.contains('layout-split') || splitterVertical();
+    }
+
+    /** @param {boolean} vertical @param {number|null} ratio */
+    function applyPaneRatio(vertical, ratio) {
+      const s = document.body.style;
+      if (ratio === null) {
+        if (vertical) { s.removeProperty('--map-h'); s.removeProperty('--map-min-h'); }
+        else s.removeProperty('--map-flex');
+        return;
+      }
+      const r = normalisePaneRatio(ratio, ratio);
+      if (vertical) {
+        s.setProperty('--map-h', (r * 100).toFixed(3) + '%');
+        // THE 240 px FLOOR IS FOR THE AUTOMATIC LAYOUT, NOT FOR THE PILOT. It
+        // stops a short window collapsing the map on its own; once the divider
+        // has been put somewhere by hand, a floor that quietly overrode it
+        // would drag itself back with nothing said - the silent failure this
+        // project refuses. Their number wins.
+        s.setProperty('--map-min-h', '0px');
+      } else {
+        // A BASIS, NOT A GROWTH FACTOR. `flex: 0 0 42%` is a length the browser
+        // resolves exactly as this line computes it; a growth factor shares out
+        // whatever is LEFT after every panel's own border and padding, which
+        // put the bar 11 px off the cursor when it was tried. The plan panel
+        // keeps its grow factor and simply takes the rest.
+        s.setProperty('--map-flex', '0 0 ' + (r * 100).toFixed(3) + '%');
+      }
+    }
+
+    /** @param {boolean} vertical @returns {number|null} */
+    function storedPaneRatio(vertical) {
+      const v = vertical ? aircraftProfile.stackRatio : aircraftProfile.splitRatio;
+      if (v === null || v === undefined || v === '') return null;
+      return normalisePaneRatio(v, PANE_MIN);
+    }
+
+    function applyStoredPaneRatios() {
+      applyPaneRatio(false, storedPaneRatio(false));
+      applyPaneRatio(true, storedPaneRatio(true));
+    }
+
+    function savePaneRatios() {
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+    }
+
+    /** Leaflet measures its container once and caches it, so every size change
+     *  has to be announced. `pan: false` keeps the centre where the pilot put
+     *  it instead of nudging it with the new size. */
+    function panesResized() {
+      if (map && typeof map.invalidateSize === 'function') map.invalidateSize({ pan: false });
+    }
+
+    /** The pointer position, as the map's fraction of #main. The arithmetic
+     *  itself is `paneRatioFromPoint` in anchors.js; this only picks the axis. */
+    function paneRatioForDrag(d, x, y) {
+      return d.vertical
+        ? paneRatioFromPoint(y, d.rect.top, d.rect.height, d.bar)
+        : paneRatioFromPoint(x, d.rect.left, d.rect.width, d.bar);
+    }
+
+    function onSplitterDown(e) {
+      if (!splitterActive()) return;
+      const main = document.getElementById('main');
+      const bar = document.getElementById('splitter');
+      if (!main || !bar) return;
+      const vertical = splitterVertical();
+      const barRect = bar.getBoundingClientRect();
+      paneDrag = {
+        vertical,
+        rect: main.getBoundingClientRect(),
+        bar: (vertical ? barRect.height : barRect.width) || 6,
+        ratio: null
+      };
+      document.body.classList.add('splitter-dragging');
+      // THE POINTER IS CAPTURED FOR THE LENGTH OF THE DRAG, which is what stops
+      // it turning into a map gesture the moment it crosses into the chart -
+      // the v16.46 lesson from the line drag, bought cheaply this time because
+      // pointer capture is the platform's own answer to it.
+      if (e.pointerId !== undefined && bar.setPointerCapture) {
+        try { bar.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+      }
+      e.preventDefault();
+    }
+
+    function onSplitterMove(e) {
+      if (!paneDrag) return;
+      const r = paneRatioForDrag(paneDrag, e.clientX, e.clientY);
+      if (r === null) return;
+      paneDrag.ratio = r;
+      applyPaneRatio(paneDrag.vertical, r);
+      // Announcing the size on every pointer event would re-measure the map
+      // dozens of times a second; once a frame is what the screen can show.
+      if (!paneRaf && typeof requestAnimationFrame === 'function') {
+        paneRaf = requestAnimationFrame(() => { paneRaf = 0; panesResized(); });
+      }
+      e.preventDefault();
+    }
+
+    function onSplitterUp() {
+      if (!paneDrag) return;
+      const d = paneDrag;
+      paneDrag = null;
+      document.body.classList.remove('splitter-dragging');
+      if (d.ratio !== null) {
+        if (d.vertical) aircraftProfile.stackRatio = d.ratio;
+        else aircraftProfile.splitRatio = d.ratio;
+        savePaneRatios();
+      }
+      panesResized();
+    }
+
+    /** Double-click, Home or Enter: back to the shipped proportions. Clearing
+     *  the stored figure rather than writing a default one means the app is
+     *  once again taking its sizes from the stylesheet - there is no second
+     *  place for the default to live and drift. */
+    function resetSplitter() {
+      if (!splitterActive()) return;
+      const vertical = splitterVertical();
+      if (vertical) aircraftProfile.stackRatio = null; else aircraftProfile.splitRatio = null;
+      applyPaneRatio(vertical, null);
+      savePaneRatios();
+      panesResized();
+      say('Divider reset', 'info', 1500);
+    }
+
+    /** `role="separator"` with a tab stop promises the arrow keys work, so they
+     *  do. A step of 2% is one press of a nudge and 35 presses end to end. */
+    function onSplitterKey(e) {
+      if (!splitterActive()) return;
+      const vertical = splitterVertical();
+      const back = vertical ? 'ArrowUp' : 'ArrowLeft';
+      const fwd = vertical ? 'ArrowDown' : 'ArrowRight';
+      let step = 0;
+      if (e.key === back) step = -0.02;
+      else if (e.key === fwd) step = 0.02;
+      else if (e.key === 'Home' || e.key === 'Enter') { resetSplitter(); e.preventDefault(); e.stopPropagation(); return; }
+      else return;
+      const main = document.getElementById('main');
+      const mapEl = document.getElementById('map-container');
+      if (!main || !mapEl) return;
+      const mainRect = main.getBoundingClientRect();
+      const mapRect = mapEl.getBoundingClientRect();
+      const total = vertical ? mainRect.height : mainRect.width;
+      const cur = storedPaneRatio(vertical) !== null
+        ? /** @type {number} */ (storedPaneRatio(vertical))
+        : (total > 0 ? (vertical ? mapRect.height : mapRect.width) / total : 0.4);
+      const next = normalisePaneRatio(cur + step, PANE_MIN);
+      applyPaneRatio(vertical, next);
+      if (vertical) aircraftProfile.stackRatio = next; else aircraftProfile.splitRatio = next;
+      savePaneRatios();
+      panesResized();
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    // LISTENERS, NOT INLINE ATTRIBUTES. A pointer drag needs move and up bound
+    // anyway, and the v16.53 keybind row is the standing reminder that markup
+    // built by string is where a quote goes wrong. Nothing here is in an
+    // attribute, so there is no attribute to escape.
+    function initSplitter() {
+      const bar = document.getElementById('splitter');
+      if (!bar) return;
+      bar.addEventListener('pointerdown', onSplitterDown);
+      bar.addEventListener('pointermove', onSplitterMove);
+      bar.addEventListener('pointerup', onSplitterUp);
+      bar.addEventListener('pointercancel', onSplitterUp);
+      bar.addEventListener('lostpointercapture', onSplitterUp);
+      bar.addEventListener('dblclick', resetSplitter);
+      bar.addEventListener('keydown', onSplitterKey);
     }
 
     // "View Mode" = locked, read-only, tap-to-highlight (in-flight use).

@@ -6962,6 +6962,171 @@ T('L2: the build refuses a lockfile whose version has drifted', () => {
 
 
 
+console.log('\n=== 62a000i. The panel divider (v16.67) ===');
+
+T('a pane ratio is bounded, and the bounds are the ones CLAUDE.md argues', () => {
+  const A = moduleExports.anchors;
+  assert(A.PANE_MIN === 0.15 && A.PANE_MAX === 0.85,
+    'the pane bounds moved: ' + A.PANE_MIN + '-' + A.PANE_MAX);
+  assert(A.PANE_MIN > 0 && A.PANE_MAX < 1,
+    'a bound of 0 or 1 reduces a panel to nothing, and a divider you cannot find again is a trap');
+  assert(A.normalisePaneRatio(0.5, 0.4) === 0.5, 'a legitimate ratio was changed');
+  assert(A.normalisePaneRatio(0.01, 0.4) === A.PANE_MIN, 'a tiny ratio was not clamped up');
+  assert(A.normalisePaneRatio(9, 0.4) === A.PANE_MAX, 'a huge ratio was not clamped down');
+  // ABSENT IS NOT ZERO. The default is handed in so the caller decides what a
+  // missing figure means, exactly as normaliseFixStyle does with its colour.
+  assert(A.normalisePaneRatio(undefined, 0.4) === 0.4, 'undefined did not fall back');
+  assert(A.normalisePaneRatio('rubbish', 0.4) === 0.4, 'a non-number did not fall back');
+  assert(A.normalisePaneRatio(NaN, 0.4) === 0.4, 'NaN did not fall back');
+  assert(A.normalisePaneRatio(-0.5, 0.4) === 0.4, 'a negative ratio did not fall back');
+  // Three decimals is a tenth of a pixel on a 1500 px window, and it keeps the
+  // number in a saved route file readable.
+  assert(A.normalisePaneRatio(0.4567891, 0.4) === 0.457, 'the ratio is not rounded');
+  // It must survive its own round trip, or a reload would walk the divider.
+  const r = A.normalisePaneRatio(0.4567891, 0.4);
+  assert(A.normalisePaneRatio(r, 0.4) === r, 'the stored ratio is not stable across a reload');
+});
+
+T('the divider maths is a share of the WHOLE container, divider included', () => {
+  const A = moduleExports.anchors;
+  // THE BUG THIS ENCODES, measured in Chromium: expressing the ratio as a share
+  // of the space LEFT OVER after the divider and feeding it to flex-grow put
+  // the bar 11 px left of the cursor, because growth factors share out FREE
+  // space and the panels' own border and padding come off first. A share of the
+  // container is a length the browser resolves the same way this line does.
+  // 1500 px wide starting at x=0, a 6 px bar: dropping the cursor at 750 must
+  // put the bar's CENTRE at 750, so the map is 747 px, i.e. 0.498.
+  assert(A.paneRatioFromPoint(750, 0, 1500, 6) === 0.498,
+    'the middle of the window is not the middle: ' + A.paneRatioFromPoint(750, 0, 1500, 6));
+  // ...and the container's own offset is taken off, or a page with a header
+  // above it would be out by the header's height on the vertical axis.
+  assert(A.paneRatioFromPoint(830, 80, 1500, 6) === 0.498,
+    'the container offset was ignored: ' + A.paneRatioFromPoint(830, 80, 1500, 6));
+  // Half the bar comes off, so the bar is centred on the boundary rather than
+  // hanging off it by its own width.
+  assert(A.paneRatioFromPoint(750, 0, 1500, 0) > A.paneRatioFromPoint(750, 0, 1500, 20),
+    'the divider thickness is not taken into account at all');
+  // Out of range clamps rather than escaping the container.
+  assert(A.paneRatioFromPoint(-500, 0, 1500, 6) === A.PANE_MIN, 'dragging off the left did not clamp');
+  assert(A.paneRatioFromPoint(9000, 0, 1500, 6) === A.PANE_MAX, 'dragging off the right did not clamp');
+  // NO ROOM TO DIVIDE IS null, NOT A NUMBER. A hidden panel measures zero, and
+  // a ratio computed from a zero-width container is a divide by nothing.
+  assert(A.paneRatioFromPoint(750, 0, 0, 6) === null, 'a zero-width container returned a ratio');
+  assert(A.paneRatioFromPoint(750, 0, NaN, 6) === null, 'a non-finite span returned a ratio');
+});
+
+T('both pane ratios travel in an exported route file, and nothing personal does', () => {
+  const E = moduleExports.exch;
+  assert(E.PROFILE_KEYS.includes('splitRatio') && E.PROFILE_KEYS.includes('stackRatio'),
+    'the divider positions are not in PROFILE_KEYS, so they would not survive an export');
+  // THE TWO LAYOUTS KEEP SEPARATE FIGURES. A good side-by-side split is not a
+  // good stacked one, and one number for both would move the divider every
+  // time the layout changed.
+  const out = E.buildExportPayload({
+    profile: { splitRatio: 0.62, stackRatio: 0.31, ownerName: 'Someone', tailNumber: 'LN-TRA' }
+  });
+  const json = JSON.stringify(out);
+  assert(/0\.62/.test(json) && /0\.31/.test(json), 'the divider positions did not reach the export');
+  assert(!/Someone/.test(json) && !/LN-TRA/.test(json),
+    'the export carried a person or a machine - PROFILE_KEYS is the one whitelist');
+});
+
+T('the divider is a real element between the two panels, and it is not printed', () => {
+  const ids = ['map-container', 'splitter', 'sidebar'];
+  const order = ev(`(() => {
+    const kids = [...document.getElementById('main').children].map((e) => e.id).filter(Boolean);
+    return kids.join(',');
+  })()`);
+  assert(order === ids.join(','),
+    'the divider is not sitting between the map and the plan: ' + order);
+  // role/tabindex are a PROMISE that the arrow keys work; onSplitterKey keeps it.
+  assert(ev(`document.getElementById('splitter').getAttribute('role')`) === 'separator',
+    'the divider does not announce itself as a separator');
+  assert(ev(`document.getElementById('splitter').getAttribute('tabindex')`) === '0',
+    'the divider cannot be reached from the keyboard');
+  assert(ev(`document.getElementById('splitter').classList.contains('no-print')`),
+    'the divider would print on the company OFP sheet');
+  // NO INLINE HANDLER. A pointer drag needs move and up bound anyway, and the
+  // v16.53 keybind row is the standing reminder that a handler built by string
+  // interpolation is where a quote goes wrong.
+  const attrs = ev(`[...document.getElementById('splitter').attributes].map((a) => a.name).join(',')`);
+  assert(!/\bon[a-z]+/.test(attrs), 'the divider grew an inline handler: ' + attrs);
+});
+
+T('an untouched app writes no pane variables, so the shipped design is untouched', () => {
+  ev(SEED);
+  ev(`aircraftProfile.splitRatio = null; aircraftProfile.stackRatio = null; applyStoredPaneRatios();`);
+  assert(ev(`document.body.style.getPropertyValue('--map-flex')`) === '',
+    'a pilot who never dragged the divider got an inline width anyway');
+  assert(ev(`document.body.style.getPropertyValue('--map-h')`) === '',
+    'a pilot who never dragged the divider got an inline height anyway');
+  // ...and a stored figure DOES reach the layout, on the right axis each time.
+  ev(`aircraftProfile.splitRatio = 0.62; aircraftProfile.stackRatio = 0.31; applyStoredPaneRatios();`);
+  const flex = ev(`document.body.style.getPropertyValue('--map-flex')`);
+  const h = ev(`document.body.style.getPropertyValue('--map-h')`);
+  assert(/^0 0 62\.000%$/.test(flex.trim()), 'the split ratio did not become a flex basis: ' + flex);
+  assert(/^31\.000%$/.test(h.trim()), 'the stacked ratio did not become a height: ' + h);
+  // A BASIS, NOT A GROWTH FACTOR - see the module test above. `flex: 0.62`
+  // would parse and would put the bar 11 px off the cursor.
+  assert(/^0 0 /.test(flex.trim()),
+    'the map pane went back to a growth factor: ' + flex);
+  // THE 240 px FLOOR IS FOR THE AUTOMATIC LAYOUT, NOT FOR THE PILOT: a hand
+  // placed divider that a min-height quietly overrode would drag itself back
+  // with nothing said.
+  assert(ev(`document.body.style.getPropertyValue('--map-min-h')`).trim() === '0px',
+    'the stacked floor still overrides a divider the pilot placed by hand');
+  ev(`aircraftProfile.splitRatio = null; aircraftProfile.stackRatio = null; applyStoredPaneRatios();`);
+  ev(SEED);
+});
+
+T('a drag remembers where it was let go, and a reset clears it rather than writing a default', () => {
+  ev(SEED);
+  ev(`aircraftProfile.splitRatio = null; aircraftProfile.stackRatio = null; applyStoredPaneRatios();
+      setLayoutMode('split', false);`);
+  // jsdom has no layout, so every rect is zero and a real drag cannot be
+  // measured here - verify-layout.mjs drags the bar with a real mouse and reads
+  // the boxes back. What jsdom CAN prove is the bookkeeping either side of it.
+  ev(`applyPaneRatio(false, 0.7); aircraftProfile.splitRatio = 0.7; savePaneRatios();`);
+  assert(JSON.parse(ev(`localStorage.getItem('c182_perf_profile')`)).splitRatio === 0.7,
+    'the divider position was not persisted');
+  ev(`resetSplitter();`);
+  assert(ev(`aircraftProfile.splitRatio`) === null,
+    'the reset wrote a default instead of clearing the stored figure');
+  assert(ev(`document.body.style.getPropertyValue('--map-flex')`) === '',
+    'the reset left an inline width behind');
+  assert(JSON.parse(ev(`localStorage.getItem('c182_perf_profile')`)).splitRatio === null,
+    'the reset was not persisted, so a reload would bring the old divider back');
+  // THE RESET IS PER AXIS. Resetting the split must not throw away a stacked
+  // divider the pilot set on a different screen.
+  ev(`aircraftProfile.splitRatio = 0.7; aircraftProfile.stackRatio = 0.3;
+      setLayoutMode('split', false); resetSplitter();`);
+  assert(ev(`aircraftProfile.stackRatio`) === 0.3,
+    'resetting the split threw away the stacked position too');
+  ev(`aircraftProfile.splitRatio = null; aircraftProfile.stackRatio = null; applyStoredPaneRatios();
+      setLayoutMode('split', false);`);
+  ev(SEED);
+});
+
+T('there is no divider when there is only one panel to divide', () => {
+  ev(SEED);
+  const active = (setup) => ev(setup + ' splitterActive()');
+  assert(active(`setLayoutMode('split', false);`), 'the split layout has no divider');
+  assert(active(`setLayoutMode('stacked', false);`), 'the stacked layout has no divider');
+  assert(!active(`setLayoutMode('plan', false);`), 'plan-only offered a divider with nothing to divide');
+  assert(!active(`setLayoutMode('map', false);`), 'map-only offered a divider with nothing to divide');
+  // The Menu skin collapses the plan to a rail that opens on hover; a divider
+  // there would fight the hover and resize something about to slide away.
+  assert(!active(`setLayoutMode('split', false); applySkin('menu');`),
+    'the Menu skin kept a divider for its hover rail');
+  assert(active(`applySkin('default');`), 'the divider did not come back with the default skin');
+  // ...and a drag that starts while there is nothing to divide does nothing.
+  ev(`setLayoutMode('plan', false); onSplitterDown({ preventDefault(){}, pointerId: undefined });`);
+  assert(ev(`aircraftProfile.splitRatio == null`),
+    'a drag on a hidden divider still wrote a position');
+  ev(`setLayoutMode('split', false);`);
+  ev(SEED);
+});
+
 console.log('\n=== 62a000d. Quality of life, one batch (v16.49, item 16) ===');
 
 T('the key mapping is a pure decision, and every action has a home', () => {

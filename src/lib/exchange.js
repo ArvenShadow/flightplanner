@@ -47,6 +47,8 @@ export const PROFILE_KEYS = [
   'corridorNM',
   'corridorFillPct',
   'skin',
+  'splitRatio',
+  'stackRatio',
   'navPath',
   'corridorColorMode',
   'corridorColor',

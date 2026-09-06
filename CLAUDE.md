@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 37 shared mutable
+    decision, not unfinished work: it is one web of 39 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -2023,6 +2023,79 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 - CLAUDE.md said "ENTC's published 32 ft gives 1000 ft" - the published figure is **32 ft**
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
+
+## The panel divider (v16.67)
+
+The pilot asked whether the edge of the plan panel could be dragged to give more
+or less of the window to the map, in Split and in Stacked. It can, and the whole
+thing is 6 px of bar plus one number per layout.
+
+- **WHAT IS STORED IS THE MAP'S FRACTION OF `#main`**, not a pixel width, so the
+  same figure means the same thing after a window resize - and Split and Stacked
+  keep SEPARATE figures (`splitRatio`, `stackRatio`), because a good side-by-side
+  split is not a good stacked one and one number for both would move the divider
+  every time the layout changed.
+- **AN UNDRAGGED APP WRITES NOTHING AT ALL.** The sizes go through
+  `var(--map-flex, 1.05)` and `var(--map-h, 42vh)`, so the stylesheet's own
+  fallbacks are still the shipped design. Reset CLEARS the stored figure rather
+  than writing a default one - there is no second place for the default to live
+  and drift.
+- **THE BAR IS EXACTLY AS WIDE AS THE BORDER IT REPLACES (2 px), AND THAT WAS
+  DECIDED BY MEASUREMENT.** A fatter handle is easier to see, and the first
+  version was 6 px - which pushed the whole plan panel sideways and re-laid the
+  map out narrower: `verify:visual` against v16.66 reported **75 648 pixels
+  changed** for a feature that adds a gesture. At 2 px, with the map's own
+  `border-right` removed where the divider is shown, the sidebar is **0 pixels
+  different** and what is left is the version badge plus ~1 px of antialiasing
+  on the route line. The shipped design is the author's; it should not move as a
+  side effect. What makes the divider findable is the CURSOR and the hover
+  highlight, and neither costs any layout.
+- **A BASIS, NOT A GROWTH FACTOR, AND THAT WAS MEASURED.** The first version set
+  `flex: <r>` on the map and `flex: <1-r>` on the plan; in Chromium the bar came
+  to rest **11 px left of the cursor**, and further off the further right it was
+  dragged. Growth factors share out the space LEFT OVER after every panel's own
+  border and padding - 2 px of map border, 20 px of sidebar padding here - and
+  nothing in the page can see those numbers to correct for them. `flex: 0 0 X%`
+  is a length the browser resolves exactly as `paneRatioFromPoint` computes it,
+  and the plan panel keeps its grow factor and takes the rest. Landed at 1 px.
+- **THE 240 px FLOOR IS FOR THE AUTOMATIC LAYOUT, NOT FOR THE PILOT.**
+  `min-height` on the stacked map exists so a short window never collapses the
+  map on its own; a floor that silently overrode a hand-placed divider would
+  drag it back with nothing said, which is the silent failure this project
+  refuses. It is `var(--map-min-h, 240px)` and a drag sets it to 0.
+- **THE BOUNDS ARE ARGUED, like every other bound here**: below 0.15 the map is
+  a strip too narrow to read a chart in; above 0.85 the OFP table is squeezed
+  past the point where its columns fit, which is the one thing `verify:ofp`
+  exists to prevent. Neither end reduces a panel to nothing - a divider you
+  cannot find again is a trap.
+- **THE ARITHMETIC IS A PURE MODULE** (`paneRatioFromPoint`, `normalisePaneRatio`
+  in `anchors.js`), so the whole of it is tested without a browser and the
+  browser only has to prove the wiring - the same division of labour as
+  `keys.js`. The page picks the axis and nothing else.
+- **POINTER CAPTURE IS THE PLATFORM'S ANSWER TO THE v16.46 STUCK DRAG.** The
+  line drag had to grow four cancel paths because a mouseup could go missing;
+  `setPointerCapture` routes every later pointer event to the bar whatever it
+  crosses, and `lostpointercapture` and `pointercancel` both end the drag.
+- **`role="separator"` WITH A TAB STOP IS A PROMISE THAT THE ARROW KEYS WORK**,
+  so they do: 2% a press, Home or Enter to reset. Offering the tab stop without
+  them would be an accessibility claim the page does not honour.
+- **NO INLINE HANDLER.** A pointer drag needs move and up bound in code anyway,
+  and the v16.53 keybind row is the standing reminder that a handler built by
+  string interpolation is where a quote goes wrong.
+- **THERE IS NO DIVIDER WHEN THERE IS ONLY ONE PANEL.** Plan-only and Map-only
+  hide one of them, and the Menu skin collapses the plan to a hover rail -
+  resizing a panel that is about to slide away is not a gesture with a meaning.
+- jsdom has no layout, so every rect is zero and a drag cannot be measured
+  there. `verify-layout.mjs` drags the real bar with the real mouse on both
+  axes and reads the boxes back: the bar lands within 1 px of the cursor, the
+  map gains what the plan loses, the position survives a reload, double-click
+  clears it, the arrow keys nudge it, a hand-placed divider beats the 240 px
+  floor (131 px measured), and the bar is absent in all three cases above.
+  Six mutations were run against the finished guards - the ratio over free space
+  instead of the container, a growth factor instead of a basis, the floor left
+  in, a reset that writes a default, the Menu skin keeping a divider, and no
+  clamp at all - and all six fail the suite by name, none of them only through
+  `tsc`.
 
 ## SKINS, and the plan for restyling the whole shell (v16.65)
 
