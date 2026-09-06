@@ -355,6 +355,7 @@
             <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b> — always a <b>whole hundred feet</b>, rounded <i>up</i>, because the figure is a minimum and the nearest hundred would be below it half the time — with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Taking it gives you <b>one continuous climb</b>: the earlier leg's climb is delayed so it tops out exactly on that fix and runs straight on, rather than levelling off there and climbing again. The rounding buys you a little height, so you top out slightly <i>before</i> the distance you asked for rather than exactly on it — "be level by" is a deadline, and early is safe. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
             <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
+            <li><b>Skins — the same planner, arranged differently.</b> <b>Settings → 🗺 Map → Look</b> offers <b>Default</b> (the shipped design), <b>Top bar</b> (the plan becomes a band across the top with the map below), <b>Menu</b> (the plan collapses to a narrow rail and opens when you hover or tab into it, giving the map the whole window), <b>Compact</b> (smaller type and tighter rows for a 13&quot; laptop) and <b>Bold</b> (larger hit targets and heavier type for a touchscreen). A skin is <b>pure CSS</b>: nothing moves in the page, so every button does exactly what it did before and no action can be lost by choosing one. It is a standing preference, and it travels in your exported settings; the <b>layout</b> selector in the header is a separate, per-session choice and still wins.</li>
             <li><b>Great circle or rhumb line — your choice</b>, on the <b>Map page of Settings</b>. It governs the <b>route line, the corridor, the distance and the track together</b>, because a plan that drew one line and printed the heading for another would be worse than either. <b>Great circle</b> (the default) is the shortest path and what a GPS flies — the heading changes along the leg, and the track shown is the one you set out on. <b>Rhumb line</b> is one constant heading fix to fix. Measured at 69°N: the <i>distance</i> difference is negligible (0.002 NM on a 53 NM leg, below what the OFP prints), but the <i>track</i> differs by up to 1° on a Troms leg and <b>5.1°</b> on the 229 NM Tromsø–Kirkenes leg, and the two paths lie up to <b>5.2 NM</b> apart there. East–west legs are where it shows. Your paper ICAO chart is Lambert conformal, where a ruler line is nearly a great circle — which is why that is the default. In great-circle mode a long leg is drawn slightly curved on screen: that is correct, because the map is Mercator and a straight line on Mercator is the rhumb.</li>
             <li><b>◫ Corridor</b> draws a band of a radius you choose either side of the <b>whole flown track</b>, vias and all — for finding the <b>MSA along your route</b> by reading the chart's own contours and MEF figures inside it. Default <b>1 NM</b>; set the radius and the transparency on the <b>Map page of Settings</b>.
               <br><b>It is geometry and nothing else.</b> It shows you <i>where</i> to look; it does not compute a safe altitude and never states one. This planner holds no terrain data by an explicit decision — the chart is the reference, and a number invented here would be exactly the plausible wrong answer this tool refuses to give.
@@ -852,6 +853,30 @@
           </div>
 
           <div class="setting-section">
+            <h3>Look</h3>
+            <div class="setting-row">
+              <label for="map-skin">Shell layout &amp; style</label>
+              <select id="map-skin" onchange="updateSkin()" style="width:210px;"></select>
+            </div>
+            <div id="map-skin-note" style="font-size:10px; color:var(--text-muted); margin-top:2px;"></div>
+            <details class="setting-help">
+              <summary>What a skin changes, and what it never touches</summary>
+              <div>
+              A skin is a different <b>arrangement and style of the same planner</b> — where the
+              panels sit, how big the controls are, how heavy the type is. Every button does
+              exactly what it did before: a skin is pure CSS, nothing moves in the page, so no
+              action can be lost or rewired by choosing one.
+              <br>What a skin <b>cannot</b> do is lift one control out of its panel and put it in
+              another — CSS places a box inside its own container and no further. Moving a whole
+              panel is fine (that is what <b>Top bar</b> and <b>Menu</b> do); moving a single
+              button between panels is not, yet.
+              <br><b>Default</b> is the shipped design and is left exactly as it was — every
+              restyling change is checked against it pixel for pixel.
+              </div>
+            </details>
+          </div>
+
+          <div class="setting-section">
             <h3>Route path</h3>
             <div class="setting-row">
               <label for="map-nav-path">Measure and draw along</label>
@@ -1020,7 +1045,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 132 inline on*= handlers - 102 written
+    // map, markers, undoStack...) plus 133 inline on*= handlers - 103 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1245,7 +1270,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.64';
+    const APP_VERSION = '16.65';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3469,6 +3494,32 @@
      * Everything downstream is recomputed, because the wind triangle, the
      * ground speed, the times and the fuel all hang off the track.
      */
+    /**
+     * Wear a skin: one body class, nothing else (v16.65).
+     *
+     * The same shape as the layout-* switcher deliberately - clear every class
+     * this module owns, then add one. A skin and a layout are different things
+     * and both apply: the layout is what you want for THIS session (the plan
+     * full-width on a small screen), the skin is a standing preference.
+     */
+    function applySkin(id) {
+      const want = normaliseSkin(id);
+      SKIN_CLASSES.forEach((c) => document.body.classList.remove(c));
+      document.body.classList.add('skin-' + want);
+      const note = document.getElementById('map-skin-note');
+      if (note) note.textContent = skinById(want).note;
+      return want;
+    }
+
+    function updateSkin() {
+      const el = document.getElementById('map-skin');
+      if (!el) return;
+      aircraftProfile.skin = applySkin(el.value);
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      // The map's own size changed with the panels, so Leaflet has to be told.
+      if (map && typeof map.invalidateSize === 'function') setTimeout(() => map.invalidateSize(), 180);
+    }
+
     function updateNavPath() {
       const el = document.getElementById('map-nav-path');
       if (!el) return;
@@ -4625,6 +4676,17 @@
       document.getElementById('set-auto-plan').value =
         normaliseBool(aircraftProfile.autoPlanAfterStop, true) ? 'yes' : 'no';
       updateRouteWeightPreview();
+      const skinSel = document.getElementById('map-skin');
+      if (skinSel && !skinSel.options.length) {
+        SKINS.forEach((sk) => {
+          const o = document.createElement('option');
+          o.value = sk.id; o.textContent = sk.label;
+          skinSel.appendChild(o);
+        });
+      }
+      if (skinSel) skinSel.value = normaliseSkin(aircraftProfile.skin);
+      const skinNote = document.getElementById('map-skin-note');
+      if (skinNote) skinNote.textContent = skinById(aircraftProfile.skin).note;
       document.getElementById('map-nav-path').value = normaliseNavPath(aircraftProfile.navPath);
       document.getElementById('map-corridor-nm').value = String(corridorRadiusNM());
       document.getElementById('map-corridor-fill').value =
@@ -6474,6 +6536,7 @@
     drawAirspace();
     updateFixesBtn();
     drawFixes();
+    applySkin(aircraftProfile.skin);   // before the first paint, so nothing flashes
     // THE PATH MODEL IS INJECTED BEFORE ANYTHING IS DRAWN OR COMPUTED, because
     // every distance and track in the first render depends on it.
     setNavPath(aircraftProfile.navPath);

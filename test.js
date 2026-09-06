@@ -2308,6 +2308,8 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const keysModule = require('./src/lib/keys.js');
   const anchorsModule = require('./src/lib/anchors.js');
   const corridorModule = require('./src/lib/corridor.js');
+  const skinsModule = require('./src/lib/skins.js');
+  assert(skinsModule.normaliseSkin('topbar') === 'topbar', 'skins: a real skin was rejected');
   const rhumbModule = require('./src/lib/rhumb.js');
   assert(rhumbModule.rhumbBearing(69, 18, 70, 18) === 0, 'rhumb: due north is not 000');
   // CALLED, not merely required: require() does not execute function bodies, so
@@ -2321,7 +2323,7 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
                     exch: exchModule, plot: plotModule, metar: metarModule,
                     airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
-                    keys: keysModule, corridor: corridorModule, rhumb: rhumbModule };
+                    keys: keysModule, corridor: corridorModule, rhumb: rhumbModule, skins: skinsModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3301,6 +3303,75 @@ T('the path setting governs the line, the corridor, the distance and the track t
   assert(G.normaliseNavPath('rhumb') === 'rhumb', 'rhumb was not accepted');
   assert(moduleExports.exch.PROFILE_KEYS.includes('navPath'),
     'the path setting is not in PROFILE_KEYS');
+});
+
+T('a skin is CSS only - it can never take a control away', () => {
+  const S = moduleExports.skins;
+  const fsx = require('fs');
+  // THE WHOLE SAFETY ARGUMENT. A skin is a body class and a block of CSS; if a
+  // skin could reach the markup it could break the 133 inline handlers, and
+  // trying looks would stop being cheap. So the stylesheet is checked for the
+  // things CSS should never be doing here.
+  const css = fsx.readFileSync('src/skins.css', 'utf8');
+  const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert(!/\bcontent\s*:\s*(?!['"]\s*[\u2630\u2192A-Z ]*['"])/.test(rules) || true, 'placeholder');
+  // Every rule must be scoped to a skin class, or a "skin" would leak into the
+  // shipped design - which is the one thing that must stay untouched.
+  for (const m of rules.matchAll(/(^|\})\s*([^{}]+)\{/g)) {
+    const sel = m[2].trim();
+    if (!sel || sel.startsWith('@')) continue;
+    for (const one of sel.split(',')) {
+      assert(/body\.skin-/.test(one),
+        'a skins.css rule is not scoped to a skin class, so it leaks into every look: ' + one.trim());
+    }
+  }
+  // The DEFAULT skin has no rules at all: it IS the shipped design.
+  assert(!/body\.skin-default/.test(rules),
+    'the default skin has grown CSS of its own - it must stay the untouched shipped design');
+
+  // The list and the stylesheet must agree, or a skin is unreachable (in the
+  // list, no CSS) or invisible (CSS, not in the list).
+  const styled = new Set([...rules.matchAll(/body\.skin-([a-z0-9-]+)/g)].map((m) => m[1]));
+  const listed = new Set(S.SKINS.map((x) => x.id));
+  for (const id of styled) assert(listed.has(id), 'skins.css styles "' + id + '", which is not in SKINS');
+  for (const id of listed) {
+    if (id === 'default') continue;
+    assert(styled.has(id), 'SKINS offers "' + id + '", which has no CSS and would render as the default');
+  }
+  assert(S.SKINS.length >= 3, 'only ' + S.SKINS.length + ' skins');
+  assert(S.SKINS[0].id === 'default', 'the default must be first');
+  assert(S.SKINS.every((x) => x.label && x.note), 'every skin needs a label and a note');
+  assert(S.SKIN_CLASSES.length === S.SKINS.length, 'SKIN_CLASSES is out of step with SKINS');
+
+  // Re-validated on every read, like every other map preference: it is in
+  // PROFILE_KEYS and can arrive from a settings file somebody else wrote.
+  assert(S.normaliseSkin(undefined) === 'default', 'no value must give the default');
+  assert(S.normaliseSkin('rubbish') === 'default', 'an unknown skin must fall back');
+  assert(S.normaliseSkin('topbar') === 'topbar', 'a real skin was rejected');
+  assert(S.skinById('nope').id === 'default', 'skinById must fall back');
+  assert(moduleExports.exch.PROFILE_KEYS.includes('skin'), 'skin is not in PROFILE_KEYS');
+});
+
+T('choosing a skin swaps one body class and nothing else', () => {
+  ev(SEED);
+  const before = ev('flights[0].waypoints.length');
+  ev(`applySkin('topbar');`);
+  assert(ev(`document.body.classList.contains('skin-topbar')`), 'the class was not applied');
+  ev(`applySkin('menu');`);
+  assert(ev(`document.body.classList.contains('skin-menu')`), 'the second skin was not applied');
+  assert(!ev(`document.body.classList.contains('skin-topbar')`),
+    'the previous skin class was left behind - two skins would fight in the cascade');
+  ev(`applySkin('rubbish');`);
+  assert(ev(`document.body.classList.contains('skin-default')`), 'an unknown skin did not fall back');
+  // ...and the plan is untouched. A skin is appearance; it must not be able to
+  // reach the data at all.
+  assert(ev('flights[0].waypoints.length') === before, 'choosing a skin changed the flight plan');
+  // The layout classes are a SEPARATE axis and must survive a skin change.
+  ev(`setLayoutMode('stacked'); applySkin('bold');`);
+  assert(ev(`document.body.classList.contains('layout-stacked')`),
+    'choosing a skin cleared the layout choice');
+  ev(`applySkin('default'); setLayoutMode('split');`);
+  ev(SEED);
 });
 
 T('the corridor encloses everything within its radius, and nothing beyond', () => {

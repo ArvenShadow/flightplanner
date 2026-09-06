@@ -891,7 +891,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     /* LEG SETTINGS PREVIEW. The pins are computed on a COPY of the flight
    through the real engine, so what this shows is what applying will do. */
-    .leg-preview { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border);
+    .leg-preview { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border-color);
       border-radius: 5px; background: var(--highlight-bg); font-size: 11px; line-height: 1.6; }
     .leg-preview .lp-row { display: grid; grid-template-columns: 74px 1fr; gap: 8px; }
     .leg-preview .lp-k { color: var(--text-muted); text-transform: uppercase; font-size: 9px;
@@ -903,17 +903,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
     /* SETTINGS PAGES. Two tabs rather than one long scroll: the aircraft page
    is configured once per machine, the map page is pure display preference, and
    mixing them meant scrolling past the POH tables to change a symbol colour. */
-    .settings-tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--border);
-      background: var(--card-bg); }
+    .settings-tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--border-color);
+      background: var(--bg-card); }
     .settings-tab { appearance: none; border: 1px solid transparent; border-bottom: none;
       background: none; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700;
       letter-spacing: 0.3px; padding: 7px 12px; margin-bottom: -1px; border-radius: 4px 4px 0 0;
       color: var(--text-muted); }
-    .settings-tab:hover { color: var(--text); background: var(--highlight-bg); }
-    .settings-tab.is-active { color: var(--highlight-text); background: var(--bg);
-      border-color: var(--border); border-bottom: 1px solid var(--bg); }
+    .settings-tab:hover { color: var(--text-main); background: var(--highlight-bg); }
+    .settings-tab.is-active { color: var(--highlight-text); background: var(--bg-card);
+      border-color: var(--border-color); border-bottom: 1px solid var(--bg-card); }
     /* A live preview of the symbols, so the effect is visible before saving. */
-    .fix-preview { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border);
+    .fix-preview { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border-color);
       border-radius: 5px; background: var(--preview-surface);
       display: flex; gap: 26px; align-items: center; flex-wrap: wrap; min-height: 40px; }
         .fix-preview .pv { position: relative; display: flex; align-items: center; gap: 6px; }
@@ -950,7 +950,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     /* The route-track preview (v16.50). Same chart-paper ground as the fix
        preview, so the thickness is judged against something the colour of what
        it will actually sit on. */
-    .route-preview { margin-top: 10px; padding: 12px; border: 1px solid var(--border);
+    .route-preview { margin-top: 10px; padding: 12px; border: 1px solid var(--border-color);
       border-radius: 5px; background: var(--preview-surface);
       display: flex; flex-direction: column; gap: 9px; justify-content: center; min-height: 46px; }
         .route-preview .rpv { display: flex; align-items: center; }
