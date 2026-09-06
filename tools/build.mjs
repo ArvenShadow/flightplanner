@@ -48,6 +48,12 @@ const ENTRY = join(ROOT, 'src', 'main.js');
 const SITE_DIR = join(ROOT, 'site');
 const SW_SRC = join(ROOT, 'src', 'sw.js');
 const CSS_SRC = join(ROOT, 'src', 'styles.css');
+// Skins are a SECOND stylesheet so a new look is one self-contained block that
+// can be written, tried and thrown away without touching the shipped design.
+// It is concatenated into the SAME <style> element, because a test asserts the
+// page carries exactly one (v16.19) and two would be a second place for the
+// cascade order to be argued about.
+const SKINS_SRC = join(ROOT, 'src', 'skins.css');
 // Styling lives in src/styles.css so it can be edited on its own; it is
 // inlined back into <style> for BOTH deliveries, so what ships is exactly
 // what shipped when the CSS sat in the page - no extra request, no FOUC.
@@ -161,8 +167,53 @@ export async function runBuild({ quiet = false } = {}) {
     if (AIP_MARKER.test(srcHtml)) fail('the @AIPDATA marker was not replaced');
   }
 
-  const css = readFileSync(CSS_SRC, 'utf8');
-  if (/<\/style/i.test(css)) fail('styles.css contains a literal </style sequence');
+/**
+ * A CSS TYPO IS SILENT, WHICH IS WHY THE BUILD HAS TO SEE IT.
+ *
+ * A browser drops a declaration it cannot parse and says nothing: `colr: red`,
+ * a missing brace, or `var(--text-mutedd)` all render as "no rule applied",
+ * which looks exactly like a rule that was never written. Nothing else in this
+ * project could catch that - the tests read text, and the pixel verifier only
+ * knows the page changed, not why.
+ *
+ * Deliberately NOT a full CSS parser: three checks that are certain, rather
+ * than a lint that argues about vendor prefixes.
+ *
+ * @param {string} css
+ */
+function lintCss(css) {
+  // Braces must balance, or every rule after the mistake silently disappears.
+  const open = (css.match(/\{/g) || []).length;
+  const close = (css.match(/\}/g) || []).length;
+  if (open !== close) fail(`CSS braces do not balance: ${open} { against ${close} }`);
+
+  // Every var(--x) must have a --x defined somewhere, or it renders as nothing.
+  const defined = new Set();
+  for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) defined.add(m[1]);
+  const missing = new Map();
+  for (const m of css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*([,)])/gi)) {
+    // A var() WITH a fallback is a deliberate default, not a typo.
+    if (m[2] === ',') continue;
+    if (!defined.has(m[1])) missing.set(m[1], (missing.get(m[1]) || 0) + 1);
+  }
+  if (missing.size) {
+    fail('CSS uses custom properties that are never defined (a typo renders as nothing):\n' +
+      [...missing].map(([k, n]) => `      ${k} - ${n} use(s)`).join('\n'));
+  }
+
+  // A declaration with no colon is dropped whole.
+  const bodies = css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\{([^{}]*)\}/g);
+  for (const b of bodies) {
+    for (const decl of b[1].split(';')) {
+      const d = decl.trim();
+      if (d && !d.includes(':')) fail(`CSS declaration has no colon and will be dropped: ${JSON.stringify(d.slice(0, 60))}`);
+    }
+  }
+}
+
+  const css = readFileSync(CSS_SRC, 'utf8') + '\n' + readFileSync(SKINS_SRC, 'utf8');
+  if (/<\/style/i.test(css)) fail('a stylesheet contains a literal </style sequence');
+  lintCss(css);
   const styleIndent = srcHtml.match(STYLE_MARKER)[1];
   srcHtml = srcHtml.replace(STYLE_MARKER, styleIndent + '<style>\n' + css + styleIndent + '</style>\n');
   if (STYLE_MARKER.test(srcHtml)) fail('the @STYLES marker was not replaced');

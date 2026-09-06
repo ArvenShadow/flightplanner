@@ -1,0 +1,149 @@
+/* ===========================================================================
+   SKINS - whole-shell looks, switched by one body class (v16.65)
+   ===========================================================================
+
+   WHAT A SKIN MAY DO, AND WHY THAT IS THE LINE.
+
+   The planner's shell is `#header` and `#main`, and `#main` holds exactly two
+   children: `#map-container` and `#sidebar`. Making `#main` a GRID lets a skin
+   place those two anywhere relative to one another - side by side, stacked,
+   the sidebar across the top as a bar - without touching a single element in
+   the markup. Nothing moves in the DOM, so no id changes, no `on*=` handler is
+   rewritten, and no wiring can break. That is the whole safety argument, and
+   it is why skins are CSS-only BY RULE rather than by convention.
+
+   WHAT A SKIN MAY NOT DO, stated so nobody tries: it cannot REPARENT a
+   control - lift one button out of the sidebar and drop it into the header -
+   because CSS places a box within its own container and no further. That needs
+   the handlers bound in code instead of in markup attributes, which is roadmap
+   item 18 (`src/page.js` under the compiler). Until then, a skin that wants a
+   control somewhere else must move the whole PANEL it lives in.
+
+   ADDING ONE: append a `body.skin-<name>` block here, add the name to
+   SKINS in src/lib/skins.js, and it appears in the picker. Nothing else.
+   `tools/verify-skins.mjs` then holds it to the same bar as the rest: every
+   control on screen, nothing overflowing, and the same inventory of
+   interactive elements as the default. A look that loses a button is not a
+   look, it is a bug.
+
+   The DEFAULT skin deliberately has NO rules at all. It is the shipped design,
+   and a tokenising or skinning change must leave it pixel-identical - which
+   `npm run verify:visual` proves rather than assumes.
+   =========================================================================== */
+
+/* --------------------------------------------------------------------------
+   TOP BAR - the sidebar becomes a band across the top, map below.
+   The author's own example of "full restructuring". Note that this is done
+   entirely by grid placement: #sidebar is still the second child of #main in
+   the markup, exactly where every handler expects it.
+   -------------------------------------------------------------------------- */
+body.skin-topbar #main {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 2fr) minmax(0, 3fr);
+}
+body.skin-topbar #sidebar {
+  grid-row: 1;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  overflow-x: auto;
+  border-bottom: 2px solid var(--border-color);
+}
+body.skin-topbar #sidebar > .card { flex: 1 1 320px; min-width: 280px; }
+body.skin-topbar #map-container {
+  grid-row: 2;
+  border-right: none;
+}
+/* The stacked/plan/map layouts still win - they are the user's explicit choice
+   for THIS session, where a skin is a standing preference. */
+body.skin-topbar.layout-plan #map-container { display: none; }
+body.skin-topbar.layout-map #sidebar { display: none; }
+
+/* --------------------------------------------------------------------------
+   COMPACT - the same arrangement, less of everything. For a 13" laptop where
+   the constraint is vertical space (see the v16.49 measurements).
+   -------------------------------------------------------------------------- */
+body.skin-compact #header { padding: 3px 10px; gap: 3px 8px; }
+body.skin-compact #header h1 { font-size: 13px; }
+body.skin-compact #sidebar { padding: 5px; gap: 5px; }
+body.skin-compact .card { padding: 6px 8px; }
+body.skin-compact .btn { padding: 3px 7px; font-size: 10px; border-radius: 3px; }
+body.skin-compact .btn-sm { padding: 2px 5px; font-size: 9px; }
+body.skin-compact table { font-size: 9.5px; }
+body.skin-compact th, body.skin-compact td { padding: 1px 3px; }
+body.skin-compact .map-ctl { padding: 2px 6px; font-size: 10px; }
+body.skin-compact h2, body.skin-compact h3 { font-size: 11px; margin: 2px 0; }
+
+/* --------------------------------------------------------------------------
+   BOLD - bigger hit targets and heavier edges, for a touchscreen or a cockpit
+   bag tablet at a desk. Sizes stay inside the bounds the rest of the project
+   argues for: nothing here shrinks a control below the 6 px the fix symbols
+   are capped at, and nothing grows the track beyond what covers chart ink.
+   -------------------------------------------------------------------------- */
+body.skin-bold #header { padding: 12px 20px; border-bottom: 3px solid var(--accent-line); }
+body.skin-bold #header h1 { font-size: 20px; letter-spacing: 0.3px; }
+body.skin-bold #sidebar { padding: 14px; gap: 14px; }
+body.skin-bold .card { padding: 14px 16px; border-width: 2px; border-radius: 8px; }
+body.skin-bold .btn {
+  padding: 9px 16px; font-size: 13px; font-weight: 700;
+  border-radius: 8px; border-width: 2px; letter-spacing: 0.2px;
+}
+body.skin-bold .btn-sm { padding: 6px 11px; font-size: 11px; }
+body.skin-bold .map-ctl { padding: 8px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; }
+body.skin-bold table { font-size: 12px; }
+body.skin-bold th, body.skin-bold td { padding: 6px 7px; }
+body.skin-bold th { letter-spacing: 0.4px; }
+body.skin-bold input, body.skin-bold select { font-size: 12px; padding: 4px 6px; }
+
+/* --------------------------------------------------------------------------
+   MENU - the sidebar collapses to a narrow rail and opens on hover or focus.
+   Minimalist: the map gets the whole window until you reach for the plan.
+
+   NO JAVASCRIPT, deliberately. A toggle would need a control, and a control
+   would need markup and a handler - which is precisely the coupling skins
+   exist to avoid. `:hover` and `:focus-within` do it, and `:focus-within`
+   is what keeps it reachable from the keyboard rather than mouse-only.
+   -------------------------------------------------------------------------- */
+body.skin-menu #sidebar {
+  flex: 0 0 34px;
+  padding: 6px 2px;
+  overflow: hidden;
+  transition: flex-basis 0.16s ease;
+  position: relative;
+  z-index: 500;
+  border-left: 2px solid var(--border-color);
+}
+body.skin-menu #sidebar::before {
+  content: '☰ PLAN';
+  writing-mode: vertical-rl;
+  font-size: 10px; font-weight: 800; letter-spacing: 1px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+body.skin-menu #sidebar > * { display: none; }
+body.skin-menu #sidebar:hover,
+body.skin-menu #sidebar:focus-within {
+  flex: 0 0 min(560px, 55vw);
+  padding: 10px;
+  overflow-y: auto;
+  box-shadow: -6px 0 18px rgba(0, 0, 0, 0.18);
+}
+body.skin-menu #sidebar:hover::before,
+body.skin-menu #sidebar:focus-within::before { display: none; }
+body.skin-menu #sidebar:hover > *,
+body.skin-menu #sidebar:focus-within > * { display: revert; }
+body.skin-menu #map-container { flex: 1; border-right: none; }
+/* The explicit layout choices still win over the skin. */
+body.skin-menu.layout-plan #sidebar { flex: 1; padding: 10px; overflow-y: auto; }
+body.skin-menu.layout-plan #sidebar::before { display: none; }
+body.skin-menu.layout-plan #sidebar > * { display: revert; }
+
+/* The stacked layout makes #main a COLUMN, so the rail has to collapse the
+   panel's HEIGHT there rather than its width. Without this the Menu skin
+   silently does nothing on a short window - which is exactly the size it was
+   meant for. */
+body.skin-menu.layout-stacked #sidebar { flex: 0 0 26px; }
+body.skin-menu.layout-stacked #sidebar::before { writing-mode: horizontal-tb; }
+body.skin-menu.layout-stacked #sidebar:hover,
+body.skin-menu.layout-stacked #sidebar:focus-within { flex: 0 0 min(60vh, 420px); }

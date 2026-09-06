@@ -678,6 +678,43 @@ svg.leaflet-image-layer.leaflet-interactive path {
     
     /* Theme Variables */
     body.light-mode {
+
+      /* THEME TONES (v16.64). Every colour a THEME would want to change lives
+         here, so a new look is this block rather than a sweep through 1300
+         lines. The values are the ones that were already inline: the tokenising
+         commit is proved PIXEL-IDENTICAL against the previous build, which is
+         the only way a CSS move can be proved at all. */
+      --warn-strong-bg: #fed7d7;
+      --warn-strong-text: #742a2a;
+      --bad-bg: #fff5f5;
+      --bad-text: #822727;
+      --bad-line: #feb2b2;
+      --info-bg: #ebf8ff;
+      --info-text: #2a4365;
+      --info-line: #bee3f8;
+      --info-hover-bg: #ebf8ff;
+      --info-hover-text: #2a4365;
+      --accent-line: #3182ce;
+      --capture-bg: #fffaf0;
+      --capture-text: #7b341e;
+      --capture-line: #dd6b20;
+      --row-warm-bg: #feebc8;
+      --wv-bg: #fffaf0;
+      --wv-text: #744210;
+      --overlay-bg: #ffffff;
+      --overlay-text: #1a202c;
+      --overlay-muted: #5a6678;
+      --overlay-line: #e2e8f0;
+      --chip-bg: #5a6678;
+      --chip-text: #ffffff;
+      --attrib-text: #333;
+      --attrib-bg: rgba(255,255,255,0.72);
+      --preview-surface: linear-gradient(135deg, #e8e2d4 0%, #dfe6dc 100%);
+      --pv-name-text: #1a365d;
+      --pv-name-halo: #fff;
+      --missing-bg: #fff5f5;
+      --missing-line: #e53e3e;
+
       --bg-body: #f4f6f9;
       --bg-header: #1a365d;
       --bg-card: #ffffff;
@@ -694,6 +731,43 @@ svg.leaflet-image-layer.leaflet-interactive path {
       --acc-fuel-text: #22543d;
     }
     body.dark-mode {
+
+      /* THEME TONES (v16.64). Every colour a THEME would want to change lives
+         here, so a new look is this block rather than a sweep through 1300
+         lines. The values are the ones that were already inline: the tokenising
+         commit is proved PIXEL-IDENTICAL against the previous build, which is
+         the only way a CSS move can be proved at all. */
+      --warn-strong-bg: #4a1d1d;
+      --warn-strong-text: #fed7d7;
+      --bad-bg: #63171b;
+      --bad-text: #fed7d7;
+      --bad-line: #9b2c2c;
+      --info-bg: #1a365d;
+      --info-text: #bee3f8;
+      --info-line: #2c5282;
+      --info-hover-bg: #2a4365;
+      --info-hover-text: #bee3f8;
+      --accent-line: #3182ce;
+      --capture-bg: #652b19;
+      --capture-text: #fbd38d;
+      --capture-line: #dd6b20;
+      --row-warm-bg: #744210;
+      --wv-bg: #451a03;
+      --wv-text: #fed7aa;
+      --overlay-bg: #232b38;
+      --overlay-text: #e8edf4;
+      --overlay-muted: #a7b3c4;
+      --overlay-line: #3a4557;
+      --chip-bg: #4a5568;
+      --chip-text: #ffffff;
+      --attrib-text: #e2e8f0;
+      --attrib-bg: rgba(26,32,44,0.78);
+      --preview-surface: linear-gradient(135deg, #2a3140 0%, #232a36 100%);
+      --pv-name-text: #bee3f8;
+      --pv-name-halo: #10151f;
+      --missing-bg: #3b1111;
+      --missing-line: #e53e3e;
+
       --bg-body: #121824;
       --bg-header: #0f172a;
       --bg-card: #1e293b;
@@ -781,18 +855,16 @@ svg.leaflet-image-layer.leaflet-interactive path {
    non-commercially, the national border in it is Kartverket's open data. It
    sits above the chart label so neither covers the other. */
     #airspace-attribution { position: absolute; bottom: 18px; left: 6px; z-index: 1000; font-size: 9px;
-      color: #333; background: rgba(255,255,255,0.72); padding: 1px 6px; border-radius: 3px;
+      color: var(--attrib-text); background: var(--attrib-bg); padding: 1px 6px; border-radius: 3px;
       max-width: 74%; line-height: 1.35; pointer-events: none; }
-    body.dark-mode #airspace-attribution { color: #e2e8f0; background: rgba(26,32,44,0.78); }
-    /* The fixes layer's attribution. Stacked ABOVE the airspace one so both
+        /* The fixes layer's attribution. Stacked ABOVE the airspace one so both
    are readable when both layers are on; one grant only here (Avinor, by
    permission, non-commercial) - Kartverket is not involved in the reporting
    points, and the three licences in this project must not be conflated. */
     #fixes-attribution { position: absolute; bottom: 32px; left: 6px; z-index: 1000; font-size: 9px;
-      color: #333; background: rgba(255,255,255,0.72); padding: 1px 6px; border-radius: 3px;
+      color: var(--attrib-text); background: var(--attrib-bg); padding: 1px 6px; border-radius: 3px;
       max-width: 74%; line-height: 1.35; pointer-events: none; }
-    body.dark-mode #fixes-attribution { color: #e2e8f0; background: rgba(26,32,44,0.78); }
-
+    
     /* AIP FIXES. The SYMBOL is inline SVG, not CSS: a CSS border-triangle has a
    zero-sized box by construction, so it could neither be measured nor resized
    from one number, and the colour was baked into the stylesheet where the user
@@ -819,38 +891,35 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     /* LEG SETTINGS PREVIEW. The pins are computed on a COPY of the flight
    through the real engine, so what this shows is what applying will do. */
-    .leg-preview { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border);
+    .leg-preview { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border-color);
       border-radius: 5px; background: var(--highlight-bg); font-size: 11px; line-height: 1.6; }
     .leg-preview .lp-row { display: grid; grid-template-columns: 74px 1fr; gap: 8px; }
     .leg-preview .lp-k { color: var(--text-muted); text-transform: uppercase; font-size: 9px;
       letter-spacing: 0.4px; padding-top: 2px; }
     .leg-preview .lp-v { font-weight: 600; }
     .leg-preview .leg-warn { margin-top: 6px; padding: 5px 7px; border-radius: 4px;
-      background: #fed7d7; color: #742a2a; font-weight: 600; font-size: 10.5px; line-height: 1.45; }
-    body.dark-mode .leg-preview .leg-warn { background: #4a1d1d; color: #fed7d7; }
-
+      background: var(--warn-strong-bg); color: var(--warn-strong-text); font-weight: 600; font-size: 10.5px; line-height: 1.45; }
+    
     /* SETTINGS PAGES. Two tabs rather than one long scroll: the aircraft page
    is configured once per machine, the map page is pure display preference, and
    mixing them meant scrolling past the POH tables to change a symbol colour. */
-    .settings-tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--border);
-      background: var(--card-bg); }
+    .settings-tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--border-color);
+      background: var(--bg-card); }
     .settings-tab { appearance: none; border: 1px solid transparent; border-bottom: none;
       background: none; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700;
       letter-spacing: 0.3px; padding: 7px 12px; margin-bottom: -1px; border-radius: 4px 4px 0 0;
       color: var(--text-muted); }
-    .settings-tab:hover { color: var(--text); background: var(--highlight-bg); }
-    .settings-tab.is-active { color: var(--highlight-text); background: var(--bg);
-      border-color: var(--border); border-bottom: 1px solid var(--bg); }
+    .settings-tab:hover { color: var(--text-main); background: var(--highlight-bg); }
+    .settings-tab.is-active { color: var(--highlight-text); background: var(--bg-card);
+      border-color: var(--border-color); border-bottom: 1px solid var(--bg-card); }
     /* A live preview of the symbols, so the effect is visible before saving. */
-    .fix-preview { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border);
-      border-radius: 5px; background: linear-gradient(135deg, #e8e2d4 0%, #dfe6dc 100%);
+    .fix-preview { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border-color);
+      border-radius: 5px; background: var(--preview-surface);
       display: flex; gap: 26px; align-items: center; flex-wrap: wrap; min-height: 40px; }
-    body.dark-mode .fix-preview { background: linear-gradient(135deg, #2a3140 0%, #232a36 100%); }
-    .fix-preview .pv { position: relative; display: flex; align-items: center; gap: 6px; }
+        .fix-preview .pv { position: relative; display: flex; align-items: center; gap: 6px; }
     .fix-preview .pv-name { font-size: 9px; font-weight: 700; letter-spacing: 0.2px;
-      color: #1a365d; text-shadow: 0 0 2px #fff, 0 0 3px #fff; }
-    body.dark-mode .fix-preview .pv-name { color: #bee3f8; text-shadow: 0 0 2px #10151f, 0 0 3px #10151f; }
-    .fix-preview .pv-kind { font-size: 9px; color: var(--text-muted); text-transform: uppercase;
+      color: var(--pv-name-text); text-shadow: 0 0 2px var(--pv-name-halo), 0 0 3px var(--pv-name-halo); }
+        .fix-preview .pv-kind { font-size: 9px; color: var(--text-muted); text-transform: uppercase;
       letter-spacing: 0.4px; }
     /* The keyboard page (v16.52). A dense list - 30-odd rows - so the row is
        compact and the group headers carry the structure. */
@@ -868,29 +937,23 @@ svg.leaflet-image-layer.leaflet-interactive path {
       min-width: 112px; text-align: center; padding: 3px 6px; border-radius: 3px;
       border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-main);
       cursor: pointer; }
-    .keybind-chord:hover:not(:disabled) { border-color: #3182ce; background: #ebf8ff; color: #2a4365; }
-    body.dark-mode .keybind-chord:hover:not(:disabled) { background: #2a4365; color: #bee3f8; }
-    .keybind-chord:disabled { cursor: default; opacity: 0.75; }
+    .keybind-chord:hover:not(:disabled) { border-color: var(--accent-line); background: var(--info-hover-bg); color: var(--info-hover-text); }
+        .keybind-chord:disabled { cursor: default; opacity: 0.75; }
     .keybind-chord.is-unbound { font-weight: 400; font-style: italic; color: var(--text-muted); }
-    .keybind-row.is-capturing .keybind-chord { border-color: #dd6b20; background: #fffaf0;
-      color: #7b341e; font-style: normal; font-weight: 700; }
-    body.dark-mode .keybind-row.is-capturing .keybind-chord { background: #652b19; color: #fbd38d; }
-    .keybind-actions { display: flex; gap: 4px; }
+    .keybind-row.is-capturing .keybind-chord { border-color: var(--capture-line); background: var(--capture-bg); color: var(--capture-text); font-style: normal; font-weight: 700; }
+        .keybind-actions { display: flex; gap: 4px; }
     .keybind-fixed { font-size: 9.5px; color: var(--text-muted); font-style: italic; padding: 0 6px; }
     .keybind-note { font-size: 10.5px; padding: 6px 8px; border-radius: 4px; margin-bottom: 8px;
-      background: #ebf8ff; color: #2a4365; border: 1px solid #bee3f8; }
-    .keybind-note.is-bad { background: #fff5f5; color: #822727; border-color: #feb2b2; }
-    body.dark-mode .keybind-note { background: #1a365d; color: #bee3f8; border-color: #2c5282; }
-    body.dark-mode .keybind-note.is-bad { background: #63171b; color: #fed7d7; border-color: #9b2c2c; }
-
+      background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-line); }
+    .keybind-note.is-bad { background: var(--bad-bg); color: var(--bad-text); border-color: var(--bad-line); }
+        
     /* The route-track preview (v16.50). Same chart-paper ground as the fix
        preview, so the thickness is judged against something the colour of what
        it will actually sit on. */
-    .route-preview { margin-top: 10px; padding: 12px; border: 1px solid var(--border);
-      border-radius: 5px; background: linear-gradient(135deg, #e8e2d4 0%, #dfe6dc 100%);
+    .route-preview { margin-top: 10px; padding: 12px; border: 1px solid var(--border-color);
+      border-radius: 5px; background: var(--preview-surface);
       display: flex; flex-direction: column; gap: 9px; justify-content: center; min-height: 46px; }
-    body.dark-mode .route-preview { background: linear-gradient(135deg, #2a3140 0%, #232a36 100%); }
-    .route-preview .rpv { display: flex; align-items: center; }
+        .route-preview .rpv { display: flex; align-items: center; }
     .route-preview .rpv-line { display: block; width: 100%; border-radius: 1px; }
 
     /* Hover card for a fix: the published coordinate is the point of the
@@ -908,8 +971,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .airspace-tip { padding: 0; border: none; box-shadow: 0 3px 12px rgba(0,0,0,0.28);
       background: transparent; white-space: normal; width: max-content; max-width: 290px; }
     .airspace-tip::before { display: none; }        /* no callout arrow */
-    .as-card { font-size: 10.5px; line-height: 1.35; text-align: left; color: #1a202c;
-      background: #ffffff; border-radius: 5px; border-left: 3px solid var(--as-accent, #718096);
+    .as-card { font-size: 10.5px; line-height: 1.35; text-align: left; color: var(--overlay-text);
+      background: var(--overlay-bg); border-radius: 5px; border-left: 3px solid var(--as-accent, #718096);
       padding: 6px 9px 7px; }
     .as-head { display: flex; align-items: baseline; gap: 6px; }
     .as-name { font-weight: 800; font-size: 11.5px; letter-spacing: -0.1px; }
@@ -917,24 +980,19 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .as-class { margin-left: auto; flex: none; font-weight: 800; font-size: 9px;
       color: #ffffff; background: var(--as-accent, #718096);
       padding: 1px 5px; border-radius: 3px; }
-    .as-kind { color: #5a6678; font-size: 9.5px; margin-top: 1px; }
+    .as-kind { color: var(--overlay-muted); font-size: 9.5px; margin-top: 1px; }
     /* The band decides whether this airspace is relevant at all, so it reads
        ahead of everything below it. */
     .as-band { font-weight: 700; font-size: 10.5px; margin-top: 3px; }
     .as-svc { display: grid; grid-template-columns: auto auto 1fr; gap: 2px 7px;
       align-items: baseline; margin-top: 5px; padding-top: 5px;
-      border-top: 1px solid #e2e8f0; }
-    .as-tag { font-weight: 800; font-size: 8.5px; letter-spacing: 0.4px; color: #ffffff;
-      background: #5a6678; border-radius: 2px; padding: 1px 4px; text-align: center; }
+      border-top: 1px solid var(--overlay-line); }
+    .as-tag { font-weight: 800; font-size: 8.5px; letter-spacing: 0.4px; color: var(--chip-text); background: var(--chip-bg); border-radius: 2px; padding: 1px 4px; text-align: center; }
     .as-freq { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .as-dot { color: #a0aec0; margin: 0 3px; }
-    .as-cs { color: #5a6678; font-size: 9.5px; }
-    .as-note { color: #5a6678; font-size: 9px; font-style: italic; margin-top: 4px; }
-    body.dark-mode .as-card { color: #e8edf4; background: #232b38; }
-    body.dark-mode .as-kind, body.dark-mode .as-cs, body.dark-mode .as-note { color: #a7b3c4; }
-    body.dark-mode .as-svc { border-top-color: #3a4557; }
-    body.dark-mode .as-tag { background: #4a5568; }
-    #map { width: 100%; height: 100%; }
+    .as-cs { color: var(--overlay-muted); font-size: 9.5px; }
+    .as-note { color: var(--overlay-muted); font-size: 9px; font-style: italic; margin-top: 4px; }
+            #map { width: 100%; height: 100%; }
     #sidebar { flex: 1.55; display: flex; flex-direction: column; background: var(--bg-sidebar); overflow-y: auto; padding: 10px; gap: 10px; }
     
     /* Cards & Panels */
@@ -985,12 +1043,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
        cursor is the only thing that shows it is there. */
     .leaflet-interactive.route-hit { cursor: copy; }
     .highlight-cell { background: var(--highlight-bg); font-weight: 700; color: var(--highlight-text); }
-    .row-highlight { background: #feebc8 !important; }
-    body.dark-mode .row-highlight { background: #744210 !important; }
-    .wv-cell { background: #fffaf0; color: #744210; font-weight: 700; cursor: pointer; transition: 0.1s; }
+    .row-highlight { background: var(--row-warm-bg) !important; }
+        .wv-cell { background: var(--wv-bg); color: var(--wv-text); font-weight: 700; cursor: pointer; transition: 0.1s; }
     .wv-cell:hover { background: #feebc8; }
-    body.dark-mode .wv-cell { background: #451a03; color: #fed7aa; }
-    
+        
     /* Badges */
     .type-climb { color: #22543d; background: #c6f6d5; font-weight: 700; font-size: 9px; padding: 1px 4px; border-radius: 3px; }
     .type-cruise { color: #2b6cb0; background: #bee3f8; font-weight: 700; font-size: 9px; padding: 1px 4px; border-radius: 3px; }
@@ -1133,11 +1189,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
        ===================================================================== */
     /* An empty wind/OAT box blocks the save and says so. */
     .wmodal-missing {
-      border: 2px solid #e53e3e !important;
-      background: #fff5f5 !important;
+      border: 2px solid var(--missing-line) !important;
+      background: var(--missing-bg) !important;
     }
-    body.dark-mode .wmodal-missing { background: #3b1111 !important; }
-
+    
     #ofp-print { display: none; }
 
     @page { size: A4 landscape; margin: 6mm; }
