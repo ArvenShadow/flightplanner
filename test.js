@@ -2293,11 +2293,19 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const airspaceModule = require('./src/lib/airspace.js');
   const keysModule = require('./src/lib/keys.js');
   const anchorsModule = require('./src/lib/anchors.js');
+  const corridorModule = require('./src/lib/corridor.js');
+  // CALLED, not merely required: require() does not execute function bodies, so
+  // a free identifier inside one only throws when invoked. That is how toRad,
+  // OM_LEVELS and flights were caught. Every module in this list gets a real
+  // call with real arguments.
+  assert(corridorModule.corridorPieces([[69, 18], [69.5, 18.5]], 1).length === 1,
+    'corridor: a one-leg route should give one band');
+  assert(corridorModule.normaliseCorridorNM('2.5') === 2.5, 'corridor: radius not parsed');
   moduleExports = { magvar: magvarModule, geodesy: geodesyModule, perf: perfModule, fmt: fmtModule,
                     legs: legsModule, day: dayModule, winds: windsModule, integrity: integrityModule,
                     exch: exchModule, plot: plotModule, metar: metarModule,
                     airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
-                    keys: keysModule };
+                    keys: keysModule, corridor: corridorModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3110,6 +3118,185 @@ T('nothing published with a dialable frequency is invisible on the card', () => 
   const sola = set.features.find((f) => /^Sola TMA/.test(f.name));
   const arr = A.serviceRows(sola).find((r) => r.callsign === 'Sola Arrival');
   assert(arr && arr.freqs.join(',') === '119.405', 'Sola Arrival: ' + JSON.stringify(arr));
+});
+
+T('the corridor toggles, follows the track, and takes no clicks', () => {
+  ev(SEED);
+  ev(`delete aircraftProfile.corridorOn; delete aircraftProfile.corridorNM;`);
+  ev(`refreshMap();`);
+  assert(ev('corridorLayers.length') === 0, 'the corridor drew while switched off');
+  assert(/Off/.test(txtOf('corridor-btn')), 'the button does not say Off: ' + txtOf('corridor-btn'));
+
+  ev(`toggleCorridor();`);
+  assert(ev('aircraftProfile.corridorOn') === true, 'the toggle did not stick');
+  assert(ev('corridorLayers.length') === 1, 'nothing drawn: ' + ev('corridorLayers.length'));
+  assert(/1 NM/.test(txtOf('corridor-btn')), 'the button does not carry the radius: ' + txtOf('corridor-btn'));
+
+  // IT MUST NEVER TAKE A CLICK. The band covers the whole route, so an
+  // interactive one would swallow every press meant for a leg or for bare map -
+  // the pane-order trap the v16.31 airspace entry describes, one layer lower.
+  const opts = ev('corridorLayers[0]._opts');
+  assert(opts.interactive === false, 'the corridor is interactive: ' + JSON.stringify(opts.interactive));
+  assert(opts.pane === 'corridorPane', 'the corridor is not in its own pane: ' + opts.pane);
+  assert(opts.fillRule === 'nonzero',
+    'evenodd would punch a hole through the band at every turn: ' + opts.fillRule);
+
+  // IT FOLLOWS THE TRACK, so adding a waypoint must redraw it.
+  const before = ev('corridorLayers[0]._ll.length');
+  ev(`flights[0].waypoints.push({ lat: 70.1, lng: 19.8, name: 'FAR', alt: 3000,
+        oat: 5, wdir: 0, wspd: 0, var: -11 }); refreshMap();`);
+  const after = ev('corridorLayers[0]._ll.length');
+  assert(after > before, 'the corridor did not grow with the route: ' + before + ' -> ' + after);
+
+  // The radius is a display setting, so it travels with the other map settings
+  // and is dropped from a route file that has no business carrying it.
+  const keys = moduleExports.exch.PROFILE_KEYS;
+  assert(keys.includes('corridorNM') && keys.includes('corridorOn'),
+    'the corridor settings are not in PROFILE_KEYS');
+
+  ev(`aircraftProfile.corridorOn = false; delete aircraftProfile.corridorNM;`);
+  ev(SEED);
+});
+
+T('the corridor encloses everything within its radius, and nothing beyond', () => {
+  const C = moduleExports.corridor;
+  const G = moduleExports.geodesy;
+  // THE ONLY PROPERTY THAT MATTERS, and it is a safety one: the drawn band must
+  // cover the WHOLE set of points within `r` of the track. A gap means the
+  // pilot is not shown terrain that is genuinely beside their route, which is
+  // the under-reporting direction. The first implementation had two such gaps -
+  // end caps swept the wrong way (a bow tie), and inner corners joined by a
+  // straight chord cut the corridor to HALF its radius on a gentle turn.
+  const cross = (a, b, p) =>
+    (b[1] - a[1]) * (p[0] - a[0]) - (p[1] - a[1]) * (b[0] - a[0]);
+  // NONZERO winding, because that is the rule the fill uses. Under evenodd an
+  // overlap punches a hole through the band at exactly the turns.
+  function inRing(ring, p) {
+    let w = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[j], b = ring[i];
+      if (a[0] <= p[0]) { if (b[0] > p[0] && cross(a, b, p) > 0) w++; }
+      else if (b[0] <= p[0] && cross(a, b, p) < 0) w--;
+    }
+    return w !== 0;
+  }
+  const inside = (pieces, p) => pieces.some((r) => inRing(r, p));
+  // Walk the REAL geodesic: a constant initial bearing is a different line, and
+  // over a long leg it diverges far enough to fail a correct corridor.
+  function ringOfSamples(path, d) {
+    const out = [];
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i], b = path[i + 1];
+      const L = G.distanceNMExact(a[0], a[1], b[0], b[1]);
+      for (let k = 1; k < 20; k++) {
+        const on = G.interpolateGeo(a[0], a[1], b[0], b[1], (L * k) / 20, L);
+        const brg = G.trueTrackExact(on[0], on[1], b[0], b[1]);
+        for (const side of [90, -90]) out.push(G.destinationPoint(on[0], on[1], brg + side, d));
+      }
+    }
+    for (const v of path) {
+      for (let ang = 0; ang < 360; ang += 15) out.push(G.destinationPoint(v[0], v[1], ang, d));
+    }
+    return out;
+  }
+  const routes = {
+    straight: [[69.05, 18.54], [69.68, 18.91]],
+    gentle: [[69.05, 18.54], [69.40, 18.20], [69.68, 18.91]],
+    rightAngle: [[69.05, 18.54], [69.40, 18.54], [69.40, 19.10]],
+    hairpin: [[69.05, 18.54], [69.40, 18.20], [69.06, 18.50]],
+    manyVias: [[69.0, 18.0], [69.1, 18.3], [69.05, 18.6], [69.3, 18.8], [69.5, 18.4], [69.68, 18.91]],
+    // A LEG LONG ENOUGH TO BEND. Every route above is under 40 NM, where a
+    // geodesic and its chord agree closely enough that a two-point edge still
+    // passes - so none of them guards the densification. Oslo to Tromso does:
+    // without it the drawn edge leaves the corridor by miles in the middle.
+    longLeg: [[60.20, 11.08], [69.68, 18.91]]
+  };
+  let checked = 0;
+  for (const [name, path] of Object.entries(routes)) {
+    for (const r of [0.5, 1, 5, 25]) {
+      const pieces = C.corridorPieces(path, r);
+      assert(pieces.length >= path.length - 1, name + ': too few pieces');
+      const inn = ringOfSamples(path, r * 0.97);
+      const missed = inn.filter((p) => !inside(pieces, p)).length;
+      assert(missed === 0, `${name} at ${r} NM: ${missed} of ${inn.length} points inside the ` +
+        'corridor were left outside the drawn band');
+      checked += inn.length;
+    }
+  }
+  assert(checked > 3000, 'only ' + checked + ' points checked');
+});
+
+T('the corridor is round at the turns and round at the ends', () => {
+  const C = moduleExports.corridor;
+  const G = moduleExports.geodesy;
+  // "Within 1 NM of the track" is a SET, and its boundary is genuinely circular
+  // at every vertex and at both ends. A square end would stop the corridor flat
+  // across the departure fix; a mitred outer corner would claim ground further
+  // than the radius away. So no drawn point may be more than r from the track.
+  const path = [[69.05, 18.54], [69.40, 18.20], [69.68, 18.91]];
+  const r = 2;
+  const pieces = C.corridorPieces(path, r);
+  let worst = 0;
+  let pts = 0;
+  for (const ring of pieces) {
+    for (const p of ring) {
+      let best = Infinity;
+      for (let i = 0; i < path.length - 1; i++) {
+        const a = path[i], b = path[i + 1];
+        const L = G.distanceNMExact(a[0], a[1], b[0], b[1]);
+        for (let k = 0; k <= 60; k++) {
+          const on = G.interpolateGeo(a[0], a[1], b[0], b[1], (L * k) / 60, L);
+          best = Math.min(best, G.distanceNMExact(p[0], p[1], on[0], on[1]));
+        }
+      }
+      worst = Math.max(worst, best);
+      pts++;
+    }
+  }
+  assert(pts > 100, 'only ' + pts + ' ring points');
+  assert(worst <= r * 1.02, 'the band reaches ' + worst.toFixed(3) + ' NM, beyond its ' + r + ' NM radius');
+  // A round end really is round: the cap alone contributes points BEHIND the
+  // first fix, which a square end would not.
+  const back = G.destinationPoint(path[0][0], path[0][1],
+    (G.trueTrackExact(path[0][0], path[0][1], path[1][0], path[1][1]) + 180) % 360, r * 0.9);
+  const cross = (a, b, p) => (b[1] - a[1]) * (p[0] - a[0]) - (p[1] - a[1]) * (b[0] - a[0]);
+  const inRing = (ring, p) => {
+    let w = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[j], b = ring[i];
+      if (a[0] <= p[0]) { if (b[0] > p[0] && cross(a, b, p) > 0) w++; }
+      else if (b[0] <= p[0] && cross(a, b, p) < 0) w--;
+    }
+    return w !== 0;
+  };
+  assert(pieces.some((ring) => inRing(ring, back)),
+    'the corridor is cut square at the departure fix instead of rounded');
+});
+
+T('the corridor radius is re-validated on every read', () => {
+  const C = moduleExports.corridor;
+  // It lives in PROFILE_KEYS, so it travels in an exported settings file and
+  // can arrive from one somebody else wrote, or from a hand-edited
+  // localStorage. It reaches Leaflet as a distance rather than as markup, so
+  // the risk is a NaN or an absurd band rather than injection - but the rule
+  // that every map preference is re-validated has no exceptions.
+  assert(C.normaliseCorridorNM(undefined) === C.CORRIDOR_DEFAULT_NM, 'no value must give the default');
+  assert(C.normaliseCorridorNM('') === C.CORRIDOR_DEFAULT_NM, 'empty must give the default');
+  assert(C.normaliseCorridorNM('rubbish') === C.CORRIDOR_DEFAULT_NM, 'a non-number must give the default');
+  assert(C.normaliseCorridorNM(0) === C.CORRIDOR_DEFAULT_NM, 'zero is not a corridor');
+  assert(C.normaliseCorridorNM(-4) === C.CORRIDOR_DEFAULT_NM, 'a negative radius must not survive');
+  assert(C.normaliseCorridorNM(0.001) === C.CORRIDOR_MIN_NM, 'below the minimum must clamp up');
+  assert(C.normaliseCorridorNM(9999) === C.CORRIDOR_MAX_NM, 'above the maximum must clamp down');
+  assert(C.normaliseCorridorNM('2.5') === 2.5, 'a typed string must parse');
+  assert(C.CORRIDOR_DEFAULT_NM === 1, 'the roadmap asked for a 1 NM default');
+  // Degenerate routes must not throw or invent a band.
+  assert(C.corridorPieces([], 1).length === 0, 'an empty route drew something');
+  assert(C.corridorPieces([[69, 18]], 1).length === 1, 'a single waypoint should still give a circle');
+  assert(C.corridorPieces([[69, 18], [69, 18]], 1).length === 1,
+    'a repeated waypoint is a zero-length leg and must collapse, not divide by nothing');
+  const nan = C.corridorPieces([[69, 18], [NaN, 18.5], [69.5, 18.5]], 1);
+  assert(nan.every((ring) => ring.every((p) => isFinite(p[0]) && isFinite(p[1]))),
+    'a NaN waypoint leaked into the drawn ring');
 });
 
 T('an airspace worked only by an ACC still names someone to call', () => {

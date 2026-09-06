@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 36 shared mutable
+    decision, not unfinished work: it is one web of 37 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE

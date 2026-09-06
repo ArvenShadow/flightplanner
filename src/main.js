@@ -28,11 +28,12 @@ import * as plotting from './lib/plotting.js';
 import * as metar from './lib/metar.js';
 import * as ofpform from './lib/ofpform.js';
 import * as keys from './lib/keys.js';
+import * as corridor from './lib/corridor.js';
 
 const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs,
     ...airspace, ...anchors,
               ...daylight, ...winds, ...integrity, ...exchange, ...plotting, ...metar,
-              ...ofpform, ...keys };
+              ...ofpform, ...keys, ...corridor };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {
