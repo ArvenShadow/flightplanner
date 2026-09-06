@@ -78,7 +78,7 @@
              It needs no CSS of its own: #map-controls has been a flex column
              since v16.24, precisely so a new control cannot fall off screen. -->
         <button id="active-flight-btn" class="map-ctl" title="Which flight plan new waypoints are added to. Click to cycle through your plans (it wraps at the end, because this is the only way to switch without a keyboard). The keys , and . step back and forward without wrapping, and 1-9 jump straight to a plan. The full list is in the sidebar." onclick="cycleActiveFlight()">✈ Plan 1</button>
-        <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector). It begins at the last waypoint of the current one, so a multi-sector mission joins up. Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
+        <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector) at the end of the mission. It begins at the last waypoint of the LAST plan, so a multi-sector mission joins up. (A touch &amp; go or a full stop opens its next sector right after the plan it was made on instead.) Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
       </div>
       <div id="chart-label"></div>
       <div id="airspace-attribution" class="no-print" style="display:none;"></div>
@@ -273,6 +273,7 @@
               <b>🔁 Touch &amp; go</b> — the aircraft never stops. It costs <b>5 minutes</b> of circuit time (priced at your <i>pattern</i> fuel flow, since that is what it is), then you are asked whether to fly <b>circuits</b> here; say yes and the laps are added at the derived circuit altitude.
               <b>🛩 Full stop</b> — <b>10 minutes</b> on the ground, and the next sector pays a fresh <b>start-up and taxi</b>, because the engine was shut down and started again. If you refuel there, put the fuel on board into the <b>⛽ Fuel after</b> box in the next plan's header and that sector departs with it; leave it empty and whatever is left carries over. It is <b>not</b> checked against tank capacity — the planner holds no published usable-fuel figure for the aircraft, so what fits in the tanks is your call. (A touch & go gets no such box: the engine never stops.)
               <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing.
+              <br><b>The first waypoint of a plan is asked a different question</b>, because you cannot touch down or shut down before you have taken off: a fresh plan offers <b>🛫 Departure</b> (on the field, at its published elevation, and it sets the plan's departure elevation to match) and <b>➡ Fly-by</b> (you are already airborne and pass overhead — it stays at your planned altitude and leaves the departure elevation alone). Nothing is guessed from the position in the plan: whichever you pick is what you get.
               <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
@@ -1139,7 +1140,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.57';
+    const APP_VERSION = '16.59';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2389,9 +2390,27 @@
       setFlightDepElevation(activeFlightIndex, val);
     }
 
-    function addNewFlightPlan() {
+    /**
+     * Begin another sector.
+     *
+     * WHICH PLAN IT CONTINUES FROM IS AN ARGUMENT, NOT AN ASSUMPTION (v16.59).
+     * It used to seed from `flights[flights.length - 1]` and append at the end
+     * ALWAYS - fine on a one-sector mission, wrong the moment there are several.
+     * A full stop made on plan 2 of 3 then created plan 4, seeded from plan 3's
+     * last waypoint: the sector that should follow the stop never existed, its
+     * ground time landed on an unrelated plan's header, and the pilot was jumped
+     * to a plan with nothing to do with the aerodrome they had just landed at.
+     * That is the reported "a full stop does not start a new flight plan".
+     *
+     * @param {number} [afterIdx] Insert the new plan directly AFTER this one and
+     *   seed it from that plan's last waypoint. Omitted (the + New plan button):
+     *   append at the end, continuing the last plan.
+     */
+    function addNewFlightPlan(afterIdx) {
       pushUndoState('add a flight plan');
-      const lastFlight = flights[flights.length - 1];
+      const srcIdx = (typeof afterIdx === 'number' && flights[afterIdx])
+        ? afterIdx : flights.length - 1;
+      const lastFlight = flights[srcIdx];
       let newDepElev = Number(document.getElementById('def-dep-elev').value);
       let initialWPs = [];
 
@@ -2426,14 +2445,15 @@
       // Use max-existing-id + 1. flights.length + 1 produced duplicate IDs and
       // duplicate titles as soon as any plan had been deleted.
       const newId = flights.reduce((max, f) => Math.max(max, f.id || 0), 0) + 1;
-      flights.push({
+      const insertAt = srcIdx + 1;
+      flights.splice(insertAt, 0, {
         id: newId,
         title: `Flight Plan ${newId}`,
         depElev: newDepElev,
         waypoints: initialWPs
       });
 
-      activeFlightIndex = flights.length - 1;
+      activeFlightIndex = insertAt;
       document.getElementById('def-dep-elev').value = newDepElev;
       refreshMap();
       renderAllFlightTables();
@@ -3691,23 +3711,40 @@
     async function clickAnchor(a) {
       if (!a || a.kind !== 'AD') { addAnchorWaypoint(a); return; }
       const civil = civilName(a);
+      const elev = typeof a.elevFt === 'number' ? ' (' + a.elevFt + ' ft)' : '';
+      // AN EMPTY PLAN IS ASKED A DIFFERENT QUESTION (v16.58). You cannot touch
+      // down or shut down before you have taken off, so those two options are
+      // not offered on the first waypoint - and until this existed there was no
+      // way to say "I depart from here" at all, which left Fly-by as the only
+      // sensible pick and then quietly turned it into a departure on the deck.
+      const empty = !flights[activeFlightIndex].waypoints.length;
+      const flyby = { id: 'flyby', label: '\u27a1 Fly-by',
+        hint: civil ? 'an ordinary waypoint named ' + civil : 'an ordinary waypoint' };
       const chosen = await ask({
         title: (a.icao || a.name) + ' - what happens here?',
-        message: 'A touch & go or a full stop ends this sector at the aerodrome and starts ' +
-                 'the next one from its field elevation' +
-                 (typeof a.elevFt === 'number' ? ' (' + a.elevFt + ' ft)' : '') + '.',
-        buttons: [
+        message: empty
+          ? 'This is the first waypoint of the plan, so it is either where you take off ' +
+            'from or somewhere you pass on the way. A touch & go or a full stop needs a ' +
+            'departure first.'
+          : 'A touch & go or a full stop ends this sector at the aerodrome and starts ' +
+            'the next one from its field elevation' + elev + '.',
+        buttons: empty ? [
+          { id: 'departure', label: '\ud83d\udeeb Departure', variant: 'primary',
+            hint: 'take off from here, on the field' + elev },
+          flyby,
+          { id: 'cancel', label: 'Cancel' }
+        ] : [
           { id: 'touch-go', label: '\ud83d\udd01 Touch & go', variant: 'primary',
             hint: STOP_DEFAULT_MIN['touch-go'] + ' min, then climb out again' },
           { id: 'full-stop', label: '\ud83d\udee9 Full stop',
             hint: STOP_DEFAULT_MIN['full-stop'] + ' min on the ground, plus start-up and taxi fuel' },
-          { id: 'flyby', label: '\u27a1 Fly-by',
-            hint: civil ? 'an ordinary waypoint named ' + civil : 'an ordinary waypoint' },
+          flyby,
           { id: 'cancel', label: 'Cancel' }
         ]
       });
       if (!chosen || chosen.id === 'cancel') return;
       if (chosen.id === 'flyby') { addAnchorWaypoint(a, { flyby: true }); return; }
+      if (chosen.id === 'departure') { addAnchorWaypoint(a, { departure: true }); return; }
       await addAerodromeStop(a, chosen.id);
     }
 
@@ -3717,6 +3754,10 @@
      */
     async function addAerodromeStop(a, kind) {
       addAnchorWaypoint(a, { stop: kind });
+      // AN INDEX IS NOT AN IDENTITY ACROSS AN AWAIT (discipline rule 7). The
+      // circuits dialog below can leave and re-enter the plan list, so the
+      // sector the stop was made on is remembered by ITS ID and found again.
+      const stopFlightId = flights[activeFlightIndex].id;
       if (kind === 'touch-go') {
         // The circuits are the EXISTING pattern mechanism, untouched - a touch
         // and go is one pass, circuits are laps, and the pilot says which.
@@ -3730,10 +3771,16 @@
             { id: 'cancel', label: 'Cancel' }
           ]
         });
-        if (laps && laps.id === 'yes') addPatternStop();
+        // AWAITED: the circuits belong to THIS sector, so they have to be on
+        // it before the next one opens. Unawaited, the new plan was created
+        // while the laps dialog was still on screen.
+        if (laps && laps.id === 'yes') await addPatternStop();
       }
       if (normaliseBool(aircraftProfile.autoPlanAfterStop, true)) {
-        addNewFlightPlan();
+        // The next sector goes directly AFTER the one the stop was made on -
+        // not at the end of the list. See addNewFlightPlan.
+        const stopIdx = flights.findIndex((f) => f.id === stopFlightId);
+        addNewFlightPlan(stopIdx < 0 ? undefined : stopIdx);
         say('Next sector opened, departing ' + (a.icao || a.name) +
             (typeof a.elevFt === 'number' ? ' at ' + a.elevFt + ' ft' : '') +
             '. Ground time is editable in its header.', 'good', 6000);
@@ -3748,10 +3795,17 @@
       // ON THE FIELD, OR OVER IT? The published elevation belongs to a
       // waypoint the aircraft is ON - the departure, or a touch & go / full
       // stop. A FLY-BY is en route and keeps the planned altitude (v16.56).
-      const atField = first || !!o.stop;
+      //
+      // THE CALLER SAYS WHICH, AND NOTHING GUESSES ON TOP OF IT (v16.58).
+      // v16.56 read `first ||` here, i.e. "the first waypoint of a plan must be
+      // the departure" - a guess about intent that OVERRODE the pilot's stated
+      // one, so an explicit fly-by on an empty plan still went to the deck.
+      // That is the bug it was written to fix, surviving in the one case the
+      // dialog offered no other answer.
+      const atField = !!o.departure || !!o.stop;
       const wp = anchorWaypoint(a, {
         atField,
-        alt: first ? fl.depElev : Number(document.getElementById('def-alt').value),
+        alt: first && !o.flyby ? fl.depElev : Number(document.getElementById('def-alt').value),
         oat: Number(document.getElementById('def-oat').value),
         wdir: Number(document.getElementById('def-wdir').value),
         wspd: Number(document.getElementById('def-wspd').value)
@@ -3765,10 +3819,12 @@
       // at the aerodrome, so the code would be misleading on the OFP.
       if (o.flyby) { const c = civilName(a); if (c) wp.name = c; }
       if (o.stop) { wp.stop = normaliseStopKind(o.stop); wp.stopMin = normaliseStopMinutes(o.stop); }
-      // An AERODROME as the first waypoint also sets the flight's departure
-      // elevation: the published field elevation IS that number, and leaving
-      // the two disagreeing would put a climb profile on the wrong datum.
-      if (first && a.kind === 'AD' && typeof a.elevFt === 'number') {
+      // An AERODROME DEPARTED FROM also sets the flight's departure elevation:
+      // the published field elevation IS that number, and leaving the two
+      // disagreeing would put a climb profile on the wrong datum. A FLY-BY does
+      // NOT - the aircraft did not take off there, so its elevation says
+      // nothing about where the climb starts.
+      if (first && atField && a.kind === 'AD' && typeof a.elevFt === 'number') {
         fl.depElev = a.elevFt;
         const el = document.getElementById('def-dep-elev');
         if (el && activeFlightIndex === 0) el.value = a.elevFt;

@@ -7298,16 +7298,40 @@ TA('a fly-by keeps the planned altitude; a stop sits on the field', async () => 
   wp = ev('flights[0].waypoints[flights[0].waypoints.length - 1]');
   assert(wp.alt === 32, 'a full stop is not on the field: ' + wp.alt);
 
-  // and the FIRST waypoint of a plan is the departure, so it is on the field
-  // whichever option was chosen.
-  ev(`flights = [{ id: 1, title: 'X', depElev: 0, waypoints: [] }]; activeFlightIndex = 0;
-      refreshMap(); renderAllFlightTables();`);
+  // AN EMPTY PLAN IS ASKED A DIFFERENT QUESTION (v16.58), and this is where
+  // the v16.56 fix did NOT reach. Until Departure existed the dialog offered
+  // no way to say "I take off from here", so Fly-by was the only sensible pick
+  // on a fresh plan - and `first ||` then turned it into a departure on the
+  // deck, which is the very bug v16.56 was written to fix. The test written
+  // with it asserted that behaviour as CORRECT, so the suite stayed green
+  // while the reported case stayed broken.
+  const fresh = `flights = [{ id: 1, title: 'X', depElev: 0, waypoints: [] }]; activeFlightIndex = 0;
+      refreshMap(); renderAllFlightTables();`;
+  ev(fresh);
   p = ev(`clickAnchor(${JSON.stringify(endu)})`);
   await tick();
+  assert(/first waypoint of the plan/.test(openDlg().textContent),
+    'an empty plan was not asked the departure question: ' + openDlg().textContent);
+  assert(!/Touch & go|Full stop/.test(openDlg().textContent),
+    'a touch & go or a full stop was offered before there was a departure');
   answerDialog('➡ Fly-by');
   await p; await tick();
   wp = ev('flights[0].waypoints[0]');
+  assert(wp.alt === 4500, 'a fly-by on an empty plan went to the deck: ' + wp.alt +
+    ' (ENDU publishes 254 ft)');
+  assert(wp.name === 'Bardufoss', 'the fly-by name changed: ' + wp.name);
+  assert(ev('flights[0].depElev') === 0,
+    'a fly-by set the departure elevation: ' + ev('flights[0].depElev'));
+
+  // ...and DEPARTURE is the option that puts it on the runway.
+  ev(fresh);
+  p = ev(`clickAnchor(${JSON.stringify(endu)})`);
+  await tick();
+  answerDialog('🛫 Departure');
+  await p; await tick();
+  wp = ev('flights[0].waypoints[0]');
   assert(wp.alt === 254, 'the departure is not at the field elevation: ' + wp.alt);
+  assert(wp.name === 'ENDU', 'a departure should keep the ICAO code: ' + wp.name);
   assert(ev('flights[0].depElev') === 254, 'the departure elevation did not follow');
 
   ev(`delete aircraftProfile.autoPlanAfterStop;`);
@@ -7361,6 +7385,63 @@ TA('a stop opens the next sector from the field elevation, unless turned off', a
   await p; await tick();
   assert(ev('flights.length') === 1, 'the setting did not turn the auto-open off');
   ev(`delete aircraftProfile.autoPlanAfterStop;`);
+  ev(SEED);
+});
+
+TA('the next sector follows the plan the stop was made on, not the last plan', async () => {
+  // THE REPORTED BUG (v16.59): "a full stop does not start a new flight plan".
+  // addNewFlightPlan always seeded from flights[flights.length - 1] and appended
+  // at the END, so a stop made on plan 2 of 3 created plan 4 out of plan 3's
+  // last waypoint. The sector that should follow the stop never existed, its
+  // ground time landed on an unrelated plan's header (stopBeforeHTML reads
+  // flights[fIdx - 1]) and the pilot was jumped to a plan with nothing to do
+  // with the aerodrome they had just landed at. One plan hid it completely,
+  // which is why every earlier test passed.
+  const A = moduleExports.anchors;
+  const entc = A.buildAnchors(aipDataset()).find((x) => x.kind === 'AD' && x.icao === 'ENTC');
+  const wp = (n, la, ln, alt) =>
+    `{ lat: ${la}, lng: ${ln}, name: '${n}', alt: ${alt}, oat: 5, wdir: 0, wspd: 0, var: -11 }`;
+  ev(`delete aircraftProfile.autoPlanAfterStop;`);
+  ev(`flights = [
+        { id: 1, title: 'One',   depElev: 254, waypoints: [${wp('ENDU', 69.055, 18.544, 254)}, ${wp('A', 69.3, 18.6, 3500)}] },
+        { id: 2, title: 'Two',   depElev: 254, waypoints: [${wp('A', 69.3, 18.6, 254)}, ${wp('B', 69.5, 18.8, 3500)}] },
+        { id: 3, title: 'Three', depElev: 254, waypoints: [${wp('B', 69.5, 18.8, 254)}, ${wp('C', 69.6, 19.0, 3500)}] }];
+      activeFlightIndex = 1; refreshMap(); renderAllFlightTables();`);
+
+  const p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🛩 Full stop');
+  await p; await tick();
+
+  assert(ev('flights.length') === 4, 'the next sector did not open: ' + ev('flights.length'));
+  const names = ev('flights.map(f => f.waypoints.map(w => w.name).join(">"))');
+  assert(ev('flights[1].waypoints').slice(-1)[0].name === 'ENTC',
+    'the stop did not land on the plan it was made on: ' + JSON.stringify(names));
+  // THE NEW SECTOR SITS DIRECTLY AFTER IT, seeded from the aerodrome stopped at.
+  assert(names[2] === 'ENTC', 'the new sector is not after the stop: ' + JSON.stringify(names));
+  assert(ev('activeFlightIndex') === 2,
+    'the pilot was not taken to the new sector: ' + ev('activeFlightIndex'));
+  assert(ev('flights[2].depElev') === 32,
+    'the new sector does not depart from the field: ' + ev('flights[2].depElev'));
+  // ...and the plan that already followed is untouched, still after the new one.
+  assert(names[3] === 'B>C', 'the following sector was disturbed: ' + JSON.stringify(names));
+  // The ground time belongs to the sector that departs after the stop, and
+  // stopBeforeHTML finds it at flights[fIdx - 1] only because the new plan is
+  // in the right PLACE.
+  // NOTE: no whitespace tidy-up here. Inside a template literal `\s` collapses
+  // to a bare `s`, so the obvious `.replace(/\s+/g, ' ')` silently replaces the
+  // LETTER s ("Full stop" -> "Full  top") and the assert fails for the wrong
+  // reason - which is exactly what it did when this test was written.
+  const hdrs = ev(`[...document.querySelectorAll('.flight-header')].map(h => h.textContent)`);
+  assert(/Full stop ENTC/.test(hdrs[2] || ''),
+    'the ground time is not on the sector that departs after the stop: ' + (hdrs[2] || ''));
+  assert(!/Full stop/.test(hdrs[3] || ''),
+    'the ground time also landed on an unrelated plan: ' + (hdrs[3] || ''));
+
+  // The + New plan button is unchanged: no argument means "continue the last".
+  ev(`activeFlightIndex = 0; addNewFlightPlan();`);
+  assert(ev('flights.length') === 5 && ev('activeFlightIndex') === 4,
+    'the plain button no longer appends at the end: ' + ev('activeFlightIndex'));
   ev(SEED);
 });
 

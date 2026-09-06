@@ -1805,10 +1805,68 @@ job. What the cycle changed, and what it exposed:
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
 
-## What happens at an aerodrome (v16.54-v16.57, roadmap item 17)
+## What happens at an aerodrome (v16.54-v16.59, roadmap item 17)
 
 Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 **fly-by**. They are three different plans, and only the pilot knows which.
+
+- **THE FIRST WAYPOINT OF A PLAN IS ASKED A DIFFERENT QUESTION (v16.58, the
+  pilot's second report of the SAME bug).** A fresh plan offers **Departure**
+  and **Fly-by**; a touch & go or a full stop before you have taken off is not
+  a plan, so those two are withheld and the message says why.
+- **THE NEXT SECTOR FOLLOWS THE PLAN THE STOP WAS MADE ON (v16.59, the pilot's
+  report: "a full stop does not start a new flight plan, only a touch n go").**
+  `addNewFlightPlan` always seeded from `flights[flights.length - 1]` and
+  appended at the END. On a one-sector mission those are the same plan, which is
+  why every test and every verifier passed; the moment there are several they
+  are not.
+  - MEASURED: a full stop on plan 2 of 3 created plan **4**, seeded from plan
+    3's last waypoint. The sector that should follow the stop never existed, the
+    ground time landed on plan 3's header (`stopBeforeHTML` reads
+    `flights[fIdx - 1]`, and plan 3 merely happened to sit after plan 2), and the
+    pilot was jumped to a plan with nothing to do with the aerodrome they had
+    just landed at. From the cockpit that reads exactly as "the full stop did
+    not open a sector".
+  - **WHICH PLAN IT CONTINUES FROM IS NOW AN ARGUMENT, NOT AN ASSUMPTION.**
+    `addNewFlightPlan(afterIdx)` inserts directly after that plan and seeds from
+    it. The `＋ New plan` button passes nothing and still appends at the end -
+    its tooltip used to claim it continued "the current one", which was never
+    true, and now says what it does.
+  - THE STOP'S PLAN IS REMEMBERED BY **ID**, not by index (discipline rule 7):
+    the circuits dialog sits between adding the waypoint and opening the sector.
+  - `addPatternStop()` IS NOW AWAITED. It was not, so on a touch & go with
+    circuits the next sector was created while the laps dialog was still open.
+  - THE TEST WROTE ITS OWN BUG FIRST: `.replace(/\s+/g, ' ')` inside a template
+    literal is `/s+/g`, because `\s` in a template literal collapses to a bare
+    `s`. It was replacing the LETTER s - "Full stop" came back as "Full  top" -
+    so the assert failed against correct output. Do not normalise whitespace
+    inside an `ev()` template without doubling the backslash.
+  - **THE v16.56 FIX HAD A HOLE, AND ITS OWN TEST NAILED THE HOLE SHUT.**
+    `atField` read `first || !!o.stop` - "the first waypoint of a plan must be
+    the departure" - which is a GUESS about intent, and it OVERRODE the pilot's
+    stated one. So an explicit fly-by on an empty plan still went to the deck:
+    exactly the bug v16.56 was written to fix, surviving in the one case where
+    it mattered. It is now `!!o.departure || !!o.stop`: the caller says which,
+    and nothing guesses on top of it.
+  - **THE TEST WRITTEN WITH THE FIX ASSERTED THE BROKEN CASE AS CORRECT**
+    (`assert(wp.alt === 254, 'the departure is not at the field elevation')`),
+    so the suite was green, the verifier was green, and the reported bug was
+    untouched. That is the "test assert looser than the measurement" failure in
+    its worst form - not looser, but *pointed the wrong way*. When a fix is
+    reported as not working, re-derive the pilot's ACTUAL path before defending
+    the code: the reproduction here took one browser probe of three shapes, and
+    the broken one was the shape no test drove.
+  - **THE REAL DEFECT WAS A MISSING OPTION, NOT A WRONG BRANCH.** Until v16.58
+    the dialog offered no way to say "I take off from here" at all, so on a
+    fresh plan Fly-by was the only sensible pick - and the code then quietly
+    reinterpreted it. A menu that has no word for what the pilot means will get
+    the wrong answer however carefully the branches are written.
+  - A FLY-BY NO LONGER SETS `depElev` either. The aircraft did not take off
+    there, so the field elevation says nothing about where the climb starts.
+  - Three mutations are checked: restoring `first ||`, removing the empty-plan
+    question, and letting a fly-by move `depElev` each fail the suite by name.
+    `verify-fixes.mjs` CLICKS both options on a real empty plan, because the
+    v16.53 lesson is that driving the function proves the function.
 
 - **THIS REVERSES THE v16.34 "NO DIALOG ON ADD" RULE - FOR AERODROMES ONLY.**
   That rule is still right for a reporting point: it has a published name and
