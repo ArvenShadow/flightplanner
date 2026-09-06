@@ -2969,6 +2969,149 @@ T('military, guard and irrelevant services never reach the card', () => {
   assert(!JSON.stringify(card).includes('121.500'), 'guard reached the card');
   assert(!JSON.stringify(card).includes('MIL'), 'a military remark reached the card');
 });
+T('a frequency is shown against the position that publishes it', () => {
+  const A = moduleExports.airspace;
+  // THE BUG (v16.60, the pilot's report - "why does ENGM have so many approach
+  // frequencies"). collectServices used to union every service sharing a CODE
+  // into one row and label it with the FIRST callsign found. At the 47
+  // aerodromes publishing one approach position that is the same thing; at the
+  // six that publish several it puts a frequency against a position that does
+  // not work it. Gardermoen read:
+  //   APP · Final · 128.905 · 119.980 · 118.480 · 129.305 · 136.405 · 120.455
+  // and a pilot would call Final on 118.480, which is Oslo Approach sector E.
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  const engm = set.features.find((f) => f.icao === 'ENGM' && f.kind === 'CTR');
+  assert(engm, 'Gardermoen CTR is missing from the dataset');
+  const rows = A.serviceRows(engm);
+  const app = rows.filter((r) => r.tag === 'APP');
+  assert(app.length === 3, 'ENGM approach positions: ' + JSON.stringify(app));
+  const by = {};
+  for (const r of app) by[r.callsign] = r.freqs.join(',');
+  assert(by['Final'] === '128.905', 'Final: ' + by['Final']);
+  assert(by['Director'] === '136.405', 'Director: ' + by['Director']);
+  assert(by['Oslo Approach'] === '118.480,120.455', 'Oslo Approach: ' + by['Oslo Approach']);
+
+  // THE INVARIANT, over the WHOLE dataset rather than this one card: every
+  // frequency on a row must be published by a service whose callsign is that
+  // row's. That is what "paired with its service" means, and nothing asserted
+  // it before - which is why the suite was green while ENGM was wrong.
+  assert(set.features.length > 100, 'only ' + set.features.length + ' features to check');
+  let checked = 0;
+  const key = (c) => String(c || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const f of set.features) {
+    for (const r of A.serviceRows(f)) {
+      if (r.tag === 'ACC') continue;               // resolved by position, not by callsign
+      for (const mhz of r.freqs) {
+        const ok = (f.services || []).some((sv) =>
+          (sv.tag === r.tag || (sv.code || '').toUpperCase() === r.tag) &&
+          (r.tag === 'ATIS' || key(sv.callsign) === key(r.callsign)) &&
+          (sv.freqs || []).some((q) => q.mhz === mhz));
+        assert(ok, `${f.name}: ${mhz} is shown against "${r.callsign}", which does not publish it`);
+        checked++;
+      }
+    }
+  }
+  assert(checked > 300, 'only ' + checked + ' frequencies checked');
+});
+
+T('a standby frequency is not offered as one to dial', () => {
+  const A = moduleExports.airspace;
+  // Published HO with "AVBL only when <primary> U/S". Kept in the DATA - nothing
+  // published is discarded - and left off the card, exactly like the guard
+  // frequencies. 103 of 1673 in the 2026-09-03 edition carry the remark.
+  assert(A.isStandbyFrequency({ mhz: '119.980', remarks: 'AVBL only when 128.905/136.405 MHZ U/S' }),
+    'the Oslo standby was not recognised');
+  assert(A.isStandbyFrequency({ mhz: '118.705', remarks: 'AVBL only when 118.305 MHZ U/S.' }),
+    'the Gardermoen tower standby was not recognised');
+  assert(!A.isStandbyFrequency({ mhz: '118.480', remarks: 'Oslo TMA sector E' }),
+    'a sector remark was mistaken for a standby');
+  assert(!A.isStandbyFrequency({ mhz: '118.105', remarks: '' }), 'an empty remark became a standby');
+
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  const engm = set.features.find((f) => f.icao === 'ENGM' && f.kind === 'CTR');
+  const shown = JSON.stringify(A.serviceRows(engm));
+  for (const mhz of ['119.980', '129.305', '118.705', '123.330']) {
+    assert(!shown.includes(mhz), 'standby ' + mhz + ' reached the ENGM card');
+  }
+  // ...and the DATA still carries every one of them.
+  const all = JSON.stringify(engm.services);
+  for (const mhz of ['119.980', '129.305', '118.705', '123.330']) {
+    assert(all.includes(mhz), 'standby ' + mhz + ' was dropped from the data');
+  }
+  // The tower row keeps BOTH of its real sector frequencies.
+  const twr = A.serviceRows(engm).find((r) => r.tag === 'TWR');
+  assert(twr.freqs.join(',') === '118.305,120.105', 'ENGM tower: ' + twr.freqs.join(','));
+});
+
+T('one position published under two spellings is one row', () => {
+  const A = moduleExports.airspace;
+  // Ørland publishes its single approach position as both "Ørland
+  // Approach/radar" and "Ørland Approach/ Radar" in the same edition. Splitting
+  // by callsign must fold those together, or the fix for ENGM invents a second
+  // position at ENOL. Normalising away spacing, case and punctuation is what
+  // makes the split safe.
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  const enol = set.features.find((f) => f.icao === 'ENOL' && f.kind === 'CTR');
+  assert(enol, 'Ørland CTR is missing from the dataset');
+  const spellings = new Set((enol.services || [])
+    .filter((sv) => (sv.code || '') === 'APP').map((sv) => sv.callsign));
+  assert(spellings.size === 2, 'ENOL no longer publishes two spellings: ' + JSON.stringify([...spellings]));
+  const app = A.serviceRows(enol).filter((r) => r.tag === 'APP');
+  assert(app.length === 1, 'two spellings became two positions: ' + JSON.stringify(app));
+  assert(app[0].freqs.join(',') === '118.255,126.205', 'ENOL approach: ' + app[0].freqs.join(','));
+
+  // An aerodrome publishing an arrival AND a departure ATIS gets one row each,
+  // named by which it is - the published callsign is "<place> Information",
+  // which reads exactly like an AFIS, so it is not used bare (v16.31).
+  const engm = set.features.find((f) => f.icao === 'ENGM' && f.kind === 'CTR');
+  const atis = A.serviceRows(engm).filter((r) => r.tag === 'ATIS');
+  assert(atis.length === 2, 'ENGM ATIS rows: ' + JSON.stringify(atis));
+  assert(/arrival/i.test(atis[0].callsign) && /departure/i.test(atis[1].callsign),
+    'the two ATIS rows are not distinguished: ' + JSON.stringify(atis.map((r) => r.callsign)));
+  assert(atis.every((r) => /^ENGM ATIS/.test(r.callsign)),
+    'an ATIS row lost its aerodrome label: ' + JSON.stringify(atis.map((r) => r.callsign)));
+  // A field with ONE ATIS is unchanged - no "(arrival)" where there is nothing
+  // to tell apart.
+  const entc = set.features.find((f) => f.icao === 'ENTC' && f.kind === 'CTR');
+  const one = A.serviceRows(entc).filter((r) => r.tag === 'ATIS');
+  assert(one.length === 1 && one[0].callsign === 'ENTC ATIS', 'ENTC ATIS: ' + JSON.stringify(one));
+});
+
+T('nothing published with a dialable frequency is invisible on the card', () => {
+  const A = moduleExports.airspace;
+  // ENR 2.1/2.2 do not tag a service type - only AD 2.18 does - so for a TMA the
+  // code is DERIVED from the published callsign. "Final" and "Sola Arrival"
+  // matched none of the patterns, landed with code null, and the card collects
+  // by code: two published frequencies imported and then never shown (Oslo TMA
+  // 128.905, Sola TMA 119.405). Absent for a stated reason is this project's
+  // rule; absent because a regex did not recognise a word is not.
+  const src = fs.readFileSync('data/aip.js', 'utf8');
+  const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
+  assert(set.features.length > 100, 'only ' + set.features.length + ' features to check');
+  const orphans = new Map();
+  for (const f of set.features) {
+    for (const sv of f.services || []) {
+      if (sv.code) continue;
+      const dialable = (sv.freqs || [])
+        .filter((q) => A.isUsableFrequency(q) && !A.isStandbyFrequency(q));
+      if (dialable.length) orphans.set(sv.callsign || '(no callsign)', f.name);
+    }
+  }
+  assert(orphans.size === 0, 'published services that reach no card: ' +
+    JSON.stringify([...orphans.entries()]));
+
+  // The two that used to be lost are on their cards now.
+  const tma = set.features.find((f) => /^Oslo TMA/.test(f.name));
+  const oslo = A.serviceRows(tma).find((r) => r.callsign === 'Final');
+  assert(oslo && oslo.freqs.join(',') === '128.905', 'Oslo TMA Final: ' + JSON.stringify(oslo));
+  const sola = set.features.find((f) => /^Sola TMA/.test(f.name));
+  const arr = A.serviceRows(sola).find((r) => r.callsign === 'Sola Arrival');
+  assert(arr && arr.freqs.join(',') === '119.405', 'Sola Arrival: ' + JSON.stringify(arr));
+});
+
 T('an airspace worked only by an ACC still names someone to call', () => {
   const A = moduleExports.airspace;
   // Hammerfest, Helgeland and Lofoten TMA have no local approach - Polaris

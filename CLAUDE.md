@@ -1225,6 +1225,60 @@ three cheap disciplines applied every time the page is touched:
     bindTooltip/setStyle. It also kept only the LAST handler per map event, so
     adding moveend/zoomend silently disabled the declutter tests - the stub now
     keeps a list and `__fireMap(ev)` fires them all, like the real map.
+- **A ROW IS A POSITION, NOT A SERVICE CODE (v16.60, the pilot's question: "why
+  does ENGM have so many approach frequencies?").** `collectServices` unioned
+  every service sharing a code into ONE row and labelled it with the FIRST
+  callsign it found. At the 47 aerodromes publishing one approach position that
+  is the same thing; at the six that publish several it is a plausible wrong
+  answer. Gardermoen read
+  `APP · Final · 128.905 · 119.980 · 118.480 · 129.305 · 136.405 · 120.455`,
+  and a pilot would call Final on 118.480, which is Oslo Approach sector E.
+  - IT IS THE v16.32 RULE UNAPPLIED TO ITS OWN SURFACE. That entry says a
+    frequency is only usable PAIRED WITH ITS SERVICE, and made the IMPORTER keep
+    the pairing - then the DISPLAY threw it away again. Same shape as v16.33
+    (all 26 Polaris frequencies, no position) and v16.42 (a prose frequency
+    landing on the last APP service). Grep for every surface when a rule is
+    added.
+  - **VERIFIED AGAINST THE SOURCE, NOT AGAINST OUR OWN DATASET.** AD 2.18 for
+    ENGM carries four separate `TSERVICE;CODE_TYPE = APP` blocks - Final
+    128.905, Oslo Approach 118.480 "Oslo TMA sector E", Director 136.405, Oslo
+    Approach 120.455 "sector W". The long list was faithful; the label was not.
+  - **TWO SPELLINGS OF ONE POSITION MUST STILL MERGE.** Ørland publishes
+    "Ørland Approach/radar" AND "Ørland Approach/ Radar" in the same edition, so
+    the split is keyed on the callsign normalised for case, spacing and
+    punctuation. Splitting naively invents a second position at ENOL - a test
+    asserts both halves.
+  - **A STANDBY FREQUENCY IS NOT ONE YOU DIAL.** 103 of 1673 are published `HO`
+    with "AVBL only when <primary> U/S". Off the card, kept in the data, exactly
+    like the guard frequencies. This is what pays for the extra rows: ENBR's
+    card actually got SHORTER.
+  - **TWO PUBLISHED SERVICES WERE INVISIBLE, and a regex was the reason.** ENR
+    2.1/2.2 do not tag a service type, so a TMA's code is derived from the
+    callsign - and "Final" (Oslo TMA 128.905) and "Sola Arrival" (Sola TMA
+    119.405) matched nothing, got `code: null`, and the card collects by code.
+    `codeFromCallsign` now knows both words. The re-import reproduced the
+    2026-09-03 edition EXACTLY - same 212 features, 27 sectors, 53 aerodromes -
+    with nine `null -> APP` changes and nothing else, which is why it was safe
+    to run. A test now asserts NO published service with a dialable frequency
+    reaches no card: it is 0.
+  - **THE COST WAS MEASURED IN THE BROWSER BEFORE IT WAS ACCEPTED**, because the
+    pilot's question was "will it clutter my screen". ENGM 290x133 -> 249x173:
+    40 px taller, 41 px NARROWER, and it is the worst card in the country. 174
+    of 212 airspaces are unchanged, Tromsø and Bardufoss among them; only ENGM
+    reaches 6 rows.
+  - **THE PUBLISHED REMARKS WERE MEASURED AND REJECTED.** Showing "sector E/W"
+    beside a frequency sounds obviously right; only 6 of 31 distinct remarks on
+    shown frequencies are sector letters. The rest is operational prose -
+    "IFR TFC only" (15 frequencies), "Remote AFIS is provided from RTC Bodø",
+    telephone numbers - so a sector-letter regex would surface the minority and
+    hide the one that matters most to a VFR pilot. Showing every SHORT remark
+    instead costs +50 px at ENGM and widens TROMSØ by 62 px, a card that is
+    otherwise untouched. Left out; say so rather than leaving it looking like an
+    oversight.
+  - NOTHING TESTED THE PAIRING BEFORE THIS. The whole suite passed while ENGM
+    was wrong. The new invariant walks EVERY row of EVERY feature and requires
+    the frequency to be published by a service whose callsign is that row's
+    (351 frequencies checked).
 - **ACC SECTORS: THE RIGHT POLARIS FREQUENCY, BY POSITION (v16.33)**. Hovering
   Polaris CTA printed ALL 26 VHF Polaris frequencies, which tells a pilot
   nothing. The CTA is ONE airspace over the whole country, so its published
