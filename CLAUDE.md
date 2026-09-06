@@ -1534,7 +1534,8 @@ and H2 all hold exactly as described.
    an import summary; labelled undo/redo; fix-search distance and bearing; a
    timezone statement beside the ETD field; a print-preview button; row-hover
    highlights the leg on the map. Nothing there changes a calculation.
-**17. TOUCH & GO / FULL STOP / FLY-OVER on an aerodrome** (the author's own
+**17. DONE at v16.54 - touch & go / full stop / fly-by.** See the section below.
+   ~~original entry:~~ TOUCH & GO / FULL STOP / FLY-OVER on an aerodrome (the author's own
    feature, from the taxi-fuel question). Clicking an airport offers the three,
    and they mean different things to the plan: FULL STOP carries taxi fuel into
    the next sector (which settles the open question - taxi fuel is per full stop,
@@ -1637,7 +1638,7 @@ file does not touch it. Do not let the split be mistaken for fixing M5.
   circuit altitude at all. `patternAltitude` (anchors.js) is the field elevation
   ROUNDED TO THE NEAREST 100 ft plus 1000 ft - rounding the elevation before
   adding, not the sum, because that is the arithmetic a pilot does in their head
-  and it differs only on a half-hundred. ENTC's 31 ft gives 1000 ft.
+  and it differs only on a half-hundred. ENTC's published 32 ft gives 1000 ft.
   - **ENDU IS 1500 ft AND THAT IS A TOLD VALUE, NOT A COMPUTED ONE.** The rule
     would give 1300. `KNOWN_PATTERN_ALT_FT` is a table on purpose: the eAIP hands
     us elevations and NEVER circuit altitudes, so every entry in it comes from a
@@ -1803,6 +1804,77 @@ job. What the cycle changed, and what it exposed:
   loosened: it is edition-dependent data, not an invariant. A parser regression
   looks exactly like a real withdrawal here, so the assert message says to check
   the source before editing the number. That is what caught Sector 8.
+
+## What happens at an aerodrome (v16.54-v16.55, roadmap item 17)
+
+Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
+**fly-by**. They are three different plans, and only the pilot knows which.
+
+- **THIS REVERSES THE v16.34 "NO DIALOG ON ADD" RULE - FOR AERODROMES ONLY.**
+  That rule is still right for a reporting point: it has a published name and
+  there is nothing to decide, so it is added with one click and no question. An
+  aerodrome is the exception because overflying one, touching down and going,
+  and shutting down for ten minutes produce different times, different fuel and
+  a different next sector. A test asserts the reporting-point path is unchanged.
+- **THE MINUTES ARE THE PILOT'S FIGURES** - 5 for a touch & go, 10 for a full
+  stop, both stated by them - and they are EDITABLE, because how long a
+  turnaround takes is a fact about the day rather than about the aircraft. They
+  live on the stop waypoint (one source of truth, and they still count when the
+  auto-open is off) and are edited in the FOLLOWING plan's header, which is the
+  sector whose off-block time actually moves.
+- **THE STOP TIME SITS BETWEEN TWO SECTORS, NOT IN A ROW OF ITS OWN.** It is
+  added to the running clock at the sector boundary, so every ETO in the next
+  sector moves by it - which is exactly what a turnaround does to a plan.
+- **TAXI FUEL IS NOW CHARGED PER DEPARTURE, NOT PER MISSION, and that is a
+  CALCULATION CHANGE.** The author settled it in AUDIT.md ("taxi fuel belongs to
+  a full stop"). It used to be charged once for the whole mission, so every
+  sector after a full stop read low by one start-up and taxi. A TOUCH & GO is
+  charged nothing here - the engine never stopped - and its minutes are priced
+  at the PATTERN fuel flow, which is the rate the pilot already set for circuit
+  work. Neither figure is invented.
+- **THE NEXT SECTOR DEPARTS FROM THE PUBLISHED FIELD ELEVATION**, looked up from
+  the dataset rather than inherited from the arrival row. This SETTLES the
+  question CLAUDE.md left open at v16.43: the old note guessed that a touch & go
+  would resume from the circuit altitude, and the pilot's answer is that both
+  resume from the field - you are on the runway either way.
+- **A FLY-BY IS NAMED FROM THE PUBLISHED ATS CALLSIGN (v16.55, the pilot's
+  correction), AND THE ANSWER WAS IN THE DATA ALL ALONG.**
+  v16.54 used the AIP's `city` field and was wrong about a third of the time -
+  ENEV came out "Harstad/Narvik" where the chart and the radio both say EVENES.
+  The pilot asked whether that information exists anywhere. It does, and this
+  project already ships it: every aerodrome's own station is published with a
+  CALLSIGN in the airspace data, and the place part of it IS the name.
+  - MEASURED: 49 of 53 aerodromes publish a station of their own, and 22 of
+    those give a name `city` does not - Vigra, Flesland, Kjevik, Gardermoen,
+    Banak, Værnes, Sola, Torp, Skagen, Helle, Evenes.
+  - **THE OTHER CANDIDATE WAS TRIED AND MEASURED, NOT ASSUMED.** `name` carries
+    the aerodrome after a " / " and agrees with the callsign on 40 of the 49 -
+    but where they differ the callsign is the one flown: Tromsø not Langnes,
+    Kirkenes not Høybuktmoen, Molde not Årø, Vardø not Svartnes. It is used only
+    for the 4 uncontrolled fields with no station (Eggemoen, Gullknapp, Kjeller,
+    Rena), where it IS what pilots call them. 53 of 53 now resolve, and a test
+    asserts none of them falls back to the ICAO code.
+  - **ONLY THE AERODROME'S OWN STATION COUNTS** - tower, AFIS or the ATIS. An
+    APPROACH service can be an area centre: "Polaris Control" answers for
+    Skagen's TIZ, and taking it would name half of Norway "Polaris". A test
+    asserts no aerodrome is called Polaris.
+  - THE LESSON, and it is the NO GUESSTIMATES rule in a new place: v16.54
+    reached for the field with the likeliest-sounding NAME (`city`) instead of
+    asking which published field actually carries the thing wanted. "No single
+    field gives every colloquial name" was true of the two fields I looked at,
+    and false of the dataset.
+  - **THE ANCHOR HAD TO CARRY THE NAME, and the test caught that it did not.**
+    `buildAnchors` built an aerodrome anchor whose `name` IS the ICAO code, so
+    `civilName` fell back to it and a fly-by over Tromsø would have been called
+    "Entc". Written before the test ran; found the moment it did.
+- **CLICKED FOR REAL IN THE VERIFIER.** v16.53's lesson: `verify-fixes.mjs`
+  clicks the actual aerodrome symbol, reads the dialog, clicks Full stop, and
+  asserts the next sector opened at 32 ft with the ground time in its header.
+  Driving `clickAnchor()` from a test would have proved the function, not the
+  marker.
+- CLAUDE.md said "ENTC's published 32 ft gives 1000 ft" - the published figure is **32 ft**
+  and the derived circuit altitude is unchanged at 1000. Corrected here rather
+  than left as a number the code disagrees with.
 
 ## The keyboard belongs to the pilot (v16.52, roadmap item 10)
 

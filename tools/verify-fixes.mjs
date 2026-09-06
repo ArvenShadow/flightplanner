@@ -124,6 +124,65 @@ check(wp.name === 'ELLA' && wp.lat === published.lat && wp.lng === published.lng
   `the waypoint sits on the published coordinate ${published.published} (${wp.lat}, ${wp.lng})`);
 check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point: ' + wp.anchor);
 
+// ---- AN AERODROME ASKS WHAT HAPPENS THERE (v16.54, roadmap item 17) ------
+// A reporting point is added with no dialog (asserted above); an aerodrome is
+// the deliberate exception. Clicked for real, because v16.53 shipped a menu of
+// dead buttons that every function-level test passed.
+{
+  await page.evaluate(() => {
+    flights = [{ id: 1, title: 'F', depElev: 254, waypoints: [
+      { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 }]}];
+    activeFlightIndex = 0;
+    map.setView([69.679, 18.911], 10, { animate: false });
+    refreshMap(); renderAllFlightTables();
+  });
+  await page.waitForTimeout(500);
+  const ads = await page.locator('.fix-icon.fix-ad').count();
+  check(ads >= 1, `an aerodrome symbol is on screen to click (${ads})`);
+  await page.locator('.fix-icon.fix-ad').first().click();
+  await page.waitForTimeout(300);
+  const asked = await page.evaluate(() => {
+    const d = document.getElementById('app-dialog');
+    return d ? d.textContent.replace(/\s+/g, ' ') : '';
+  });
+  check(/what happens here/.test(asked), 'clicking an aerodrome asks what happens: ' + asked.slice(0, 60));
+  check(/Touch & go/.test(asked) && /Full stop/.test(asked) && /Fly-by/.test(asked),
+    'all three options are offered');
+  // The dialog must NAME the fly-by waypoint, because the AIP publishes two
+  // names and neither is always the one pilots say.
+  check(/Troms\u00f8/.test(asked), 'the fly-by option names the place: ' + asked.slice(0, 140));
+  // v16.55: the name is the published CALLSIGN's place, not the town. ENTC
+  // happens to agree; ENEV is the case that proves the rule, so it is checked
+  // through the same resolver the dialog uses.
+  const named = await page.evaluate(() => {
+    const ads = buildAnchors(window.C182_AIP).filter((a) => a.kind === 'AD');
+    const of = (i) => { const a = ads.find((x) => x.icao === i); return a ? civilName(a) : null; };
+    return { ENEV: of('ENEV'), ENSK: of('ENSK'), ENSH: of('ENSH'),
+             codeNamed: ads.filter((a) => civilName(a).toUpperCase() === a.icao).length };
+  });
+  check(named.ENEV === 'Evenes' && named.ENSK === 'Skagen' && named.ENSH === 'Helle',
+    'the callsign names them: ' + JSON.stringify(named));
+  check(named.codeNamed === 0, `no aerodrome falls back to its ICAO code (${named.codeNamed})`);
+
+  await page.locator('#app-dialog .dlg-btn', { hasText: 'Full stop' }).click();
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => {
+    const w = flights[0].waypoints.slice(-1)[0];
+    const hdrs = [...document.querySelectorAll('.flight-header')].map((h) => h.textContent.replace(/\s+/g, ' '));
+    return { plans: flights.length, stop: w.stop, stopMin: w.stopMin, name: w.name,
+             nextDepElev: flights[1] && flights[1].depElev, hdr: hdrs[1] || '' };
+  });
+  check(after.stop === 'full-stop' && after.stopMin === 10,
+    `the full stop is recorded with its default minutes (${after.stop}, ${after.stopMin})`);
+  check(after.name === 'ENTC', 'a full stop keeps the ICAO code: ' + after.name);
+  check(after.plans === 2, `the next sector opened (${after.plans} plans)`);
+  // ENTC publishes 32 ft: the next climb starts from the RUNWAY, not from the
+  // altitude the arrival row showed.
+  check(after.nextDepElev === 32, `the next sector departs from the field (${after.nextDepElev} ft)`);
+  check(/Full stop/.test(after.hdr) && /ENTC/.test(after.hdr),
+    'the next plan header shows the editable ground time: ' + after.hdr.slice(0, 90));
+}
+
 // The hover card must appear, be readable, and lead with the published fix.
 // Whichever reporting point is actually DRAWN here - naming one by hand ties
 // this check to a viewport, and the point of the layer is that it culls.

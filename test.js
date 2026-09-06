@@ -6931,6 +6931,326 @@ TA('importing a file applies its keybinds through the sanitiser', async () => {
 });
 
 
+
+console.log('\n=== 62a000h. Touch & go, full stop, fly-by (v16.54, roadmap item 17) ===');
+
+T('a stop is a validated kind and a validated number of minutes', () => {
+  const A = moduleExports.anchors;
+  assert(A.normaliseStopKind('touch-go') === 'touch-go' && A.normaliseStopKind('full-stop') === 'full-stop',
+    'a real stop kind was rejected');
+  for (const bad of ['landing', '', null, 7, {}])
+    assert(A.normaliseStopKind(bad) === null, 'a bogus stop kind got through: ' + JSON.stringify(bad));
+  // THE DEFAULTS ARE THE PILOT'S FIGURES: 5 for a touch & go, 10 for a full stop.
+  assert(A.normaliseStopMinutes('touch-go') === 5, 'touch & go default');
+  assert(A.normaliseStopMinutes('full-stop') === 10, 'full stop default');
+  assert(A.normaliseStopMinutes('touch-go', 12) === 12, 'an explicit figure was overridden');
+  assert(A.normaliseStopMinutes('touch-go', 'x') === 5, 'a non-number should fall back to the default');
+  assert(A.normaliseStopMinutes('full-stop', 0) === A.STOP_MIN_MINUTES, 'no lower clamp');
+  assert(A.normaliseStopMinutes('full-stop', 99999) === A.STOP_MAX_MINUTES, 'no upper clamp');
+  assert(A.normaliseStopMinutes(null, 30) === null, 'minutes without a kind mean nothing');
+});
+
+T('a fly-by is named from the published ATS callsign', () => {
+  // THE PILOT'S CORRECTION (v16.55): the name a pilot says IS the callsign.
+  // v16.54 used the AIP's `city` and came out "Harstad/Narvik" where the chart
+  // and the radio both say EVENES.
+  const A = moduleExports.anchors;
+  assert(A.callsignPlace('Evenes Tower') === 'Evenes', 'tower');
+  assert(A.callsignPlace('Skagen Information') === 'Skagen', 'AFIS');
+  assert(A.callsignPlace('Bardufoss Approach/ Radar') === 'Bardufoss', 'a compound service name');
+  assert(A.callsignPlace('Ny-Ålesund Information') === 'Ny-Ålesund', 'a hyphenated place');
+  assert(A.callsignPlace('') === '' && A.callsignPlace(null) === '', 'nothing published, nothing invented');
+  // A callsign that is only a service word names no place.
+  assert(A.callsignPlace('Information') === '', 'a bare service word became a place name');
+
+  const set = aipDataset();
+  const ads = A.buildAnchors(set).filter((x) => x.kind === 'AD');
+  assert(ads.length > 40, 'only ' + ads.length + ' aerodromes');
+  // THE THREE THE PILOT NAMED, plus the two the old rule got right anyway.
+  const want = { ENEV: 'Evenes', ENSK: 'Skagen', ENSH: 'Helle',
+                 ENTC: 'Tromsø', ENDU: 'Bardufoss' };
+  for (const [icao, name] of Object.entries(want)) {
+    const a = ads.find((x) => x.icao === icao);
+    assert(a, 'no anchor for ' + icao);
+    assert(A.civilName(a) === name, icao + ' should be ' + name + ', got ' + A.civilName(a));
+  }
+  // An APPROACH service can be an area centre - "Polaris Control" answers for
+  // Skagen's TIZ - and taking it would name half of Norway "Polaris".
+  assert(!ads.some((a) => /Polaris/i.test(A.civilName(a))), 'an ACC callsign became an aerodrome name');
+  // EVERY aerodrome gets a name, and none of them is an ICAO code.
+  const unnamed = ads.filter((a) => !A.civilName(a));
+  assert(unnamed.length === 0, unnamed.length + ' aerodromes have no name');
+  const codeNamed = ads.filter((a) => A.civilName(a).toUpperCase() === a.icao);
+  assert(codeNamed.length === 0, codeNamed.map((a) => a.icao).join() + ' fell back to the ICAO code');
+
+  // THE FOUR UNCONTROLLED FIELDS have no station, so the published aerodrome
+  // name is used - which for those IS what pilots call them.
+  assert(A.publishedFieldName({ name: 'HØNEFOSS / Eggemoen' }) === 'Eggemoen', 'name suffix');
+  assert(A.publishedFieldName({ name: 'BARDUFOSS' }) === '', 'no suffix to take');
+  for (const [icao, name] of Object.entries({ ENKJ: 'Kjeller', ENRE: 'Rena' })) {
+    const a = ads.find((x) => x.icao === icao);
+    assert(a && A.civilName(a) === name, icao + ' should fall back to ' + name + ', got ' +
+      (a && A.civilName(a)));
+  }
+  // ...and the town remains the last resort, title-cased, for anything with
+  // neither a station nor a published aerodrome name.
+  assert(A.civilName({ city: 'HARSTAD/NARVIK' }) === 'Harstad/Narvik', 'the last-resort title-case');
+});
+
+
+T('the stop travels through the sanitiser, and an unknown one does not', () => {
+  const E = moduleExports.exch;
+  const wp = (extra) => Object.assign({ lat: 69, lng: 18, name: 'X', alt: 254 }, extra);
+  const f = E.sanitiseFlights([{ id: 1, title: 't', depElev: 0, waypoints: [
+    wp({ stop: 'full-stop' }), wp({ stop: 'touch-go', stopMin: '12' }),
+    wp({ stop: 'crash', stopMin: 9 }), wp({})
+  ] }]);
+  const got = f[0].waypoints;
+  assert(got[0].stop === 'full-stop' && got[0].stopMin === 10, 'a full stop lost its default minutes');
+  assert(got[1].stop === 'touch-go' && got[1].stopMin === 12, 'an explicit figure was lost');
+  assert(got[2].stop === undefined && got[2].stopMin === undefined,
+    'an unknown stop kind survived: ' + JSON.stringify([got[2].stop, got[2].stopMin]));
+  assert(got[3].stop === undefined, 'an ordinary waypoint gained a stop');
+  // a plan made before stops existed must read back identically
+  const plain = E.sanitiseFlights([{ id: 1, title: 't', depElev: 0, waypoints: [wp({})] }]);
+  assert(!('stop' in plain[0].waypoints[0]), 'an old route file gained a stop key');
+});
+
+T('the auto-open setting is whitelisted and defaults to on', () => {
+  const E = moduleExports.exch;
+  assert(E.PROFILE_KEYS.includes('autoPlanAfterStop'), 'the setting is not in PROFILE_KEYS');
+  assert(ev('normaliseBool(undefined, true)') === true, 'an absent setting must keep the old behaviour');
+  assert(ev('normaliseBool(false, true)') === false, 'an explicit false must turn it off');
+  assert(ev(`normaliseBool('false', true)`) === false, 'a stringified false must turn it off');
+});
+
+T('a full stop adds its ground time between sectors, a touch & go its circuit time', () => {
+  // The stop sits BETWEEN two sectors, so every ETO in the next one moves by it.
+  const twoSectors = (stop, mins) => `
+    flights = [
+      { id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12
+          ${stop ? `, stop: '${stop}'${mins ? ', stopMin: ' + mins : ''}` : ''} }]},
+      { id: 2, title: 'B', depElev: 31, waypoints: [
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 31, oat: 10, wdir: 0, wspd: 0, var: -12 },
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]}
+    ]; activeFlightIndex = 0;
+    document.getElementById('def-etd').value = '10:00';
+    refreshMap(); renderAllFlightTables();`;
+  const finalAcc = () => txtOf('f-tot-acc-1');
+
+  ev(twoSectors(null));
+  const plain = finalAcc();
+  ev(twoSectors('full-stop'));
+  const stopped = finalAcc();
+  assert(plain !== stopped, 'a full stop changed nothing: ' + plain + ' vs ' + stopped);
+  const toMin = (t) => { const p = String(t).split(':').map(Number); return p[0] * 60 + p[1]; };
+  assert(toMin(stopped) - toMin(plain) === 10,
+    'a full stop should add 10 min, added ' + (toMin(stopped) - toMin(plain)));
+
+  ev(twoSectors('touch-go'));
+  assert(toMin(finalAcc()) - toMin(plain) === 5, 'a touch & go should add 5 min');
+  ev(twoSectors('full-stop', 25));
+  assert(toMin(finalAcc()) - toMin(plain) === 25, 'an edited ground time was ignored');
+  ev(SEED);
+});
+
+T('a full stop pays a fresh start-up and taxi; a touch & go does not', () => {
+  // The author settled this in AUDIT.md: taxi fuel belongs to a departure, not
+  // to the mission. Before v16.54 it was charged once and every sector after a
+  // full stop read low.
+  const sectors = (stop) => `
+    aircraftProfile.taxiFuel = 2.0; aircraftProfile.patternFf = 12;
+    flights = [
+      { id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12
+          ${stop ? `, stop: '${stop}'` : ''} }]},
+      { id: 2, title: 'B', depElev: 31, waypoints: [
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 31, oat: 10, wdir: 0, wspd: 0, var: -12 },
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]}
+    ]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+  const burn = () => parseFloat(txtOf('grand-tot-burn'));
+
+  ev(sectors(null));
+  const plain = burn();
+  ev(sectors('full-stop'));
+  const full = burn();
+  assert(Math.abs((full - plain) - 2.0) < 0.15,
+    'a full stop should add one taxi charge (2.0), added ' + (full - plain).toFixed(2));
+
+  ev(sectors('touch-go'));
+  const tg = burn();
+  // 5 min at 12 gph = 1.0 gal of circuit flying, and NO taxi - the engine
+  // never stopped.
+  assert(Math.abs((tg - plain) - 1.0) < 0.15,
+    'a touch & go should cost 5 min at the pattern flow (1.0), cost ' + (tg - plain).toFixed(2));
+  ev(SEED);
+});
+
+T('the ground time is editable in the FOLLOWING plan header', () => {
+  ev(`flights = [
+      { id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12,
+          stop: 'full-stop', stopMin: 10 }]},
+      { id: 2, title: 'B', depElev: 31, waypoints: [
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 31, oat: 10, wdir: 0, wspd: 0, var: -12 },
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]}
+    ]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const headers = [...doc.querySelectorAll('.flight-header')];
+  assert(headers.length === 2, headers.length + ' flight headers');
+  assert(!/Full stop/.test(headers[0].textContent), 'the FIRST plan claims a stop before it');
+  assert(/Full stop/.test(headers[1].textContent) && /ENTC/.test(headers[1].textContent),
+    'the second plan does not name the stop: ' + headers[1].textContent);
+  ev('setStopMinutes(0, 30)');
+  assert(ev('flights[0].waypoints[1].stopMin') === 30, 'the edit did not reach the waypoint');
+  ev('undoLast(true)');
+  assert(ev('flights[0].waypoints[1].stopMin') === 10, 'the edit was not undoable');
+  ev(SEED);
+});
+
+TA('clicking an aerodrome asks what happens, and each answer does its own thing', async () => {
+  const A = moduleExports.anchors;
+  const set = aipDataset();
+  const entc = A.buildAnchors(set).find((x) => x.kind === 'AD' && x.icao === 'ENTC');
+  assert(entc, 'no ENTC anchor');
+  ev(SEED);
+  ev(`aircraftProfile.autoPlanAfterStop = false;`);
+
+  // FLY-BY: an ordinary waypoint, named after the place, no new plan.
+  let p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  assert(/what happens here/.test(openDlg().textContent), 'no dialog: ' + openDlg().textContent);
+  assert(/Tromsø/.test(openDlg().textContent), 'the dialog does not name the fly-by waypoint');
+  answerDialog('➡ Fly-by');
+  await p; await tick();
+  let wps = ev('flights[0].waypoints');
+  assert(wps.length === 4, 'the fly-by did not add a waypoint');
+  assert(wps[3].name === 'Tromsø', 'the fly-by is not named after the place: ' + wps[3].name);
+  assert(!wps[3].stop, 'a fly-by must not be a stop');
+  assert(ev('flights.length') === 1, 'a fly-by opened a new plan');
+
+  // FULL STOP: a stop with its default minutes, and no circuit question.
+  ev(SEED);
+  p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🛩 Full stop');
+  await p; await tick();
+  wps = ev('flights[0].waypoints');
+  assert(wps[3].stop === 'full-stop' && wps[3].stopMin === 10, 'the full stop was not recorded');
+  assert(wps[3].name === 'ENTC', 'a full stop should keep the ICAO code: ' + wps[3].name);
+  assert(!openDlg(), 'a full stop asked about circuits');
+
+  // TOUCH & GO: asks about circuits; "no" leaves the route alone.
+  ev(SEED);
+  p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🔁 Touch & go');
+  await tick();
+  assert(openDlg() && /Circuits at ENTC/.test(openDlg().textContent),
+    'a touch & go did not ask about circuits');
+  answerDialog('No - straight out again');
+  await p; await tick();
+  wps = ev('flights[0].waypoints');
+  assert(wps[3].stop === 'touch-go' && wps[3].stopMin === 5, 'the touch & go was not recorded');
+  assert(wps.length === 4, 'saying no to circuits still added a pattern stop');
+  ev(`delete aircraftProfile.autoPlanAfterStop;`);
+  ev(SEED);
+});
+
+TA('yes to circuits adds a pattern stop at the derived altitude', async () => {
+  const A = moduleExports.anchors;
+  const entc = A.buildAnchors(aipDataset()).find((x) => x.kind === 'AD' && x.icao === 'ENTC');
+  ev(SEED);
+  ev(`aircraftProfile.autoPlanAfterStop = false;`);
+  const p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🔁 Touch & go');
+  await tick();
+  answerDialog('Yes - fly circuits here');
+  await tick();
+  typeInDialog('4');
+  answerDialog('Add circuits');
+  await p; await tick();
+  const wps = ev('flights[0].waypoints');
+  assert(wps.length === 5, 'no pattern stop was added: ' + wps.length);
+  assert(wps[4].isPattern === true && wps[4].laps === 4, 'the circuits are wrong: ' +
+    JSON.stringify([wps[4].isPattern, wps[4].laps]));
+  // ENTC's published field elevation is 32 ft, so the derived circuit
+  // altitude is 32 rounded to the nearest 100 (= 0) plus 1000.
+  assert(wps[4].alt === 1000, 'the circuit altitude was not derived: ' + wps[4].alt);
+  ev(`delete aircraftProfile.autoPlanAfterStop;`);
+  ev(SEED);
+});
+
+TA('a stop opens the next sector from the field elevation, unless turned off', async () => {
+  const A = moduleExports.anchors;
+  const entc = A.buildAnchors(aipDataset()).find((x) => x.kind === 'AD' && x.icao === 'ENTC');
+  ev(SEED);
+  ev(`delete aircraftProfile.autoPlanAfterStop;`);   // default is ON
+  let p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🛩 Full stop');
+  await p; await tick();
+  assert(ev('flights.length') === 2, 'the next sector did not open');
+  assert(ev('flights[1].depElev') === 32,
+    'the next sector does not depart from the field: ' + ev('flights[1].depElev'));
+
+  // ...and the setting really turns it off
+  ev(SEED);
+  ev(`aircraftProfile.autoPlanAfterStop = false;`);
+  p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🛩 Full stop');
+  await p; await tick();
+  assert(ev('flights.length') === 1, 'the setting did not turn the auto-open off');
+  ev(`delete aircraftProfile.autoPlanAfterStop;`);
+  ev(SEED);
+});
+
+T('the next sector departs from the PUBLISHED field, not the arrival altitude', () => {
+  // THIS HAS TO BE TESTED WITH THE TWO FIGURES DIFFERENT, or it passes for the
+  // wrong reason: the old rule inherited the last waypoint's altitude, and for
+  // an aerodrome waypoint that is USUALLY the field elevation anyway. The case
+  // the lookup exists for is a pilot who planned to cross ENTC at 2500 and then
+  // landed there - the next climb still starts from the runway.
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12,
+          stop: 'full-stop', stopMin: 10 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables(); addNewFlightPlan();`);
+  assert(ev('flights.length') === 2, 'no new plan');
+  assert(ev('flights[1].depElev') === 32,
+    'the next sector inherited the arrival altitude instead of the published field: ' +
+    ev('flights[1].depElev'));
+  // ...and with NO stop the old inherit-the-altitude behaviour is untouched.
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables(); addNewFlightPlan();`);
+  assert(ev('flights[1].depElev') === 2500,
+    'a plain waypoint stopped inheriting its altitude: ' + ev('flights[1].depElev'));
+  ev(SEED);
+});
+
+TA('a reporting point still adds with no dialog', async () => {
+  // v16.34's rule stands for everything except aerodromes: a published point
+  // already HAS its name, and asking about it is a click for nothing.
+  const A = moduleExports.anchors;
+  const rp = A.buildAnchors(aipDataset()).find((x) => x.kind === 'RP');
+  assert(rp, 'no reporting point in the dataset');
+  ev(SEED);
+  const before = ev('flights[0].waypoints.length');
+  ev(`clickAnchor(${JSON.stringify(rp)})`);
+  await tick();
+  assert(!openDlg(), 'a reporting point opened a dialog');
+  assert(ev('flights[0].waypoints.length') === before + 1, 'the point was not added');
+  ev(SEED);
+});
+
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');

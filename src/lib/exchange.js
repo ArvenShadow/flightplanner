@@ -25,6 +25,7 @@
  *  Aircraft performance, units and display preference - nothing that
  *  identifies a person, a machine or a place. */
 import { normaliseKeymap } from './keys.js';
+import { normaliseStopKind, normaliseStopMinutes } from './anchors.js';
 
 export const PROFILE_KEYS = [
   'mode', 'cruiseRpm', 'cruiseMp', 'cruiseTas', 'cruiseFf',
@@ -37,6 +38,8 @@ export const PROFILE_KEYS = [
   // #rrggbb; normaliseFixStyle re-checks them on the way in regardless,
   // because a route file can arrive from anyone.
   'fixAdColor', 'fixRpColor', 'fixAdShape', 'fixRpShape', 'fixStyle', 'fixSize', 'fixLabels',
+  // Whether a touch & go or a full stop opens the next sector for you (v16.54).
+  'autoPlanAfterStop',
   // The route line's thickness (v16.50). Validated by normaliseRouteWeight on
   // every read, because a route file can carry it.
   'routeWeight'
@@ -126,6 +129,11 @@ function sanitiseWaypoint(/** @type {any} */ w) {
   };
   if (w.varSource !== undefined && w.varSource !== null) out.varSource = String(w.varSource);
   if (w.anchor !== undefined && w.anchor !== null) out.anchor = String(w.anchor);
+  // What happens AT this aerodrome (v16.54). An unknown kind is dropped, not
+  // guessed at - a stop the app does not understand must not silently become
+  // one it does. The minutes follow the kind, so clearing the kind clears both.
+  const stop = normaliseStopKind(w.stop);
+  if (stop) { out.stop = stop; out.stopMin = normaliseStopMinutes(stop, w.stopMin); }
   if (out.isPattern) out.laps = Math.max(1, Math.floor(num(w.laps)) || 1);
   // Pins: cleared is null, never 0, so a route saved before pins existed reads
   // identically to one made after.
