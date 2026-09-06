@@ -12,7 +12,61 @@
  * which is why `verify-skins.mjs` checks the two agree.
  */
 
-/** @typedef {{ id: string, label: string, note: string }} Skin */
+/**
+ * TIER 2 - MOVING A CONTROL BETWEEN PANELS (v16.66).
+ *
+ * CSS places a box inside its own container and no further, so a skin cannot
+ * lift a button out of the sidebar and put it in the header. This was written
+ * up as needing roadmap 18 (handlers bound in code); that was WRONG, and the
+ * reason is worth keeping: `appendChild` MOVES A LIVE NODE, and the node keeps
+ * its id, its inline `on*=` attribute and every listener already attached. So a
+ * skin can reparent real controls at runtime without touching the markup, the
+ * handlers, or the compiler.
+ *
+ * WHAT KEEPS IT SAFE:
+ *   - only ids on MOVABLE are movable, so a skin cannot relocate a table cell
+ *     or something the layout depends on;
+ *   - only ids in SLOTS can receive, so nothing lands somewhere unstyled;
+ *   - the page remembers each node's original parent AND next sibling, so
+ *     leaving a skin puts it back exactly, not merely somewhere in the parent;
+ *   - `verify-skins.mjs` already asserts every skin keeps the whole inventory
+ *     of controls, and now also that a MOVED control still works.
+ */
+
+/** Containers a skin may move a control INTO. Each is an existing part of the
+ *  shell that already knows how to lay out controls. */
+export const SLOTS = ['map-controls', 'slot-header', 'slot-sidebar-top'];
+
+/** Controls a skin may move. Deliberately a whitelist of top-level actions -
+ *  the buttons a pilot presses, not the inputs a calculation reads. */
+export const MOVABLE = [
+  'undo-btn', 'redo-btn', 'settings-btn', 'guide-btn', 'wind-btn', 'sera-btn',
+  'ruler-btn', 'done-mode-btn', 'compact-btn', 'print-btn'
+];
+
+/**
+ * A skin's placement map, with everything it does not recognise dropped.
+ *
+ * Re-validated on every read for the same reason every other preference is: a
+ * skin can arrive from an exported settings file, and an unknown id would
+ * silently do nothing while looking as though it had worked.
+ *
+ * @param {unknown} raw
+ * @returns {Record<string, string>}
+ */
+export function normalisePlacement(raw) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [control, slot] of Object.entries(/** @type {Record<string, unknown>} */ (raw))) {
+    if (MOVABLE.includes(control) && typeof slot === 'string' && SLOTS.includes(slot)) {
+      out[control] = slot;
+    }
+  }
+  return out;
+}
+
+/** @typedef {{ id: string, label: string, note: string, place?: Record<string, string> }} Skin */
 
 /**
  * The default is FIRST and has no CSS of its own on purpose: it is the shipped
@@ -23,12 +77,14 @@
 export const SKINS = [
   { id: 'default', label: 'Default',
     note: 'The shipped design - map beside the plan.' },
-  { id: 'topbar', label: 'Top bar',
-    note: 'The plan becomes a band across the top, with the map filling the space below.' },
   { id: 'compact', label: 'Compact',
     note: 'The same arrangement with smaller type, tighter padding and shorter rows - for a 13" laptop, where the constraint is vertical space.' },
   { id: 'menu', label: 'Menu',
-    note: 'The plan collapses to a narrow rail and opens when you reach for it, so the map has the whole window. Hover or tab into it.' },
+    note: 'The plan collapses to a narrow rail and opens when you reach for it, so the map has the whole window. Undo, redo and Settings move onto the map, where they are still one click away.',
+    // TIER 2 IN ANGER: with the plan collapsed, the three actions a pilot
+    // reaches for most would be behind a hover. They are MOVED - the same
+    // buttons, the same handlers, a different parent.
+    place: { 'undo-btn': 'map-controls', 'redo-btn': 'map-controls', 'settings-btn': 'map-controls' } },
   { id: 'bold', label: 'Bold',
     note: 'Larger hit targets, heavier borders and bigger type - for a touchscreen, or reading at arm’s length.' }
 ];

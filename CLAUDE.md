@@ -2043,10 +2043,13 @@ The shell is `#header` and `#main`, and `#main` holds exactly two children:
   rewritten, so **no wiring can break**. That is the safety argument, and it is
   why skins are CSS-only BY RULE: a test asserts every rule in `src/skins.css`
   is scoped to a `body.skin-` class.
-- **TIER 2 - NEEDS ROADMAP 18.** REPARENTING a control: lifting one button out
-  of the sidebar and dropping it in the header. CSS places a box inside its own
-  container and no further. This needs the handlers bound in code rather than in
-  markup attributes - i.e. `src/page.js` under the compiler.
+- **TIER 2 - DONE at v16.66, and it did NOT need roadmap 18.** REPARENTING a
+  control: lifting one button out of the sidebar and dropping it in the header.
+  CSS places a box inside its own container and no further - that part was
+  right. The wrong part was the conclusion: **`appendChild` MOVES A LIVE NODE**,
+  and the node keeps its id, its inline `on*=` attribute and every listener
+  already attached. So a skin reparents real controls at runtime, and neither
+  the markup nor the handlers nor the compiler come into it. See "Tier 2" below.
 - **TIER 3 - NEEDS A DATA-DRIVEN RENDERER.** Reordering the OFP COLUMNS ("the
   flight plan screen shows the values in different orders"). CSS cannot reorder
   `<table>` cells - `order` does not apply to table-cell boxes - and the row
@@ -2061,15 +2064,46 @@ The shell is `#header` and `#main`, and `#main` holds exactly two children:
   list, kept pure so the page, the tests and the verifier read the same one).
   Both are inlined into the SAME `<style>` element, because a test asserts the
   page carries exactly one (v16.19).
-- Four skins beyond the default: **Top bar** (the plan becomes a band above the
-  map - the author's own example), **Menu** (the plan collapses to a rail and
+- Three skins beyond the default: **Menu** (the plan collapses to a rail and
   opens on hover or focus, no JavaScript), **Compact**, **Bold**.
+- **TOP BAR WAS TRIED AND REMOVED at v16.66** - the author's own example of what
+  they wanted, and having seen it, *"didn't do any wonders"*. Recorded because
+  the mechanism worked exactly as intended: one CSS block deleted, one line out
+  of `SKINS`, nothing else touched. A look that is cheap to try is also cheap to
+  throw away, which is the entire point of the arrangement.
 - **THE DEFAULT SKIN HAS NO CSS AT ALL, and a test enforces it.** It is the
   shipped design; every restyling change must leave it pixel-identical, which
   `verify:visual` proves rather than assumes.
 - ADDING ONE is a block in `skins.css` plus a line in `SKINS`. Nothing else -
   which is the whole point, because a look that is expensive to try does not get
   tried.
+
+### TIER 2 - A SKIN MAY MOVE A CONTROL BETWEEN PANELS (v16.66)
+
+`SLOTS` are the containers that may receive; `MOVABLE` is the whitelist that may
+move; a skin carries `place: { 'undo-btn': 'map-controls' }`. Both lists are
+enforced, so a skin can neither relocate something the layout depends on nor
+drop a control somewhere unstyled.
+
+- **THE MENU SKIN USES IT IN ANGER**, which matters - a mechanism no skin
+  exercises is untested by definition, and a test asserts at least one does.
+  With the plan collapsed to a rail, Undo, Redo and Settings would be behind a
+  hover, so they move onto the map. Same buttons, same handlers, different
+  parent.
+- **HOME IS A PARENT *AND* A POSITION.** Putting a control back with
+  `appendChild` returns it to the END of the row, so every switch drifts the
+  header one place further.
+- **AND RESTORING HAS TO RUN RIGHT-TO-LEFT.** A control is put back before the
+  sibling it used to precede - but if that sibling moved too, it is not back
+  yet and the insert falls through to the end anyway. Measured: Undo came home
+  at index 11 instead of 8. Restoring in descending original index means each
+  control's next sibling is already home by the time it is needed.
+- **THE WEAK ASSERTION HID IT, AND THAT IS THE LESSON.** The first version of
+  both the test and the verifier compared `parentElement.id` on each side - and
+  the home row has NO id, so both sides read `''` (or the same hard-coded
+  fallback) and the check passed while the control was three places adrift.
+  Comparing a value that is constant on both sides is not a comparison. They
+  compare the INDEX among siblings now, and that found the bug immediately.
 
 ### THE TYPO NET, because a CSS mistake is SILENT
 
