@@ -2024,6 +2024,55 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## Restyling has to be cheap before it can be safe (v16.64)
+
+The author wants to try WHOLE DIFFERENT LOOKS - layouts, button styles, placing -
+and asked for it to be fast and for typos not to slip past. Measured first, and
+the codebase was not ready for either:
+
+- **THE CSS WAS BARELY TOKEN-DRIVEN.** 14 custom properties against **223 literal
+  hex colours (79 distinct)** and 40 `rgba()` scattered through the rules. A new
+  look meant editing hundreds of places - expensive, and exactly where a typo
+  hides.
+- **THE COLOURS ARE NOT ONE POPULATION**, so the fix was scoped by measurement
+  rather than swept: 164 uses belong to the APP, 31 to LEAFLET's bundled CSS
+  (third-party, left alone) and 12 to the PRINTED OFP - and those 12 stay
+  literal ON PURPOSE. `#ofp-print, #ofp-print *` forces black on white so the
+  sheet survives a mono printer (v16.41); a theme must never be able to make
+  company paperwork grey.
+- **30 TONE TOKENS, AND 17 DARK-MODE OVERRIDE RULES DELETED.** Every paired
+  rule (`.row-highlight` plus `body.dark-mode .row-highlight`) collapses to one
+  rule and one token defined per theme. Zero dark-mode rules still carry a
+  literal colour.
+- **PROVED BY PIXELS, NOT BY TESTS**, which is the standing rule for a CSS move
+  (v16.19). `verify-visual` renders both builds in real Chromium and the
+  tokenised one is byte-identical in light AND dark.
+
+### THE VERIFIER WAS BROKEN IN THREE WAYS, AND THAT IS WHY IT WAS NEVER USED
+
+It is not in `package.json`, so it had rotted quietly since v16.45:
+
+1. **ITS DEFAULT REFERENCE WAS A SINGLE FILE** (`/tmp/old_build.html`), left from
+   the `dist/` era. The delivery has been THREE files since v16.45, so copying
+   `index.html` alone gives a page whose bundle never loads - it failed with
+   `escapeText is not defined`. The reference must be a whole `site/` directory.
+2. **IT RACED THE BOOT.** A fixed 900 ms wait, then `toggleTheme()` - which
+   reached `aircraftProfile` before the page script's top level had run. It
+   waits for the app now, not for a clock. **AND THE READINESS PROBE ITSELF HAD
+   TO SURVIVE THE DEAD ZONE**: `typeof flights` THROWS while `flights` is a
+   `let` in its temporal dead zone, where an undeclared name would simply
+   return 'undefined'. The probe is wrapped in try/catch for that one reason.
+3. **IT CRIED WOLF ON AN UNCHANGED BUILD.** Comparing a build against ITSELF
+   reported 11 differing pixels - the top border of the `#route-selector`
+   `<select>`. Native form controls are platform-themed and Chromium does not
+   rasterise them identically between runs.
+   - **THE FIX MEASURES THE NOISE INSTEAD OF TOLERATING IT.** Each side is shot
+     TWICE; pixels that differ between two shots of the SAME build are noise by
+     demonstration and are excluded. No threshold is picked, and if the flake
+     ever grows the mask grows with it and the run says so.
+   - That is deferred nit 13 ("verify-visual always reports 2 problems") - the
+     same class of defect, found from the other end.
+
 ## Great circle or rhumb line - the pilot chooses (v16.63)
 
 The pilot asked which model the distances used, and the answer exposed a

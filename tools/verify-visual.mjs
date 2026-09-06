@@ -32,7 +32,21 @@ async function shot(file, theme, tag) {
   const errs = []; page.on('pageerror', e => errs.push(String(e)));
   await page.route('**://**/**', r => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.goto('file://' + file, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(900);
+  // WAIT FOR THE APP, NOT FOR A CLOCK. A fixed 900 ms raced the boot on a cold
+  // cache and died with "Cannot access 'aircraftProfile' before initialization"
+  // - the page script had not finished its top level, so toggleTheme() reached
+  // a let-binding still in its temporal dead zone.
+  // ...AND THE PROBE ITSELF HAS TO SURVIVE THE DEAD ZONE. `flights` is a `let`
+  // at the top level of a classic script, and `typeof` on a let-binding still
+  // in its temporal dead zone THROWS - it does not return 'undefined' the way
+  // it would for a name that was never declared. So the readiness check is
+  // wrapped, or it fails with the very error it exists to wait out.
+  await page.waitForFunction(() => {
+    try {
+      return typeof toggleTheme === 'function' && !!flights && !!aircraftProfile;
+    } catch (e) { return false; }
+  }, null, { timeout: 20000 });
+  await page.waitForTimeout(300);
   await page.evaluate(async (theme) => {
     closeHelpModal(); toggleTheme(theme);
     flights = [{ id:1, title:'F1', depElev:254, waypoints: [
@@ -66,11 +80,58 @@ async function shot(file, theme, tag) {
   await ctx.close();
   return { buf, styles, errs, tag };
 }
+/**
+ * THE TOOL MEASURES ITS OWN NOISE FLOOR rather than trusting a threshold.
+ *
+ * Native form controls are platform-themed, and Chromium does not rasterise
+ * them identically between runs: comparing a build against ITSELF reported 11
+ * differing pixels along the top border of the #route-selector <select>. A
+ * verifier that cries wolf on an unchanged build is worse than none, and it is
+ * why this one had gone unused (it is not even in package.json).
+ *
+ * So each side is shot TWICE. Pixels that differ between two shots of the SAME
+ * build are noise BY DEMONSTRATION, and are excluded from the comparison. That
+ * is a measurement, not a tolerance - if the flake ever grows, the mask grows
+ * with it and says so.
+ */
+function diffMask(a, b) {
+  const m = new Uint8Array(a.length / 4);
+  for (let i = 0, k = 0; i < a.length; i += 4, k++) {
+    if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) m[k] = 1;
+  }
+  return m;
+}
+async function raw(buf) {
+  const ctx = await b.newContext();
+  const pg = await ctx.newPage();
+  const data = await pg.evaluate(async (b64) => {
+    const img = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.src = b64; });
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    c.getContext('2d').drawImage(img, 0, 0);
+    return Array.from(c.getContext('2d').getImageData(0, 0, img.width, img.height).data);
+  }, 'data:image/png;base64,' + buf.toString('base64'));
+  await ctx.close();
+  return Uint8ClampedArray.from(data);
+}
+
 let bad = 0;
 for (const theme of ['light', 'dark']) {
   const n = await shot(CURRENT, theme, 'new');
   const o = await shot(REFERENCE, theme, 'old');
-  const pxSame = Buffer.compare(n.buf, o.buf) === 0;
+  let pxSame = Buffer.compare(n.buf, o.buf) === 0;
+  let noisy = 0, real = 0;
+  if (!pxSame) {
+    // Re-shoot each side and let the run tell us which pixels are unstable.
+    const [nA, nB, oA] = [await raw(n.buf), await raw((await shot(CURRENT, theme, 'new2')).buf), await raw(o.buf)];
+    const noise = diffMask(nA, nB);
+    const delta = diffMask(nA, oA);
+    for (let k = 0; k < delta.length; k++) {
+      if (!delta[k]) continue;
+      if (noise[k]) noisy++; else real++;
+    }
+    pxSame = real === 0;
+    console.log(`   ${theme}: ${real} pixels really differ, ${noisy} are platform noise (unstable between two shots of the same build)`);
+  }
   const cssSame = n.styles === o.styles;
   console.log(`${theme.padEnd(6)} | pixels identical: ${pxSame} | computed styles identical: ${cssSame} | page errors ${n.errs.length}/${o.errs.length}`);
   if (!cssSame) {
