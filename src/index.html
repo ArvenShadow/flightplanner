@@ -270,7 +270,7 @@
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
-            <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — click <b>Set</b>, press the key. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only.
+            <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only.
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
               <br><b>Four rules apply to every binding.</b> <b>Ctrl</b> means Ctrl <i>or</i> ⌘, so one binding works on either keyboard. While a dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing fires behind it. Inside a text field the keys keep their normal text-editing meaning (<b>Ctrl+S</b> is the deliberate exception: the browser's own Ctrl+S saves the web page, which is never what you want here). And <b>Escape cannot be rebound</b> — it is the way out of a dialog and out of a half-finished line drag, so moving it could leave you with no way back.
               <br>Two things the menu will refuse, and it says why: a chord the <b>browser owns</b> (Ctrl+W, Ctrl+T, F5 …), because <i>preventDefault</i> cannot stop those and the binding would look like it worked and then not; and a chord <b>already used by another action</b>, because whichever came second would silently never fire. Your bindings are saved with your settings and <b>travel in the exported JSON</b>.</li>
@@ -828,7 +828,8 @@
           <div class="setting-section">
             <h3>Keyboard shortcuts</h3>
             <p style="font-size:10px; color:var(--text-muted); margin:0 0 8px; line-height:1.6;">
-              Click <b>Set</b>, then press the keystroke you want. <b>Ctrl</b> means Ctrl or ⌘,
+              <b>Click a row's shortcut box</b>, then press the keystroke you want; the Clear
+              button becomes Cancel while it waits. <b>Ctrl</b> means Ctrl or ⌘,
               so one binding works on either keyboard. <b>Clear</b> unbinds an action — most of
               these ship unbound on purpose, so the keyboard is yours rather than full of
               shortcuts nobody asked for. Shortcuts never fire while a dialog is open, and
@@ -887,8 +888,8 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 121 inline on*= handlers - 93 written
-    // into the markup and 28 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 119 inline on*= handlers - 93 written
+    // into the markup and 26 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -1112,7 +1113,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.52';
+    const APP_VERSION = '16.53';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3926,34 +3927,98 @@
       el.classList.toggle('is-bad', !!bad);
     }
 
+    /**
+     * THE ROW HAS NO INLINE HANDLERS, and that is a fix, not a style choice
+     * (v16.53). The first version built them with
+     * `onclick="beginKeybindCapture(' + JSON.stringify(id) + ')"` -
+     * and JSON.stringify emits DOUBLE quotes, which closed the onclick
+     * attribute on the spot. Every Set and Clear button in the list was inert.
+     * It is the same attribute-quoting failure v16.47 was about, and the tests
+     * missed it because they called the functions instead of clicking the
+     * buttons. Listeners are attached to the elements here, so there is no
+     * attribute for a quote to escape from.
+     */
     function populateKeybindForm() {
       const host = document.getElementById('keybind-list');
       if (!host) return;
       const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
-      let html = '';
+      host.innerHTML = '';
       let group = null;
       for (const spec of ACTION_SPECS) {
         if (spec.group !== group) {
           group = spec.group;
-          html += '<div class="keybind-group">' + esc(group) + '</div>';
+          const h = document.createElement('div');
+          h.className = 'keybind-group';
+          h.textContent = group;
+          host.appendChild(h);
         }
         const chord = spec.fixed ? spec.dflt : keybinds[spec.id];
         const capturing = keybindCapturing === spec.id;
-        html += '<div class="keybind-row' + (capturing ? ' is-capturing' : '') + '">' +
-          '<span class="keybind-what"><b>' + esc(spec.label) + '</b>' +
-          (spec.hint ? '<small>' + esc(spec.hint) + '</small>' : '') + '</span>' +
-          '<kbd class="keybind-chord' + (chord ? '' : ' is-unbound') + '">' +
-          esc(capturing ? 'Press a key…' : chordLabel(chord, mac)) + '</kbd>' +
-          '<span class="keybind-actions">' +
-          (spec.fixed
-            ? '<span class="keybind-fixed">fixed</span>'
-            : '<button class="btn btn-outline btn-sm" onclick="beginKeybindCapture(' +
-                JSON.stringify(spec.id) + ')">' + (capturing ? 'Cancel' : 'Set') + '</button>' +
-              '<button class="btn btn-outline btn-sm" onclick="clearKeybind(' +
-                JSON.stringify(spec.id) + ')"' + (chord ? '' : ' disabled') + '>Clear</button>') +
-          '</span></div>';
+
+        const row = document.createElement('div');
+        row.className = 'keybind-row' + (capturing ? ' is-capturing' : '');
+        row.dataset.action = spec.id;
+
+        const what = document.createElement('span');
+        what.className = 'keybind-what';
+        const b = document.createElement('b');
+        b.textContent = spec.label;
+        what.appendChild(b);
+        if (spec.hint) {
+          const small = document.createElement('small');
+          small.textContent = spec.hint;
+          what.appendChild(small);
+        }
+        row.appendChild(what);
+
+        // THE CHORD BOX IS THE CONTROL (the pilot's request): click what you
+        // want to change. A separate "Set" button was a second thing to aim at
+        // for no gain, and the box is where the eye already is.
+        const kbd = document.createElement('button');
+        kbd.type = 'button';
+        kbd.className = 'keybind-chord' + (chord ? '' : ' is-unbound') +
+          (spec.fixed ? ' is-fixed' : '');
+        kbd.textContent = capturing ? 'Press a key\u2026' : chordLabel(chord, mac);
+        if (spec.fixed) {
+          kbd.disabled = true;
+          kbd.title = spec.hint || 'This binding is fixed.';
+        } else {
+          kbd.title = (chord ? 'Change' : 'Set') + ' the shortcut for "' + spec.label + '"';
+          kbd.addEventListener('click', () => beginKeybindCapture(spec.id));
+        }
+        row.appendChild(kbd);
+
+        const actions = document.createElement('span');
+        actions.className = 'keybind-actions';
+        if (spec.fixed) {
+          const fixed = document.createElement('span');
+          fixed.className = 'keybind-fixed';
+          fixed.textContent = 'fixed';
+          actions.appendChild(fixed);
+        } else {
+          // CANCEL TAKES THE CLEAR BUTTON'S PLACE while capturing, so the row
+          // never grows a third control and the way out is where the hand
+          // already is.
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-sm ' + (capturing ? 'btn-danger' : 'btn-outline');
+          btn.textContent = capturing ? 'Cancel' : 'Clear';
+          btn.disabled = !capturing && !chord;
+          btn.title = capturing ? 'Stop setting this shortcut and leave it as it was'
+                                : 'Remove this shortcut';
+          btn.addEventListener('click', () => {
+            if (keybindCapturing === spec.id) {
+              keybindNote('Cancelled - nothing changed.', false);
+              endKeybindCapture();
+            } else {
+              clearKeybind(spec.id);
+            }
+          });
+          actions.appendChild(btn);
+        }
+        row.appendChild(actions);
+        host.appendChild(row);
       }
-      host.innerHTML = html;
     }
 
     function beginKeybindCapture(id) {

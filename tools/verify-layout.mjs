@@ -190,8 +190,22 @@ check(short.map.height >= 140, `...and the map does not vanish: ${short.map.heig
   check(list.n >= 25, `the keyboard page lists every action: ${list.n} rows`);
   check(list.sized === list.n, `every row has a real box on screen: ${list.sized}/${list.n}`);
 
+  // THE CONTROLS ARE CLICKED, NOT CALLED. v16.52 shipped a list whose buttons
+  // were inert - a JSON.stringify'd id closed the onclick attribute - and it
+  // got through because this file and the jsdom tests both drove the functions
+  // instead of the controls. A real mouse click is the only thing that proves
+  // a control is wired up.
+  const chordBox = (id) => page.locator(`.keybind-row[data-action="${id}"] .keybind-chord`);
+  const sideBtn = (id) => page.locator(`.keybind-row[data-action="${id}"] .keybind-actions button`);
+
+  await chordBox('print').click();
+  await page.waitForTimeout(120);
+  check(await page.evaluate(() => keybindCapturing === 'print'),
+    'CLICKING the chord box starts a capture');
+  check((await sideBtn('print').textContent()).trim() === 'Cancel',
+    'Clear becomes Cancel while capturing');
+
   // BINDING Ctrl+S MUST NOT ALSO SAVE.
-  await page.evaluate(() => beginKeybindCapture('print'));
   await page.keyboard.press('Control+s');
   await page.waitForTimeout(200);
   const afterCtrlS = await page.evaluate(() => ({
@@ -206,9 +220,16 @@ check(short.map.height >= 140, `...and the map does not vanish: ${short.map.heig
   await page.waitForTimeout(150);
   check(await page.evaluate(() => keybinds['print'] === 'Alt+P' && keybindCapturing === null),
     'a free chord is accepted and ends the capture');
+  check((await chordBox('print').textContent()).trim() === 'Alt+P', 'the row shows the new chord');
+
+  // CLICKING CLEAR really unbinds.
+  await sideBtn('print').click();
+  await page.waitForTimeout(120);
+  check(await page.evaluate(() => keybinds['print'] === null), 'CLICKING Clear unbinds the action');
+  check(await sideBtn('print').isDisabled(), 'Clear disables itself once there is nothing to clear');
 
   // A REBOUND KEY FIRES AND THE OLD ONE GOES QUIET - measured on real presses.
-  await page.evaluate(() => beginKeybindCapture('undo'));
+  await chordBox('undo').click();
   await page.keyboard.press('Alt+u');
   await page.waitForTimeout(120);
   await page.evaluate(() => closeSettingsModal());

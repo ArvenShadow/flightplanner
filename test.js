@@ -6795,10 +6795,12 @@ T('the keyboard page lists every action, with the fixed one marked', () => {
     rows.length + ' rows for ' + K.ACTION_SPECS.length + ' actions');
   const groups = [...doc.querySelectorAll('#keybind-list .keybind-group')];
   assert(groups.length >= 4, 'the list is not grouped: ' + groups.length);
-  // the fixed one offers no Set button, because it cannot be moved
+  // The fixed one is marked and its chord box is inert - v16.53 made the box
+  // itself the control, so "no button" became "a disabled one".
   const fixedRow = rows[rows.length - 1];
   assert(/fixed/.test(fixedRow.textContent), 'the fixed binding is not marked: ' + fixedRow.textContent);
-  assert(!fixedRow.querySelector('button'), 'the fixed binding offers a button');
+  assert(fixedRow.querySelector('.keybind-chord').disabled, 'the fixed chord box is clickable');
+  assert(!fixedRow.querySelector('.keybind-actions button'), 'the fixed binding offers a Clear button');
   // an unbound action says so rather than showing an empty box
   assert([...doc.querySelectorAll('#keybind-list .is-unbound')].length > 0,
     'nothing is shown as unbound, though most actions ship that way');
@@ -6806,41 +6808,91 @@ T('the keyboard page lists every action, with the fixed one marked', () => {
 });
 
 TA('setting a key from the menu takes effect, and a clash is refused', async () => {
+  // THESE TESTS CLICK THE REAL CONTROLS. v16.52 shipped a list whose Set and
+  // Clear buttons were completely inert - the handler was built with
+  // `onclick="...(' + JSON.stringify(id) + ')"`, and JSON.stringify's double
+  // quotes closed the attribute. It got through because the tests called
+  // beginKeybindCapture() and clearKeybind() directly. Driving the functions
+  // proves the functions; only driving the CONTROL proves the control.
   ev(SEED);
   ev('openSettingsModal(); showSettingsPage("keys")');
-  // A KeyboardEvent's fields are getters, so a plain object stands in - the
-  // capture handler only reads key/ctrlKey/... and calls the two methods.
+  const row = (id) => doc.querySelector('#keybind-list .keybind-row[data-action="' + id + '"]');
+  const chordBox = (id) => row(id).querySelector('.keybind-chord');
+  const sideBtn = (id) => row(id).querySelector('.keybind-actions button');
+  const click = (el) => el.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   const press = (init) => ev(`captureKeybind(Object.assign(` +
     `{ preventDefault(){}, stopPropagation(){} }, ${JSON.stringify(init)}))`);
 
-  ev(`beginKeybindCapture('print')`);
-  assert(ev('keybindCapturing') === 'print', 'capture did not start');
+  // CLICKING THE CHORD BOX starts the capture - there is no Set button any more.
+  assert(chordBox('print').textContent === 'Not bound', 'print should start unbound');
+  click(chordBox('print'));
+  assert(ev('keybindCapturing') === 'print',
+    'clicking the chord box did not start a capture (this is the v16.52 bug)');
+  assert(/Press a key/.test(chordBox('print').textContent), 'the box does not prompt: ' +
+    chordBox('print').textContent);
+  assert(sideBtn('print').textContent === 'Cancel', 'Clear did not become Cancel while capturing');
+
   // A CLASH IS REFUSED AND CAPTURE STAYS OPEN, so the pilot can just try again.
   press({ key: 'z', ctrlKey: true });
   assert(ev('keybindCapturing') === 'print', 'a refused chord ended the capture');
   assert(ev(`keybinds['print']`) === null, 'the clashing chord was stored anyway');
   assert(/already/.test(doc.getElementById('keybind-capture-note').textContent),
     'the clash was not explained: ' + doc.getElementById('keybind-capture-note').textContent);
+
   // a good one lands
   press({ key: 'p', altKey: true });
   assert(ev(`keybinds['print']`) === 'Alt+P', 'the new chord was not stored: ' + ev(`keybinds['print']`));
   assert(ev('keybindCapturing') === null, 'capture did not end');
+  assert(chordBox('print').textContent === 'Alt+P', 'the row still shows the old value');
   assert(JSON.parse(w.localStorage.getItem('c182_keybinds')).print === 'Alt+P', 'it was not persisted');
 
-  // Escape cancels without changing anything
-  ev(`beginKeybindCapture('open-guide')`);
+  // CLICKING CANCEL leaves the binding as it was.
+  click(chordBox('print'));
+  assert(ev('keybindCapturing') === 'print', 'the box did not re-open for editing');
+  click(sideBtn('print'));
+  assert(ev('keybindCapturing') === null, 'the Cancel button did nothing');
+  assert(ev(`keybinds['print']`) === 'Alt+P', 'Cancel changed the binding');
+  assert(sideBtn('print').textContent === 'Clear', 'the button did not go back to Clear');
+
+  // CLICKING CLEAR unbinds, and then disables itself because there is nothing left.
+  click(sideBtn('print'));
+  assert(ev(`keybinds['print']`) === null, 'the Clear button did nothing');
+  assert(chordBox('print').textContent === 'Not bound', 'the row still shows a chord');
+  assert(sideBtn('print').disabled, 'Clear is still offered on an unbound action');
+
+  // Escape cancels a capture without changing anything
+  click(chordBox('open-guide'));
   press({ key: 'Escape' });
   assert(ev('keybindCapturing') === null, 'Escape did not cancel the capture');
   assert(ev(`keybinds['open-guide']`) === null, 'Escape bound something');
 
-  // Clear unbinds
-  ev(`clearKeybind('print')`);
-  assert(ev(`keybinds['print']`) === null, 'Clear did not unbind');
-
   // closing the modal must not leave a capture swallowing keystrokes
-  ev(`beginKeybindCapture('print'); closeSettingsModal();`);
+  click(chordBox('print'));
+  ev('closeSettingsModal()');
   assert(ev('keybindCapturing') === null, 'a capture survived the modal closing');
   ev(`keybinds = normaliseKeymap(null); saveKeybinds();`);
+});
+
+T('the keybind list carries no inline handlers, so no quote can escape one', () => {
+  // The v16.52 regression in one assertion: a string interpolated into an
+  // `onclick="..."` attribute breaks the attribute the moment it contains a
+  // double quote. The list attaches listeners to elements instead.
+  ev('openSettingsModal(); showSettingsPage("keys")');
+  const nodes = [...doc.querySelectorAll('#keybind-list *')];
+  assert(nodes.length > 50, 'the list did not render: ' + nodes.length);
+  for (const el of nodes) {
+    for (const at of el.attributes)
+      assert(!/^on/i.test(at.name),
+        'an inline handler is back on the keybind list: ' + el.tagName + ' ' + at.name);
+  }
+  // and every actionable row really is wired up
+  const K = moduleExports.keys;
+  for (const spec of K.ACTION_SPECS) {
+    const r = doc.querySelector('#keybind-list .keybind-row[data-action="' + spec.id + '"]');
+    assert(r, 'no row for ' + spec.id);
+    assert(r.querySelector('.keybind-chord'), spec.id + ' has no chord control');
+  }
+  ev('closeSettingsModal()');
 });
 
 T('keybinds travel in the exported JSON, and are normalised both ways', () => {
