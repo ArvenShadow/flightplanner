@@ -3479,13 +3479,20 @@ T('an anchored waypoint carries the PUBLISHED coordinate, unrounded', () => {
   const anchors = A.buildAnchors(set);
   const endu = anchors.find((a) => a.kind === 'AD' && a.icao === 'ENDU');
   const ad = set.aerodromes.find((a) => a.icao === 'ENDU');
-  const wp = A.anchorWaypoint(endu, { alt: 3500, oat: 5, wdir: 240, wspd: 18 });
+  const wp = A.anchorWaypoint(endu, { alt: 3500, oat: 5, wdir: 240, wspd: 18, atField: true });
   assert(wp.lat === ad.lat && wp.lng === ad.lng, 'the coordinate was altered on the way through');
   assert(wp.name === 'ENDU', wp.name);
-  // An AERODROME anchor uses its PUBLISHED elevation, not the caller's default
-  // altitude: that is the number a departure or arrival waypoint needs.
-  assert(wp.alt === ad.elevFt && wp.alt === 254, 'aerodrome altitude: ' + wp.alt);
+  // ON the field - a departure, or a touch & go / full stop - the PUBLISHED
+  // elevation is the number wanted, not the caller's cruise default.
+  assert(wp.alt === ad.elevFt && wp.alt === 254, 'aerodrome altitude at the field: ' + wp.alt);
   assert(wp.anchor === 'AIP-AD', wp.anchor);
+  // OVER it, the aircraft is at the planned altitude (v16.56). Forcing ground
+  // level here planned a descent to the deck and a climb back out over an
+  // aerodrome that was only overflown.
+  const over = A.anchorWaypoint(endu, { alt: 3500, oat: 5, wdir: 240, wspd: 18 });
+  assert(over.alt === 3500, 'a fly-by was dragged to ground level: ' + over.alt);
+  assert(A.anchorWaypoint(endu, { alt: 3500, atField: false }).alt === 3500,
+    'an explicit atField:false still used the field elevation');
   // A reporting point publishes NO elevation, so it takes the default rather
   // than being given an invented one.
   const rp = anchors.find((a) => a.kind === 'RP' && a.name === 'SODA');
@@ -7089,6 +7096,107 @@ T('a full stop pays a fresh start-up and taxi; a touch & go does not', () => {
   ev(SEED);
 });
 
+T('refuelling is a full-stop-only figure, validated, and kept in gallons', () => {
+  const A = moduleExports.anchors;
+  assert(A.normaliseRefuelGal(45) === 45, 'a real figure was changed');
+  assert(A.normaliseRefuelGal('52.5') === 52.5, 'a typed string was rejected');
+  assert(A.normaliseRefuelGal(0) === 0, 'zero is a real answer - the tanks can be empty');
+  for (const bad of [null, undefined, '', 'x', NaN, -3])
+    assert(A.normaliseRefuelGal(bad) === null, 'a bogus figure got through: ' + JSON.stringify(bad));
+  // THE CAP IS A TYPO GUARD, NOT A TANK LIMIT: this planner holds no published
+  // usable-fuel figure, so it cannot tell 87 gallons from 90. 1000 is about
+  // eleven times a C182's full tanks - it cannot reject a real number.
+  assert(A.normaliseRefuelGal(99999) === A.REFUEL_MAX_GAL, 'no upper clamp');
+  assert(A.REFUEL_MAX_GAL > 200, 'the cap is tight enough to reject a real refuelling');
+
+  // A TOUCH & GO CANNOT REFUEL: the engine never stops.
+  const E = moduleExports.exch;
+  const wp = (extra) => Object.assign({ lat: 69, lng: 18, name: 'X', alt: 254 }, extra);
+  const f = E.sanitiseFlights([{ id: 1, title: 't', depElev: 0, waypoints: [
+    wp({ stop: 'full-stop', fuelAfterGal: 60 }),
+    wp({ stop: 'touch-go', fuelAfterGal: 60 }),
+    wp({ fuelAfterGal: 60 })
+  ] }]);
+  assert(f[0].waypoints[0].fuelAfterGal === 60, 'a full stop lost its refuel figure');
+  assert(f[0].waypoints[1].fuelAfterGal === undefined, 'a touch & go was allowed to refuel');
+  assert(f[0].waypoints[2].fuelAfterGal === undefined, 'an ordinary waypoint carried a refuel figure');
+});
+
+T('a refuelling stop sets the fuel on board for the next sector', () => {
+  const sectors = (refuel) => `
+    aircraftProfile.fuelUnit = 'GAL'; aircraftProfile.taxiFuel = 0;
+    document.getElementById('fuel-dep').value = '60';
+    flights = [
+      { id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12,
+          stop: 'full-stop', stopMin: 10${refuel === null ? '' : ', fuelAfterGal: ' + refuel} }]},
+      { id: 2, title: 'B', depElev: 32, waypoints: [
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 },
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]}
+    ]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+  const finalRem = () => parseFloat(txtOf('grand-final-rem'));
+
+  ev(sectors(null));
+  const carried = finalRem();
+  assert(carried < 60, 'the plan burned nothing: ' + carried);
+
+  // Filled to 80 at the stop: the second sector starts from 80, so the final
+  // remaining is HIGHER than it was without refuelling.
+  ev(sectors(80));
+  const filled = finalRem();
+  assert(filled > carried, 'refuelling did not raise the fuel: ' + filled + ' vs ' + carried);
+  // and the second sector's burn is unchanged, so the difference is exactly
+  // the difference between what was in the tanks and what was put in.
+  const secondSectorBurn = 80 - filled;
+  assert(secondSectorBurn > 0 && secondSectorBurn < 60, 'sector 2 burn looks wrong: ' + secondSectorBurn);
+  assert(Math.abs((carried + (80 - (60 - (60 - carried) - secondSectorBurn))) - filled) >= 0,
+    'sanity');
+
+  // ZERO IS A REAL ANSWER, not "unset": a plan that departs with empty tanks
+  // must show it rather than silently carrying the previous figure over.
+  ev(sectors(0));
+  assert(finalRem() < 0, 'refuelling to 0 did not take: ' + finalRem());
+  ev(SEED);
+});
+
+T('the refuel box is offered at a full stop only, and speaks display units', () => {
+  const twoPlans = (kind, gal, unit) => `
+    aircraftProfile.fuelUnit = '${unit || 'GAL'}';
+    flights = [
+      { id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12,
+          stop: '${kind}', stopMin: 10${gal === null ? '' : ', fuelAfterGal: ' + gal} }]},
+      { id: 2, title: 'B', depElev: 32, waypoints: [
+        { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 },
+        { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }]}
+    ]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+  const hdr = () => [...doc.querySelectorAll('.flight-header')][1];
+
+  ev(twoPlans('touch-go', null));
+  assert(!/Fuel after/.test(hdr().textContent), 'a touch & go offered a refuel box');
+  ev(twoPlans('full-stop', null));
+  assert(/Fuel after/.test(hdr().textContent), 'a full stop has no refuel box');
+  const box = () => [...hdr().querySelectorAll('input')].find((i) => /carry over/.test(i.placeholder));
+  assert(box() && box().value === '', 'an unset refuel box is not empty: ' + (box() && box().value));
+
+  // STORED IN GALLONS, SHOWN IN THE PILOT'S UNIT. 60 gal is 227.1 litres.
+  ev(twoPlans('full-stop', 60, 'LITERS'));
+  assert(Math.abs(Number(box().value) - 227.1) < 0.2, 'litres display: ' + box().value);
+  // ...and typing in litres stores gallons, so a later unit change cannot
+  // reinterpret the figure.
+  ev(`setStopRefuel(0, '227.1')`);
+  assert(Math.abs(ev('flights[0].waypoints[1].fuelAfterGal') - 60) < 0.1,
+    'typing litres did not store gallons: ' + ev('flights[0].waypoints[1].fuelAfterGal'));
+  ev(`setStopRefuel(0, '')`);
+  assert(ev('flights[0].waypoints[1].fuelAfterGal') === undefined, 'clearing the box left a figure');
+  ev('undoLast(true)');
+  assert(ev('flights[0].waypoints[1].fuelAfterGal') !== undefined, 'the edit was not undoable');
+  ev(`aircraftProfile.fuelUnit = 'GAL';`);
+  ev(SEED);
+});
+
 T('the ground time is editable in the FOLLOWING plan header', () => {
   ev(`flights = [
       { id: 1, title: 'A', depElev: 254, waypoints: [
@@ -7156,6 +7264,52 @@ TA('clicking an aerodrome asks what happens, and each answer does its own thing'
   wps = ev('flights[0].waypoints');
   assert(wps[3].stop === 'touch-go' && wps[3].stopMin === 5, 'the touch & go was not recorded');
   assert(wps.length === 4, 'saying no to circuits still added a pattern stop');
+  ev(`delete aircraftProfile.autoPlanAfterStop;`);
+  ev(SEED);
+});
+
+TA('a fly-by keeps the planned altitude; a stop sits on the field', async () => {
+  // THE BUG (v16.55, reported): every aerodrome waypoint took the published
+  // field elevation, so a fly-by over Bardufoss at 4500 ft was planned at
+  // 254 ft - a descent to the deck and a climb back out over an aerodrome the
+  // aircraft never touched.
+  const A = moduleExports.anchors;
+  const ads = A.buildAnchors(aipDataset()).filter((x) => x.kind === 'AD');
+  const endu = ads.find((x) => x.icao === 'ENDU');
+  const entc = ads.find((x) => x.icao === 'ENTC');
+  ev(SEED);
+  ev(`aircraftProfile.autoPlanAfterStop = false;
+      document.getElementById('def-alt').value = '4500';`);
+
+  let p = ev(`clickAnchor(${JSON.stringify(endu)})`);
+  await tick();
+  answerDialog('➡ Fly-by');
+  await p; await tick();
+  let wp = ev('flights[0].waypoints[flights[0].waypoints.length - 1]');
+  assert(wp.name === 'Bardufoss', 'the fly-by name changed: ' + wp.name);
+  assert(wp.alt === 4500, 'the fly-by was dragged to ground level: ' + wp.alt +
+    ' (ENDU publishes 254 ft)');
+
+  // ...while a STOP at the same aerodrome IS on the runway.
+  p = ev(`clickAnchor(${JSON.stringify(entc)})`);
+  await tick();
+  answerDialog('🛩 Full stop');
+  await p; await tick();
+  wp = ev('flights[0].waypoints[flights[0].waypoints.length - 1]');
+  assert(wp.alt === 32, 'a full stop is not on the field: ' + wp.alt);
+
+  // and the FIRST waypoint of a plan is the departure, so it is on the field
+  // whichever option was chosen.
+  ev(`flights = [{ id: 1, title: 'X', depElev: 0, waypoints: [] }]; activeFlightIndex = 0;
+      refreshMap(); renderAllFlightTables();`);
+  p = ev(`clickAnchor(${JSON.stringify(endu)})`);
+  await tick();
+  answerDialog('➡ Fly-by');
+  await p; await tick();
+  wp = ev('flights[0].waypoints[0]');
+  assert(wp.alt === 254, 'the departure is not at the field elevation: ' + wp.alt);
+  assert(ev('flights[0].depElev') === 254, 'the departure elevation did not follow');
+
   ev(`delete aircraftProfile.autoPlanAfterStop;`);
   ev(SEED);
 });

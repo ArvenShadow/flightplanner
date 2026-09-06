@@ -181,6 +181,26 @@ check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point
   check(after.nextDepElev === 32, `the next sector departs from the field (${after.nextDepElev} ft)`);
   check(/Full stop/.test(after.hdr) && /ENTC/.test(after.hdr),
     'the next plan header shows the editable ground time: ' + after.hdr.slice(0, 90));
+
+  // A REFUELLING STOP (v16.57). The box must be VISIBLE - this project has
+  // shipped present-but-invisible controls before - and typing in it must
+  // reach the plan. Filled, not called: a control is only proved by using it.
+  const refuel = page.locator('.flight-header input[placeholder="carry over"]');
+  const nBoxes = await refuel.count();
+  const rBox = nBoxes ? await refuel.first().boundingBox() : null;
+  check(nBoxes === 1 && !!rBox && rBox.width > 0 && rBox.height > 0,
+    `the refuel box is on screen at a full stop (${nBoxes}, ${rBox ? Math.round(rBox.width) + 'x' + Math.round(rBox.height) : 'no box'})`);
+  const remBefore = await page.evaluate(() => document.getElementById('grand-final-rem').textContent);
+  await refuel.first().fill('80');
+  await refuel.first().dispatchEvent('change');
+  await page.waitForTimeout(250);
+  const fuelled = await page.evaluate(() => ({
+    gal: flights[0].waypoints[1].fuelAfterGal,
+    rem: document.getElementById('grand-final-rem').textContent
+  }));
+  check(fuelled.gal === 80, `typing in the box stored the figure in gallons (${fuelled.gal})`);
+  check(parseFloat(fuelled.rem) > parseFloat(remBefore),
+    `refuelling raised the final remaining (${remBefore} -> ${fuelled.rem})`);
 }
 
 // The hover card must appear, be readable, and lead with the published fix.

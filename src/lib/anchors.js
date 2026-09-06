@@ -294,6 +294,39 @@ export const STOP_DEFAULT_MIN = { 'touch-go': 5, 'full-stop': 10 };
 export const STOP_MIN_MINUTES = 1;
 export const STOP_MAX_MINUTES = 600;
 
+/**
+ * REFUELLING AT A FULL STOP (v16.57, the pilot's request).
+ *
+ * A full stop is where fuel goes in, so the fuel on board for the next sector
+ * can be set outright rather than carried over. Stored in GALLONS like every
+ * other fuel figure in this project - the POH's unit - and converted only for
+ * display, so a pilot switching to litres cannot silently reinterpret a number
+ * already written into a saved route.
+ *
+ * A TOUCH & GO CANNOT REFUEL and the field is not offered there: the engine
+ * never stops and the aircraft never leaves the runway. That is a real
+ * constraint, not a UI simplification.
+ *
+ * THE CAP IS A TYPO GUARD, NOT A TANK LIMIT, and the difference matters. This
+ * planner holds no published usable-fuel figure for the aircraft - the profile
+ * carries rates and a taxi burn, never a capacity - so it cannot tell 87
+ * gallons from 90. 1000 gal is roughly eleven times a C182's full tanks: it
+ * cannot reject a real figure, and it still catches a slipped decimal point or
+ * a corrupted file. The pilot is the authority on what fits in the tanks, and
+ * the field says so.
+ */
+export const REFUEL_MAX_GAL = 1000;
+
+/** Fuel on board after a stop, in gallons. null means "carry on with what is
+ *  left", which is what every plan did before this existed.
+ *  @param {any} v @returns {number|null} */
+export function normaliseRefuelGal(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  if (!isFinite(n) || n < 0) return null;
+  return Math.min(REFUEL_MAX_GAL, Math.round(n * 10) / 10);
+}
+
 /** @param {any} kind @returns {string|null} */
 export function normaliseStopKind(kind) {
   return typeof kind === 'string' && STOP_KINDS.includes(kind) ? kind : null;
@@ -543,13 +576,16 @@ export { escapeText };
  * The waypoint an anchor becomes.
  *
  * The coordinate is the PUBLISHED one, unrounded - that is the entire reason
- * this feature exists. An aerodrome also carries its published elevation,
- * which is the altitude the first and last waypoint of a flight should have;
- * a reporting point publishes no elevation and so is given the caller's
- * default rather than an invented one.
+ * this feature exists. A reporting point publishes no elevation and so is
+ * given the caller's default rather than an invented one.
+ *
+ * An AERODROME takes its published elevation only when `atField` says the
+ * aircraft is on it - departing, or stopping there. Overflying one is an
+ * ordinary waypoint at the planned altitude.
  *
  * @param {Anchor} a
- * @param {{alt?: number, oat?: number, wdir?: number, wspd?: number}} defaults
+ * @param {{alt?: number, oat?: number, wdir?: number, wspd?: number,
+ *          atField?: boolean}} defaults
  * @returns {{lat: number, lng: number, name: string, alt: number, oat: number,
  *            wdir: number, wspd: number, anchor: string}}
  */
@@ -557,7 +593,15 @@ export function anchorWaypoint(a, defaults) {
   const d = defaults || {};
   return {
     lat: a.lat, lng: a.lng, name: a.name,
-    alt: a.kind === 'AD' && typeof a.elevFt === 'number' ? a.elevFt : Number(d.alt || 0),
+    // AN AERODROME IS ONLY AT FIELD ELEVATION WHEN THE AIRCRAFT IS ON IT
+    // (v16.56, the pilot's bug report). Departing from it, or stopping there,
+    // puts the waypoint on the runway - so the published elevation is exactly
+    // the number wanted. FLYING OVER it does not: a fly-by is an ordinary
+    // en-route waypoint, and forcing it to ground level planned a descent to
+    // the deck and a climb back out over an aerodrome the aircraft never
+    // touched. The caller says which, because only the caller knows.
+    alt: d.atField && a.kind === 'AD' && typeof a.elevFt === 'number'
+      ? a.elevFt : Number(d.alt || 0),
     oat: Number(d.oat || 0), wdir: Number(d.wdir || 0), wspd: Number(d.wspd || 0),
     // Stamped so the row can say the coordinate came from the AIP and not
     // from a click. Never a person, a machine or a place beyond the fix name.
