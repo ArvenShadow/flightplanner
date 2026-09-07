@@ -8974,6 +8974,18 @@ T('the deploy locks the build, and never falls back to publishing it plain', () 
   assert(/path: site-locked/.test(wf), 'the workflow uploads something other than site-locked');
   assert(!/path: site\s*$/m.test(wf), 'the workflow still uploads the plaintext site/');
   assert(/SITE_PASSWORD/.test(wf), 'the workflow never mentions the SITE_PASSWORD secret');
+  // HIDDEN FILES ARE EXCLUDED BY DEFAULT by upload-pages-artifact from v4 on,
+  // and the locked build ships a hidden .nojekyll. Without the opt-in the
+  // artifact uploads, the deploy goes green, and one file is simply missing -
+  // the kind of silent regression nothing else here would notice.
+  assert(/include-hidden-files: true/.test(wf),
+    'the deploy would drop .nojekyll: upload-pages-artifact needs include-hidden-files');
+  // ...and the Node the suite runs on has to be one that can require() ESM,
+  // which is what test.js does with tools/aip-fields.mjs and tools/lock-rules.mjs.
+  const nv = wf.match(/node-version: '(\d+)'/);
+  assert(nv && Number(nv[1]) >= 22,
+    'CI runs Node ' + (nv ? nv[1] : '?') + '; require(esm) needs 20.19+/22.12+, ' +
+    'so pin a major that cannot resolve below that');
 });
 
 runAsyncTests().then(() => {

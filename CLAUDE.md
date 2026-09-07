@@ -313,7 +313,11 @@ three cheap disciplines applied every time the page is touched:
 
 ## Test harness notes
 
-- `npm install` then `npm test` (which BUILDS first). Requires Node 18+.
+- `npm install` then `npm test` (which BUILDS first). **Requires Node 20.19+ or
+  22.12+, NOT 18** - this file said 18 for a long time and was wrong: the suite
+  `require()`s ESM modules from `tools/` (`aip-fields.mjs`, and `lock-rules.mjs`
+  since v16.78), and `require(esm)` only exists from those versions. Stated in
+  `package.json` engines so it is machine-readable, and CI pins 22.
 - `SWEEP_N=<n> npm test` multiplies every generated sweep, so the big figures
   quoted in this file are reproducible on demand instead of aspirational. The
   everyday run uses the smaller sizes; the asserts are absolute lower bounds, so
