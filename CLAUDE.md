@@ -2032,6 +2032,121 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## THE DEPLOYED COPY IS ENCRYPTED, AND THE SOURCE IS NOT (v16.78)
+
+The author asked for "a password set in an encrypted file only i can access so
+that if anyone opens the website without permission, they wont access", applied
+once per machine. What was built is real: `site-locked/` carries no app at all,
+only AES-256-GCM ciphertext. What it does NOT do is stated everywhere it could
+be mistaken - here, in `tools/lock-site.mjs`, in the workflow and in the app's
+own guide.
+
+### THE THREE FACTS THAT DECIDED THE DESIGN, EACH VERIFIED FIRST
+
+1. **THE REPO IS PUBLIC** (`"visibility": "public"`, read off the API, not
+   assumed). So `src/`, `data/aip.js` and the whole planner are one click away
+   on GitHub and anyone can run it locally. **This gates the deployed URL and
+   nothing else.** Saying otherwise would be the plausible wrong answer at its
+   most expensive.
+2. **GITHUB PAGES HAS NO ACCESS CONTROL on a personal account** - authenticated
+   visitors are a GitHub Enterprise Cloud feature. Publishing Pages from a
+   PRIVATE repo is a cheaper tier (GitHub Pro), not Enterprise; the author's
+   call was to keep the repo public for now, so the artifact itself has to be
+   the gate. Correcting "Enterprise" to "Pro" mattered: it is a different
+   decision at a different price.
+3. **A PASSWORD PROMPT OVER A PLAINTEXT APP PROTECTS NOTHING.** The files are
+   downloaded by the time it appears, so devtools or a direct fetch of `app.js`
+   walks past it. That option was offered and named as protecting nothing, not
+   built and quietly labelled a lock. It is the v16.26 offline-chart lesson: a
+   promise the platform revokes at the moment it matters.
+
+### HOW IT WORKS, AND WHAT IS DELIBERATELY ABSENT
+
+- `tools/lock-site.mjs` turns the TESTED `site/` into `site-locked/`: the page,
+  the bundle and the dataset become `body.enc`, `app.enc`, `aip.enc`, and
+  `src/unlock.html` becomes the gate. `npm run lock`, and CI deploys that.
+- **NO PASSWORD HASH IS STORED ANYWHERE.** The GCM authentication tag is what
+  fails on a wrong key, so the artifact holds only salt, iteration count and
+  ciphertext. There is nothing to attack except the payload, which an attacker
+  would have to attack anyway.
+- **THE PASSPHRASE IS NEVER IN THE REPO OR THE ARTIFACT.** `.site-password`
+  (gitignored) locally, the `SITE_PASSWORD` repository secret in CI - GitHub
+  stores that encrypted and cannot show it back, only replace it, which is
+  exactly the property wanted. A test asserts both paths stay untracked,
+  because a passphrase committed once is a passphrase an attacker has for good.
+- **WHAT IS REMEMBERED PER BROWSER IS THE DERIVED KEY, NOT THE PASSPHRASE.**
+  The expensive KDF runs once per machine and the phrase cannot be recovered
+  from `localStorage` afterwards.
+- **THE ITERATION COUNT IS MEASURED.** PBKDF2-SHA256 in Chromium is ~154 ns an
+  iteration (310k/49 ms, 600k/94 ms, 1.2M/185 ms, 2.4M/369 ms). 2 000 000 is
+  ~310 ms here, ~3.3x the OWASP floor, and it is paid once per browser rather
+  than per load. **AND IT IS NOT WHAT MAKES THIS SAFE** - the attacker guesses
+  offline at their own pace, so entropy comes first and the KDF second. That is
+  why `readPassphrase` REFUSES a short or obvious phrase and says which rule
+  was broken: a locker reporting success on "1234" would be theatre.
+- **IT NEEDS https OR localhost.** `crypto.subtle` is secure-context-only, so
+  the plain-http LAN case this project supports (phone on a hotspot) CANNOT
+  unlock - the same rule that stops the service worker there. The gate says so
+  in those words rather than letting an absent API surface as "wrong
+  passphrase". Serve the unlocked build on the LAN; the https URL is the locked
+  one. `SITE_DIR=site-locked node tools/serve.mjs` checks it on localhost.
+
+### THE RELAUNCH IS THE v16.45 CONSTRAINT AGAIN, AND IT IS WHY THIS IS VERIFIED IN CHROMIUM
+
+The bundle is a CLASSIC script whose functions the page's 100-odd inline `on*=`
+handlers need as GLOBALS, and the page script's top level calls into it. So the
+gate cannot just dump HTML: `innerHTML` does not execute scripts, and
+`document.write` after load is a parser re-entry problem. It parses the
+decrypted page with `DOMParser`, replaces `documentElement`, then RE-CREATES
+every script element in document order - dataset, bundle, page script - which
+executes them at global scope exactly as a normal load would.
+
+- `tools/verify-locked.mjs` measures that in real Chromium, offline: wrong
+  passphrase shows nothing and runs no app code; the right one boots the app,
+  `computeFlightSchedule` is a global, the dataset loads, the OFP table
+  renders, the ENDU-ENTC leg computes at 38.4 NM, and **an inline `on*=`
+  handler actually fires** (the v16.53 lesson - driving a function proves the
+  function, clicking proves the wiring). Then: not asked again on a second
+  load, and a stale or tampered key falls back to asking.
+- **A KEY WHOSE SALT IS NOT THIS BUILD'S IS NOW CLEARED, and the verifier found
+  that.** The branch returned early and left dead bytes in `localStorage` on
+  every machine for good after a rebuild under a new passphrase.
+
+### TWO BUGS WORTH RECORDING, BOTH MINE
+
+- **A LITERAL CLOSING SCRIPT TAG INSIDE A JS COMMENT TRUNCATED THE GATE'S OWN
+  SCRIPT** - in a comment that was explaining such a tag is harmless in the app
+  payload. The HTML parser does not read comments: it ended the element there,
+  the gate threw a SyntaxError, rendered the rest of its source as text, and
+  unlocked nothing. Every string check in the locker passed; only the browser
+  caught it. The locker now runs `node --check` over the extracted block, the
+  way `tools/build.mjs` already does for the page script.
+- **AND THE OBVIOUS GUARD FOR IT WAS THE WRONG ONE.** "A stray tag yields TWO
+  script blocks" is false - there is no second opening tag, so you get ONE
+  block that stops mid-statement, and counting would have missed the original
+  bug entirely. The PARSE is what catches truncation; the count guards a
+  genuinely added second script. Both are asserted, for different reasons, and
+  the test says which does what. Straight M5: assert the thing that actually
+  justified the check.
+- Two smaller ones, both my own probes rather than the app: `window.flights` is
+  `undefined` because `flights` is `let` at the top level of a classic script -
+  a global LEXICAL binding, the exact trap this file names - and a fresh
+  browser boots the v16.49 EMPTY plan, so asking it for `schedule[0]` reported
+  a working engine as returning null.
+
+### THERE IS NO FALLBACK TO PUBLISHING THE PLAINTEXT BUILD
+
+If `SITE_PASSWORD` is missing the deploy FAILS, loudly. Publishing `site/`
+instead would put the whole planner up unlocked and report success. The
+workflow also greps the artifact for the app's own identifiers immediately
+before upload - proved load-bearing by removing the locker's own leak check and
+leaving one payload unencrypted, which CI then caught.
+
+**FIVE MUTATIONS, ALL CAUGHT**: deploying `site/` (1 test), a 4-character
+minimum (1 test), an emptied obvious-list (1 test), a reintroduced closing tag
+(build failure), and a payload left in plaintext (CI guard). None of them died
+only in `tsc`.
+
 ## THE ALTITUDE COLUMN IS THE PILOT'S, AND NOTHING REWRITES IT (v16.77)
 
 The pilot, on the v16.74/v16.75 carry-back that had just been built for them:

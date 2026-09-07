@@ -5,6 +5,17 @@ node_modules/
 # from src/ by `npm run build`, and by CI before every deploy.
 site/
 
+# The LOCKED build - site/ encrypted by tools/lock-site.mjs, and what CI
+# actually deploys. Generated, so not committed, same as site/.
+site-locked/
+
+# THE PASSPHRASE FOR THE LOCKED BUILD. This must never be committed: it IS the
+# key, and the deployed ciphertext is public, so a passphrase in the history is
+# a passphrase an attacker has. Locally it lives here; in CI it comes from the
+# SITE_PASSWORD repository secret, which GitHub stores encrypted and only the
+# owner can read or set.
+.site-password
+
 # Screenshots written by tools/verify-visual.mjs when it finds a difference
 vis_*.png
 
