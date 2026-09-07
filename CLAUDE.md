@@ -2134,6 +2134,38 @@ executes them at global scope exactly as a normal load would.
   browser boots the v16.49 EMPTY plan, so asking it for `schedule[0]` reported
   a working engine as returning null.
 
+### THE PASSPHRASE RULE WAS DRAWN TOO WIDE, AND THE FIRST REAL DEPLOY FOUND IT (v16.79)
+
+`readPassphrase` started as a bare `includes` ban on OBVIOUS, and the very
+first deploy failed on it. That failure was CORRECT - the author's secret was
+`SECRETPASSWORD`, which is the two most-guessed words concatenated and has a
+residue of zero - but looking at the rule with a real failure in front of it
+showed the rule itself was wrong:
+
+- **IT REFUSED STRONG PASSPHRASES AND TOLD THE AUTHOR THEY WERE GUESSABLE.**
+  `my-c182-flies-over-tromso-at-dawn` is 33 characters and fine, and a
+  substring ban rejected it for containing `c182` while reporting it as one of
+  the strings tried first. **That is a false claim about the passphrase** - the
+  plausible wrong answer pointing the other way, and worse than useless because
+  the honest fix then looks like a tool malfunction.
+- `obviousResidue` strips every obvious string and what REMAINS must stand on
+  its own against MIN_LENGTH. A long phrase MAY contain one of those words; it
+  may not largely BE one. Measured: `flightplanner` 0, `flightplanner-2026` 4,
+  `MySecretPassword123` 5, `SECRETPASSWORD` 0 - all refused; the 33-character
+  phrase 23 - accepted.
+- **PUNCTUATION DOES NOT COUNT toward the remainder**, or `c182` plus twenty
+  hyphens would pass. Æ Ø Å do, because the author's own words are Norwegian.
+- **IT IS EXPLICITLY NOT AN ENTROPY ESTIMATOR**, and a test asserts that by
+  requiring `abababababababab` to be ACCEPTED. It cannot tell that from four
+  random words, and this project has no business inventing a strength score it
+  cannot justify. One guard against one specific mistake; the guide says the
+  passphrase's own quality is what carries the security.
+
+THE SHAPE IS THE ONE THIS FILE ALREADY NAMES: a rule stated once and applied
+too bluntly, caught only when something real ran into it. The refusal message
+now says how many characters of non-obvious material were found, so it is
+actionable rather than a verdict.
+
 ### THERE IS NO FALLBACK TO PUBLISHING THE PLAINTEXT BUILD
 
 If `SITE_PASSWORD` is missing the deploy FAILS, loudly. Publishing `site/`

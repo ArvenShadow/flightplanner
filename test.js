@@ -8806,9 +8806,13 @@ T('a weak passphrase is refused, and the refusal says which rule it broke', () =
     ['short', null, /12 is the minimum/],
     ['           ', null, /whitespace|minimum/],
     ['  leading-and-trailing-space  ', null, /whitespace/],
-    ['my-password-is-long', null, /tried first/],       // contains "password"
-    ['flightplanner-tromso-2026', null, /tried first/], // contains the project
-    ['C182-is-my-aircraft-yes', null, /tried first/]    // case-insensitive
+    // MOSTLY a guessable string, in three shapes: the bare word, the word plus
+    // a year, and two obvious words stitched together.
+    ['flightplanner', null, /not part of a common password/],
+    ['flightplanner-2026', null, /not part of a common password/],
+    ['MySecretPassword123', null, /not part of a common password/],
+    // Padding with punctuation must not buy length.
+    ['c182--------------------', null, /Punctuation does not count/]
   ];
   for (const [env, file, why] of bad) {
     const r = L.readPassphrase(env, file);
@@ -8819,6 +8823,38 @@ T('a weak passphrase is refused, and the refusal says which rule it broke', () =
   const good = L.readPassphrase('correct-horse-battery-staple', null);
   assert(good.ok === true, 'a good passphrase was refused: ' + good.why);
   assert(good.pass === 'correct-horse-battery-staple', 'the passphrase was altered');
+});
+
+T('a long passphrase MAY contain an obvious word - it just cannot mostly be one', () => {
+  // THIS IS THE REGRESSION THE FIRST REAL DEPLOY FOUND. The rule started as a
+  // bare `includes` ban, which refused a 33-character phrase for containing
+  // "c182" and told the author it was among the strings tried first. That is a
+  // FALSE CLAIM ABOUT THE PASSPHRASE - the plausible wrong answer pointing the
+  // other way, and the honest fix looked like a tool malfunction.
+  const L = require('./tools/lock-rules.mjs');
+  for (const strong of [
+    'my-c182-flies-over-tromso-at-dawn',   // contains c182
+    'the-secret-of-good-landings-is-airspeed',   // contains secret
+    'admin-rights-are-not-a-personality-trait'   // contains admin
+  ]) {
+    const r = L.readPassphrase(strong, null);
+    assert(r.ok === true, 'a strong phrase was refused for containing a word: ' +
+      JSON.stringify(strong) + ' -> ' + r.why);
+  }
+  // The measurement behind the rule: what is LEFT once the obvious parts go.
+  assert(L.obviousResidue('flightplanner') === '', 'the bare project name leaves a residue');
+  assert(L.obviousResidue('c182--------------------') === '',
+    'punctuation padding counted toward the residue');
+  assert(L.obviousResidue('my-c182-flies-over-tromso-at-dawn')
+    === 'myfliesovertromsoatdawn', 'the residue is wrong: ' +
+    L.obviousResidue('my-c182-flies-over-tromso-at-dawn'));
+  // Æ Ø Å count as real characters - the author's own words are Norwegian.
+  assert(L.obviousResidue('sørkjosen-og-bardufoss-i-tåke').length > 20,
+    'Norwegian letters were stripped out of the residue');
+  // ...and this is NOT an entropy estimator, which the module says outright.
+  // Recording the limitation rather than implying a strength score.
+  assert(L.readPassphrase('abababababababab', null).ok === true,
+    'the guard has quietly become a strength estimator it cannot justify');
 });
 
 T('exactly one trailing newline is stripped, and the env beats the file', () => {
