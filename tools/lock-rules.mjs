@@ -25,11 +25,45 @@ export const ITERATIONS = 2_000_000;
  *  short of which the KDF stops mattering because a wordlist gets there first. */
 export const MIN_LENGTH = 12;
 
-/** Rejected whatever their length: these are what gets tried first. */
+/** The strings a targeted attacker tries first: common passwords, and this
+ *  project's own vocabulary. NOT banned outright - see `obviousResidue`. */
 export const OBVIOUS = [
   'password', 'passphrase', 'flightplanner', 'flight planner', 'c182',
   'letmein', 'changeme', 'qwerty', '123456', 'secret', 'admin'
 ];
+
+/**
+ * What is left of a passphrase once every obvious string is removed.
+ *
+ * WHY THIS IS NOT A SUBSTRING BAN, and the first version WAS one - it failed
+ * the very first real deploy and it was right to be replaced rather than
+ * worked around. `my-c182-flies-over-tromso-at-dawn` is 33 characters and
+ * genuinely strong, and a bare `includes` check refused it while reporting
+ * that it was among the strings tried first. That is a FALSE CLAIM ABOUT THE
+ * PASSPHRASE - the plausible wrong answer pointing the other way, and worse
+ * than useless because the honest fix looks like a tool malfunction.
+ *
+ * The thing actually worth refusing is a passphrase that mostly IS a
+ * guessable string: `flightplanner`, `flightplanner-2026`, `MySecretPassword`.
+ * So the obvious parts are stripped and what REMAINS has to stand on its own
+ * against MIN_LENGTH. A long phrase may contain one of these words; it may not
+ * largely consist of them.
+ *
+ * THIS IS NOT AN ENTROPY ESTIMATOR and does not pretend to be one. It cannot
+ * tell `abababababababab` from four random words, and this project has no
+ * business inventing a strength score it cannot justify. It is one guard
+ * against one specific mistake, and the guide says the passphrase's own
+ * quality is what carries the security.
+ *
+ * @param {string} pass @returns {string} the non-obvious remainder
+ */
+export function obviousResidue(pass) {
+  let residue = pass.toLowerCase();
+  for (const o of OBVIOUS) residue = residue.split(o).join('');
+  // Padding with punctuation must not buy length: `c182` plus twenty hyphens
+  // is not a passphrase, and counting the hyphens would let it through.
+  return residue.replace(/[^a-z0-9\u00e6\u00f8\u00e5]/g, '');
+}
 
 /**
  * The payloads, in the order the browser must run them.
@@ -81,10 +115,14 @@ export function readPassphrase(envValue, fileValue) {
       'hardware allows - no iteration count rescues a short one. Four ordinary ' +
       'words are both easier to type and far stronger than a mangled single word.' };
   }
-  if (OBVIOUS.some((o) => pass.toLowerCase().includes(o))) {
+  const residue = obviousResidue(pass);
+  if (residue.length < MIN_LENGTH) {
     return { ok: false, why:
-      'the passphrase contains one of the strings that get tried first ' +
-      `(${OBVIOUS.join(', ')}). Pick something that is not about this project.` };
+      `only ${residue.length} characters of the passphrase are not part of a common ` +
+      `password or this project's own vocabulary (${OBVIOUS.join(', ')}), and ` +
+      `${MIN_LENGTH} is the minimum. A long phrase MAY contain one of those words - ` +
+      '"my-c182-flies-over-tromso-at-dawn" is fine - it just cannot mostly BE one. ' +
+      'Punctuation does not count toward the remainder.' };
   }
   return { ok: true, pass };
 }
