@@ -1026,6 +1026,41 @@ export function computeFlightSchedule(fl, opts) {
   return legs;
 }
 
+/**
+ * Which waypoints a "cross here at, and hold it from here on" edit should touch
+ * (v16.73). The pilot points at one fix, names an altitude, and every fix after
+ * it flies at the same level - which is how a phase of flight is actually
+ * planned, rather than typing the same number into six rows.
+ *
+ * TWO EXCLUSIONS, and both are the project refusing to invent something:
+ *
+ *   THE LAST WAYPOINT KEEPS ITS OWN ALTITUDE. It is the destination, sitting at
+ *   its published field elevation, and raising it to cruise would silently
+ *   delete the descent - the plan would still look clean and would no longer
+ *   arrive. Pointing AT the last fix still sets it, because then the pilot said
+ *   so explicitly.
+ *
+ *   A CIRCUIT STOP IS SKIPPED. Its altitude is DERIVED from the field it is
+ *   flown at (v16.40: elevation rounded to the nearest 100 ft, plus 1000), not
+ *   inherited from the leg before - which is the whole reason that rule exists.
+ *   A cruise level written into a circuit is a pattern flown at 6500 ft.
+ *
+ * @param {Waypoint[]} waypoints
+ * @param {number} fromIdx the waypoint the pilot pointed at
+ * @returns {number[]} indices to set, in flight order; empty if fromIdx is out of range
+ */
+export function levelFromIndices(waypoints, fromIdx) {
+  if (!Array.isArray(waypoints)) return [];
+  if (!(fromIdx >= 0) || fromIdx >= waypoints.length) return [];
+  const last = waypoints.length - 1;
+  const out = [fromIdx];
+  for (let i = fromIdx + 1; i < last; i++) {
+    if (waypoints[i] && waypoints[i].isPattern) continue;
+    out.push(i);
+  }
+  return out;
+}
+
 // Map/plotting markers for one leg under the flight schedule: a leg can
 // now carry a TOC (possibly from a climb begun legs earlier) AND a TOD
 // (possibly for a low waypoint legs later), so this returns a list.

@@ -1179,6 +1179,27 @@ svg.leaflet-image-layer.leaflet-interactive path {
       box-shadow: 0 0 0 1.5px rgba(255,255,255,0.95), 0 1px 3px rgba(0,0,0,0.5); }
     .prof-tick.toc { background: #276749; }
     .prof-tick.tod { background: #c05621; }
+    /* THE BOTTOM OF A CLIMB OR DESCENT IS A RING, NOT A TICK (v16.73, the
+       pilot's request, and deferred nit 9). A tick across the track means "the
+       profile changes across this line" - which is what a TOC and a TOD are. A
+       BOC and a BOD are the OTHER end of the same manoeuvre, and drawing them
+       with the same glyph in the same colour left the chip text as the only
+       thing telling them apart. A hollow ring on the track reads as a
+       different KIND of mark at a glance, and it matches the plotting list,
+       which has used a hollow glyph for the pinned corners since v16.37
+       (`? TOC / ? BOC`). Same colour as its phase, so the pair still reads as
+       one climb or one descent. */
+    .prof-ring { position: absolute; left: 0; top: 0; width: 13px; height: 13px;
+      border-radius: 50%; background: transparent; box-sizing: border-box;
+      box-shadow: 0 0 0 1.5px rgba(255,255,255,0.95), 0 1px 3px rgba(0,0,0,0.5); }
+    .prof-ring.toc { border: 3px solid #276749; }
+    .prof-ring.tod { border: 3px solid #c05621; }
+    /* A DRAGGABLE MARK SAYS SO WITH THE CURSOR. The mark itself is small, so
+       the affordance cannot be a visual weight change without covering the
+       chart it sits on - the same argument that keeps the divider 2 px wide. */
+    .prof-drag { pointer-events: auto; cursor: grab; }
+    .prof-drag:active { cursor: grabbing; }
+    .leaflet-dragging .prof-drag { cursor: grabbing; }
     /* Just "TOC" / "TOD". The full sentence is the title tooltip, and the
        numbers are in the OFP sub-line and the plotting list, which is where
        they are copied from. pointer-events is needed for the tooltip to

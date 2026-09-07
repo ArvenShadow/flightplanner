@@ -422,6 +422,173 @@ const via1 = await page.evaluate(() =>
   flights[0].waypoints.reduce((n, w) => n + ((w.via || []).length), 0));
 check(via1 > via0, `a left click on the line still drops a via point (${via0} -> ${via1})`);
 
+
+// ---------------------------------------------------------------------------
+// DRAGGING A CLIMB OR DESCENT CORNER ALONG THE TRACK (v16.73, the pilot's
+// request). jsdom has no projection and no drag, so only a real browser can
+// show that the gesture reaches the track, that the mark SNAPS to the line
+// rather than floating off it, and that the manoeuvre keeps its POH length
+// while both ends move together.
+// ---------------------------------------------------------------------------
+{
+  await page.evaluate(async () => {
+    OVERLAY_IDS.forEach(closeModal); closeLegModal();
+    setLayoutMode('map');
+    flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+      { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 6500, oat: 0, wdir: 0, wspd: 0, var: -12 }] }];
+    activeFlightIndex = 0;
+    map.setView([69.37, 18.73], 9, { animate: false });
+    refreshMap(); renderAllFlightTables();
+    await new Promise((r) => setTimeout(r, 350));
+  });
+
+  const marks = () => page.evaluate(() => profileMarkers.map((m) => {
+    const el = m.getElement();
+    const g = el.querySelector('.prof-tick,.prof-ring');
+    const r = g.getBoundingClientRect();
+    return { k: (el.textContent || '').trim(),
+             cx: Math.round(r.x + r.width / 2), cy: Math.round(r.y + r.height / 2),
+             shape: /prof-ring/.test(g.className) ? 'ring' : 'tick',
+             drag: /prof-drag/.test(g.className) };
+  }));
+  const sched = () => page.evaluate(() => {
+    const sc = computeFlightSchedule(flights[0]);
+    return { climbStart: +sc[0].climbStartNM.toFixed(2), toc: +sc[0].tocAlongNM.toFixed(2),
+             climbDist: +sc[0].climbDistNM.toFixed(2),
+             boc: flights[0].waypoints[1].bocNM, tocPin: flights[0].waypoints[1].tocNM };
+  });
+  const dragMark = async (kind, dx, dy) => {
+    const m = (await marks()).find((x) => x.k === kind);
+    if (!m) return false;
+    await page.mouse.move(m.cx, m.cy);
+    await page.mouse.down();
+    for (let k = 1; k <= 10; k++) await page.mouse.move(m.cx + dx * k / 10, m.cy + dy * k / 10);
+    await page.mouse.up();
+    await page.waitForTimeout(420);
+    return true;
+  };
+
+  // A TOP IS A TICK ACROSS THE TRACK, A BOTTOM IS A RING ON IT.
+  const m0 = await marks();
+  check(m0.length === 1 && m0[0].k === 'TOC' && m0[0].shape === 'tick',
+    `an unpinned climb draws one TOC, as a tick (${JSON.stringify(m0.map((x) => x.k + ':' + x.shape))})`);
+  check(m0[0].drag, 'the TOC carries the grab affordance');
+  const s0 = await sched();
+
+  // DRAGGING THE TOP PLACES THE BOTTOM. The pilot names where they want to be
+  // level; the engine works the POH climb backwards to find where it must
+  // begin, and that corner appears as a ring.
+  check(await dragMark('TOC', 20, -110), 'the TOC tick can be grabbed and dragged');
+  const m1 = await marks(), s1 = await sched();
+  check(m1.length === 2 && m1.some((x) => x.k === 'BOC' && x.shape === 'ring'),
+    `dragging the TOC placed a BOC ring (${JSON.stringify(m1.map((x) => x.k + ':' + x.shape))})`);
+  check(s1.toc > s0.toc + 1,
+    `the top of climb actually moved (${s0.toc} -> ${s1.toc} NM)`);
+  check(s1.tocPin !== null && s1.boc === null,
+    'dragging the top must set the "be level by" pin and clear any BOC pin - a leg cannot carry two answers');
+  // THE CLIMB IS NEVER STRETCHED: the POH prices a rate, not a wish, so the
+  // manoeuvre keeps its length and only its position moves.
+  check(Math.abs(s1.climbDist - s0.climbDist) < 0.35,
+    `the climb kept its POH length (${s0.climbDist} -> ${s1.climbDist} NM)`);
+  check(Math.abs((s1.toc - s1.climbStart) - s1.climbDist) < 0.35,
+    'the drawn BOC and TOC are not one climb apart');
+
+  // DRAGGING THE BOTTOM MOVES THE WHOLE SEGMENT, which is what the pilot asked
+  // the ring for.
+  check(await dragMark('BOC', 10, -60), 'the BOC ring can be grabbed and dragged');
+  const s2 = await sched();
+  check(s2.climbStart > s1.climbStart + 1,
+    `the bottom of climb moved (${s1.climbStart} -> ${s2.climbStart} NM)`);
+  check(s2.toc > s1.toc + 1,
+    `and the top came with it (${s1.toc} -> ${s2.toc} NM)`);
+  check(s2.boc !== null && s2.tocPin === null,
+    'dragging the bottom must set the BOC pin and clear the target');
+  check(Math.abs(s2.climbDist - s0.climbDist) < 0.35,
+    `the climb still has its POH length after both drags (${s2.climbDist} NM)`);
+
+  // THE MARK STAYS ON THE TRACK. A bottom of climb three miles off the line is
+  // not something a pilot can fly, so the drag projects onto the flown path
+  // instead of letting the icon float free.
+  const off = await page.evaluate(() => {
+    const sc = computeFlightSchedule(flights[0]);
+    const marksNow = computeLegMarkers(flights[0].waypoints[0], flights[0].waypoints[1], sc[0]);
+    return marksNow.map((mk) => {
+      const rep = alongLegNM(flights[0].waypoints[0], flights[0].waypoints[1], L.latLng(mk.lat, mk.lng));
+      return +rep.offTrackNM.toFixed(3);
+    });
+  });
+  // THE TOLERANCE IS THE GREAT CIRCLE'S OWN BOW, not a fudge. `alongLegNM`
+  // measures against the straight waypoint-to-waypoint chord while the mark is
+  // placed on the GEODESIC, and v16.63 measured those two lines 0.057 NM apart
+  // on a 38 NM leg at 69N. 0.1 NM is inside that and still catches the failure
+  // this exists for - an icon dropped off the line lands miles away.
+  check(off.every((v) => v < 0.1),
+    `every mark sits on the track after a drag (worst ${Math.max(...off)} NM off)`);
+
+  // ONE UNDO PUTS IT BACK - the drag is one edit, not two.
+  await page.evaluate(() => undoLast(true));
+  await page.waitForTimeout(320);
+  const s3 = await sched();
+  check(s3.climbStart < s2.climbStart - 0.5 || s3.boc === null,
+    `undo took the last drag back (${s2.climbStart} -> ${s3.climbStart} NM)`);
+
+  // THE DESCENT IS THE SAME GESTURE FROM THE OTHER END.
+  await page.evaluate(async () => {
+    flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+      { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 6500, oat: 0, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 500, oat: 5, wdir: 0, wspd: 0, var: -12 }] }];
+    activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+    await new Promise((r) => setTimeout(r, 350));
+  });
+  const dsc = () => page.evaluate(() => {
+    const sc = computeFlightSchedule(flights[0]);
+    return { todBefore: +(sc[0].todBeforeNM || 0).toFixed(2), bodTail: +(sc[0].bodTailNM || 0).toFixed(2),
+             descDist: +(sc[0].descDistNM || 0).toFixed(2), bodPin: flights[0].waypoints[1].bodNM };
+  });
+  const d0 = await dsc();
+  const dm0 = await marks();
+  check(dm0.length === 1 && dm0[0].k === 'TOD' && dm0[0].shape === 'tick',
+    `an unpinned descent draws one TOD, as a tick (${JSON.stringify(dm0.map((x) => x.k))})`);
+  check(await dragMark('TOD', -10, 90), 'the TOD tick can be grabbed and dragged');
+  const d1 = await dsc(), dm1 = await marks();
+  check(dm1.some((x) => x.k === 'BOD' && x.shape === 'ring'),
+    `dragging the TOD placed a BOD ring (${JSON.stringify(dm1.map((x) => x.k + ':' + x.shape))})`);
+  check(d1.todBefore > d0.todBefore + 1,
+    `the top of descent moved earlier (${d0.todBefore} -> ${d1.todBefore} NM before the fix)`);
+  check(Math.abs(d1.descDist - d0.descDist) < 0.35,
+    `the descent kept its POH length (${d0.descDist} -> ${d1.descDist} NM)`);
+  check(await dragMark('BOD', -10, 60), 'the BOD ring can be grabbed and dragged');
+  const d2 = await dsc();
+  check(d2.bodTail > d1.bodTail + 1 && d2.todBefore > d1.todBefore + 1,
+    `dragging the BOD moved the whole descent (tail ${d1.bodTail} -> ${d2.bodTail}, top ${d1.todBefore} -> ${d2.todBefore})`);
+
+  // A MARK IS TRANSPARENT TO EVERY GESTURE BUT ITS OWN DRAG. Making these
+  // draggable made them interactive, and an interactive marker eats what is
+  // under it: the right-click that opens the leg panel stopped working
+  // wherever a mark happened to sit. Both gestures are asserted here rather
+  // than reasoned about.
+  const tickPt = await page.evaluate(() => {
+    const t = profileMarkers[0].getElement().querySelector('.prof-tick,.prof-ring').getBoundingClientRect();
+    return [Math.round(t.x + t.width / 2), Math.round(t.y + t.height / 2)];
+  });
+  await page.evaluate(() => { OVERLAY_IDS.forEach(closeModal); closeLegModal(); });
+  await page.mouse.click(tickPt[0], tickPt[1]);
+  await page.waitForTimeout(420);
+  const throughAsk = await page.evaluate(() =>
+    [...document.querySelectorAll('#app-dialog .dlg-title')].map((x) => x.textContent));
+  check(throughAsk.length === 1 && /waypoint/i.test(throughAsk[0]),
+    `a LEFT click on a mark still falls through to the map (${JSON.stringify(throughAsk)})`);
+  await page.evaluate(() => { const d = document.getElementById('app-dialog'); if (d) d.remove(); });
+  await page.mouse.click(tickPt[0], tickPt[1], { button: 'right' });
+  await page.waitForTimeout(400);
+  check(await page.evaluate(() => {
+    const el = document.getElementById('leg-modal');
+    return !!el && getComputedStyle(el).display !== 'none';
+  }), 'a RIGHT click on a mark opens the leg panel for that leg');
+  await page.evaluate(() => { closeLegModal(); });
+}
+
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
 await b.close();
 if (fails.length) { console.error('\n' + fails.length + ' check(s) FAILED'); process.exit(1); }

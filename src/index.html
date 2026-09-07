@@ -299,6 +299,8 @@
             <li>A via point <b>bends a leg without adding a row</b>. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
             <li><b>Forgot a waypoint in the middle of a route?</b> <b>Right-click the leg line</b> where you want it: it gets its own OFP row with its own altitude, times and fuel, the leg splits in two, and any via points on it stay on the correct half so the flown track does not move. (Clicking empty map adds a waypoint at the END of the route; right-clicking the line is how you get one in the middle.) The new waypoint inherits the altitude, OAT and wind of the waypoint it is inserted before — the leg was already planned to arrive at those, so nothing is invented — and all of it is editable in the row. Its magnetic variation is computed for the new position.</li>
             <li>Climb and descent no longer split legs into separate rows: each leg row shows <b>total</b> distance/time/burn for easy copying, with the CLB/DES portion and TOC/TOD marking distance in the sub-line.</li>
+            <li><b>Drag a climb or descent corner along the track</b> (v16.73). A <b>top</b> (TOC/TOD) is a <b>tick across</b> the track; a <b>bottom</b> (BOC/BOD) is a <b>ring on</b> it. Drag the <b>TOC</b> to say where you want to be level and the planner works the POH climb backwards and places the <b>BOC</b> ring where it has to begin; drag that ring to move the <b>whole climb</b> without changing its length. The descent works the same way from the other end. The climb and descent are never stretched — the POH prices a rate, not a wish — so moving either end moves the manoeuvre. <b>Right-click a mark</b> to open that leg’s panel; a left click still drops a waypoint as anywhere else on the map.</li>
+            <li><b>Right-click a waypoint → Set altitude from here…</b> to cross that fix at an altitude and hold it for the rest of the plan. The <b>destination keeps its own altitude</b> so your descent survives, and <b>circuit stops keep their circuit altitude</b>, which is derived from the field rather than inherited. One Ctrl+Z takes the whole thing back.</li>
             <li><b>TOC and TOD are drawn as a short tick across the track</b>, the way you would mark them on the paper chart, with a small <b>TOC</b> / <b>TOD</b> chip beside it — <b>hover the chip</b> for the full sentence (which altitude, how far from which fix, and for a TOD the aerodrome being descended to). The distances are also in the leg's ↳ sub-line and the plotting list, which is what you copy from and what prints. A descent that fills a whole leg starts <b>at</b> the previous fix, and the mark is drawn there and says so.</li>
             <li>Press <b>👁 View Mode</b> to lock all editing for in-flight use; tapping a map waypoint then highlights its OFP row. The button flips to <b>✏ Edit Mode</b> to switch back.</li>
             <li><b>Undo / Redo</b> cover every change. <b>Esc</b> closes any window like this one.</li>
@@ -1278,7 +1280,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.72';
+    const APP_VERSION = '16.73';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3158,16 +3160,37 @@
           // The tick crosses the track: a bar drawn along north, rotated to
           // the local true track and then a further 90 degrees.
           const tickStyle = `transform:translate(-50%,-50%) rotate(${Math.round(prof.tt + 90)}deg);`;
+          const ringStyle = `transform:translate(-50%,-50%);`;
+          // ONLY THE ACTIVE PLAN'S MARKS MOVE, and never in View Mode - the
+          // same rule the waypoint markers already follow. Dragging a mark on a
+          // dimmed plan would edit a flight the pilot is not looking at.
+          const canDragProf = !isDoneMode && !dimmed;
           const chipStyle = `position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(${dx}px,${dy}px);`;
           // A pinned corner shares the phase's colour - a BOC belongs to the
           // climb, a BOD to the descent - so the four marks read as two pairs.
           const kindCls = (prof.kind === 'TOC' || prof.kind === 'BOC') ? 'toc' : 'tod';
-          const labelHtml =
-            `<div class="prof-tick ${kindCls}" style="${tickStyle}"></div>` +
+          // A TOP is a tick ACROSS the track; a BOTTOM is a RING ON it. Two
+          // glyphs for two kinds of corner, one colour per phase.
+          const isBottom = prof.kind === 'BOC' || prof.kind === 'BOD';
+          const glyph = isBottom
+            ? `<div class="prof-ring ${kindCls} ${canDragProf ? 'prof-drag' : ''}" style="${ringStyle}"></div>`
+            : `<div class="prof-tick ${kindCls} ${canDragProf ? 'prof-drag' : ''}" style="${tickStyle}"></div>`;
+          const labelHtml = glyph +
             `<div class="${kindCls}-label" style="${chipStyle}" title="${esc(tip)}">${fTag}${esc(prof.kind)}</div>`;
 
           const m = L.marker([prof.lat, prof.lng], {
-            interactive: false,
+            interactive: canDragProf,
+            draggable: canDragProf,
+            // A MARK IS TRANSPARENT TO EVERY GESTURE BUT ITS OWN DRAG. Before
+            // v16.73 these were non-interactive, so a click on one fell through
+            // to the map and added a waypoint like a click anywhere else;
+            // making them draggable would otherwise have made them EAT it,
+            // which is the same defect the right-click already showed (a mark
+            // sitting on a leg stopped the leg panel opening). Bubbling puts
+            // the old behaviour back, and the drag is unaffected because
+            // Leaflet suppresses the click when the pointer moved. Both halves
+            // are measured in verify:leg rather than assumed.
+            bubblingMouseEvents: true,
             opacity: dimmed ? 0.35 : 1,
             // Above the waypoint markers. A TOD that lands ON a fix would
             // otherwise be drawn UNDER that fix's own name label - which is
@@ -3179,6 +3202,7 @@
               iconAnchor: [0, 0]
             })
           }).addTo(map);
+          if (canDragProf) attachProfileDrag(m, fIdx, i, prof, schedM[i]);
           profileMarkers.push(m);
           });
         }
@@ -3203,6 +3227,129 @@
      * line. Leaflet markers do not bubble to the map, and the propagation is
      * stopped as well, so exactly one of the two panels can open.
      */
+    // ---- Dragging a climb or descent corner along the track (v16.73) ----
+    //
+    // THE ENGINE ALREADY UNDERSTOOD EVERY DROP POSITION; what was missing was
+    // the gesture. A drop is turned into ONE of the pins the v16.37 schedule
+    // already takes, so nothing about the aircraft is invented and every
+    // existing refusal (a contradictory pin, a descent that cannot fit) still
+    // reports itself in the red banner exactly as before.
+    //
+    //   BOC dropped at d  -> bocNM = d          "hold this altitude for d, then climb"
+    //   TOC dropped at d  -> tocNM = d          "be level by d" - the engine works the
+    //                                            climb BACKWARDS at the POH rate and the
+    //                                            BOC appears where it has to begin
+    //   BOD dropped at d  -> bodNM = D - d      "be level d before the end fix"
+    //   TOD dropped at d  -> bodNM shifted by the SAME amount the top moved
+    //
+    // THE CLIMB AND THE DESCENT ARE NEVER STRETCHED. Their length is the POH's,
+    // so moving either end moves the whole manoeuvre - which is exactly what
+    // the pilot asked for ("drag the BOC to move the whole segment"), and it is
+    // the only honest answer: the POH prices a rate of climb, not a wish.
+
+    /** A drag in progress: which mark, on which leg, and the geometry to snap to. */
+    let profDrag = null;
+
+    /**
+     * @param {any} m the Leaflet marker
+     * @param {number} fIdx flight index
+     * @param {number} legIdx index of the leg's FROM waypoint
+     * @param {any} prof the mark being dragged
+     * @param {any} SL the schedule leg it was drawn from
+     */
+    function attachProfileDrag(m, fIdx, legIdx, prof, SL) {
+      if (!SL || !SL.segs) return;
+      // A MARK MUST NOT SWALLOW THE GESTURE UNDER IT. Making the marker
+      // interactive so it can be dragged also made it eat the RIGHT-click that
+      // opens the leg panel - wherever a mark happened to sit, the panel simply
+      // stopped opening (caught by verify:leg, which right-clicks a leg that
+      // has a TOC on it). Forwarding it is better than passing it through:
+      // right-clicking a corner opens the panel for the leg that corner belongs
+      // to, which is the leg the pilot is pointing at.
+      m.on('contextmenu', function(e) {
+        if (isDoneMode || isRulerMode) return;
+        if (e.originalEvent && e.originalEvent.preventDefault) e.originalEvent.preventDefault();
+        openLegPanel(fIdx, e.latlng || m.getLatLng());
+      });
+      m.on('dragstart', function() {
+        map.dragging.disable();
+        profDrag = { fIdx, legIdx, kind: prof.kind, SL, dropNM: null };
+      });
+      m.on('drag', function(e) {
+        if (!profDrag) return;
+        const fl = flights[profDrag.fIdx];
+        const from = fl && fl.waypoints[profDrag.legIdx];
+        const to = fl && fl.waypoints[profDrag.legIdx + 1];
+        if (!from || !to) return;
+        // THE MARK SLIDES ALONG THE TRACK, IT DOES NOT LEAVE IT. A bottom of
+        // climb 3 NM off the line is not a thing a pilot can fly, and letting
+        // the icon float free would invite exactly that reading. `alongLegNM`
+        // is the same projection the leg panel's right-click uses.
+        // A MARKER DRAG EVENT CARRIES NO `latlng`. That field belongs to mouse
+        // events on the map; for a dragged marker the live position is on the
+        // marker itself, and reading `e.latlng` silently yields undefined - the
+        // projection then returns null and the drop is discarded, which looks
+        // exactly like a gesture that never registered.
+        const here = e.target.getLatLng();
+        // `alongLegNM` RETURNS A REPORT, NOT A NUMBER - {alongNM, totalNM,
+        // offTrackNM}. Treating it as a scalar makes every later step NaN, and
+        // `JSON.stringify(NaN)` prints `null`, so a debug log of it accuses the
+        // projection of failing when the projection was fine.
+        const rep = alongLegNM(from, to, here);
+        if (!rep || !isFinite(rep.alongNM)) return;
+        profDrag.dropNM = Math.max(0, Math.min(SL.distNM, rep.alongNM));
+        const pt = pointAlongSegments(SL.segs, profDrag.dropNM);
+        if (pt) e.target.setLatLng([pt.lat, pt.lng]);
+      });
+      m.on('dragend', function() {
+        const d = profDrag;
+        profDrag = null;
+        map.dragging.enable();
+        // NaN IS NOT null. Checking only for null let a NaN through to the pin
+        // arithmetic, where every comparison is false and the pin was quietly
+        // cleared instead of set.
+        if (!d || !isFinite(d.dropNM)) { refreshMap(); return; }
+        applyProfileDrop(d);
+      });
+    }
+
+    /** Turn a drop into a pin on the leg's TO waypoint, where alt/OAT/wind
+     *  already live. @param {any} d */
+    function applyProfileDrop(d) {
+      const fl = flights[d.fIdx];
+      const to = fl && fl.waypoints[d.legIdx + 1];
+      if (!to) { refreshMap(); return; }
+      const SL = d.SL;
+      const D = SL.distNM;
+      const at = d.dropNM;
+      const round = (v) => Math.round(v * 10) / 10;   // a tenth of a mile, as the OFP prints
+      pushUndoState('move the ' + d.kind);
+      if (d.kind === 'BOC') {
+        // A POSITION AND A DEADLINE CANNOT BOTH BE THE TRUTH. Setting one
+        // clears the other, so the leg never carries two answers for where the
+        // climb begins - which the engine would report as contradicting.
+        to.bocNM = at > 0.05 ? round(at) : null;
+        to.tocNM = null;
+      } else if (d.kind === 'TOC') {
+        to.tocNM = at > 0.05 ? round(at) : null;
+        to.bocNM = null;
+      } else if (d.kind === 'BOD') {
+        const tail = D - at;
+        to.bodNM = tail > 0.05 ? round(tail) : null;
+      } else if (d.kind === 'TOD') {
+        // The descent keeps its POH length, so moving the TOP moves the BOTTOM
+        // by the same distance. Working in a DELTA rather than recomputing from
+        // the descent length means this is right whether or not the descent
+        // also runs back onto an earlier leg.
+        const todWas = D - (SL.todBeforeNM === null ? 0 : SL.todBeforeNM);
+        const tail = (SL.bodTailNM || 0) - (at - todWas);
+        to.bodNM = tail > 0.05 ? round(tail) : null;
+      }
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
+    }
+
     async function openWaypointMenu(fIdx, wpIdx) {
       const fl = flights[fIdx];
       const wp = fl && fl.waypoints[wpIdx];
@@ -3216,12 +3363,66 @@
         input: isPat ? null : { label: 'Waypoint name', value: wp.name },
         buttons: [
           ...(isPat ? [] : [{ id: 'rename', label: 'Rename', variant: 'primary' }]),
+          ...(isPat ? [] : [{ id: 'alt', label: 'Set altitude from here\u2026' }]),
           { id: 'delete', label: isPat ? 'Delete this circuit stop' : 'Delete this waypoint', variant: 'danger' },
           { id: 'cancel', label: 'Cancel', variant: 'ghost' }
         ]
       });
       if (r.id === 'rename') renameWaypoint(fIdx, wpIdx, r.value);
+      else if (r.id === 'alt') await setAltitudeFromWaypoint(fIdx, wpIdx);
       else if (r.id === 'delete') deleteWaypointFromFlight(fIdx, wpIdx);
+    }
+
+    /** Cross THIS fix at an altitude and hold it from here on (v16.73, the
+     *  pilot's request): "that way it's easier to set altitudes I want for
+     *  different phases of the flight". Which fixes it reaches is
+     *  `levelFromIndices` in legs.js - a pure rule, so the two exclusions (the
+     *  destination keeps its field elevation, a circuit keeps its derived
+     *  circuit altitude) are tested without a browser. */
+    async function setAltitudeFromWaypoint(fIdx, wpIdx) {
+      // RE-READ AFTER THE AWAIT (discipline rule 7): the dialog above has
+      // already yielded, so the flight this was opened on may have been
+      // rebound by an undo.
+      const fl0 = flights[fIdx];
+      const wp0 = fl0 && fl0.waypoints[wpIdx];
+      if (!wp0) return;
+      const reach = levelFromIndices(fl0.waypoints, wpIdx);
+      const onward = reach.length - 1;
+      const skipped = fl0.waypoints.slice(wpIdx + 1, fl0.waypoints.length - 1)
+        .filter((w) => w.isPattern).length;
+      // WHAT IT WILL NOT TOUCH IS SAID BEFORE IT RUNS, not discovered afterwards.
+      const keeps = [fl0.waypoints[fl0.waypoints.length - 1].name + ' keeps its own altitude']
+        .concat(skipped ? [skipped + ' circuit stop' + (skipped === 1 ? '' : 's') + ' keep theirs'] : []);
+      const r = await ask({
+        title: 'Altitude from ' + wp0.name,
+        message: onward > 0
+          ? 'Sets ' + wp0.name + ' and the ' + onward + ' fix' + (onward === 1 ? '' : 'es') +
+            ' after it. ' + keeps.join('; ') + '.'
+          : 'Sets ' + wp0.name + ' only - there is nothing after it.',
+        input: { label: 'Altitude (ft AMSL)', value: String(wp0.alt) },
+        buttons: [
+          { id: 'ok', label: 'Set', variant: 'primary' },
+          { id: 'cancel', label: 'Cancel', variant: 'ghost' }
+        ]
+      });
+      if (r.id !== 'ok') return;
+      const ft = Number(String(r.value == null ? '' : r.value).trim());
+      // AN UNREADABLE ALTITUDE IS REFUSED, NOT COERCED. `Number('')` is 0, and
+      // a plan silently levelled at sea level is the plausible wrong answer
+      // this project exists to refuse (the v16.43 wind-matrix rule).
+      if (!isFinite(ft)) { say('That is not an altitude - nothing was changed.', 'error'); return; }
+      const fl = flights[fIdx];
+      if (!fl || !fl.waypoints[wpIdx]) return;
+      const idxs = levelFromIndices(fl.waypoints, wpIdx);
+      pushUndoState('set the altitude from ' + fl.waypoints[wpIdx].name);
+      idxs.forEach((i) => { fl.waypoints[i].alt = ft; });
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
+      say(idxs.length === 1
+        ? fl.waypoints[wpIdx].name + ' set to ' + ft + ' ft.'
+        : ft + ' ft from ' + fl.waypoints[wpIdx].name + ' onwards (' + idxs.length + ' fixes).',
+        'success');
     }
 
     function deleteWaypointFromFlight(fIdx, wpIdx) {

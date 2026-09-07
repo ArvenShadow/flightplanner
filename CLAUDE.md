@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 39 shared mutable
+    decision, not unfinished work: it is one web of 40 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -1409,10 +1409,9 @@ is forgotten.
 
 ### Cosmetic and UX
 
-9. **BOC/BOD map chips share the TOC/TOD colours** - a pinned BOC is the same
-   green as the TOC, a BOD the same orange as the TOD. The chip text
-   distinguishes them; a hollow tick for the pinned corners would read faster.
-   (The plotting text already uses hollow glyphs: `▲ TOC / △ BOC`.)
+9. ~~**BOC/BOD map chips share the TOC/TOD colours**~~ - DONE at v16.73: a top
+   is a tick across the track and a bottom is a ring on it. The colour still
+   says which phase; the shape now says which end.
 10. **The leg panel's "Insert one where I right-clicked" discards unapplied
     pins** - it closes the panel to open the naming dialog.
 11. **"Save & Recalculate"** is aircraft-centric wording for a button that now
@@ -2023,6 +2022,104 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 - CLAUDE.md said "ENTC's published 32 ft gives 1000 ft" - the published figure is **32 ft**
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
+
+## Dragging the corners, and setting an altitude for a phase (v16.73)
+
+Two requests in one: *"a separate icon for BOC and TOC, same with TOD and BOD...
+drag the icon across the track and it will automatically calculate and place a
+BOC / BOD as well which should also be draggable to move the whole segment"*,
+and *"when right clicking a waypoint, let me have the ability to set a new
+altitude... All waypoints after that waypoint will automatically be set to the
+same altitude."*
+
+### THE ENGINE ALREADY UNDERSTOOD EVERY DROP; WHAT WAS MISSING WAS THE GESTURE
+
+No schedule maths changed. A drop is turned into ONE of the pins v16.37 already
+takes, so every existing refusal (a contradictory pin, a descent that cannot
+fit) still reports itself in the red banner exactly as before.
+
+    BOC dropped at d  ->  bocNM = d        hold this altitude for d, then climb
+    TOC dropped at d  ->  tocNM = d        "be level by d" - climbStartForToc works
+                                            the POH climb BACKWARDS and the BOC
+                                            appears where it has to begin
+    BOD dropped at d  ->  bodNM = D - d    be level d before the end fix
+    TOD dropped at d  ->  bodNM shifted by the SAME distance the top moved
+
+- **THE MANOEUVRE IS NEVER STRETCHED.** Its length is the POH's, so moving
+  either end moves the whole thing - which is exactly what the pilot asked the
+  ring for, and the only honest answer: the POH prices a rate of climb, not a
+  wish. Measured in Chromium: TOC dragged 20 -> 26.4 NM placed the BOC at
+  6.4 NM, and the climb stayed 20.0 NM; dragging that ring to 9.9 NM took the
+  TOC to 29.9 NM. The descent behaves identically from the other end.
+- **A POSITION AND A DEADLINE CANNOT BOTH BE THE TRUTH.** Dragging the top sets
+  `tocNM` and CLEARS `bocNM`; dragging the bottom does the reverse. A leg that
+  carried both would be reporting itself as contradicting.
+- **THE TOD USES A DELTA, NOT THE DESCENT LENGTH.** Moving the top moves the
+  bottom by the same distance, which is right whether or not the descent also
+  runs back onto an earlier leg - where the length on THIS leg is not the whole
+  manoeuvre.
+
+### A TOP IS A TICK, A BOTTOM IS A RING
+
+Deferred nit 9, closed. A tick across the track means "the profile changes
+across this line", which is what a TOC and a TOD are; drawing the pinned corners
+with the same glyph in the same colour left the chip text as the only thing
+telling them apart. The ring matches the plotting list, which has used a hollow
+glyph for them since v16.37. Same colour per phase, so a climb still reads as
+one pair.
+
+### AN INTERACTIVE MARKER EATS WHAT IS UNDER IT, AND THAT COST TWO GESTURES
+
+Making the marks draggable made them interactive, and Leaflet markers do not
+bubble. **The right-click that opens the leg panel stopped working wherever a
+mark happened to sit** - caught by `verify:leg`, which right-clicks a leg that
+has a TOC on it. Two fixes, and both are now asserted rather than reasoned
+about: `bubblingMouseEvents: true` so a LEFT click still falls through to the
+map and adds a waypoint as it always did, and a `contextmenu` handler that opens
+the leg panel for the leg that corner belongs to - forwarding beats passing
+through, because the mark IS the leg the pilot is pointing at.
+
+### THREE TRAPS, AND THE MIDDLE ONE MADE THE DEBUG OUTPUT LIE
+
+- **`alongLegNM` RETURNS A REPORT, NOT A NUMBER** - `{alongNM, totalNM,
+  offTrackNM}`. Treating it as a scalar makes every later step NaN.
+- **AND `JSON.stringify(NaN)` PRINTS `null`**, so the debug line accused the
+  projection of returning nothing when the projection was fine. A drop guard
+  written `=== null` then let the NaN straight through to the pin arithmetic,
+  where every comparison is false and the pin was quietly CLEARED instead of
+  set - which looks exactly like a gesture that never registered. Guard with
+  `isFinite`, never against `null`, wherever a NaN can reach.
+- A marker `drag` event carries **no `latlng`**; that field belongs to mouse
+  events on the map. The live position is `e.target.getLatLng()`.
+
+### SET AN ALTITUDE FROM A WAYPOINT ONWARD
+
+`levelFromIndices` (legs.js) is the whole rule, pure and tested without a
+browser. Two exclusions, both the project refusing to invent something:
+
+- **THE LAST WAYPOINT KEEPS ITS OWN ALTITUDE.** It is the destination at its
+  published field elevation, and raising it to cruise would silently delete the
+  descent - the plan would still look clean and would no longer arrive. Pointing
+  AT the last fix still sets it, because then the pilot said so.
+- **A CIRCUIT STOP IS SKIPPED**, because its altitude is DERIVED from the field
+  (v16.40), not inherited. A cruise level written into a circuit is a pattern
+  flown at 6500 ft.
+- The author settled the other two questions: it overwrites hand-set altitudes
+  (one Ctrl+Z takes it back), and what it will NOT touch is stated in the dialog
+  BEFORE it runs rather than discovered afterwards.
+- **AN UNREADABLE ALTITUDE IS REFUSED, NOT COERCED.** `Number('')` is 0, and a
+  plan silently levelled at sea level is the v16.43 wind-matrix defect again.
+
+### AND I EMPTIED THIS FILE AGAIN WHILE WRITING THAT SECTION
+
+The warning under "Test harness notes" has been here since the first time it
+happened, and it caught me anyway - in a new shape. `open(p, 'w')` TRUNCATES THE
+FILE THE MOMENT IT IS CALLED, and Python evaluates it BEFORE the argument to
+`.write()`. So `open(p,'w').write(s.replace(a, b))` with a typo in `b` raises
+*after* the file is already empty: the exception looks like "nothing happened"
+and the file is gone. `git checkout HEAD -- CLAUDE.md` got it back because the
+last commit was clean. Build the new text into a variable, assert on it, and
+only then open for writing.
 
 ### A FIXED BASIS DOES NOT FILL A WINDOW THE WAY A GROW FACTOR DID (v16.72)
 
