@@ -146,9 +146,15 @@ function answerDialog(labelPart) {
   btn.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
 }
 /** Type into the dialog's text field. */
-function typeInDialog(value) {
-  const input = openDlg() && openDlg().querySelector('.dlg-input');
-  if (!input) throw new Error('the open dialog has no text field');
+function typeInDialog(value, fieldId) {
+  const dlg = openDlg();
+  if (!dlg) throw new Error('no dialog is open');
+  // A dialog can carry SEVERAL fields since v16.74 (the waypoint menu edits a
+  // name AND an altitude), so a test must say which one it is typing into.
+  const input = fieldId
+    ? dlg.querySelector('.dlg-input[data-field="' + fieldId + '"]')
+    : dlg.querySelector('.dlg-input');
+  if (!input) throw new Error('the open dialog has no field ' + (fieldId || '(first)'));
   input.value = value;
 }
 const dialogText = () => (openDlg() ? openDlg().textContent : '');
@@ -6040,7 +6046,7 @@ TA('right-clicking the line opens the LEG PANEL, and inserting is still there', 
     'the panel inserted in the wrong place: ' + JSON.stringify(names));
   assert(!legOpen(), 'the panel stayed open');
 });
-TA('right-clicking a WAYPOINT renames it, and offers to delete it (v16.40)', async () => {
+TA('right-clicking a WAYPOINT renames it, and offers to delete it (v16.40, one dialog since v16.74)', async () => {
   // The gesture had to go on the MARKER: right-clicking the route line opens
   // the leg panel, and a waypoint sits on that line. Exactly one panel may open.
   ev(SEED);
@@ -6050,8 +6056,8 @@ TA('right-clicking a WAYPOINT renames it, and offers to delete it (v16.40)', asy
   assert(!legOpen(), 'right-clicking the waypoint also opened the leg panel');
   assert(/FINNSNES/.test(doc.getElementById('app-dialog').textContent),
     'the menu did not name the waypoint: ' + doc.getElementById('app-dialog').textContent);
-  typeInDialog('MIDWAY');
-  answerDialog('Rename');
+  typeInDialog('MIDWAY', 'name');
+  answerDialog('Apply');
   await p; await tick();
   assert(JSON.stringify(ev('flights[0].waypoints.map(w => w.name)')) ===
     JSON.stringify(['ENDU', 'MIDWAY', 'ENTC']), 'the rename did not take: ' +
@@ -7307,23 +7313,46 @@ TA('right-clicking a waypoint sets the altitude from there onward', async () => 
         { lat: 69.40, lng: 18.60, name: 'MID2', alt: 3000, oat: 10, wdir: 0, wspd: 0, var: -11 },
         { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
       activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
-  const p = ev(`openWaypointMenu(0, 1)`);
+  ev(`openWaypointMenu(0, 1)`);
   await tick();
-  await answerDialog('Set altitude from here');
-  await tick();
-  await typeInDialog('6500');
-  await answerDialog('Set');
+  // ONE dialog, both fields - the v16.74 request was to lose the extra click.
+  assert(openDlg().querySelector('.dlg-input[data-field="name"]'), 'no name field');
+  assert(openDlg().querySelector('.dlg-input[data-field="alt"]'), 'no altitude field');
+  typeInDialog('6500', 'alt');
+  await answerDialog('Apply');
   await tick();
   assert(ev('flights[0].waypoints[1].alt') === 6500, 'the clicked fix was not set');
   assert(ev('flights[0].waypoints[2].alt') === 6500, 'the fix after it was not set');
   // THE DESTINATION KEEPS ITS FIELD ELEVATION, or the descent quietly vanishes.
   assert(ev('flights[0].waypoints[3].alt') === 32,
     'the destination was raised to cruise: ' + ev('flights[0].waypoints[3].alt'));
-  // ...and it is one undo.
+  assert(ev('flights[0].waypoints[1].name') === 'MID1', 'the name changed when only the altitude was edited');
+  // ...and it is ONE undo, not one per fix.
   ev(`undoLast(true)`);
   await tick();
   assert(ev('flights[0].waypoints[1].alt') === 2500 && ev('flights[0].waypoints[2].alt') === 3000,
     'undo did not put both altitudes back');
+  ev(SEED);
+});
+
+TA('the name and the altitude commit together as one edit', async () => {
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.20, lng: 18.30, name: 'MID1', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  ev(`openWaypointMenu(0, 1)`);
+  await tick();
+  typeInDialog('ROSSVOLL', 'name');
+  typeInDialog('4500', 'alt');
+  await answerDialog('Apply');
+  await tick();
+  assert(ev('flights[0].waypoints[1].name') === 'ROSSVOLL', 'the rename did not apply');
+  assert(ev('flights[0].waypoints[1].alt') === 4500, 'the altitude did not apply');
+  ev(`undoLast(true)`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].name') === 'MID1' && ev('flights[0].waypoints[1].alt') === 2500,
+    'the two halves were not one undo step');
   ev(SEED);
 });
 
@@ -7333,12 +7362,10 @@ TA('an unreadable altitude is refused, not coerced to zero', async () => {
         { lat: 69.20, lng: 18.30, name: 'MID1', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
         { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
       activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
-  const p = ev(`openWaypointMenu(0, 1)`);
+  ev(`openWaypointMenu(0, 1)`);
   await tick();
-  await answerDialog('Set altitude from here');
-  await tick();
-  await typeInDialog('not a number');
-  await answerDialog('Set');
+  typeInDialog('not a number', 'alt');
+  await answerDialog('Apply');
   await tick();
   // `Number('')` is 0 and `Number('abc')` is NaN - neither may become an
   // altitude. A plan silently levelled at sea level is the v16.43 defect.
@@ -7347,13 +7374,95 @@ TA('an unreadable altitude is refused, not coerced to zero', async () => {
   ev(SEED);
 });
 
-T('a circuit stop is offered no altitude propagation', () => {
-  // Its altitude is derived from the field (v16.40) and the option would
-  // overwrite it with a cruise level.
-  const src = APP_SRC;
-  assert(/isPat \? \[\] : \[\{ id: 'alt'/.test(src.replace(/\s+/g, ' ')) ||
-         /isPat \? \[\] : \[\{ id: 'alt'/.test(src),
-    'the altitude option is no longer withheld from a circuit stop');
+TA('a circuit stop keeps its own altitude and carries nothing forward', async () => {
+  // Its altitude is DERIVED from the field (v16.40). It is editable, because
+  // the VAC is the authority and the derived figure is a default to check - but
+  // it is never a cruise level to hand on to the rest of the plan.
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'PATTERN', alt: 1000, oat: 10, wdir: 0, wspd: 0, var: -12, isPattern: true, laps: 3 },
+        { lat: 69.70, lng: 18.95, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  ev(`openWaypointMenu(0, 1)`);
+  await tick();
+  assert(!openDlg().querySelector('.dlg-input[data-field="name"]'),
+    'a circuit stop was offered a rename - "PATTERN" is reserved in both directions');
+  typeInDialog('1500', 'alt');
+  await answerDialog('Apply');
+  await tick();
+  assert(ev('flights[0].waypoints[1].alt') === 1500, 'the circuit altitude did not apply');
+  assert(ev('flights[0].waypoints[2].alt') === 32,
+    'a circuit altitude carried forward into the rest of the plan: ' + ev('flights[0].waypoints[2].alt'));
+  ev(SEED);
+});
+
+console.log('\n=== 62a000l. A TOC dragged further back than the POH can climb (v16.74) ===');
+
+TA('the first leg clamps and says so, instead of raising the red banner', async () => {
+  // You cannot climb before takeoff, so on the first leg there is no earlier
+  // fix to raise - the honest answer is the earliest the POH can reach.
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 6500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const bare = ev(`computeFlightSchedule(flights[0])[0].tocAlongNM`);
+  assert(bare > 5, 'the probe leg has no climb to speak of');
+  ev(`settleTocDrag(0, 0, 2)`);   // ask for a TOC far earlier than the POH allows
+  await tick();
+  const pinned = ev('flights[0].waypoints[1].tocNM');
+  assert(pinned !== null && pinned >= bare,
+    'the TOC was not clamped to the earliest reachable point: ' + pinned + ' vs ' + bare);
+  // IT ROUNDS UP. A clamp landing a hundredth of a mile early misses the very
+  // target it was computed to meet and puts the banner straight back.
+  assert(ev(`computeFlightSchedule(flights[0])[0].tocTargetMet`) !== false,
+    'the clamped TOC still reports its own target as missed - the banner would stay up');
+  assert(/cannot go further back/i.test(toastText()),
+    'the pilot was not told why the TOC stopped: ' + toastText());
+  ev(SEED);
+});
+
+TA('a leg with one behind it carries the climb back, and says what it changed', async () => {
+  // THE BOC CROSSES THE LEG BOUNDARY BY THE ONE MECHANISM THAT KEEPS THE
+  // ALTITUDE COLUMN HONEST: the earlier fix is raised to the altitude the climb
+  // passes through, and that leg's climb is pinned to finish exactly on it, so
+  // the two halves are one continuous climb and every stated altitude is flown.
+  ev(`flights = [{ id: 1, title: 'B', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.20, lng: 18.50, name: 'MID',  alt: 2500, oat: 5, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.90, lng: 18.50, name: 'ENTC', alt: 8500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  assert(ev('flights[0].waypoints[1].alt') === 2500, 'the probe did not seed');
+  ev(`settleTocDrag(0, 1, 6)`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].alt') > 2500,
+    'the earlier fix was not raised, so the climb could not begin on the leg before: ' +
+    ev('flights[0].waypoints[1].alt'));
+  assert(ev('flights[0].waypoints[2].tocNM') === 6, 'the asked-for TOC was not kept');
+  // NO RED BANNER: the resulting plan is flyable and every altitude is stated.
+  const probs = ev(`runIntegrityCheck({}) , (document.getElementById('integrity-banner').style.display || '')`);
+  assert(ev(`computeFlightSchedule(flights[0])[1].tocTargetMet`) !== false,
+    'the target is still reported as missed after the climb was carried back');
+  assert(/one continuous climb/i.test(toastText()),
+    'the pilot was not told the earlier fix moved: ' + toastText());
+  // ...and the whole thing is ONE undo, because it is one gesture.
+  ev(`undoLast(true)`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].alt') === 2500 && ev('flights[0].waypoints[2].tocNM') == null,
+    'undo did not take the whole carried-back climb with it');
+  ev(SEED);
+});
+
+T('a TOC that fits is applied silently, with no advice and no note', () => {
+  ev(`flights = [{ id: 1, title: 'C', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 6500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+      document.getElementById('app-toasts').innerHTML = '';`);
+  const dist = ev(`computeFlightSchedule(flights[0])[0].distNM`);
+  ev(`settleTocDrag(0, 0, ${Math.round(dist - 1)})`);
+  assert(ev('flights[0].waypoints[1].tocNM') === Math.round(dist - 1), 'a reachable TOC was not applied as asked');
+  assert(toastText().trim() === '', 'a TOC that fits should say nothing: ' + toastText());
+  ev(SEED);
 });
 
 console.log('\n=== 62a000d. Quality of life, one batch (v16.49, item 16) ===');

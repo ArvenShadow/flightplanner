@@ -306,11 +306,13 @@ check(wpMenu.legPanel !== 'flex',
   'the route line underneath ALSO opened the leg panel (display ' + wpMenu.legPanel + ')');
 // Rename through the real dialog, then confirm the route changed.
 await page.evaluate(() => {
-  const inp = document.querySelector('#app-dialog input');
+  // ONE dialog with a name AND an altitude since v16.74, so the field has to be
+  // named - the first input is no longer necessarily the one you mean.
+  const inp = document.querySelector('#app-dialog input[data-field="name"]');
   inp.value = 'MIDPOINT';
   inp.dispatchEvent(new Event('input', { bubbles: true }));
   [...document.querySelectorAll('#app-dialog button')]
-    .find((b) => /Rename/.test(b.textContent)).click();
+    .find((b) => /Apply/.test(b.textContent)).click();
 });
 await page.waitForTimeout(320);
 check(await page.evaluate(() => flights[0].waypoints[1].name) === 'MIDPOINT',
@@ -587,6 +589,81 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     return !!el && getComputedStyle(el).display !== 'none';
   }), 'a RIGHT click on a mark opens the leg panel for that leg');
   await page.evaluate(() => { closeLegModal(); });
+
+  // A TOC DRAGGED FURTHER BACK THAN THE POH CAN CLIMB (v16.74, the pilot's
+  // report: it "automatically resets, the red integrity banner appears"). Three
+  // outcomes, and none of them is a banner - the resulting plan is flyable in
+  // every case, so saying DO NOT USE would be false.
+  const bannerText = () => page.evaluate(() => {
+    const el = document.getElementById('integrity-banner');
+    return el && getComputedStyle(el).display !== 'none'
+      ? el.textContent.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+  });
+  const toastText = () => page.evaluate(() => {
+    const h = document.getElementById('app-toasts');
+    return h ? h.textContent.replace(/\s+/g, ' ').trim().slice(0, 130) : '';
+  });
+
+  // (1) THE FIRST LEG has nothing behind it - clamp, and say why.
+  await page.evaluate(async () => {
+    document.getElementById('app-toasts').innerHTML = '';
+    flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+      { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 6500, oat: 0, wdir: 0, wspd: 0, var: -12 }] }];
+    activeFlightIndex = 0;
+    map.setView([69.37, 18.73], 9, { animate: false });
+    refreshMap(); renderAllFlightTables();
+    await new Promise((r) => setTimeout(r, 350));
+  });
+  const firstMark = (await marks())[0];
+  await page.mouse.move(firstMark.cx, firstMark.cy);
+  await page.mouse.down();
+  for (let k = 1; k <= 10; k++) await page.mouse.move(firstMark.cx - 2 * k, firstMark.cy + 22 * k);
+  await page.mouse.up();
+  await page.waitForTimeout(520);
+  const clamped = await page.evaluate(() => ({
+    toc: flights[0].waypoints[1].tocNM,
+    met: computeFlightSchedule(flights[0])[0].tocTargetMet
+  }));
+  check(clamped.toc !== null && clamped.met !== false,
+    `dragging the TOC past the POH climb clamps to a target it can meet (${clamped.toc} NM)`);
+  check((await bannerText()) === '',
+    `and raises no red banner (${JSON.stringify(await bannerText())})`);
+  check(/cannot go further back/i.test(await toastText()),
+    `it says why instead (${JSON.stringify(await toastText())})`);
+
+  // (2) A LEG WITH ONE BEHIND IT carries the climb back onto the earlier leg -
+  //     by raising that fix, so the altitude column still states what is flown.
+  await page.evaluate(async () => {
+    document.getElementById('app-toasts').innerHTML = '';
+    flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+      { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.20, lng: 18.50, name: 'MID',  alt: 2500, oat: 5, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.90, lng: 18.50, name: 'ENTC', alt: 8500, oat: 0, wdir: 0, wspd: 0, var: -12 }] }];
+    activeFlightIndex = 0;
+    map.setView([69.25, 18.5], 8, { animate: false });
+    refreshMap(); renderAllFlightTables();
+    await new Promise((r) => setTimeout(r, 400));
+  });
+  const midWas = await page.evaluate(() => flights[0].waypoints[1].alt);
+  const northToc = (await marks()).filter((m) => m.k === 'TOC').sort((a, c) => a.cy - c.cy)[0];
+  check(!!northToc, 'the later leg has a TOC to drag');
+  await page.mouse.move(northToc.cx, northToc.cy);
+  await page.mouse.down();
+  for (let k = 1; k <= 10; k++) await page.mouse.move(northToc.cx - k, northToc.cy + 12 * k);
+  await page.mouse.up();
+  await page.waitForTimeout(560);
+  const carried = await page.evaluate(() => ({
+    mid: flights[0].waypoints[1].alt,
+    met: computeFlightSchedule(flights[0])[1].tocTargetMet
+  }));
+  check(carried.mid > midWas,
+    `the climb began on the leg before, by raising that fix (${midWas} -> ${carried.mid} ft)`);
+  check(carried.met !== false, 'and the target is met rather than reported missed');
+  check((await bannerText()) === '',
+    `no red banner for a plan that is flyable (${JSON.stringify(await bannerText())})`);
+  check(/one continuous climb/i.test(await toastText()),
+    `the pilot is told what moved (${JSON.stringify(await toastText())})`);
 }
 
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
