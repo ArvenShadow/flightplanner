@@ -1176,8 +1176,15 @@ T('every label chip is inline-block so its background covers all text', () => {
 console.log('\n=== 33. TOC/TOD: a tick across the track, plus a small chip ===');
 T('the mark is a tick rotated ACROSS the track, anchored on the exact point', () => {
   const raw = APP_SRC;
-  assert(raw.includes('class="prof-tick ${kindCls}"'), 'the TOC/TOD tick is gone');
+  assert(raw.includes('class="prof-tick ${kindCls}'), 'the TOC/TOD tick is gone');
   assert(!raw.includes('prof-point'), 'the old diamond dot is back');
+  // A TOP IS A TICK, A BOTTOM IS A RING (v16.73). Drawing all four with the
+  // same glyph left the chip text as the only thing telling a TOC from a BOC.
+  assert(raw.includes('class="prof-ring ${kindCls}'), 'the BOC/BOD ring is gone');
+  assert(/const isBottom = prof\.kind === 'BOC' \|\| prof\.kind === 'BOD';/.test(raw),
+    'the two glyphs are no longer chosen by which END of the manoeuvre the mark is');
+  const ring = raw.split('.prof-ring {')[1].split('}')[0];
+  assert(/border-radius:\s*50%/.test(ring), 'the bottom-of-climb mark is not round');
   // a bar drawn along north, rotated to the local track and then a further
   // 90 degrees, is a bar that CROSSES the track
   assert(raw.includes('rotate(${Math.round(prof.tt + 90)}deg)'), 'the tick is not rotated across the track');
@@ -7259,6 +7266,94 @@ T('the editable number columns are the roomiest of the numeric group', () => {
   assert(ev(`document.querySelectorAll('th.col-num').length`) >= 2,
     'OAT and VAR no longer carry col-num: ' + ev(`document.querySelectorAll('th.col-num').length`));
   ev(SEED);
+});
+
+console.log('\n=== 62a000k. Set an altitude from a waypoint onward (v16.73) ===');
+
+T('the propagation reaches every fix after the one you pointed at, with two exclusions', () => {
+  const L = moduleExports.legs;
+  const wps = (n) => Array.from({ length: n }, (_, i) => ({ name: 'W' + i, alt: 1000 + i }));
+  // Every fix after the clicked one, EXCEPT the last.
+  assert(JSON.stringify(L.levelFromIndices(wps(5), 1)) === '[1,2,3]',
+    'the middle case is wrong: ' + JSON.stringify(L.levelFromIndices(wps(5), 1)));
+  // THE LAST WAYPOINT KEEPS ITS OWN ALTITUDE. It is the destination at its
+  // published field elevation, and raising it to cruise would silently delete
+  // the descent - the plan would look clean and no longer arrive.
+  assert(!L.levelFromIndices(wps(5), 1).includes(4), 'the destination was overwritten');
+  // ...but pointing AT it still sets it, because then the pilot said so.
+  assert(JSON.stringify(L.levelFromIndices(wps(5), 4)) === '[4]',
+    'clicking the last fix must still set that one');
+  // A CIRCUIT STOP IS SKIPPED: its altitude is DERIVED from the field it is
+  // flown at (v16.40), not inherited. A cruise level there is a pattern at
+  // 6500 ft.
+  const withPat = wps(6);
+  withPat[3].isPattern = true;
+  assert(JSON.stringify(L.levelFromIndices(withPat, 1)) === '[1,2,4]',
+    'a circuit stop was overwritten: ' + JSON.stringify(L.levelFromIndices(withPat, 1)));
+  // Degenerate shapes return nothing rather than throwing.
+  assert(L.levelFromIndices(wps(3), 9).length === 0, 'an out-of-range index must give nothing');
+  assert(L.levelFromIndices(wps(3), -1).length === 0, 'a negative index must give nothing');
+  assert(L.levelFromIndices(null, 0).length === 0, 'a missing list must give nothing');
+  assert(JSON.stringify(L.levelFromIndices(wps(1), 0)) === '[0]', 'a one-fix plan sets that fix');
+  // In flight order, because the page applies them straight through.
+  const idx = L.levelFromIndices(wps(8), 2);
+  assert(idx.every((v, i) => i === 0 || v > idx[i - 1]), 'the indices came back out of order');
+});
+
+TA('right-clicking a waypoint sets the altitude from there onward', async () => {
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.20, lng: 18.30, name: 'MID1', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.40, lng: 18.60, name: 'MID2', alt: 3000, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const p = ev(`openWaypointMenu(0, 1)`);
+  await tick();
+  await answerDialog('Set altitude from here');
+  await tick();
+  await typeInDialog('6500');
+  await answerDialog('Set');
+  await tick();
+  assert(ev('flights[0].waypoints[1].alt') === 6500, 'the clicked fix was not set');
+  assert(ev('flights[0].waypoints[2].alt') === 6500, 'the fix after it was not set');
+  // THE DESTINATION KEEPS ITS FIELD ELEVATION, or the descent quietly vanishes.
+  assert(ev('flights[0].waypoints[3].alt') === 32,
+    'the destination was raised to cruise: ' + ev('flights[0].waypoints[3].alt'));
+  // ...and it is one undo.
+  ev(`undoLast(true)`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].alt') === 2500 && ev('flights[0].waypoints[2].alt') === 3000,
+    'undo did not put both altitudes back');
+  ev(SEED);
+});
+
+TA('an unreadable altitude is refused, not coerced to zero', async () => {
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.20, lng: 18.30, name: 'MID1', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const p = ev(`openWaypointMenu(0, 1)`);
+  await tick();
+  await answerDialog('Set altitude from here');
+  await tick();
+  await typeInDialog('not a number');
+  await answerDialog('Set');
+  await tick();
+  // `Number('')` is 0 and `Number('abc')` is NaN - neither may become an
+  // altitude. A plan silently levelled at sea level is the v16.43 defect.
+  assert(ev('flights[0].waypoints[1].alt') === 2500,
+    'an unreadable altitude was applied anyway: ' + ev('flights[0].waypoints[1].alt'));
+  ev(SEED);
+});
+
+T('a circuit stop is offered no altitude propagation', () => {
+  // Its altitude is derived from the field (v16.40) and the option would
+  // overwrite it with a cruise level.
+  const src = APP_SRC;
+  assert(/isPat \? \[\] : \[\{ id: 'alt'/.test(src.replace(/\s+/g, ' ')) ||
+         /isPat \? \[\] : \[\{ id: 'alt'/.test(src),
+    'the altitude option is no longer withheld from a circuit stop');
 });
 
 console.log('\n=== 62a000d. Quality of life, one batch (v16.49, item 16) ===');
