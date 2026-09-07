@@ -67,16 +67,6 @@ interface Waypoint {
   /** LEGACY, read but never written - see `legTarget` in legs.js. */
   bocNM?: number | null;
   /**
-   * THE ALTITUDE THE PILOT TYPED, cached when a dragged TOC on the NEXT leg
-   * raised this fix to carry a climb back across the boundary (v16.75). Every
-   * later drag is judged from this baseline rather than from the raised figure,
-   * so the raises cannot compound and the crossing altitude comes back down as
-   * the TOC is moved forward again. `tocBase` is the pin that was here before
-   * the carry-back, and null is meaningful (there was no pin).
-   */
-  altBase?: number;
-  tocBase?: number | null;
-  /**
    * BOTTOM OF DESCENT pin for the leg ENDING here: be level this many NM
    * before the leg's END fix and run in level. Also pure geometry - the
    * descent simply starts earlier. If there is no room for it, that is the
@@ -226,22 +216,9 @@ interface ScheduleLeg {
   /** True when climbStartNM was derived from tocTargetNM rather than pinned
    *  directly, so a bocNM on the same leg was ignored. */
   tocDerivedBoc: boolean;
-  /** What this leg's START fix would have to be crossed at for the target to
-   *  be reachable at the profile's climb rate. Null on the first leg (there is
-   *  no earlier fix to raise) and null when the figure was TRIED and did not
-   *  work because the earlier legs cannot climb that high by then. */
-  tocNeedsEntryAlt: number | null;
-  /** True when a candidate altitude was computed, tried, and did not help -
-   *  so no altitude at the previous fix makes the target reachable. */
-  tocNoAltHelps: boolean;
-  /** Where the earlier leg's "be level by" pin goes when the advice is taken
-   *  (its full length), and where its climb then begins. Both are read from the
-   *  trial that verified the advice. Null when there is no earlier leg. */
   /** The climb is handed over from the previous leg (which topped out on the
    *  shared fix), so it starts AT the fix and a target here is a deadline. */
   tocContinuation: boolean;
-  tocAdviceLevelByNM: number | null;
-  tocAdviceClimbFromNM: number | null;
   /** This leg's climb tops out ON its end fix and the next leg climbs straight
    *  on from there: one climb through the fix, so this leg draws no TOC. */
   climbContinues: boolean;

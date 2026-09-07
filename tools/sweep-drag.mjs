@@ -244,7 +244,16 @@ for (const [name, wps] of Object.entries(PLANS)) {
       }
       for (const bad of a.bad) if (!base.bad.includes(bad)) problems.push(`STATE   ${where}: ${bad}`);
 
-      // 6. NOTHING RATCHETS. Drag the same mark back to the far end and the
+      // 6. NO DRAG EVER CHANGES AN ALTITUDE THE PILOT TYPED (v16.77). This is
+      //    the pilot's own requirement - "Id prefer the Climb and descent
+      //    doesnt really fuck with the altitudes that much" - and it is an
+      //    ABSOLUTE check, not the round-trip one below: v16.74/v16.75 passed
+      //    the round trip by caching the figure and giving it back, which is a
+      //    weaker promise than never touching it.
+      const mid = await page.evaluate(() => JSON.stringify(flights[0].waypoints.map((w) => w.alt)));
+      if (mid !== before) problems.push(`ALTITUDE ${where}: ${before} -> ${mid}`);
+
+      // 7. NOTHING RATCHETS. Drag the same mark back to the far end and the
       //    altitudes the pilot typed must come back.
       const ms2 = await marks();
       // MATCH THE MARK ON KIND *AND* LEG. Matching on kind alone picks the

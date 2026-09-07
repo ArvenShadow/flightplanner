@@ -4872,8 +4872,6 @@ T('"be level by" SETS the bottom of climb, working backwards at the profile\'s r
   // there is no earlier leg to start the climb on.
   const impossible = route({ tocNM: 4 });
   assert(!impossible.tocTargetMet, 'an unreachable target was reported as met');
-  assert(impossible.tocNeedsEntryAlt === null,
-    'the first leg was told to raise a fix that does not exist: ' + impossible.tocNeedsEntryAlt);
   assert(impossible.climbRateReqFpm > 0 && isFinite(impossible.climbRateReqFpm),
     'no required rate on the one case where it is the only answer');
   assert(Math.abs(impossible.climbMin - base.climbMin) < 1e-6, 'a refused target changed the climb');
@@ -4881,101 +4879,55 @@ T('"be level by" SETS the bottom of climb, working backwards at the profile\'s r
 
   // With no target there is nothing to report.
   assert(base.tocTargetNM === null && base.climbRateReqFpm === null && base.tocTargetMet === true
-    && base.tocDerivedBoc === false && base.tocNeedsEntryAlt === null, JSON.stringify(base.tocTargetNM));
+    && base.tocDerivedBoc === false, JSON.stringify(base.tocTargetNM));
 });
-T('when the climb will not fit, the ALTITUDE the previous fix needs is computed - and it works', () => {
-  // THE USER'S POINT, and it is the right design: rather than reporting a rate
-  // nobody can fly, work out what crossing the previous fix higher would take.
-  // That keeps the altitude column the single source of truth for what is flown
-  // where, instead of the schedule quietly doing something the column denies.
+T('an unreachable target is REPORTED, and changes nothing about the plan', () => {
+  // THE v16.77 INVARIANT, and it replaces the advice machinery that used to sit
+  // here. Until v16.76 an unreachable "be level by" made the engine compute the
+  // altitude the previous fix would have to be crossed at, verify it on a trial
+  // schedule, and offer it with a button that REWROTE that fix. The pilot
+  // retired all of it: "I set what altitude i plan on using, not the exact
+  // altitude i will have at that point... Id prefer the Climb and descent
+  // doesnt really fuck with the altitudes that much. Just a simple 'climb here,
+  // descend there'."
+  //
+  // So the schedule may now do exactly two things with a target it cannot meet:
+  // say so, and leave the climb where the POH puts it.
   const L2 = moduleExports.legs;
   const W = (n, lat, alt, x) => ({ name: n, lat, lng: 18.5, alt, oat: 0, wdir: 0, wspd: 0, var: -11, ...x });
-  const route = (aAlt, x) => L2.computeFlightSchedule({ id: 1,
-    waypoints: [W('ENDU', 68.3, 254), W('A', 69.0, aAlt), W('B', 69.7, 6500, x)] });
+  const wpsOf = (x) => [W('ENDU', 68.3, 254), W('A', 69.0, 2500), W('B', 69.7, 6500, x)];
 
   for (const target of [3, 5, 8, 11]) {
-    const asked = route(2500, { tocNM: target })[1];
-    assert(!asked.tocTargetMet, 'target ' + target + ' NM was somehow met from 2500 ft');
-    assert(asked.tocNeedsEntryAlt > 2500 && asked.tocNeedsEntryAlt <= 6500,
-      'implausible advice for ' + target + ' NM: ' + asked.tocNeedsEntryAlt);
-    // A WHOLE HUNDRED FEET (v16.40, the user's request) - a pilot writes and
-    // flies round altitudes. It rounds UP, never to the nearest: the figure is
-    // a MINIMUM, so the nearest hundred is below it half the time and taking
-    // that advice would miss the very target it was computed to meet.
-    assert(asked.tocNeedsEntryAlt % 100 === 0,
-      'the advice is not a whole hundred feet: ' + asked.tocNeedsEntryAlt);
-    // TAKING THE ADVICE MUST WORK. It did not at first: the required altitude
-    // was bisected against a time budget computed at the ORIGINAL climb TAS,
-    // but a higher entry altitude raises the TAS and so shortens the time
-    // available - the recommendation missed by 0.11 NM. Both sides move
-    // together now, which is why entryAltForClimbBy takes a callback.
-    const after = route(asked.tocNeedsEntryAlt, { tocNM: target })[1];
-    assert(after.tocTargetMet,
-      'taking the advice (' + asked.tocNeedsEntryAlt + ' ft) still missed the ' + target + ' NM target: ' +
-      'TOC at ' + after.tocAlongNM.toFixed(3));
-    assert(Math.abs(after.tocAlongNM - target) < 0.05,
-      'the TOC did not land on the target after taking the advice: ' + after.tocAlongNM);
-    // ...and so must rounding it UP to the next hundred BY HAND. The panel no
-    // longer does that itself (v16.39): the figure is a crossing altitude passed
-    // in a climb, not a level to be flown, and rounding it up puts a short level
-    // sliver back at the fix. It must still be safe when a pilot does it.
-    const rounded = Math.ceil(asked.tocNeedsEntryAlt / 100) * 100;
-    const afterRound = route(rounded, { tocNM: target })[1];
-    assert(afterRound.tocTargetMet, 'rounding up to ' + rounded + ' ft missed the target');
-
-    // AND IT MUST BE ONE CLIMB (v16.39, the user's correction). Raising the fix
-    // alone tops the earlier leg out early and holds the new altitude to the
-    // fix, so the pilot gets two climbs with a level stretch between them. The
-    // advice therefore also delays the earlier leg's climb to end ON the fix.
-    const both = L2.computeFlightSchedule({ id: 1, waypoints: [W('ENDU', 68.3, 254),
-      W('A', 69.0, asked.tocNeedsEntryAlt, { tocNM: asked.tocAdviceLevelByNM }),
-      W('B', 69.7, 6500, { tocNM: target })] });
-    const lead = both[0], climb = both[1];
-    assert(asked.tocAdviceLevelByNM !== null && asked.tocAdviceClimbFromNM !== null,
-      'the advice did not say where the earlier climb begins');
-    assert(Math.abs(lead.climbStartNM - asked.tocAdviceClimbFromNM) < 0.05,
-      'the offer described a climb start the plan does not produce: ' +
-      asked.tocAdviceClimbFromNM + ' vs ' + lead.climbStartNM);
-    assert(lead.distNM - (lead.climbStartNM + lead.climbDistNM) < 0.05,
-      'the earlier leg still levels off before the fix: ' +
-      (lead.distNM - (lead.climbStartNM + lead.climbDistNM)).toFixed(3) + ' NM');
-    assert(climb.climbStartNM < 0.05,
-      'the climb does not resume at the fix: ' + climb.climbStartNM.toFixed(3) + ' NM');
-    // AT OR BEFORE the deadline, not exactly on it (v16.40). The crossing
-    // altitude is rounded UP to a whole hundred, so the aircraft arrives at the
-    // fix slightly higher than the minimum and tops out slightly sooner than
-    // asked. "Be level BY" is a deadline; early is safe, and it is what keeps
-    // the climb continuous instead of levelling off for seconds at the fix.
-    assert(climb.tocTargetMet && climb.tocAlongNM > 0 && climb.tocAlongNM <= target + 0.05,
-      'the continuous climb did not top out at or before the target: ' + climb.tocAlongNM);
-    assert(climb.tocContinuation === true, 'the climb was not treated as handed over');
-    // ONE climb means ONE top of climb on the map.
-    assert(lead.climbContinues === true, 'the earlier leg did not report a continuing climb');
-    const marks = L2.computeLegMarkers(both[0].from, both[0].to, lead)
-      .concat(L2.computeLegMarkers(both[1].from, both[1].to, climb));
-    const tocs = marks.filter((m) => m.kind === 'TOC');
-    assert(tocs.length === 1 && tocs[0].distNM <= target + 0.05,
-      'a continuous climb drew ' + tocs.length + ' tops of climb: ' +
-      marks.map((m) => m.kind + '@' + m.distNM.toFixed(1)).join(', '));
+    const asked = wpsOf({ altAtNM: target });
+    const S = L2.computeFlightSchedule({ id: 1, waypoints: asked })[1];
+    const bare = L2.computeFlightSchedule({ id: 1, waypoints: wpsOf({}) })[1];
+    assert(!S.tocTargetMet, 'target ' + target + ' NM was somehow met from 2500 ft');
+    // IT IS SAID: a rate to judge, never a rate the climb is recomputed at.
+    assert(S.climbRateReqFpm > 0 && isFinite(S.climbRateReqFpm),
+      'an unmet target reported no required rate: ' + S.climbRateReqFpm);
+    // NOTHING ABOUT THE AIRCRAFT MOVED. Same climb, same minutes, same fuel,
+    // same TAS, same top of climb as with no target at all.
+    for (const k of ['climbMin', 'climbFuelGal', 'climbTas', 'climbDistNM', 'tocAlongNM',
+                     'climbStartNM', 'entryAlt', 'exitAlt']) {
+      assert(Math.abs(Number(S[k]) - Number(bare[k])) < 1e-9,
+        'a refused target changed ' + k + ': ' + S[k] + ' vs ' + bare[k]);
+    }
+    // AND NO ALTITUDE THE PILOT TYPED WAS TOUCHED. The engine is pure, so this
+    // is asserted on the objects it was handed rather than taken on trust.
+    assert(asked.map((w) => w.alt).join(',') === '254,2500,6500',
+      'the schedule wrote back an altitude: ' + asked.map((w) => w.alt).join(','));
   }
-
-  // The advice is the MINIMUM: one hundred feet lower must NOT be enough, or it
-  // is not the answer to "what does this need".
-  const asked5 = route(2500, { tocNM: 5 })[1];
-  const tooLow = route(asked5.tocNeedsEntryAlt - 100, { tocNM: 5 })[1];
-  assert(!tooLow.tocTargetMet, 'the advice is not the minimum - 100 ft lower also worked');
 });
-T('advice is only offered if it actually WORKS', () => {
-  // The per-leg figure alone is not enough: raising a fix also changes the leg
-  // BEFORE it, and if those earlier legs cannot climb that high by then the
-  // target is missed all over again. Measured over 20 000 generated routes, the
-  // unverified figure was wrong 382 times in 947 - so every candidate is tried
-  // on a copy of the flight and dropped unless the target is really met.
+T('no target, reachable or not, ever rewrites an altitude - swept over generated routes', () => {
+  // The sweep that used to verify the ADVICE now verifies its absence. Same
+  // generator, same seed, same shapes: what is asserted is that an unmet target
+  // is reported honestly and that the waypoints come back exactly as they went
+  // in - which is the one property the pilot asked for by name.
   const L2 = moduleExports.legs;
   const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
   const rnd = (() => { let s = 987654; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
-  let given = 0, works = 0, noneHelps = 0, firstLeg = 0, continuous = 0, noEarlierClimb = 0, absorbed = 0;
-  const splitClimb = [], doubleToc = [];
+  let unmet = 0, met = 0, firstLeg = 0, rated = 0;
+  const changed = [], invented = [];
   for (let iter = 0; iter < sweep(3000); iter++) {
     const nWp = 3 + Math.floor(rnd() * 2);
     const wps = []; let lat = 68.5 + rnd() * 1.0;
@@ -4987,61 +4939,38 @@ T('advice is only offered if it actually WORKS', () => {
     const li = 1 + Math.floor(rnd() * (nWp - 1));
     const base = L2.computeFlightSchedule({ id: 1, waypoints: wps.map((w) => ({ ...w })) });
     const legDist = base[li - 1] ? base[li - 1].distNM : 0;
-    const pin = wps.map((w, k) => k === li ? { ...w, tocNM: +(rnd() * legDist).toFixed(2) } : { ...w });
+    const pin = wps.map((w, k) => k === li ? { ...w, altAtNM: +(rnd() * legDist).toFixed(2) } : { ...w });
+    const before = pin.map((w) => w.alt).join(',');
     const S = L2.computeFlightSchedule({ id: 1, waypoints: pin })[li - 1];
-    if (!S || S.tocTargetNM == null || S.tocTargetMet) continue;
-    if (S.tocNeedsEntryAlt === null) { if (S.i === 0) firstLeg++; else if (S.tocNoAltHelps) noneHelps++; continue; }
-    given++;
-    // APPLIED EXACTLY AS THE PANEL APPLIES IT (v16.39): the crossing altitude
-    // AND the "be level by" pin that delays the earlier leg's climb so the two
-    // halves are one continuous climb through the fix.
-    const fixed = pin.map((w, k) => k === S.i
-      ? { ...w, alt: S.tocNeedsEntryAlt, tocNM: S.tocAdviceLevelByNM }
-      : { ...w });
-    const T2 = L2.computeFlightSchedule({ id: 1, waypoints: fixed });
-    const again = T2[S.i], lead = T2[S.i - 1];
-    if (again && again.tocTargetMet) works++;
-    // The climb must be CONTINUOUS through the raised fix, or the pilot is back
-    // to two climbs with a level stretch between them - which is the whole bug.
-    if (again && again.tocTargetMet && lead) {
-      const gapBefore = lead.distNM - (lead.climbStartNM + lead.climbDistNM);
-      if (lead.climbDistNM <= 0.05) noEarlierClimb++;   // it DESCENDS into the fix
-      // Rounding up to a whole hundred can reach the leg's OWN target altitude,
-      // and then there is no climb left here at all: the whole climb finishes
-      // on the earlier leg, which draws the top. One climb, not a split.
-      else if (again.climbDistNM <= 0.05 && gapBefore < 0.05) absorbed++;
-      else if (gapBefore < 0.05 && again.climbStartNM < 0.05 && lead.climbContinues) continuous++;
-      else splitClimb.push('leg ' + S.i + ': gap ' + gapBefore.toFixed(3) +
-        ' before / ' + again.climbStartNM.toFixed(3) + ' after, continues ' + lead.climbContinues);
-      // ONE climb draws ONE top of climb - counted over the WHOLE flight,
-      // because a climb continuing through more than one fix lands its mark on
-      // a later leg than the two being compared here.
-      const tocs = T2.filter(Boolean)
-        .flatMap((X) => L2.computeLegMarkers(X.from, X.to, X))
-        .filter((m) => m.kind === 'TOC');
-      const climbing = T2.filter(Boolean).filter((X) => X.climbDistNM > 0.05).length;
-      if (climbing > 0 && tocs.length === 0 && !T2.filter(Boolean).some((X) => X.stillClimbing))
-        doubleToc.push('leg ' + S.i + ': a climb with no TOC anywhere');
-      if (tocs.length > climbing)
-        doubleToc.push('leg ' + S.i + ': ' + tocs.length + ' TOC marks for ' + climbing + ' climbing legs');
+    // THE ALTITUDES ARE THE PILOT'S, WHATEVER HAPPENED TO THE TARGET.
+    if (pin.map((w) => w.alt).join(',') !== before) changed.push('leg ' + li);
+    if (!S || S.tocTargetNM == null) continue;
+    if (S.tocTargetMet) { met++; continue; }
+    unmet++;
+    if (S.i === 0) firstLeg++;
+    if (S.climbRateReqFpm !== null) {
+      rated++;
+      if (!(S.climbRateReqFpm > 0 && isFinite(S.climbRateReqFpm)))
+        invented.push('leg ' + li + ': rate ' + S.climbRateReqFpm);
     }
+    // The unmet leg's climb is the one the POH prices from its own entry
+    // altitude - never stretched to reach a target it could not.
+    const un = L2.computeFlightSchedule({ id: 1,
+      waypoints: pin.map((w, k) => k === li ? { ...w, altAtNM: null } : { ...w }) })[li - 1];
+    if (un && Math.abs(S.climbMin - un.climbMin) > 1e-9)
+      invented.push('leg ' + li + ': climb ' + S.climbMin + ' vs ' + un.climbMin);
   }
-  assert(given > 30, 'the sweep produced only ' + given + ' pieces of advice');
-  assert(works === given, works + ' of ' + given + ' suggestions actually satisfied the target');
-  assert(splitClimb.length === 0, splitClimb.length + ' of ' + given +
-    ' suggestions still split the climb in two: ' + splitClimb.slice(0, 3).join(' | '));
-  assert(doubleToc.length === 0, doubleToc.length + ' continuous climbs drew two tops of climb: ' +
-    doubleToc.slice(0, 3).join(' | '));
-  // ...and the honest third state must occur: sometimes NO altitude helps.
-  assert(noneHelps > 0, 'the "no altitude helps" case never came up, so it is untested');
-  assert(firstLeg > 0, 'the first-leg refusal never came up');
-  assert(continuous > 20 && noEarlierClimb > 0 && absorbed > 0,
-    'the sweep did not exercise all three shapes: ' + continuous + ' continuous / ' +
-    noEarlierClimb + ' descending / ' + absorbed + ' absorbed');
-  console.log('        ' + given + ' suggestions, all verified | ' + continuous +
-    ' one continuous climb | ' + noEarlierClimb + ' descend into the fix | ' + absorbed +
-    ' climb absorbed by the earlier leg | ' + noneHelps + ' where no altitude helps | ' +
-    firstLeg + ' first-leg refusals');
+  assert(changed.length === 0, changed.length + ' schedules rewrote a waypoint altitude: ' +
+    changed.slice(0, 3).join(' | '));
+  assert(invented.length === 0, invented.length + ' unmet targets changed the climb or reported ' +
+    'an impossible rate: ' + invented.slice(0, 3).join(' | '));
+  assert(unmet > 30, 'the sweep produced only ' + unmet + ' unreachable targets');
+  assert(met > 30, 'the sweep produced only ' + met + ' reachable targets');
+  assert(firstLeg > 0, 'the first-leg case never came up');
+  assert(rated > 0, 'no unmet target ever reported a required rate');
+  console.log('        ' + met + ' targets met | ' + unmet + ' unreachable, 0 rewrote an ' +
+    'altitude and 0 changed a climb | ' + firstLeg + ' on the first leg | ' + rated +
+    ' reported a rate');
 });
 T('a "be level by" target overrides a bottom-of-climb pin on the same leg', () => {
   // Two settings for one corner is how a contradiction arises. The target owns
@@ -7456,69 +7385,47 @@ TA('the first leg drops the pin rather than clamping, so no BOC appears at the d
   ev(SEED);
 });
 
-TA('a carried-back climb caches the altitude, and gives it back', async () => {
-  // THE PILOT'S THIRD REPORT: "I want the midleg to have cached its originally
-  // set altitude... when I move the TOC further ahead, the crossing altitude
-  // gradually returns to its original altitude." Without a baseline the raises
-  // COMPOUND - each drag lifts the fix again from the already-lifted figure.
+TA('a TOC dragged past what the POH can climb never rewrites an altitude', async () => {
+  // v16.74 and v16.75 answered this drag by RAISING the earlier fix (and
+  // caching the pilot's figure in altBase so the raises could be walked back).
+  // v16.77 deletes both, on the pilot's instruction: the altitude column on the
+  // OFP is the level they plan to use, and the tool does not argue with it.
+  // Two outcomes remain - it fits, or the leg goes back to the POH's own
+  // corner - and neither touches a number they typed.
   ev(`flights = [{ id: 1, title: 'B', depElev: 254, waypoints: [
         { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
         { lat: 69.20, lng: 18.50, name: 'MID',  alt: 2500, oat: 5, wdir: 0, wspd: 0, var: -11 },
         { lat: 69.90, lng: 18.50, name: 'ENTC', alt: 8500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
       activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
-  ev(`settleTargetDrag(0, 1, 6)`);
-  await tick();
-  const raised = ev('flights[0].waypoints[1].alt');
-  assert(raised > 2500, 'the fix was not raised to carry the climb back: ' + raised);
-  assert(ev('flights[0].waypoints[1].altBase') === 2500,
-    'the pilot altitude was not cached: ' + ev('flights[0].waypoints[1].altBase'));
-  // Drag it a little further back: the raise must be judged from 2500 again,
-  // NOT from the figure the last drag left behind.
-  ev(`settleTargetDrag(0, 1, 4)`);
-  await tick();
-  assert(ev('flights[0].waypoints[1].altBase') === 2500, 'the baseline moved');
-  const higher = ev('flights[0].waypoints[1].alt');
-  assert(higher >= raised, 'an earlier TOC should need at least as much height');
-  // Now move it forward until nothing needs raising - the pilot's altitude
-  // must come back, and the cache with it.
-  const legLen = ev(`computeFlightSchedule(flights[0])[1].distNM`);
-  ev(`settleTargetDrag(0, 1, ${Math.round(legLen)})`);
-  await tick();
-  assert(ev('flights[0].waypoints[1].alt') === 2500,
-    'the crossing altitude did not come back: ' + ev('flights[0].waypoints[1].alt'));
-  assert(ev('flights[0].waypoints[1].altBase') === undefined,
-    'the cache was left behind once it was no longer needed');
-  ev(SEED);
-});
+  const alts = () => ev('flights[0].waypoints.map(w => w.alt).join(",")');
+  assert(alts() === '254,2500,8500', 'the probe did not seed: ' + alts());
+  const natural = ev(`computeFlightSchedule(flights[0])[1].tocAlongNM`);
+  assert(natural > 6, 'the probe leg has no climb to speak of');
 
-TA('a leg with one behind it carries the climb back, and says what it changed', async () => {
-  // THE BOC CROSSES THE LEG BOUNDARY BY THE ONE MECHANISM THAT KEEPS THE
-  // ALTITUDE COLUMN HONEST: the earlier fix is raised to the altitude the climb
-  // passes through, and that leg's climb is pinned to finish exactly on it, so
-  // the two halves are one continuous climb and every stated altitude is flown.
-  ev(`flights = [{ id: 1, title: 'B', depElev: 254, waypoints: [
-        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
-        { lat: 69.20, lng: 18.50, name: 'MID',  alt: 2500, oat: 5, wdir: 0, wspd: 0, var: -11 },
-        { lat: 69.90, lng: 18.50, name: 'ENTC', alt: 8500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
-      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
-  assert(ev('flights[0].waypoints[1].alt') === 2500, 'the probe did not seed');
+  // Ask for a top of climb far earlier than the climb can reach.
   ev(`settleTargetDrag(0, 1, 6)`);
   await tick();
-  assert(ev('flights[0].waypoints[1].alt') > 2500,
-    'the earlier fix was not raised, so the climb could not begin on the leg before: ' +
-    ev('flights[0].waypoints[1].alt'));
-  assert(ev('flights[0].waypoints[2].altAtNM') === 6, 'the asked-for target was not kept');
-  // NO RED BANNER: the resulting plan is flyable and every altitude is stated.
-  const probs = ev(`runIntegrityCheck({}) , (document.getElementById('integrity-banner').style.display || '')`);
+  assert(alts() === '254,2500,8500', 'a drag rewrote an altitude: ' + alts());
+  assert(ev('flights[0].waypoints[1].altBase') === undefined,
+    'the removed altitude cache came back');
+  assert(ev('flights[0].waypoints[2].altAtNM') == null,
+    'an unreachable target was left behind: ' + ev('flights[0].waypoints[2].altAtNM'));
+  const after = ev(`computeFlightSchedule(flights[0])[1].tocAlongNM`);
+  assert(Math.abs(after - natural) < 0.001,
+    'the corner did not go back to where the POH puts it: ' + after + ' vs ' + natural);
+  // NO RED BANNER. The plan is the pilot's own and is flyable.
   assert(ev(`computeFlightSchedule(flights[0])[1].tocTargetMet`) !== false,
-    'the target is still reported as missed after the climb was carried back');
-  assert(/one continuous climb/i.test(toastText()),
-    'the pilot was not told the earlier fix moved: ' + toastText());
-  // ...and the whole thing is ONE undo, because it is one gesture.
-  ev(`undoLast(true)`);
+    'the leg still reports a missed target, so the banner would stay up');
+  assert(/cannot go further back|does not fit/i.test(toastText()),
+    'the pilot was not told why the TOC stopped: ' + toastText());
+
+  // A REACHABLE ONE IS STILL APPLIED, and still without touching an altitude.
+  const legLen = ev(`computeFlightSchedule(flights[0])[1].distNM`);
+  ev('settleTargetDrag(0, 1, ' + Math.round(legLen) + ')');
   await tick();
-  assert(ev('flights[0].waypoints[1].alt') === 2500 && ev('flights[0].waypoints[2].altAtNM') == null,
-    'undo did not take the whole carried-back climb with it');
+  assert(ev('flights[0].waypoints[2].altAtNM') === Math.round(legLen),
+    'a reachable target was not kept: ' + ev('flights[0].waypoints[2].altAtNM'));
+  assert(alts() === '254,2500,8500', 'applying a target rewrote an altitude: ' + alts());
   ev(SEED);
 });
 
