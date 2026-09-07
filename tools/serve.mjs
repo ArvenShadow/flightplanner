@@ -24,7 +24,12 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SITE = join(ROOT, 'site');
+// SITE_DIR lets this serve the LOCKED build for a local check:
+//   node tools/lock-site.mjs && SITE_DIR=site-locked node tools/serve.mjs
+// Note that only http://localhost is a secure context, so the LAN address
+// cannot unlock a locked build - WebCrypto is absent there, exactly as the
+// service worker is. Defaults to site/, so `npm run serve` is unchanged.
+const SITE = join(ROOT, process.env.SITE_DIR || 'site');
 const PORT = Number(process.env.PORT) || 8182;
 
 const TYPES = {

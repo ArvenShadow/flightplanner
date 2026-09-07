@@ -8789,6 +8789,156 @@ TA('a reporting point still adds with no dialog', async () => {
   ev(SEED);
 });
 
+console.log('\n=== 62a000m. The locked build (v16.78) ===');
+
+// The CRYPTO half of this feature cannot be tested here at all - jsdom has no
+// crypto.subtle - and the RELAUNCH half is a question about a real browser's
+// script execution. Both live in tools/verify-locked.mjs. What belongs here is
+// the pure decisions: which passphrases are refused, whether the gate page's
+// metadata really landed, and whether the service worker got re-pointed at the
+// files that exist.
+
+T('a weak passphrase is refused, and the refusal says which rule it broke', () => {
+  const L = require('./tools/lock-rules.mjs');
+  const bad = [
+    [undefined, null, /no passphrase/],
+    [undefined, '', /no passphrase/],
+    ['short', null, /12 is the minimum/],
+    ['           ', null, /whitespace|minimum/],
+    ['  leading-and-trailing-space  ', null, /whitespace/],
+    ['my-password-is-long', null, /tried first/],       // contains "password"
+    ['flightplanner-tromso-2026', null, /tried first/], // contains the project
+    ['C182-is-my-aircraft-yes', null, /tried first/]    // case-insensitive
+  ];
+  for (const [env, file, why] of bad) {
+    const r = L.readPassphrase(env, file);
+    assert(r.ok === false, JSON.stringify(env || file) + ' was accepted');
+    assert(why.test(r.why), 'the refusal does not say why: ' + r.why);
+  }
+  // ...and a real one is accepted, or the rules would just be a wall.
+  const good = L.readPassphrase('correct-horse-battery-staple', null);
+  assert(good.ok === true, 'a good passphrase was refused: ' + good.why);
+  assert(good.pass === 'correct-horse-battery-staple', 'the passphrase was altered');
+});
+
+T('exactly one trailing newline is stripped, and the env beats the file', () => {
+  const L = require('./tools/lock-rules.mjs');
+  // A .site-password written by any editor ends in a newline; that must not
+  // become part of the key, or the passphrase typed in the browser would never
+  // match what the build used. Both endings, because a Windows clone has CRLF.
+  // NOTE the sample avoids the word "passphrase" itself: the first version of
+  // this test used it and was refused by the OBVIOUS rule two tests up, which
+  // reported "LF was not stripped" for a stripper that was working fine.
+  const P = 'correct-horse-battery-staple';
+  assert(L.readPassphrase(undefined, P + '\n').pass === P, 'LF was not stripped');
+  assert(L.readPassphrase(undefined, P + '\r\n').pass === P, 'CRLF was not stripped');
+  // TWO newlines are NOT a passphrase ending in one: the second is real
+  // whitespace and is refused rather than silently trimmed, because the
+  // browser has no way to know it was there.
+  assert(L.readPassphrase(undefined, P + '\n\n').ok === false,
+    'a passphrase ending in real whitespace was accepted');
+  // CI passes the secret in the environment; a stale local file must not win.
+  assert(L.readPassphrase('from-the-environment-x', 'from-the-file-xxxxxx').pass
+    === 'from-the-environment-x', 'the file beat the environment');
+});
+
+T('the gate template really carries its metadata, and the marker cannot survive', () => {
+  const L = require('./tools/lock-rules.mjs');
+  const tpl = fs.readFileSync('src/unlock.html', 'utf8');
+  const meta = { v: 1, salt: 'c2FsdHNhbHRzYWx0c2E=', iterations: L.ITERATIONS, parts: L.PARTS };
+  const out = L.fillTemplate(tpl, meta);
+  assert(!out.includes('/* @LOCKMETA */ null'), 'the gate would ship META === null');
+  assert(out.includes(meta.salt), 'the salt is not in the gate page');
+  const back = JSON.parse(out.match(/var META = (\{.*?\});/)[1]);
+  assert(back.iterations === L.ITERATIONS, 'the iteration count did not travel');
+  assert(back.parts.length === 3, 'the payload list did not travel');
+  // A template with no marker is a build error, not a silent pass-through.
+  let threw = '';
+  try { L.fillTemplate('<script>var META = 1;</script>', meta); } catch (e) { threw = e.message; }
+  assert(/no @LOCKMETA marker/.test(threw), 'a marker-less template was accepted: ' + threw);
+});
+
+T('the gate page is ONE script block - a stray closing tag truncates it', () => {
+  const L = require('./tools/lock-rules.mjs');
+  const tpl = fs.readFileSync('src/unlock.html', 'utf8');
+  const blocks = L.scriptBlocks(tpl);
+  assert(blocks.length === 1, 'the gate has ' + blocks.length + ' script blocks, expected 1');
+  // THIS IS A REGRESSION GUARD FOR A REAL BUG. The first unlock.html wrote a
+  // literal closing script tag inside a JS comment saying such a tag is
+  // harmless in the app payload. The HTML parser does not read comments: it
+  // ended the element there, the gate threw a SyntaxError, and it unlocked
+  // nothing while every string check in the build passed.
+  //
+  // AND THE SIGNAL IS THAT THE BLOCK DOES NOT PARSE, not that a second block
+  // appears. The first version of this test asserted a stray closing tag
+  // yields TWO blocks, and it does not: the parser ends the element early and
+  // there is no second opening tag, so you get ONE block that happens to stop
+  // mid-statement. Which means the block COUNT would never have caught the
+  // original bug - only running the parser over the block does. Worth writing
+  // down rather than quietly fixing, because the count check is still in the
+  // locker and it guards something else (a genuinely added second script).
+  const truncated = tpl.replace('var STORE =', 'var X = "<' + '/script>"; var STORE =');
+  const cut = L.scriptBlocks(truncated);
+  assert(cut.length === 1, 'expected truncation to yield one short block, got ' + cut.length);
+  assert(cut[0].length < blocks[0].length,
+    'the stray closing tag did not truncate the block at all - the guard is dead');
+  let parsed = true;
+  try {
+    require('child_process').execFileSync(process.execPath, ['--check', '-'],
+      { input: cut[0], stdio: ['pipe', 'pipe', 'pipe'] });
+  } catch (e) { parsed = false; }
+  assert(!parsed, 'a truncated gate script still parses, so the locker check is dead');
+  // ...and the real block must parse, which is what the locker asserts.
+  require('child_process').execFileSync(process.execPath, ['--check', '-'],
+    { input: blocks[0], stdio: ['pipe', 'pipe', 'pipe'] });
+});
+
+T('the service worker is re-pointed at the files the locked build actually has', () => {
+  const L = require('./tools/lock-rules.mjs');
+  const sw = fs.readFileSync('site/sw.js', 'utf8');
+  assert(/'\.\/app\.js'/.test(sw), 'the plaintext worker does not precache app.js - has it moved?');
+  const out = L.relinkWorker(sw, ['./', './index.html', './aip.enc', './app.enc', './body.enc']);
+  // addAll IS ATOMIC: one 404 for app.js caches NOTHING, so the app silently
+  // stops working offline while looking perfect online. That is the v16.45
+  // trap, which is why this throws rather than warns.
+  assert(!/'\.\/app\.js'/.test(out) && !/'\.\/aip\.js'/.test(out),
+    'the locked worker still precaches a plaintext asset');
+  for (const f of ['./body.enc', './app.enc', './aip.enc', './index.html']) {
+    assert(out.includes("'" + f + "'"), 'the locked worker does not precache ' + f);
+  }
+  // Everything else about the worker is untouched - the tile rules, the cycle
+  // keying, the shell version - so a lock cannot quietly change caching policy.
+  assert(out.replace(/const SHELL_ASSETS = \[[^\]]*\];/, 'X')
+    === sw.replace(/const SHELL_ASSETS = \[[^\]]*\];/, 'X'),
+    'relinking the worker changed something other than the precache list');
+  let threw = '';
+  try { L.relinkWorker('// a worker with no list', ['./']); } catch (e) { threw = e.message; }
+  assert(/no SHELL_ASSETS array/.test(threw), 'a listless worker was accepted: ' + threw);
+});
+
+T('the passphrase file and the locked build are both gitignored', () => {
+  // THE PASSPHRASE IS THE KEY, and the ciphertext is published: a passphrase
+  // committed once is a passphrase an attacker has, permanently, because git
+  // history keeps it. A test is the cheapest place to keep that true.
+  const ig = fs.readFileSync('.gitignore', 'utf8');
+  assert(/^\.site-password$/m.test(ig), '.site-password is not gitignored');
+  assert(/^site-locked\/$/m.test(ig), 'site-locked/ is not gitignored');
+  // And it must not be in the tree at all, however the ignore file reads.
+  const tracked = require('child_process')
+    .execSync('git ls-files .site-password site-locked 2>/dev/null || true').toString().trim();
+  assert(tracked === '', 'these are tracked by git: ' + tracked);
+});
+
+T('the deploy locks the build, and never falls back to publishing it plain', () => {
+  // A workflow that deployed site/ when the secret was missing would publish
+  // the whole planner unlocked and report success - the plausible wrong answer
+  // in its most expensive form. It must fail instead.
+  const wf = fs.readFileSync('.github/workflows/pages.yml', 'utf8');
+  assert(/lock-site\.mjs|run: npm run lock/.test(wf), 'the workflow does not lock the build');
+  assert(/path: site-locked/.test(wf), 'the workflow uploads something other than site-locked');
+  assert(!/path: site\s*$/m.test(wf), 'the workflow still uploads the plaintext site/');
+  assert(/SITE_PASSWORD/.test(wf), 'the workflow never mentions the SITE_PASSWORD secret');
+});
 
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');

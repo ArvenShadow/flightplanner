@@ -409,6 +409,17 @@
         </div>
 
         <div class="setting-section">
+          <h3>🔒 The passphrase on the hosted copy</h3>
+          <ul style="margin-left:16px;">
+            <li>The copy published on GitHub Pages is <b>encrypted</b>. Opening the URL shows a passphrase box, not the planner: the deployed files are AES-256-GCM ciphertext, so a visitor without the passphrase has <b>nothing to read</b> rather than something merely hidden behind a prompt. Unlocking is remembered <b>per browser</b>, so you are asked once per machine.</li>
+            <li><b>What it protects, precisely:</b> the published URL. It does <b>not</b> protect the source — the repository is public, so the code and the AIP dataset can be read and run by anyone from GitHub. Gating the deployed copy is worth doing; believing it hides the planner would be wrong, and this guide says so rather than letting you assume otherwise.</li>
+            <li><b>Its strength is the passphrase, not the encryption.</b> Whoever holds the ciphertext can guess offline as fast as their hardware allows, so a few ordinary words beat a short mangled one — the key stretching (PBKDF2-SHA256, two million rounds, measured at about a third of a second here) raises the cost of each guess but cannot rescue a guessable phrase.</li>
+            <li><b>It needs https or localhost.</b> Browsers only expose the decryption API in a secure context, so serving the locked build over plain http on a LAN address cannot unlock — the same rule that stops the offline chart cache working there. The gate page says so instead of reporting a wrong passphrase. Serve the <i>unlocked</i> build (<code>npm run serve</code>) on the wifi or a hotspot; the published https URL is the locked one.</li>
+            <li><b>Nothing you type leaves the page</b>, and the passphrase itself is never stored — what is remembered is the key derived from it, which cannot be turned back into the phrase. Losing it means re-deploying under a new one; there is no recovery, by design.</li>
+          </ul>
+        </div>
+
+        <div class="setting-section">
           <h3>🔢 Version &amp; updates</h3>
           <ul style="margin-left:16px;">
             <li>The <b>version badge</b> next to the title shows which version you are running and what the update check found: <b>latest (hh:mm)</b> with the time it checked, a yellow <b>⬆ available</b> link when a newer release exists, or <b>update check failed</b> when GitHub could not be reached. Click the underlined part to check again at any time. The check never blocks anything — the planner works the same offline.</li>
@@ -1281,7 +1292,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.77';
+    const APP_VERSION = '16.78';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 

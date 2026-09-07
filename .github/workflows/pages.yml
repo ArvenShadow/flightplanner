@@ -4,6 +4,24 @@
 # unless the ship checklist passes (both scripts parse, no duplicate DOM
 # ids, APP_VERSION matches package.json). The suite runs before the deploy
 # so a red test can never reach the published URL.
+#
+# WHAT IS DEPLOYED IS site-locked/, NOT site/ (v16.78). GitHub Pages on a
+# personal account has no access control - authenticated visitors are a GitHub
+# Enterprise Cloud feature - so the only thing that can gate the published URL
+# is the artifact itself. tools/lock-site.mjs encrypts the whole app with
+# AES-256-GCM under a key derived from the SITE_PASSWORD secret, and the gate
+# page asks for it once per browser.
+#
+# THERE IS NO FALLBACK TO THE PLAINTEXT BUILD, DELIBERATELY. If the secret is
+# missing the deploy FAILS. Publishing site/ instead would put the whole
+# planner up unlocked and report success, which is the most expensive shape of
+# the plausible wrong answer this project refuses. A red deploy is loud; a
+# silently unlocked site is not.
+#
+# THE SECRET IS THE KEY. Set it at Settings -> Secrets and variables ->
+# Actions -> New repository secret, named SITE_PASSWORD. GitHub stores it
+# encrypted and even the owner cannot read it back, only replace it - which is
+# exactly the property wanted, and why it is not a file in the repo.
 name: Deploy site to GitHub Pages
 
 on:
@@ -31,10 +49,53 @@ jobs:
           node-version: '20'
       - run: npm install
       - run: npm test
+
+      # FAIL EARLY AND SAY WHAT IS WRONG. Without this the build would reach
+      # lock-site.mjs and refuse there too, but the message would read as a
+      # tooling error rather than "the repository is missing its secret".
+      - name: Require the SITE_PASSWORD secret
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: |
+          if [ -z "$SITE_PASSWORD" ]; then
+            echo "::error::SITE_PASSWORD is not set. The deployed site is encrypted"
+            echo "::error::with it, and this workflow will NOT publish an unlocked"
+            echo "::error::build instead. Add it under Settings -> Secrets and"
+            echo "::error::variables -> Actions -> New repository secret."
+            exit 1
+          fi
+
+      # Encrypt the tested build. lock-site.mjs re-runs the ship checklist
+      # against site/, refuses a weak passphrase, asserts the ciphertext
+      # carries no plaintext marker, and writes nothing until all of that
+      # passes.
+      - name: Lock the build
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: node tools/lock-site.mjs
+
+      # THE LAST GUARD BEFORE THE BYTES GO PUBLIC, and it reads the files
+      # about to be uploaded rather than trusting the step above. A locked
+      # build that still contained the app would be worse than no lock, so
+      # this greps the artifact for the app's own identifiers and fails.
+      - name: Refuse to publish anything readable
+        run: |
+          for f in site-locked/index.html site-locked/aip.enc site-locked/app.enc site-locked/body.enc; do
+            test -f "$f" || { echo "::error::$f is missing from the locked build"; exit 1; }
+            for needle in computeFlightSchedule C182_AIP APP_VERSION runIntegrityCheck; do
+              if grep -qF "$needle" "$f"; then
+                echo "::error::$f contains the plaintext string $needle - not publishing"
+                exit 1
+              fi
+            done
+          done
+          test ! -f site-locked/app.js || { echo "::error::a plaintext app.js is in the locked build"; exit 1; }
+          echo "locked build carries no readable app"
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: site-locked
 
   deploy:
     needs: build

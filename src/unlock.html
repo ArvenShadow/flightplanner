@@ -1,0 +1,265 @@
+<!-- The gate page for the LOCKED build (v16.78).
+
+     This file is a TEMPLATE. tools/lock-site.mjs substitutes @LOCKMETA with
+     the salt, the iteration count and the payload filenames, and writes the
+     result as site-locked/index.html. Nothing secret is in here or in the
+     substituted metadata: a PBKDF2 salt is public by design, and the
+     passphrase is never stored anywhere in the artifact.
+
+     WHY THE WHOLE APP IS CIPHERTEXT RATHER THAN HIDDEN BEHIND A PROMPT.
+     A prompt that reveals an app already sitting in the page protects
+     nothing - the files are downloaded by then, and devtools or a direct
+     fetch of app.js walks straight past it. So the deployed artifact carries
+     no app at all: body.enc, app.enc and aip.enc are AES-256-GCM ciphertext,
+     and the key exists only in the head of whoever knows the passphrase.
+
+     WHAT VERIFIES THE PASSPHRASE IS THE GCM AUTHENTICATION TAG, and that is
+     why no password hash is stored anywhere. A wrong key makes decrypt()
+     throw. There is nothing in the artifact to attack except the payload
+     itself, which an attacker would have to attack anyway.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>C182 Flight Planner</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7fafc; --card: #ffffff; --text: #2d3748; --muted: #718096;
+    --border: #cbd5e0; --accent: #2b6cb0; --bad: #c53030;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1a202c; --card: #2d3748; --text: #e2e8f0; --muted: #a0aec0;
+            --border: #4a5568; --accent: #63b3ed; --bad: #fc8181; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); color: var(--text); padding: 24px;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; width: 100%; max-width: 380px; box-shadow: 0 6px 24px rgba(0,0,0,.10);
+  }
+  h1 { margin: 0 0 4px; font-size: 17px; letter-spacing: .01em; }
+  .sub { margin: 0 0 18px; color: var(--muted); font-size: 12px; }
+  label { display: block; font-size: 11px; text-transform: uppercase;
+          letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 9px 10px; font-size: 14px; font-family: inherit;
+    color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    width: 100%; margin-top: 12px; padding: 9px 10px; font-size: 14px; font-family: inherit;
+    font-weight: 600; color: #fff; background: var(--accent);
+    border: 0; border-radius: 6px; cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: default; }
+  #msg { margin-top: 12px; font-size: 12px; min-height: 1.55em; color: var(--muted); }
+  #msg.bad { color: var(--bad); }
+  .note { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border);
+          color: var(--muted); font-size: 11px; }
+</style>
+
+<div class="card">
+  <h1>C182 Flight Planner</h1>
+  <p class="sub">This copy is locked. Enter the passphrase to unlock it on this browser.</p>
+  <form id="f" autocomplete="off">
+    <label for="pw">Passphrase</label>
+    <input id="pw" type="password" autocomplete="current-password" autofocus spellcheck="false">
+    <button id="go" type="submit">Unlock</button>
+  </form>
+  <p id="msg" role="status" aria-live="polite"></p>
+  <p class="note">Unlocking is remembered per browser, so this is asked once
+    per machine. Nothing you type leaves this page.</p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var META = /* @LOCKMETA */ null;
+  var STORE = 'c182_unlock_v1';
+
+  var msg = document.getElementById('msg');
+  var pw = document.getElementById('pw');
+  var go = document.getElementById('go');
+  var form = document.getElementById('f');
+
+  function say(text, bad) {
+    msg.textContent = text;
+    msg.className = bad ? 'bad' : '';
+  }
+
+  // ---- base64 <-> bytes, no dependencies --------------------------------
+  function toB64(bytes) {
+    var s = '', b = new Uint8Array(bytes);
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s);
+  }
+  function fromB64(s) {
+    var raw = atob(s), out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  // WEBCRYPTO IS A SECURE-CONTEXT-ONLY API, and that is not a detail we can
+  // work around: on a plain-http LAN address (the phone-on-a-hotspot case
+  // this project supports) crypto.subtle is simply absent, exactly as the
+  // service worker is. Say so plainly instead of letting it surface as
+  // "wrong passphrase", which is what an undefined subtle would look like.
+  var CRYPTO_OK = !!(self.crypto && self.crypto.subtle && self.isSecureContext);
+
+  function deriveKey(passphrase, saltBytes) {
+    return crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']
+    ).then(function (base) {
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: saltBytes, iterations: META.iterations, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, true, ['decrypt']);
+    });
+  }
+
+  /** Fetch one payload and decrypt it. The first 12 bytes are the IV; the
+   *  rest is ciphertext with the GCM tag, so a wrong key THROWS here. */
+  async function fetchPart(name, key) {
+    var res = await fetch(name, { cache: 'default' });
+    if (!res.ok) throw new Error('missing ' + name);
+    var buf = new Uint8Array(await res.arrayBuffer());
+    var plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: buf.slice(0, 12) }, key, buf.slice(12));
+    return new TextDecoder().decode(plain);
+  }
+
+  async function decryptAll(key) {
+    // Sequential on purpose: a wrong passphrase fails on the first part, so
+    // there is no reason to have pulled another 375 KB behind it.
+    var out = {};
+    for (var i = 0; i < META.parts.length; i++) {
+      out[META.parts[i].as] = await fetchPart(META.parts[i].file, key);
+    }
+    return out;
+  }
+
+  /**
+   * Hand the decrypted page over to the browser as an ordinary document.
+   *
+   * THE ORDER IS THE WHOLE TRICK, and it is the v16.45 constraint again: the
+   * bundle is a CLASSIC script whose functions the page's 100-odd inline
+   * on*= handlers need as globals, and the page script's top level calls
+   * into it. So the markup goes in first, then every script runs in document
+   * order at global scope - dataset, bundle, page script - exactly as a
+   * normal load would do it.
+   *
+   * Scripts carried in by importNode do NOT execute (that is the spec, and
+   * here it is the useful half): they are collected, stripped, and re-created
+   * as fresh script elements, which do. Setting .text rather than innerHTML
+   * means a closing script tag anywhere in the app code is a non-event - no
+   * HTML parser is involved.
+   *
+   * AND WRITING THAT TAG LITERALLY IN THIS COMMENT BROKE THIS PAGE ONCE. The
+   * HTML parser does not care that the sequence sits inside a JS comment: it
+   * ended the script element on the spot, so the gate threw a SyntaxError,
+   * rendered the rest of its own source as text, and unlocked nothing. The
+   * locker now parses this script block before writing, which is what turns
+   * that into a build failure instead of a browser one.
+   */
+  function launch(parts) {
+    var doc = new DOMParser().parseFromString(parts.body, 'text/html');
+    var code = Array.prototype.map.call(doc.querySelectorAll('script'), function (s) {
+      var src = s.getAttribute('src') || '';
+      for (var i = 0; i < META.parts.length; i++) {
+        if (META.parts[i].replaces && src === META.parts[i].replaces) {
+          return parts[META.parts[i].as];
+        }
+      }
+      return s.textContent;
+    });
+    Array.prototype.forEach.call(doc.querySelectorAll('script'), function (s) { s.remove(); });
+
+    document.replaceChild(document.importNode(doc.documentElement, true), document.documentElement);
+    for (var i = 0; i < code.length; i++) {
+      var el = document.createElement('script');
+      el.text = code[i];
+      document.head.appendChild(el);
+    }
+  }
+
+  /** Remember the DERIVED KEY, not the passphrase: the expensive PBKDF2 pass
+   *  runs once per machine, and the passphrase itself is never recoverable
+   *  from the browser afterwards. Stored with the salt it came from, so a
+   *  rebuild under a new passphrase invalidates it cleanly instead of
+   *  looking like corruption. */
+  async function remember(key) {
+    try {
+      var raw = await crypto.subtle.exportKey('raw', key);
+      localStorage.setItem(STORE, JSON.stringify({ salt: META.salt, key: toB64(raw) }));
+    } catch (e) { /* a private window may refuse; the unlock still worked */ }
+  }
+  function forget() { try { localStorage.removeItem(STORE); } catch (e) {} }
+
+  async function useSavedKey() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { return false; }
+    // A KEY WHOSE SALT IS NOT THIS BUILD'S CAN NEVER WORK AGAIN, so it is
+    // dropped rather than kept. Returning early and leaving it behind meant a
+    // rebuild under a new passphrase left dead bytes in localStorage on every
+    // machine for good - found by the verifier asserting the cleanup that this
+    // branch had quietly skipped.
+    if (!saved || !saved.key) return false;
+    if (saved.salt !== META.salt) { forget(); return false; }
+    try {
+      var key = await crypto.subtle.importKey(
+        'raw', fromB64(saved.key), { name: 'AES-GCM' }, true, ['decrypt']);
+      launch(await decryptAll(key));
+      return true;
+    } catch (e) {
+      forget();                 // rebuilt under a new passphrase, or tampered
+      return false;
+    }
+  }
+
+  form.addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    if (!pw.value) { say('Enter the passphrase.', true); return; }
+    go.disabled = true;
+    say('Unlocking…');
+    try {
+      var key = await deriveKey(pw.value, fromB64(META.salt));
+      var parts = await decryptAll(key);
+      await remember(key);
+      pw.value = '';
+      launch(parts);
+    } catch (e) {
+      go.disabled = false;
+      pw.value = '';
+      pw.focus();
+      // A DECRYPTION FAILURE AND A MISSING FILE ARE DIFFERENT PROBLEMS.
+      // Reporting a broken deploy as "wrong passphrase" would send the pilot
+      // hunting for a passphrase that was right all along.
+      say(/^missing /.test(String(e && e.message))
+        ? 'That build is incomplete — ' + e.message + '.'
+        : 'That passphrase does not unlock this build.', true);
+    }
+  });
+
+  (async function boot() {
+    if (!CRYPTO_OK) {
+      form.style.display = 'none';
+      say('This browser cannot unlock the page here: decryption needs a secure '
+        + 'context, which means https or localhost. A plain http address on a '
+        + 'local network is not one — the same rule that stops the offline '
+        + 'chart cache working there.', true);
+      return;
+    }
+    go.disabled = true;
+    say('Checking this browser…');
+    if (await useSavedKey()) return;
+    go.disabled = false;
+    say('');
+    pw.focus();
+  })();
+})();
+</script>
