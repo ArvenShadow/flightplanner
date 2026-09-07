@@ -2023,6 +2023,95 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## A DRAG NEVER COMMITS A PLAN THE APP CALLS UNUSABLE (v16.75)
+
+Four reports on v16.74, and the fourth was *"there are several bugs, some also
+throw red banner. Please do extensive chromium testing."* That one shaped the
+work: a targeted check finds the case you imagined, a SWEEP finds the case you
+did not.
+
+### `tools/sweep-drag.mjs` - 266 real mouse drags over 11 deliberately awkward plans
+
+`npm run sweep:drag` drags EVERY mark on each plan to seven positions along the
+mark's OWN leg, and after each drop asserts what must hold whatever was asked
+for: no NEW red banner, no page error, `exit(k) == entry(k+1)`, every phase
+finite and >= 0, the climb inside its leg, no duplicate mark, every mark on the
+track, and NOTHING RATCHETING (drag it back and the pilot's altitudes must
+return).
+
+- **THE FIRST RUN FOUND 46 DISTINCT PROBLEMS AND 38 OF THEM WERE THE SWEEP'S OWN
+  FAULT.** A sweep has to be calibrated before it can be believed:
+  1. a plan can be unflyable BEFORE anything is dragged (`short-final-leg`
+     genuinely cannot lose 6000 ft in 3.6 NM), so the banner is baselined and
+     only what the drag ADDS counts;
+  2. a NULL schedule leg is legitimate - a circuit stop breaks the chain (v16.5)
+     and those legs render through `computeLegTotals` instead;
+  3. the off-track tolerance is the great circle's own bow against the straight
+     chord `alongLegNM` measures from - 0.18 NM on these legs, and v16.63
+     measured 5.16 NM on a 229 NM east-west one.
+- **WHAT SURVIVED WAS ONE REAL BUG, AND IT IS A WHOLE CLASS.** On a plan whose
+  last leg is 3.6 NM, delaying the climb on the leg before pushes it into the
+  tail the descent needs: two reasonable requests contradict, and v16.74
+  ACCEPTED the pin and then raised the banner. **A pin is a REQUEST. One that
+  cannot be honoured is refused with a reason** - never accepted and then
+  reported as figures not to use. `addedProblems` runs
+  `collectIntegrityProblems` on a candidate copy and compares it with now;
+  problems that were already there are not the drag's fault.
+- **THE SWEEP'S BLIND SPOT, recorded because it is the interesting part.** It
+  first dropped at a fraction of the WHOLE route line, and on a three-fix plan
+  every fraction past the first leg projects onto that leg's END - so a TOC two
+  thirds along its own leg, which is exactly where the conflict lives, was never
+  asked for. Drops are leg-relative now. **And a mutation of the guard STILL
+  escapes the sweep through the real-mouse path** while a direct call reproduces
+  it in one line: the sweep is a broad net that found the bug, and the targeted
+  jsdom tests are what actually hold it down. Do not read a green sweep as proof.
+
+### THE OTHER THREE REPORTS
+
+- **THE NUMBER KEYS ARE GONE FROM EVERY DIALOG.** They were guarded against
+  typing in `field` - the FIRST field - and a dialog has carried SEVERAL fields
+  since v16.74, so a digit typed into the altitude box counted as "outside the
+  text field" and pressed Delete. Widening the guard was the wrong fix: a dialog
+  that takes typed values cannot also treat bare digits as commands. The badges
+  came out with them, because a badge showing a dead shortcut is worse than none.
+  A test that pressed `2` and awaited the promise now HUNG the whole suite -
+  which printed 476 passes, no summary, and exit 0. **A suite that exits 0 with
+  no RESULT line has not passed; it has stopped.**
+- **A CLAMPED TOC DREW A BOC AT THE DEPARTURE.** v16.74 clamped the pin to the
+  earliest reachable TOC; the engine then derived a bottom-of-climb a fraction
+  of a mile in, so the pilot got a ring just past the departure. It now CLEARS
+  the pin instead, which is strictly better rather than a change of mind: with
+  nothing pinned the climb starts at the fix, that IS the earliest possible, and
+  no BOC is drawn - the bottom of the climb is the fix itself.
+- **THE RAISED CROSSING ALTITUDE IS CACHED AND GIVEN BACK.** `altBase` (plus
+  `tocBase`) remembers what the pilot typed when a carried-back climb raised a
+  fix, and EVERY drag is judged from that baseline. Without it the raises
+  COMPOUND - each drag lifts the fix again from the already-lifted figure and it
+  can never come down. With it, moving the TOC forward walks the crossing
+  altitude back to the original and drops the cache when it is no longer needed.
+  It travels in the route file, because a fix stranded at a raised figure with
+  nothing to restore it to is worse than not caching at all.
+
+### THE LAST RESORT IS THE PILOT'S OWN PLAN, AND IT IS NEVER REFUSED
+
+The sweep's second useful find, on a plan that was ALREADY unflyable before
+anything was dragged. `addedProblems` compares a candidate with the state NOW -
+so once a fix had been raised, EVERY candidate including "put it back" looked
+like it was adding a problem, all three were refused, and the fix was stranded
+at an altitude the pilot never typed with no way to drag it back down.
+
+- **A refusal cannot undo the past.** The no-pin candidate is the pilot's own
+  plan - this leg unpinned and every cached altitude restored - so it can never
+  be worse than what they typed, and it is now committed unconditionally. Where
+  putting it back re-exposes a problem their own altitudes cause, the toast says
+  the leg is back as they had it rather than letting it read as the drag's fault.
+- **AND I EMPTIED A SOURCE FILE AGAIN GETTING THERE** - `src/index.html` this
+  time, by the same `b"""` typo, because `io.open(p,'w')` truncates before the
+  argument to `.write()` is evaluated. The edit pattern that survives it is:
+  read, replace, ASSERT on the finished string, and only then open for writing.
+  The next attempt used it and the assert fired harmlessly on a bad anchor
+  instead of destroying the file.
+
 ## The waypoint box, and a TOC dragged past what the aircraft can climb (v16.74)
 
 The pilot, on the v16.73 menu: *"the 'set altitude from here' button is

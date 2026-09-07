@@ -160,6 +160,19 @@ function sanitiseWaypoint(/** @type {any} */ w) {
     const v = num(w[k]);
     if (Number.isFinite(v) && v > 0) out[k] = v;
   }
+  // THE ALTITUDE THE PILOT ACTUALLY TYPED, cached when a dragged TOC raised this
+  // fix to carry a climb back (v16.75). It has to survive a save and a reload,
+  // or the fix would be stranded at the raised figure with nothing left to
+  // restore it to - so it is part of the route, not session state. `tocBase` is
+  // the pin that was there before, and null is a real value here (it means
+  // "there was no pin"), which is why it is stored separately from the >0 rule
+  // above.
+  const ab = num(w.altBase);
+  if (Number.isFinite(ab)) {
+    out.altBase = ab;
+    const tb = num(w.tocBase);
+    out.tocBase = Number.isFinite(tb) && tb > 0 ? tb : null;
+  }
   if (Array.isArray(w.via)) {
     const via = w.via
       .filter((/** @type {any} */ v) => v && isFinite(num(v.lat)) && isFinite(num(v.lng)))

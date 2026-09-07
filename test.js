@@ -6648,16 +6648,36 @@ TA('a dialog offers any number of options and returns the one chosen', async () 
   assert(r.id === 'c', 'wrong option returned: ' + r.id);
   assert(!openDlg(), 'dialog not removed after choosing');
 });
-TA('Escape cancels and the number keys pick options', async () => {
+TA('Escape cancels, Enter takes the primary, and a DIGIT is just a digit', async () => {
   let p = ev(`ask({ title: 'Esc test', buttons: [{ id: 'ok', label: 'OK', variant: 'primary' }, { id: 'cancel', label: 'Cancel' }] })`);
   await tick();
   doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   assert((await p).id === 'cancel', 'Escape did not cancel');
 
-  p = ev(`ask({ title: 'Key test', buttons: [{ id: 'one', label: 'First' }, { id: 'two', label: 'Second' }] })`);
+  // THE NUMBER KEYS ARE GONE (v16.75, the pilot's report: "I can't type a number
+  // in the altitude as it also activates the delete waypoint button"). They were
+  // guarded against typing in the FIRST field, and a dialog has carried several
+  // fields since v16.74 - so a digit typed into the altitude box counted as
+  // "outside the text field" and pressed a button. A dialog that takes typed
+  // values cannot also treat bare digits as commands.
+  p = ev(`ask({ title: 'Key test', fields: [{ id: 'alt', label: 'Altitude', value: '2500', type: 'number' }],
+    buttons: [{ id: 'apply', label: 'Apply', variant: 'primary' }, { id: 'del', label: 'Delete', variant: 'danger' }] })`);
   await tick();
-  doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: '2', bubbles: true, cancelable: true }));
-  assert((await p).id === 'two', 'number key did not select the second option');
+  const inp = openDlg().querySelector('.dlg-input[data-field="alt"]');
+  inp.focus();
+  for (const k of ['1', '2', '4']) {
+    inp.dispatchEvent(new w.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+    doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+  }
+  assert(openDlg(), 'a digit closed the dialog - the number hotkeys are back');
+  // ...and no badge is left promising a shortcut that does nothing.
+  assert(!openDlg().querySelector('.dlg-key'),
+    'the buttons still show a number badge for a key that no longer works');
+  typeInDialog('4500', 'alt');
+  answerDialog('Apply');
+  const r = await p;
+  assert(r.id === 'apply' && r.values.alt === '4500',
+    'the typed value did not survive: ' + JSON.stringify(r.values));
 
   p = ev(`ask({ title: 'Enter test', buttons: [{ id: 'no', label: 'No' }, { id: 'yes', label: 'Yes', variant: 'primary' }] })`);
   await tick();
@@ -7398,26 +7418,71 @@ TA('a circuit stop keeps its own altitude and carries nothing forward', async ()
 
 console.log('\n=== 62a000l. A TOC dragged further back than the POH can climb (v16.74) ===');
 
-TA('the first leg clamps and says so, instead of raising the red banner', async () => {
+TA('the first leg drops the pin rather than clamping, so no BOC appears at the departure', async () => {
   // You cannot climb before takeoff, so on the first leg there is no earlier
-  // fix to raise - the honest answer is the earliest the POH can reach.
+  // fix to raise. v16.74 CLAMPED the pin to the earliest reachable TOC; v16.75
+  // CLEARS it instead, and that is strictly better rather than a change of
+  // mind: with nothing pinned the climb starts at the fix, which IS the
+  // earliest possible, and the engine draws NO bottom-of-climb ring. The clamp
+  // landed a fraction of a mile in, so the engine derived a BOC there and the
+  // pilot got a spurious ring just past the departure - their second report.
   ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
         { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
         { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 6500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
       activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
-  const bare = ev(`computeFlightSchedule(flights[0])[0].tocAlongNM`);
-  assert(bare > 5, 'the probe leg has no climb to speak of');
+  const natural = ev(`computeFlightSchedule(flights[0])[0].tocAlongNM`);
+  assert(natural > 5, 'the probe leg has no climb to speak of');
   ev(`settleTocDrag(0, 0, 2)`);   // ask for a TOC far earlier than the POH allows
   await tick();
-  const pinned = ev('flights[0].waypoints[1].tocNM');
-  assert(pinned !== null && pinned >= bare,
-    'the TOC was not clamped to the earliest reachable point: ' + pinned + ' vs ' + bare);
-  // IT ROUNDS UP. A clamp landing a hundredth of a mile early misses the very
-  // target it was computed to meet and puts the banner straight back.
+  assert(ev('flights[0].waypoints[1].tocNM') == null,
+    'a pin was left behind: ' + ev('flights[0].waypoints[1].tocNM'));
+  const after = ev(`computeFlightSchedule(flights[0])[0].tocAlongNM`);
+  assert(Math.abs(after - natural) < 0.001,
+    'the TOC did not stay at the earliest reachable point: ' + after + ' vs ' + natural);
+  // NO BOC RING. The bottom of the climb IS the departure fix, and marking a
+  // point that is already a named waypoint is the clutter v16.37 refuses.
+  const kinds = ev(`computeLegMarkers(flights[0].waypoints[0], flights[0].waypoints[1],
+      computeFlightSchedule(flights[0])[0]).map(m => m.kind).join(',')`);
+  assert(!/BOC/.test(kinds), 'a BOC was drawn just past the departure: ' + kinds);
   assert(ev(`computeFlightSchedule(flights[0])[0].tocTargetMet`) !== false,
-    'the clamped TOC still reports its own target as missed - the banner would stay up');
+    'the leg still reports its own target as missed - the banner would stay up');
   assert(/cannot go further back/i.test(toastText()),
     'the pilot was not told why the TOC stopped: ' + toastText());
+  ev(SEED);
+});
+
+TA('a carried-back climb caches the altitude, and gives it back', async () => {
+  // THE PILOT'S THIRD REPORT: "I want the midleg to have cached its originally
+  // set altitude... when I move the TOC further ahead, the crossing altitude
+  // gradually returns to its original altitude." Without a baseline the raises
+  // COMPOUND - each drag lifts the fix again from the already-lifted figure.
+  ev(`flights = [{ id: 1, title: 'B', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.20, lng: 18.50, name: 'MID',  alt: 2500, oat: 5, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.90, lng: 18.50, name: 'ENTC', alt: 8500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  ev(`settleTocDrag(0, 1, 6)`);
+  await tick();
+  const raised = ev('flights[0].waypoints[1].alt');
+  assert(raised > 2500, 'the fix was not raised to carry the climb back: ' + raised);
+  assert(ev('flights[0].waypoints[1].altBase') === 2500,
+    'the pilot altitude was not cached: ' + ev('flights[0].waypoints[1].altBase'));
+  // Drag it a little further back: the raise must be judged from 2500 again,
+  // NOT from the figure the last drag left behind.
+  ev(`settleTocDrag(0, 1, 4)`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].altBase') === 2500, 'the baseline moved');
+  const higher = ev('flights[0].waypoints[1].alt');
+  assert(higher >= raised, 'an earlier TOC should need at least as much height');
+  // Now move it forward until nothing needs raising - the pilot's altitude
+  // must come back, and the cache with it.
+  const legLen = ev(`computeFlightSchedule(flights[0])[1].distNM`);
+  ev(`settleTocDrag(0, 1, ${Math.round(legLen)})`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].alt') === 2500,
+    'the crossing altitude did not come back: ' + ev('flights[0].waypoints[1].alt'));
+  assert(ev('flights[0].waypoints[1].altBase') === undefined,
+    'the cache was left behind once it was no longer needed');
   ev(SEED);
 });
 
@@ -7462,6 +7527,91 @@ T('a TOC that fits is applied silently, with no advice and no note', () => {
   ev(`settleTocDrag(0, 0, ${Math.round(dist - 1)})`);
   assert(ev('flights[0].waypoints[1].tocNM') === Math.round(dist - 1), 'a reachable TOC was not applied as asked');
   assert(toastText().trim() === '', 'a TOC that fits should say nothing: ' + toastText());
+  ev(SEED);
+});
+
+TA('a drag never commits a plan the app itself calls unusable', async () => {
+  // FOUND BY THE SWEEP, not by imagination: on a plan whose last leg is 3.6 NM,
+  // delaying the climb on the leg BEFORE pushes it into the tail the descent
+  // needs, so two reasonable requests contradict - and v16.74 accepted the pin
+  // and then raised the red banner. A pin is a REQUEST; one that cannot be
+  // honoured is refused with a reason.
+  ev(`flights = [{ id: 1, title: 'S', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.60, lng: 18.50, name: 'A', alt: 8000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+      document.getElementById('app-toasts').innerHTML = '';`);
+  const clean = ev(`collectIntegrityProblems(flights, {}).length`);
+  assert(clean === 0, 'the probe plan is already broken before the drag: ' + clean);
+  // Ask for a TOC two thirds along the first leg - the climb fits there, but
+  // the descent for ENTC then has nowhere to start.
+  const legLen = ev(`computeFlightSchedule(flights[0])[0].distNM`);
+  ev(`settleTocDrag(0, 0, ${Math.round(legLen * 0.68 * 10) / 10})`);
+  await tick();
+  assert(ev(`collectIntegrityProblems(flights, {}).length`) === 0,
+    'the drag left the plan unusable: ' + JSON.stringify(ev(`collectIntegrityProblems(flights, {})`)));
+  assert(ev('flights[0].waypoints[1].tocNM') == null,
+    'the contradicting pin was kept: ' + ev('flights[0].waypoints[1].tocNM'));
+  ev(SEED);
+});
+
+TA('a BOC dragged into the tail the descent needs is refused, not committed', async () => {
+  // THE SAME RULE ON THE OTHER THREE MARKS. `applyProfileDrop` tries the drop on
+  // a copy first, so a BOC that delays the climb into the space a later descent
+  // has to back up through is refused rather than accepted and then reported as
+  // unusable figures.
+  ev(`flights = [{ id: 1, title: 'S', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.60, lng: 18.50, name: 'A', alt: 8000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+      document.getElementById('app-toasts').innerHTML = '';`);
+  assert(ev(`collectIntegrityProblems(flights, {}).length`) === 0, 'the probe plan starts broken');
+  const legLen = ev(`computeFlightSchedule(flights[0])[0].distNM`);
+  // Hold the departure altitude most of the way, so the climb is squeezed into
+  // the tail - which is exactly where the descent for ENTC must begin.
+  ev(`applyProfileDrop({ fIdx: 0, legIdx: 0, kind: 'BOC', dropNM: ${Math.round(legLen * 0.6 * 10) / 10},
+        SL: computeFlightSchedule(flights[0])[0] })`);
+  await tick();
+  assert(ev(`collectIntegrityProblems(flights, {}).length`) === 0,
+    'a BOC drag left the plan unusable: ' + JSON.stringify(ev(`collectIntegrityProblems(flights, {})`)));
+  assert(ev('flights[0].waypoints[1].bocNM') == null,
+    'the contradicting BOC was kept: ' + ev('flights[0].waypoints[1].bocNM'));
+  assert(/does not fit/i.test(toastText()),
+    'the pilot was not told the BOC was refused: ' + toastText());
+  ev(SEED);
+});
+
+TA('a BOD that cannot fit is refused, and changes nothing', async () => {
+  // The same rule on the descent side. `applyProfileDrop` tries the drop on a
+  // copy before committing, exactly as the TOC does.
+  ev(`flights = [{ id: 1, title: 'S', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.60, lng: 18.50, name: 'A', alt: 8000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+      document.getElementById('app-toasts').innerHTML = '';`);
+  const before = ev(`JSON.stringify(flights[0].waypoints.map(w => [w.alt, w.bodNM || null]))`);
+  const sc = ev(`(() => { const s = computeFlightSchedule(flights[0])[1];
+    return JSON.stringify({ dist: s.distNM, bodTail: s.bodTailNM || 0, todBefore: s.todBeforeNM }); })()`);
+  const L = JSON.parse(sc);
+  // Ask to be level almost the whole of the short final leg early - there is
+  // nowhere for a 6000 ft descent to go.
+  ev(`applyProfileDrop({ fIdx: 0, legIdx: 1, kind: 'BOD', dropNM: 0.1,
+        SL: computeFlightSchedule(flights[0])[1] })`);
+  await tick();
+  assert(ev(`collectIntegrityProblems(flights, {}).length`) === 0,
+    'a refused BOD still left the plan unusable: ' + JSON.stringify(ev(`collectIntegrityProblems(flights, {})`)));
+  // EITHER OUTCOME IS FINE - what must never happen is a plan the app calls
+  // unusable. If the engine could apply the pin (it clamps a BOD it cannot
+  // honour and reports `bodRefused` in the panel) the plan changes silently; if
+  // it could not, nothing changes and the pilot is told. The invariant is the
+  // integrity check, not which of the two happened.
+  const changed = ev(`JSON.stringify(flights[0].waypoints.map(w => [w.alt, w.bodNM || null]))`) !== before;
+  assert(!changed || !/does not fit/i.test(toastText()),
+    'the plan was changed AND refused at the same time');
+  assert(L.dist > 0, 'the probe leg has no length');
   ev(SEED);
 });
 

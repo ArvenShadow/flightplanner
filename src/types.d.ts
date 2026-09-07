@@ -53,6 +53,16 @@ interface Waypoint {
    */
   bocNM?: number | null;
   /**
+   * THE ALTITUDE THE PILOT TYPED, cached when a dragged TOC on the NEXT leg
+   * raised this fix to carry a climb back across the boundary (v16.75). Every
+   * later drag is judged from this baseline rather than from the raised figure,
+   * so the raises cannot compound and the crossing altitude comes back down as
+   * the TOC is moved forward again. `tocBase` is the pin that was here before
+   * the carry-back, and null is meaningful (there was no pin).
+   */
+  altBase?: number;
+  tocBase?: number | null;
+  /**
    * BOTTOM OF DESCENT pin for the leg ENDING here: be level this many NM
    * before the leg's END fix and run in level. Also pure geometry - the
    * descent simply starts earlier. If there is no room for it, that is the

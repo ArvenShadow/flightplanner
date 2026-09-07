@@ -1280,7 +1280,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.74';
+    const APP_VERSION = '16.75';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3314,6 +3314,37 @@
     }
 
     /**
+     * The integrity problems a candidate plan would ADD (v16.75).
+     *
+     * A DRAG MUST NEVER COMMIT A PLAN THE APP ITSELF CALLS UNUSABLE. The sweep
+     * found it on a plan whose last leg is 3.6 NM: delaying the climb on the
+     * leg before pushes it into the tail the descent needs, so two reasonable
+     * requests contradict and the red banner appeared AFTER a gesture. A pin is
+     * a request; where it cannot be honoured the answer is to refuse it and say
+     * why, exactly as a refused BOD already does - not to accept it and then
+     * tell the pilot the figures are unusable.
+     *
+     * PROBLEMS THAT WERE ALREADY THERE ARE NOT THE DRAG'S FAULT, so only what
+     * the candidate ADDS counts. `signals` are the three read from what was
+     * RENDERED (a NaN in the table, an invalid daylight time, negative fuel
+     * remaining); a pin cannot change them, so both sides are measured without
+     * them and the comparison stays honest.
+     *
+     * @param {any[]} candidate the whole flights array, with one flight replaced
+     * @returns {string[]} problems present in the candidate and not now
+     */
+    function addedProblems(candidate) {
+      const now = collectIntegrityProblems(flights, {});
+      const then = collectIntegrityProblems(candidate, {});
+      return then.filter((p) => !now.includes(p));
+    }
+
+    /** `flights` with one flight swapped for a modified copy. */
+    function flightsWith(fIdx, fl) {
+      return flights.map((f, i) => (i === fIdx ? fl : f));
+    }
+
+    /**
      * A TOC dropped where the POH climb cannot reach it (v16.74).
      *
      * THE BOC IS ALLOWED TO CROSS THE LEG BOUNDARY - by the ONE mechanism that
@@ -3336,67 +3367,113 @@
       const fl = flights[fIdx];
       const to = fl && fl.waypoints[legIdx + 1];
       if (!to) { refreshMap(); return; }
-      const trial = (mutate) => {
-        // EVERY TRIAL RUNS THE REAL ENGINE ON A COPY, so what is offered and
-        // what is applied cannot disagree - the v16.35 preview rule.
-        const copy = JSON.parse(JSON.stringify(fl));
-        mutate(copy);
-        return { copy, sched: computeFlightSchedule(copy) };
-      };
-      const wanted = trial((c) => { c.waypoints[legIdx + 1].tocNM = wantNM; c.waypoints[legIdx + 1].bocNM = null; });
-      const L = wanted.sched[legIdx];
-      pushUndoState('move the TOC');
-      // 1. It fits. Nothing else to decide.
-      if (wantNM === null || !L || L.tocTargetNM == null || L.tocTargetMet !== false) {
-        to.tocNM = wantNM;
-        to.bocNM = null;
-        commitProfileEdit();
-        return;
-      }
-      // 2. An earlier fix can carry the climb. Take the offer the engine has
-      //    already verified, and say what it did - it changes an altitude the
-      //    pilot set, so it must never be silent.
       const from = fl.waypoints[legIdx];
-      if (legIdx > 0 && L.tocNeedsEntryAlt !== null && from) {
-        to.tocNM = wantNM;
-        to.bocNM = null;
-        from.alt = L.tocNeedsEntryAlt;
-        if (L.tocAdviceLevelByNM) from.tocNM = L.tocAdviceLevelByNM;
-        if (legIdx === 0) fl.depElev = L.tocNeedsEntryAlt;
-        commitProfileEdit();
-        say('Climb begins on the leg before \u2014 ' + from.name + ' is now crossed at ' +
-            L.tocNeedsEntryAlt + ' ft, in one continuous climb.', 'info', 5000);
+      const unit = aircraftProfile.distUnit || 'NM';
+
+      /** One candidate plan: a copy of the flight with `mutate` applied, its
+       *  schedule, and the integrity problems it would ADD. Every trial runs
+       *  the real engine on a copy, so what is offered and what is applied
+       *  cannot disagree - the v16.35 preview rule. */
+      const build = (mutate) => {
+        const copy = JSON.parse(JSON.stringify(fl));
+        // EVERY DRAG IS JUDGED FROM THE PILOT'S OWN ALTITUDES, never from a fix
+        // an earlier drag raised (v16.75, the pilot's request: "I want the
+        // midleg to have cached its originally set altitude... when I move the
+        // TOC further ahead, the crossing altitude gradually returns"). Without
+        // this the raises COMPOUND: each drag lifts the fix again from the
+        // already-lifted figure and it can never come back down.
+        restoreCachedAltitudes(copy);
+        mutate(copy);
+        return { copy, sched: computeFlightSchedule(copy), added: addedProblems(flightsWith(fIdx, copy)) };
+      };
+      const pinOnly = (c) => {
+        c.waypoints[legIdx + 1].tocNM = wantNM;
+        c.waypoints[legIdx + 1].bocNM = null;
+      };
+
+      // CANDIDATE 1: exactly what was asked for.
+      const asked = build(pinOnly);
+      const L = asked.sched[legIdx];
+      const fits = wantNM !== null && L && L.tocTargetNM != null && L.tocTargetMet !== false;
+      if (wantNM !== null && fits && !asked.added.length) {
+        commitFlightCopy(fIdx, asked.copy, 'move the TOC');
         return;
       }
-      // 3. Nothing helps: clamp to the earliest the POH can reach and say so.
-      //    The unpinned climb starts at this leg's first fix, so its TOC IS the
-      //    earliest possible one.
-      const bare = trial((c) => { c.waypoints[legIdx + 1].tocNM = null; c.waypoints[legIdx + 1].bocNM = null; });
-      const earliest = bare.sched[legIdx] && bare.sched[legIdx].tocAlongNM;
-      const unit = aircraftProfile.distUnit || 'NM';
-      if (earliest !== null && earliest !== undefined && isFinite(earliest)) {
-        // IT ROUNDS UP, NEVER TO THE NEAREST, and that is not tidiness - it is
-        // the same rule v16.40 states for the crossing altitude. The figure is
-        // a MINIMUM, so the nearest tenth is BELOW it half the time, and a
-        // clamp that lands 0.004 NM early misses the very target it was
-        // computed to meet and puts the red banner straight back up.
-        to.tocNM = Math.ceil(earliest * 10) / 10;
-        to.bocNM = null;
-        commitProfileEdit();
-        // THE NUMBER IN THE NOTE IS WHERE THE MARK ACTUALLY LANDED, not the raw
-        // figure it was derived from - they differ by the rounding, and a note
-        // that disagrees with the chart is the drift this project keeps naming.
-        say('The TOC cannot go further back \u2014 climbing from ' + (from ? from.name : 'the start') +
-            ' takes ' + convertDist(to.tocNM, unit).toFixed(1) + ' ' + distLabel(unit) +
-            ' at the POH rate.', 'warn', 5000);
-      } else {
-        // The climb does not finish on this leg at all, so there is no corner
-        // here to pin. Clearing is the truthful answer.
-        to.tocNM = null;
-        to.bocNM = null;
-        commitProfileEdit();
-        say('The climb does not top out on this leg, so there is no TOC here to move.', 'warn', 5000);
+
+      // CANDIDATE 2: carry the climb onto the leg before, by RAISING that fix -
+      // the one mechanism that keeps the altitude column honest. The figures
+      // come from the trial that verified the advice, so this cannot apply
+      // something the offer did not describe.
+      if (wantNM !== null && legIdx > 0 && L && L.tocNeedsEntryAlt !== null) {
+        const carried = build((c) => {
+          pinOnly(c);
+          const w = c.waypoints[legIdx];
+          if (w.altBase === undefined) { w.altBase = w.alt; w.tocBase = w.tocNM == null ? null : w.tocNM; }
+          w.alt = L.tocNeedsEntryAlt;
+          if (L.tocAdviceLevelByNM) w.tocNM = L.tocAdviceLevelByNM;
+        });
+        const CL = carried.sched[legIdx];
+        if (CL && CL.tocTargetMet !== false && !carried.added.length) {
+          commitFlightCopy(fIdx, carried.copy, 'move the TOC');
+          say('Climb begins on the leg before \u2014 ' + from.name + ' is now crossed at ' +
+              L.tocNeedsEntryAlt + ' ft, in one continuous climb.', 'info', 5000);
+          return;
+        }
       }
+
+      // CANDIDATE 3: NO PIN AT ALL. With nothing pinned the climb starts at this
+      // leg's first fix, so its natural TOC IS the earliest one reachable - and
+      // clearing is strictly better than clamping to it. A clamp lands a
+      // fraction of a mile in and the engine then derives a BOC there, so the
+      // pilot got a spurious ring a hundred metres past the departure (v16.75,
+      // the pilot's second report). With no pin, no BOC is drawn at all, which
+      // is the truth: the bottom of the climb IS the fix.
+      const bare = build((c) => {
+        c.waypoints[legIdx + 1].tocNM = null;
+        c.waypoints[legIdx + 1].bocNM = null;
+      });
+      // CANDIDATE 3 IS THE LAST RESORT AND IS NEVER REFUSED, because it is the
+      // pilot's OWN plan: no pin on this leg, and every cached altitude given
+      // back. It cannot be worse than what they typed. Refusing it is what
+      // stranded a fix at an altitude they never asked for with no way to drag
+      // it back down - found by the sweep on a plan that was ALREADY unflyable
+      // before anything was dragged, where every candidate "added" a problem
+      // relative to the raised state rather than to the pilot's own.
+      commitFlightCopy(fIdx, bare.copy, 'move the TOC');
+      const natural = bare.sched[legIdx] && bare.sched[legIdx].tocAlongNM;
+      if (wantNM === null) return;      // dragged to the fix itself: nothing to say
+      if (bare.added.length) {
+        // Putting it back re-exposes something the pilot's OWN altitudes cause.
+        // Say that plainly rather than letting it read as the drag's fault.
+        say('That TOC does not fit this plan, so the leg is back as you had it. ' +
+            bare.added[0], 'warn', 6500);
+        return;
+      }
+      say(isFinite(natural)
+        ? 'The TOC cannot go further back \u2014 climbing from ' + (from ? from.name : 'the start') +
+          ' takes ' + convertDist(natural, unit).toFixed(1) + ' ' + distLabel(unit) + ' at the POH rate.'
+        : 'The climb does not top out on this leg, so there is no TOC here to move.',
+        'warn', 5000);
+    }
+
+    /** Put back the altitudes an earlier carried-back climb raised, so a drag is
+     *  always judged against what the pilot actually typed. */
+    function restoreCachedAltitudes(fl) {
+      for (const w of fl.waypoints) {
+        if (!w || w.altBase === undefined) continue;
+        w.alt = w.altBase;
+        w.tocNM = w.tocBase === undefined ? null : w.tocBase;
+        delete w.altBase;
+        delete w.tocBase;
+      }
+    }
+
+    /** Swap a verified copy in as the live flight, as ONE undo step. */
+    function commitFlightCopy(fIdx, copy, label) {
+      pushUndoState(label);
+      flights[fIdx] = copy;
+      if (copy.waypoints[0] && isFinite(copy.waypoints[0].alt)) copy.depElev = copy.waypoints[0].alt;
+      commitProfileEdit();
     }
 
     function commitProfileEdit() {
@@ -3409,29 +3486,28 @@
      *  already live. @param {any} d */
     function applyProfileDrop(d) {
       const fl = flights[d.fIdx];
-      const to = fl && fl.waypoints[d.legIdx + 1];
-      if (!to) { refreshMap(); return; }
+      if (!fl || !fl.waypoints[d.legIdx + 1]) { refreshMap(); return; }
       const SL = d.SL;
       const D = SL.distNM;
       const at = d.dropNM;
       const round = (v) => Math.round(v * 10) / 10;   // a tenth of a mile, as the OFP prints
       // A TOC DRAGGED FURTHER BACK THAN THE POH CAN CLIMB IS NOT AN ERROR
-      // (v16.74, the pilot's report: "when moving the TOC backwards it
-      // automatically resets, the red integrity banner appears"). It is a
-      // request the planner can usually GRANT by starting the climb on the leg
-      // before - and where it cannot, the honest answer is a clamp and a note,
-      // not a banner that says the plan is unusable.
+      // (v16.74). It has its own settler, which can carry the climb onto the leg
+      // before or fall back to no pin at all.
       if (d.kind === 'TOC') { settleTocDrag(d.fIdx, d.legIdx, at > 0.05 ? round(at) : null); return; }
-      pushUndoState('move the ' + d.kind);
+      // A DROP IS TRIED BEFORE IT IS COMMITTED, exactly like the TOC (v16.75).
+      // The sweep found drags that turned a clean plan into one the app itself
+      // calls unusable; a pin is a REQUEST, and one that cannot be honoured is
+      // refused with a reason rather than accepted and then reported as
+      // DO NOT USE THESE FIGURES.
+      const copy = JSON.parse(JSON.stringify(fl));
+      const to = copy.waypoints[d.legIdx + 1];
       if (d.kind === 'BOC') {
         // A POSITION AND A DEADLINE CANNOT BOTH BE THE TRUTH. Setting one
         // clears the other, so the leg never carries two answers for where the
         // climb begins - which the engine would report as contradicting.
         to.bocNM = at > 0.05 ? round(at) : null;
         to.tocNM = null;
-      } else if (d.kind === 'TOC') {
-        to.tocNM = at > 0.05 ? round(at) : null;
-        to.bocNM = null;
       } else if (d.kind === 'BOD') {
         const tail = D - at;
         to.bodNM = tail > 0.05 ? round(tail) : null;
@@ -3444,9 +3520,13 @@
         const tail = (SL.bodTailNM || 0) - (at - todWas);
         to.bodNM = tail > 0.05 ? round(tail) : null;
       }
-      refreshMap();
-      renderAllFlightTables();
-      saveActiveState();
+      const added = addedProblems(flightsWith(d.fIdx, copy));
+      if (added.length) {
+        refreshMap();
+        say('That ' + d.kind + ' does not fit this plan \u2014 nothing was changed. ' + added[0], 'warn', 6000);
+        return;
+      }
+      commitFlightCopy(d.fIdx, copy, 'move the ' + d.kind);
     }
 
     /** Right-click a waypoint: rename it and set its altitude in ONE dialog,

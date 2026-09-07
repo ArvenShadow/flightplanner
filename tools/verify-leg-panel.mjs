@@ -621,12 +621,20 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
   for (let k = 1; k <= 10; k++) await page.mouse.move(firstMark.cx - 2 * k, firstMark.cy + 22 * k);
   await page.mouse.up();
   await page.waitForTimeout(520);
-  const clamped = await page.evaluate(() => ({
-    toc: flights[0].waypoints[1].tocNM,
-    met: computeFlightSchedule(flights[0])[0].tocTargetMet
-  }));
-  check(clamped.toc !== null && clamped.met !== false,
-    `dragging the TOC past the POH climb clamps to a target it can meet (${clamped.toc} NM)`);
+  const clamped = await page.evaluate(() => {
+    const sc = computeFlightSchedule(flights[0]);
+    const mk = computeLegMarkers(flights[0].waypoints[0], flights[0].waypoints[1], sc[0]);
+    return { toc: flights[0].waypoints[1].tocNM, met: sc[0].tocTargetMet,
+             kinds: mk.map((m) => m.kind).join(','), at: +sc[0].tocAlongNM.toFixed(2) };
+  });
+  // v16.75: the pin is CLEARED rather than clamped. With nothing pinned the
+  // climb starts at the fix, which IS the earliest reachable point - and no
+  // bottom-of-climb ring is drawn, where the clamp left one a fraction of a
+  // mile past the departure (the pilot's second report).
+  check(clamped.toc == null && clamped.met !== false,
+    `dragging the TOC past the POH climb leaves no pin and a target it can meet (${clamped.toc}, TOC at ${clamped.at} NM)`);
+  check(!/BOC/.test(clamped.kinds),
+    `and draws no BOC just past the departure (${clamped.kinds})`);
   check((await bannerText()) === '',
     `and raises no red banner (${JSON.stringify(await bannerText())})`);
   check(/cannot go further back/i.test(await toastText()),
