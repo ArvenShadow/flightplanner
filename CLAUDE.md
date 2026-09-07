@@ -2023,6 +2023,84 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## ONE TARGET PER LEG, AND THE CORNERS ARE DERIVED (v16.76)
+
+The pilot asked the right question: *"is the amount of work to fix all these
+bugs worth it? Or should we decide to revert to a simple TOD, TOC logic before
+it gets too complex"* - and pointed at `1ntray/flight_planner`.
+
+### WHAT THE COMPARISON ACTUALLY SHOWED
+
+Their `performancePhaseBoundaries.ts` is **85 lines** against our pin machinery,
+and the reason is the DATA MODEL, not a better algorithm:
+
+- A leg carries `altitudeFtMsl` plus a `targetPlacement` (`automatic` |
+  `distance-along-leg`), and optionally a second `endAltitudeFtMsl`. One concept.
+- BOC/TOC/TOD/BOD are **scanned out of the integrated step list** by looking for
+  phase transitions. Nothing is stored; nothing can disagree.
+- They run THE SAME SOLVER we do: `addTransition` bisects the climb start to hit
+  a target distance, which is `climbStartForToc`.
+- **Their answer to an unreachable target is strictly worse for a pilot**:
+  `insufficient-leg-distance` returns `no-solution` for the WHOLE route, and the
+  nav log and route tables blank out behind an error line. One bad drag and every
+  figure disappears. Ours repairs instead.
+
+So the feature was never the problem. THE REPRESENTATION WAS: three pins
+measured from different ends (`bocNM` after the start fix, `bodNM` before the end
+fix, `tocNM` a deadline) which could CONTRADICT each other - forcing rules about
+which wins, a state where a target is "missed", and a repair layer on top. Every
+bug report from v16.73 to v16.75 lived in that layer.
+
+### ONE FIELD REPLACES ALL THREE, AND IT WAS ALREADY PROVEN
+
+`altAtNM` - where this leg's altitude must be attained, from the leg's start fix.
+Absent means "as soon as the POH allows", the derived v16.5 behaviour.
+
+    attain EARLY  ->  the climb begins at the fix and tops out sooner   (a TOC)
+    attain LATE   ->  the climb is DELAYED, level flight first          (a BOC)
+    descending    ->  the descent finishes there, level flight after    (a BOD)
+
+**`bocNM` WAS ALREADY A SECOND SPELLING OF `tocNM`.** `climbStartForToc` bisects
+the climb's START so it ENDS on the target, so a target beyond the natural top
+delays the whole climb. Measured before the change, which is why it was safe:
+dragging the TOC to 26.4 NM with `tocNM` alone placed the BOC at 6.4 NM and kept
+the climb's POH length.
+
+- ALL FOUR MARKS NOW WRITE THE ONE FIELD, differing only in which end of the
+  manoeuvre was grabbed: a bottom is the same target one manoeuvre-length on.
+  There is no BOC that can contradict a TOC, so there are no rules about which
+  wins - the contradiction warning has nothing left to warn about.
+- **LEGACY FIELDS ARE READ, NEVER WRITTEN.** `legTarget` falls back to the three
+  pins, so a route saved before this reads identically - proven by all 480
+  existing tests passing UNCHANGED across the engine swap.
+- THE FOUR CORNERS WERE ALREADY DERIVED: `computeLegMarkers` drew the BOC from
+  `climbStartNM > EDGE_NM`, not from pin presence. That half was right already.
+
+### HONEST ABOUT WHAT THIS STEP DID AND DID NOT DO
+
+- The ENGINE IS NOT SMALLER YET - 44 pin references before, 51 after - because
+  the one-field path was ADDED while the three-pin fallback stayed for saved
+  routes. The simplification is in the interaction model: one thing is written,
+  and contradictions are now unrepresentable.
+- DELETING the old machinery (`tocTargetMet`, the advice, the caching) needs a
+  one-time migration on load so no file in the wild still carries the old pins.
+  That is the next step, and it is where the line count comes down.
+
+### THREE BUGS THE REFACTOR ITSELF PRODUCED, ALL CAUGHT
+
+- **`isFinite(null)` IS TRUE.** The global coerces (`Number(null)` is 0), so a
+  descent leg's null TOC went down the numeric branch and threw on `.toFixed`.
+  `Number.isFinite` is the one that means what it says.
+- **A PHASE-BLIND FIT TEST BROKE EVERY DESCENT DRAG.** `tocTargetNM` and
+  `tocTargetMet` exist only on a CLIMB; consulting them alone made every descent
+  drop look unachievable, so it fell through to "clear the target" and no BOD
+  could be placed. `verify:leg` drags both ends, which is why it was caught.
+- **A DERIVED DISPLAY MUST NEVER BE READ BACK AS INPUT.** `updateLegPreview`
+  writes the computed climb start into the BOC box; the panel then read that box
+  as the target, so a "clear" re-applied a target one climb-length short of the
+  one it had just removed. The box is `readonly` now, and "start the climb here"
+  goes into the one target field like every other request.
+
 ## A DRAG NEVER COMMITS A PLAN THE APP CALLS UNUSABLE (v16.75)
 
 Four reports on v16.74, and the fourth was *"there are several bugs, some also

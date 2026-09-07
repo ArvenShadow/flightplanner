@@ -51,6 +51,20 @@ interface Waypoint {
    * onto the next leg. Absent or 0 means climb from the fix, which is the
    * derived v16.5 behaviour.
    */
+  /**
+   * WHERE THE LEG'S ALTITUDE MUST BE ATTAINED (v16.76), along the flown path
+   * from the leg's START fix. Absent means "as soon as the POH allows", which
+   * is the derived v16.5 behaviour.
+   *
+   * THE ONE TARGET FIELD. It replaces the three v16.37 pins because it
+   * expresses all of them: attaining EARLY tops the climb out sooner (a TOC),
+   * attaining LATE delays it so level flight comes first (a BOC), and on a
+   * descending leg it is where the descent finishes (a BOD). The three-pin
+   * version could contradict itself, and every bug between v16.73 and v16.75
+   * lived in the layer that resolved those contradictions.
+   */
+  altAtNM?: number | null;
+  /** LEGACY, read but never written - see `legTarget` in legs.js. */
   bocNM?: number | null;
   /**
    * THE ALTITUDE THE PILOT TYPED, cached when a dragged TOC on the NEXT leg

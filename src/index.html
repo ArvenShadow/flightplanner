@@ -497,7 +497,8 @@
           <div class="setting-row">
             <label title="Hold the current altitude, then climb">Start the climb:</label>
             <div style="display:flex; gap:6px; align-items:center;">
-              <input type="number" id="leg-boc" step="0.5" min="0" style="width:80px;" oninput="updateLegPreview()">
+              <input type="number" id="leg-boc" step="0.5" min="0" style="width:80px;" readonly
+                     title="Derived: where the climb has to begin to be level by your target. Set the target below.">
               <span style="font-size:10px;">NM after <b id="leg-from-name2">the fix</b></span>
               <button class="btn btn-outline btn-sm" id="leg-boc-here" onclick="pinLegHere('boc')">Here</button>
               <span id="leg-boc-note" style="display:none; font-size:9px; color:var(--text-muted);">set by your target below</span>
@@ -1055,7 +1056,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 133 inline on*= handlers - 103 written
+    // map, markers, undoStack...) plus 132 inline on*= handlers - 102 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1280,7 +1281,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.75';
+    const APP_VERSION = '16.76';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3363,7 +3364,7 @@
      * before takeoff - the TOC is CLAMPED to the earliest the POH can reach and
      * a toast says so. That is a valid plan, so it gets no banner.
      */
-    function settleTocDrag(fIdx, legIdx, wantNM) {
+    function settleTargetDrag(fIdx, legIdx, wantNM) {
       const fl = flights[fIdx];
       const to = fl && fl.waypoints[legIdx + 1];
       if (!to) { refreshMap(); return; }
@@ -3386,15 +3387,27 @@
         mutate(copy);
         return { copy, sched: computeFlightSchedule(copy), added: addedProblems(flightsWith(fIdx, copy)) };
       };
+      // ONE FIELD, and the legacy pins are cleared with it so an old route
+      // file cannot shadow the new target once the pilot has dragged anything.
       const pinOnly = (c) => {
-        c.waypoints[legIdx + 1].tocNM = wantNM;
-        c.waypoints[legIdx + 1].bocNM = null;
+        const w = c.waypoints[legIdx + 1];
+        w.altAtNM = wantNM;
+        w.tocNM = null; w.bocNM = null; w.bodNM = null;
       };
 
       // CANDIDATE 1: exactly what was asked for.
       const asked = build(pinOnly);
       const L = asked.sched[legIdx];
-      const fits = wantNM !== null && L && L.tocTargetNM != null && L.tocTargetMet !== false;
+      // WHETHER THE TARGET WAS HONOURED IS ASKED PER PHASE. `tocTargetNM` and
+      // `tocTargetMet` only exist on a CLIMB; on a descent the engine applies
+      // the target through `bodPinNM` and says so with `bodRefused`. Consulting
+      // only the climb flags made every DESCENT drop look unachievable, so it
+      // fell through to "clear the target" and no BOD could ever be placed -
+      // caught by verify:leg, which drags both.
+      const fits = wantNM !== null && !!L && (
+        L.tocTargetNM != null ? L.tocTargetMet !== false
+        : L.descDistNM > 0.05 ? !L.bodRefused
+        : false);
       if (wantNM !== null && fits && !asked.added.length) {
         commitFlightCopy(fIdx, asked.copy, 'move the TOC');
         return;
@@ -3408,9 +3421,9 @@
         const carried = build((c) => {
           pinOnly(c);
           const w = c.waypoints[legIdx];
-          if (w.altBase === undefined) { w.altBase = w.alt; w.tocBase = w.tocNM == null ? null : w.tocNM; }
+          if (w.altBase === undefined) { w.altBase = w.alt; w.tocBase = w.altAtNM == null ? null : w.altAtNM; }
           w.alt = L.tocNeedsEntryAlt;
-          if (L.tocAdviceLevelByNM) w.tocNM = L.tocAdviceLevelByNM;
+          if (L.tocAdviceLevelByNM) w.altAtNM = L.tocAdviceLevelByNM;
         });
         const CL = carried.sched[legIdx];
         if (CL && CL.tocTargetMet !== false && !carried.added.length) {
@@ -3429,8 +3442,8 @@
       // the pilot's second report). With no pin, no BOC is drawn at all, which
       // is the truth: the bottom of the climb IS the fix.
       const bare = build((c) => {
-        c.waypoints[legIdx + 1].tocNM = null;
-        c.waypoints[legIdx + 1].bocNM = null;
+        const w = c.waypoints[legIdx + 1];
+        w.altAtNM = null; w.tocNM = null; w.bocNM = null; w.bodNM = null;
       });
       // CANDIDATE 3 IS THE LAST RESORT AND IS NEVER REFUSED, because it is the
       // pilot's OWN plan: no pin on this leg, and every cached altitude given
@@ -3449,10 +3462,18 @@
             bare.added[0], 'warn', 6500);
         return;
       }
-      say(isFinite(natural)
-        ? 'The TOC cannot go further back \u2014 climbing from ' + (from ? from.name : 'the start') +
-          ' takes ' + convertDist(natural, unit).toFixed(1) + ' ' + distLabel(unit) + ' at the POH rate.'
-        : 'The climb does not top out on this leg, so there is no TOC here to move.',
+      // `Number.isFinite`, NOT the global `isFinite`: the global coerces, so
+      // `isFinite(null)` is TRUE (Number(null) is 0) and a descent leg's null
+      // TOC went down the numeric branch and threw on `.toFixed`. The same
+      // null-versus-finite trap this file already names, in a new place.
+      const climbs = !!bare.sched[legIdx] && bare.sched[legIdx].climbDistNM > 0.05;
+      say(Number.isFinite(natural)
+        ? (climbs
+            ? 'The TOC cannot go further back \u2014 climbing from ' +
+              (from ? from.name : 'the start') + ' takes '
+            : 'That corner cannot move further \u2014 the manoeuvre takes ') +
+          convertDist(natural, unit).toFixed(1) + ' ' + distLabel(unit) + ' at the POH rate.'
+        : 'That manoeuvre does not fit on this leg, so there is no corner here to move.',
         'warn', 5000);
     }
 
@@ -3462,7 +3483,7 @@
       for (const w of fl.waypoints) {
         if (!w || w.altBase === undefined) continue;
         w.alt = w.altBase;
-        w.tocNM = w.tocBase === undefined ? null : w.tocBase;
+        w.altAtNM = w.tocBase === undefined ? null : w.tocBase;
         delete w.altBase;
         delete w.tocBase;
       }
@@ -3494,7 +3515,22 @@
       // A TOC DRAGGED FURTHER BACK THAN THE POH CAN CLIMB IS NOT AN ERROR
       // (v16.74). It has its own settler, which can carry the climb onto the leg
       // before or fall back to no pin at all.
-      if (d.kind === 'TOC') { settleTocDrag(d.fIdx, d.legIdx, at > 0.05 ? round(at) : null); return; }
+      // ONE FIELD FOR ALL FOUR MARKS (v16.76). Every drop is the same question -
+      // where must this leg's altitude be attained - and the four kinds differ
+      // only in which END of the manoeuvre the pilot grabbed. The manoeuvre
+      // keeps its POH length, so grabbing the BOTTOM means the target sits one
+      // manoeuvre-length further on.
+      //
+      // This is what replaced the three pins: there is no longer a BOC that can
+      // contradict a TOC, so there are no rules about which wins.
+      const climbLen = isFinite(SL.climbDistNM) ? SL.climbDistNM : 0;
+      const descLen = isFinite(SL.descDistNM) ? SL.descDistNM : 0;
+      const attain = d.kind === 'TOC' ? at
+        : d.kind === 'BOC' ? at + climbLen
+        : d.kind === 'BOD' ? at
+        : at + descLen;                       // TOD
+      settleTargetDrag(d.fIdx, d.legIdx, attain > 0.05 ? round(Math.min(attain, D)) : null);
+      return;
       // A DROP IS TRIED BEFORE IT IS COMMITTED, exactly like the TOC (v16.75).
       // The sweep found drags that turned a clean plan into one the app itself
       // calls unusable; a pin is a REQUEST, and one that cannot be honoured is
@@ -4885,8 +4921,11 @@
       for (const id of ['leg-from-name2', 'leg-from-name3']) document.getElementById(id).textContent = from.name;
       document.getElementById('leg-alt').value = String(to.alt);
       document.getElementById('leg-boc').value = to.bocNM ? String(to.bocNM) : '';
+      // SHOWN AS AN ATTAIN-BY, whichever box the pilot last used. One field,
+      // read back into the box that matches the leg's phase.
       document.getElementById('leg-bod').value = to.bodNM ? String(to.bodNM) : '';
-      document.getElementById('leg-toc').value = to.tocNM ? String(to.tocNM) : '';
+      document.getElementById('leg-toc').value =
+        to.altAtNM ? String(to.altAtNM) : (to.tocNM ? String(to.tocNM) : '');
       document.getElementById('leg-hint').textContent =
         'The leg is ' + along.totalNM.toFixed(1) + ' NM along the flown path. You right-clicked ' +
         along.alongNM.toFixed(1) + ' NM after ' + from.name + ' (' +
@@ -4907,7 +4946,15 @@
     function pinLegHere(which) {
       if (!legPanel) return;
       const after = legPanel.alongNM, before = legPanel.totalNM - legPanel.alongNM;
-      if (which === 'boc') document.getElementById('leg-boc').value = after.toFixed(1);
+      // "START THE CLIMB HERE" IS THE SAME TARGET, one climb-length further on
+      // (v16.76). The BOC box is a derived display, so the request goes into the
+      // one attain-by field like every other way of asking for a corner.
+      if (which === 'boc') {
+        const SLh = computeFlightSchedule(flights[legPanel.fIdx])[legPanel.legEnd - 1];
+        const climbLen = SLh && isFinite(SLh.climbDistNM) ? SLh.climbDistNM : 0;
+        document.getElementById('leg-toc').value =
+          Math.min(after + climbLen, legPanel.totalNM).toFixed(1);
+      }
       if (which === 'toc') document.getElementById('leg-toc').value = after.toFixed(1);
       if (which === 'bod') document.getElementById('leg-bod').value = before.toFixed(1);
       updateLegPreview();
@@ -5088,9 +5135,34 @@
       if (isFinite(form.alt)) to.alt = form.alt;
       // Stored as null rather than 0 when cleared, so a saved route carries no
       // pin at all and reads identically to one made before pins existed.
-      to.bocNM = form.bocNM;
-      to.bodNM = form.bodNM;
-      to.tocNM = form.tocNM;
+      // THE PANEL WRITES THE SAME ONE FIELD THE DRAG DOES (v16.76). It still
+      // shows three boxes, because a pilot who thinks in "hold for 12 NM" should
+      // be able to type that - but all three mean one thing, so they are folded
+      // into the single attain-by target here. LEAVING THE PANEL ON THE LEGACY
+      // PINS WOULD HAVE SHIPPED A REAL BUG: `legTarget` prefers `altAtNM`, so a
+      // leg that had been dragged would silently IGNORE anything typed here.
+      const SLp = computeFlightSchedule(fl)[legPanel.legEnd - 1];
+      const climbLen = SLp && isFinite(SLp.climbDistNM) ? SLp.climbDistNM : 0;
+      const descLen = SLp && isFinite(SLp.descDistNM) ? SLp.descDistNM : 0;
+      const legLen = SLp && isFinite(SLp.distNM) ? SLp.distNM : 0;
+      // THE BOC BOX IS A DERIVED DISPLAY, NOT AN INPUT (v16.38 made it one), so
+      // it must never be read back as the target. `updateLegPreview` writes the
+      // computed climb start into it - reading that as input fed the derived
+      // value straight back in, and a "clear" then re-applied a target one
+      // climb-length short of the one it had just removed. Caught by the
+      // clear-the-pins test.
+      let attain = null;
+      if (form.tocNM != null) attain = form.tocNM;                       // be level by here
+      else if (form.bodNM != null) attain = Math.max(0, legLen - form.bodNM);
+      void climbLen;
+      to.altAtNM = attain != null && attain > 0.05
+        ? Math.round(Math.min(attain, legLen || attain) * 10) / 10
+        : null;
+      // The legacy pins are cleared so there is exactly one answer on the leg.
+      to.bocNM = null;
+      to.bodNM = null;
+      to.tocNM = null;
+      void descLen;
       closeLegModal();
       refreshMap();
       renderAllFlightTables();

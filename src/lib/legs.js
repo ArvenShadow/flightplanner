@@ -687,6 +687,58 @@ function pinNM(v, maxNM) {
   return Math.min(n, Math.max(0, maxNM));
 }
 
+/**
+ * ONE TARGET PER LEG (v16.76): the altitude on the leg's TO waypoint, plus
+ * WHERE it must be attained - `altAtNM`, measured along the flown path from the
+ * leg's START fix. Absent means "as soon as the POH allows", which is the
+ * derived v16.5 behaviour.
+ *
+ * WHY ONE FIELD REPLACES THREE, and it is not a tidy-up - it is where the bugs
+ * were coming from. v16.37 grew three pins measured from different ends
+ * (`bocNM` after the start fix, `bodNM` before the end fix, `tocNM` a deadline),
+ * which meant they could CONTRADICT one another: rules for which wins, a state
+ * where a target is "missed", and a repair layer on top of that. Every bug
+ * report between v16.73 and v16.75 lived in that layer.
+ *
+ * A single "attain by" distance expresses all of them, because
+ * `climbStartForToc` bisects the climb's START so the climb ENDS on the target:
+ *
+ *   attain EARLY  -> the climb begins at the fix and tops out sooner  (a TOC)
+ *   attain LATE   -> the climb is DELAYED, so level flight comes first (a BOC)
+ *   descending    -> the descent finishes there, level flight after     (a BOD)
+ *
+ * MEASURED before the change, which is why it was safe to make: dragging the
+ * TOC to 26.4 NM with `tocNM` alone and no `bocNM` placed the BOC at 6.4 NM and
+ * kept the climb's POH length. `bocNM` was already a second spelling of the
+ * same thing.
+ *
+ * THE FOUR CORNERS ARE DERIVED, NOT STORED - the approach 1ntray/flight_planner
+ * takes, and it is the right one: `computeLegMarkers` reads them off the walked
+ * profile (`climbStartNM > EDGE_NM` already drew the BOC that way), so a mark
+ * can never disagree with the schedule that produced it.
+ *
+ * LEGACY FIELDS ARE STILL READ, never written. A route saved before this reads
+ * identically: `tocNM` is an attain-by outright, `bodNM` is one measured from
+ * the other end, and `bocNM` is a delay whose old meaning is preserved exactly.
+ *
+ * @param {Waypoint} to the leg's TO waypoint
+ * @param {number} distNM the leg's flown length
+ * @param {boolean} climbing true when the leg climbs to `to.alt`
+ * @returns {{attainNM: number, legacyBocNM: number}} attainNM 0 when automatic
+ */
+function legTarget(to, distNM, climbing) {
+  const attain = pinNM(to.altAtNM, distNM);
+  if (attain > 0) return { attainNM: attain, legacyBocNM: 0 };
+  // Nothing new set: fall back to whatever an older route file carries.
+  if (climbing) {
+    const toc = pinNM(to.tocNM, distNM);
+    if (toc > 0) return { attainNM: toc, legacyBocNM: 0 };
+    return { attainNM: 0, legacyBocNM: pinNM(to.bocNM, distNM) };
+  }
+  const bod = pinNM(to.bodNM, distNM);
+  return { attainNM: bod > 0 ? Math.max(0, distNM - bod) : 0, legacyBocNM: 0 };
+}
+
 /** The whole-flight altitude plan: a forward pass so an unfinished climb
  *  spills onto later legs, then a backward pass so a descent starts early
  *  enough that every fix is crossed AT its planned altitude.
@@ -768,7 +820,11 @@ export function computeFlightSchedule(fl, opts) {
     // the descent that TERMINATES at this leg's end fix, and only the backward
     // pass knows whether such a descent exists here and whether the tail is
     // still free - so bodTailNM stays 0 until it decides.
-    L.bodPinNM = pinNM(to.bodNM, L.distNM);
+    // ONE TARGET, read once per leg. `legTarget` picks the descent form here
+    // and the climb form below; on an old route file it falls back to the
+    // three v16.37 pins so nothing a pilot saved changes meaning.
+    const descTgt = legTarget(to, L.distNM, false);
+    L.bodPinNM = descTgt.attainNM > 0 ? Math.max(0, L.distNM - descTgt.attainNM) : 0;
     const target = to.alt;
     if (target > alt + 1) {
       const cp = climbPerf(alt, target, Number(to.oat));
@@ -783,7 +839,8 @@ export function computeFlightSchedule(fl, opts) {
       // is invented: the rate, the fuel flow and the TAS are the POH's, and
       // only the climb's POSITION moves. It is the same kind of pin as a BOC,
       // just stated from the other end, and it is what a BOC pin becomes.
-      const tocT = pinNM(to.tocNM, L.distNM);
+      const climbTgt = legTarget(to, L.distNM, true);
+      const tocT = climbTgt.attainNM;
       // IT DOES NOT FIT / IT OVERSHOT. Either way the honest answer is not a
       // steeper climb - the POH says nothing about that - it is the altitude
       // this leg would have to START from. The pilot raises the previous fix
@@ -824,7 +881,9 @@ export function computeFlightSchedule(fl, opts) {
           if (back.shortMin > 0.001) missTarget();
         }
       } else {
-        L.climbStartNM = pinNM(to.bocNM, L.distNM);
+        // Only an OLD file can reach here now: a bocNM with no attain-by. Its
+        // meaning is preserved exactly - hold, then climb.
+        L.climbStartNM = climbTgt.legacyBocNM;
       }
       // The climb begins at the BOC, so the first climbStartNM of the leg is
       // skipped. With no pin that is 0 and this is the v16.5 walk exactly.

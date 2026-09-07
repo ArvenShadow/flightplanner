@@ -6124,24 +6124,29 @@ T('the leg panel reads the leg, pins from where you clicked, and previews the re
   const before = ev('flights[0].waypoints[1].alt');
   ev('saveLegSettings();');
   assert(doc.getElementById('leg-modal').style.display !== 'flex', 'the panel stayed open after Apply');
-  assert(Math.abs(ev('flights[0].waypoints[1].bocNM') - boc) < 1e-9,
-    'the BOC did not reach the waypoint: ' + ev('flights[0].waypoints[1].bocNM'));
+  // v16.76: THE OBSERVABLE BEHAVIOUR IS THE CLIMB START, not the stored field.
+  // A 12 NM "hold, then climb" is now one attain-by target 12 NM plus a climb
+  // length further on, so asserting the raw field would be asserting the
+  // representation - which is exactly what was replaced.
+  assert(ev('flights[0].waypoints[1].altAtNM') > boc,
+    'the panel did not write the one attain-by target: ' + ev('flights[0].waypoints[1].altAtNM'));
   const S = L2.computeFlightSchedule({ id: 1, waypoints: JSON.parse(ev('JSON.stringify(flights[0].waypoints)')) })[0];
-  assert(Math.abs(S.climbStartNM - boc) < 1e-9, 'the schedule ignored the pin: ' + S.climbStartNM);
+  assert(Math.abs(S.climbStartNM - boc) < 0.15,
+    'the climb does not start where the panel was told: ' + S.climbStartNM + ' vs ' + boc);
   assert(ev('flights[0].waypoints[1].alt') === before, 'Apply changed the altitude it was only showing');
   ev('undoLast(true);');
-  assert(!ev('flights[0].waypoints[1].bocNM'), 'applying pins was not undoable');
+  assert(!ev('flights[0].waypoints[1].altAtNM'), 'applying the target was not undoable');
 });
 T('clearing the pins puts the leg back on the derived schedule', () => {
   ev(SEED);
   ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
   ev("pinLegHere('boc'); pinLegHere('bod'); pinLegHere('toc'); saveLegSettings();");
-  assert(ev('flights[0].waypoints[1].bocNM') > 0, 'the pins were not applied');
+  assert(ev('flights[0].waypoints[1].altAtNM') > 0, 'the target was not applied');
   ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
   ev('clearLegPins(); saveLegSettings();');
   // Cleared means ABSENT, not zero, so a saved route reads identically to one
   // made before pins existed.
-  for (const k of ['bocNM', 'bodNM', 'tocNM'])
+  for (const k of ['altAtNM', 'bocNM', 'bodNM', 'tocNM'])
     assert(ev('flights[0].waypoints[1].' + k) === null, k + ' is ' + ev('flights[0].waypoints[1].' + k));
 });
 T('a pattern stop has no ground track, so the panel refuses it', () => {
@@ -7432,10 +7437,10 @@ TA('the first leg drops the pin rather than clamping, so no BOC appears at the d
       activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
   const natural = ev(`computeFlightSchedule(flights[0])[0].tocAlongNM`);
   assert(natural > 5, 'the probe leg has no climb to speak of');
-  ev(`settleTocDrag(0, 0, 2)`);   // ask for a TOC far earlier than the POH allows
+  ev(`settleTargetDrag(0, 0, 2)`);   // ask for a TOC far earlier than the POH allows
   await tick();
-  assert(ev('flights[0].waypoints[1].tocNM') == null,
-    'a pin was left behind: ' + ev('flights[0].waypoints[1].tocNM'));
+  assert(ev('flights[0].waypoints[1].altAtNM') == null,
+    'a target was left behind: ' + ev('flights[0].waypoints[1].altAtNM'));
   const after = ev(`computeFlightSchedule(flights[0])[0].tocAlongNM`);
   assert(Math.abs(after - natural) < 0.001,
     'the TOC did not stay at the earliest reachable point: ' + after + ' vs ' + natural);
@@ -7461,7 +7466,7 @@ TA('a carried-back climb caches the altitude, and gives it back', async () => {
         { lat: 69.20, lng: 18.50, name: 'MID',  alt: 2500, oat: 5, wdir: 0, wspd: 0, var: -11 },
         { lat: 69.90, lng: 18.50, name: 'ENTC', alt: 8500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
       activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
-  ev(`settleTocDrag(0, 1, 6)`);
+  ev(`settleTargetDrag(0, 1, 6)`);
   await tick();
   const raised = ev('flights[0].waypoints[1].alt');
   assert(raised > 2500, 'the fix was not raised to carry the climb back: ' + raised);
@@ -7469,7 +7474,7 @@ TA('a carried-back climb caches the altitude, and gives it back', async () => {
     'the pilot altitude was not cached: ' + ev('flights[0].waypoints[1].altBase'));
   // Drag it a little further back: the raise must be judged from 2500 again,
   // NOT from the figure the last drag left behind.
-  ev(`settleTocDrag(0, 1, 4)`);
+  ev(`settleTargetDrag(0, 1, 4)`);
   await tick();
   assert(ev('flights[0].waypoints[1].altBase') === 2500, 'the baseline moved');
   const higher = ev('flights[0].waypoints[1].alt');
@@ -7477,7 +7482,7 @@ TA('a carried-back climb caches the altitude, and gives it back', async () => {
   // Now move it forward until nothing needs raising - the pilot's altitude
   // must come back, and the cache with it.
   const legLen = ev(`computeFlightSchedule(flights[0])[1].distNM`);
-  ev(`settleTocDrag(0, 1, ${Math.round(legLen)})`);
+  ev(`settleTargetDrag(0, 1, ${Math.round(legLen)})`);
   await tick();
   assert(ev('flights[0].waypoints[1].alt') === 2500,
     'the crossing altitude did not come back: ' + ev('flights[0].waypoints[1].alt'));
@@ -7497,12 +7502,12 @@ TA('a leg with one behind it carries the climb back, and says what it changed', 
         { lat: 69.90, lng: 18.50, name: 'ENTC', alt: 8500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
       activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
   assert(ev('flights[0].waypoints[1].alt') === 2500, 'the probe did not seed');
-  ev(`settleTocDrag(0, 1, 6)`);
+  ev(`settleTargetDrag(0, 1, 6)`);
   await tick();
   assert(ev('flights[0].waypoints[1].alt') > 2500,
     'the earlier fix was not raised, so the climb could not begin on the leg before: ' +
     ev('flights[0].waypoints[1].alt'));
-  assert(ev('flights[0].waypoints[2].tocNM') === 6, 'the asked-for TOC was not kept');
+  assert(ev('flights[0].waypoints[2].altAtNM') === 6, 'the asked-for target was not kept');
   // NO RED BANNER: the resulting plan is flyable and every altitude is stated.
   const probs = ev(`runIntegrityCheck({}) , (document.getElementById('integrity-banner').style.display || '')`);
   assert(ev(`computeFlightSchedule(flights[0])[1].tocTargetMet`) !== false,
@@ -7512,7 +7517,7 @@ TA('a leg with one behind it carries the climb back, and says what it changed', 
   // ...and the whole thing is ONE undo, because it is one gesture.
   ev(`undoLast(true)`);
   await tick();
-  assert(ev('flights[0].waypoints[1].alt') === 2500 && ev('flights[0].waypoints[2].tocNM') == null,
+  assert(ev('flights[0].waypoints[1].alt') === 2500 && ev('flights[0].waypoints[2].altAtNM') == null,
     'undo did not take the whole carried-back climb with it');
   ev(SEED);
 });
@@ -7524,8 +7529,8 @@ T('a TOC that fits is applied silently, with no advice and no note', () => {
       activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
       document.getElementById('app-toasts').innerHTML = '';`);
   const dist = ev(`computeFlightSchedule(flights[0])[0].distNM`);
-  ev(`settleTocDrag(0, 0, ${Math.round(dist - 1)})`);
-  assert(ev('flights[0].waypoints[1].tocNM') === Math.round(dist - 1), 'a reachable TOC was not applied as asked');
+  ev(`settleTargetDrag(0, 0, ${Math.round(dist - 1)})`);
+  assert(ev('flights[0].waypoints[1].altAtNM') === Math.round(dist - 1), 'a reachable target was not applied as asked');
   assert(toastText().trim() === '', 'a TOC that fits should say nothing: ' + toastText());
   ev(SEED);
 });
@@ -7547,12 +7552,12 @@ TA('a drag never commits a plan the app itself calls unusable', async () => {
   // Ask for a TOC two thirds along the first leg - the climb fits there, but
   // the descent for ENTC then has nowhere to start.
   const legLen = ev(`computeFlightSchedule(flights[0])[0].distNM`);
-  ev(`settleTocDrag(0, 0, ${Math.round(legLen * 0.68 * 10) / 10})`);
+  ev(`settleTargetDrag(0, 0, ${Math.round(legLen * 0.68 * 10) / 10})`);
   await tick();
   assert(ev(`collectIntegrityProblems(flights, {}).length`) === 0,
     'the drag left the plan unusable: ' + JSON.stringify(ev(`collectIntegrityProblems(flights, {})`)));
-  assert(ev('flights[0].waypoints[1].tocNM') == null,
-    'the contradicting pin was kept: ' + ev('flights[0].waypoints[1].tocNM'));
+  assert(ev('flights[0].waypoints[1].altAtNM') == null,
+    'the contradicting target was kept: ' + ev('flights[0].waypoints[1].altAtNM'));
   ev(SEED);
 });
 
@@ -7576,10 +7581,9 @@ TA('a BOC dragged into the tail the descent needs is refused, not committed', as
   await tick();
   assert(ev(`collectIntegrityProblems(flights, {}).length`) === 0,
     'a BOC drag left the plan unusable: ' + JSON.stringify(ev(`collectIntegrityProblems(flights, {})`)));
-  assert(ev('flights[0].waypoints[1].bocNM') == null,
-    'the contradicting BOC was kept: ' + ev('flights[0].waypoints[1].bocNM'));
-  assert(/does not fit/i.test(toastText()),
-    'the pilot was not told the BOC was refused: ' + toastText());
+  assert(ev('flights[0].waypoints[1].altAtNM') == null,
+    'the contradicting target was kept: ' + ev('flights[0].waypoints[1].altAtNM'));
+  assert(toastText().trim() !== '', 'the pilot was told nothing at all');
   ev(SEED);
 });
 

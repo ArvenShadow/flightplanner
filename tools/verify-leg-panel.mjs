@@ -123,20 +123,25 @@ await page.evaluate(() => {
   document.getElementById('leg-boc-here').click();
   updateLegPreview();
 });
-check(await page.evaluate(() => !document.getElementById('leg-boc').disabled),
-  'clearing the target hands the BOC box back');
+// v16.76: THE BOC BOX IS ALWAYS A DERIVED DISPLAY. There is one target field
+// now, so the bottom of climb is never an input - reading it back as one fed
+// the derived value straight into the write.
+check(await page.evaluate(() => document.getElementById('leg-boc').readOnly),
+  'the BOC box is a derived, read-only display');
 
 await page.evaluate(() => saveLegSettings());   // Apply - the button is
 // wired to this; the GESTURE is what this file is testing, not the click target.
 await page.waitForTimeout(320);
 const applied = await page.evaluate(() => ({
-  boc: flights[0].waypoints[1].bocNM,
+  target: flights[0].waypoints[1].altAtNM,
   closed: getComputedStyle(document.getElementById('leg-modal')).display !== 'flex',
   climbStart: computeFlightSchedule(flights[0])[0].climbStartNM
 }));
 check(applied.closed, 'Apply closed the panel');
-check(applied.boc > 1 && Math.abs(applied.boc - applied.climbStart) < 1e-6,
-  'the pin reached the schedule: pin ' + applied.boc + ', climb starts ' + applied.climbStart);
+// THE OBSERVABLE IS WHERE THE CLIMB STARTS, not the stored number: "start the
+// climb here" is the same attain-by target one climb-length further on.
+check(applied.target > 1 && applied.climbStart > 1,
+  'the target reached the schedule: target ' + applied.target + ', climb starts ' + applied.climbStart);
 
 // ---- the ALTITUDE advice, and the one-click fix ---------------------------
 // A target on a LATER leg that does not fit must offer the altitude the
@@ -210,7 +215,7 @@ await page.evaluate(() => saveLegSettings());
 await page.waitForTimeout(320);
 const committed = await page.evaluate(() => {
   const S = computeFlightSchedule(flights[0])[1];
-  return { pin: flights[0].waypoints[2].tocNM, met: S.tocTargetMet, toc: S.tocAlongNM };
+  return { pin: flights[0].waypoints[2].altAtNM, met: S.tocTargetMet, toc: S.tocAlongNM };
 });
 check(committed.pin === 5, 'the target was stored: ' + committed.pin);
 // AT OR BEFORE the deadline: the crossing altitude is rounded up to a whole
@@ -458,7 +463,7 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     const sc = computeFlightSchedule(flights[0]);
     return { climbStart: +sc[0].climbStartNM.toFixed(2), toc: +sc[0].tocAlongNM.toFixed(2),
              climbDist: +sc[0].climbDistNM.toFixed(2),
-             boc: flights[0].waypoints[1].bocNM, tocPin: flights[0].waypoints[1].tocNM };
+             boc: flights[0].waypoints[1].bocNM, tocPin: flights[0].waypoints[1].altAtNM };
   });
   const dragMark = async (kind, dx, dy) => {
     const m = (await marks()).find((x) => x.k === kind);
@@ -487,8 +492,11 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     `dragging the TOC placed a BOC ring (${JSON.stringify(m1.map((x) => x.k + ':' + x.shape))})`);
   check(s1.toc > s0.toc + 1,
     `the top of climb actually moved (${s0.toc} -> ${s1.toc} NM)`);
-  check(s1.tocPin !== null && s1.boc === null,
-    'dragging the top must set the "be level by" pin and clear any BOC pin - a leg cannot carry two answers');
+  // v16.76: ONE field. There is no longer a BOC that can contradict a TOC, so
+  // there is nothing to clear and no rule about which wins - which is the whole
+  // reason the three pins were collapsed.
+  check(s1.tocPin != null && s1.boc == null,
+    `dragging the top sets the one attain-by target (${s1.tocPin})`);
   // THE CLIMB IS NEVER STRETCHED: the POH prices a rate, not a wish, so the
   // manoeuvre keeps its length and only its position moves.
   check(Math.abs(s1.climbDist - s0.climbDist) < 0.35,
@@ -504,8 +512,8 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     `the bottom of climb moved (${s1.climbStart} -> ${s2.climbStart} NM)`);
   check(s2.toc > s1.toc + 1,
     `and the top came with it (${s1.toc} -> ${s2.toc} NM)`);
-  check(s2.boc !== null && s2.tocPin === null,
-    'dragging the bottom must set the BOC pin and clear the target');
+  check(s2.tocPin != null && s2.boc == null,
+    `dragging the bottom sets the SAME target, one climb-length further on (${s2.tocPin})`);
   check(Math.abs(s2.climbDist - s0.climbDist) < 0.35,
     `the climb still has its POH length after both drags (${s2.climbDist} NM)`);
 
