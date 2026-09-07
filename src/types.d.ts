@@ -51,6 +51,20 @@ interface Waypoint {
    * onto the next leg. Absent or 0 means climb from the fix, which is the
    * derived v16.5 behaviour.
    */
+  /**
+   * WHERE THE LEG'S ALTITUDE MUST BE ATTAINED (v16.76), along the flown path
+   * from the leg's START fix. Absent means "as soon as the POH allows", which
+   * is the derived v16.5 behaviour.
+   *
+   * THE ONE TARGET FIELD. It replaces the three v16.37 pins because it
+   * expresses all of them: attaining EARLY tops the climb out sooner (a TOC),
+   * attaining LATE delays it so level flight comes first (a BOC), and on a
+   * descending leg it is where the descent finishes (a BOD). The three-pin
+   * version could contradict itself, and every bug between v16.73 and v16.75
+   * lived in the layer that resolved those contradictions.
+   */
+  altAtNM?: number | null;
+  /** LEGACY, read but never written - see `legTarget` in legs.js. */
   bocNM?: number | null;
   /**
    * BOTTOM OF DESCENT pin for the leg ENDING here: be level this many NM
@@ -202,22 +216,9 @@ interface ScheduleLeg {
   /** True when climbStartNM was derived from tocTargetNM rather than pinned
    *  directly, so a bocNM on the same leg was ignored. */
   tocDerivedBoc: boolean;
-  /** What this leg's START fix would have to be crossed at for the target to
-   *  be reachable at the profile's climb rate. Null on the first leg (there is
-   *  no earlier fix to raise) and null when the figure was TRIED and did not
-   *  work because the earlier legs cannot climb that high by then. */
-  tocNeedsEntryAlt: number | null;
-  /** True when a candidate altitude was computed, tried, and did not help -
-   *  so no altitude at the previous fix makes the target reachable. */
-  tocNoAltHelps: boolean;
-  /** Where the earlier leg's "be level by" pin goes when the advice is taken
-   *  (its full length), and where its climb then begins. Both are read from the
-   *  trial that verified the advice. Null when there is no earlier leg. */
   /** The climb is handed over from the previous leg (which topped out on the
    *  shared fix), so it starts AT the fix and a target here is a deadline. */
   tocContinuation: boolean;
-  tocAdviceLevelByNM: number | null;
-  tocAdviceClimbFromNM: number | null;
   /** This leg's climb tops out ON its end fix and the next leg climbs straight
    *  on from there: one climb through the fix, so this leg draws no TOC. */
   climbContinues: boolean;

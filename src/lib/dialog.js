@@ -125,7 +125,6 @@ export function ask(opts) {
       className: 'dlg-btn dlg-' + (b.variant || 'ghost'),
       type: 'button'
     });
-    btn.appendChild(el('span', { className: 'dlg-key', textContent: String(i + 1) }));
     btn.appendChild(document.createTextNode(' ' + b.label));
     if (b.hint) btn.appendChild(el('small', { className: 'dlg-hint', textContent: b.hint }));
     btn.addEventListener('click', () => finish(b.id));
@@ -162,11 +161,15 @@ export function ask(opts) {
       finish(buttons[def >= 0 ? def : 0] ? buttons[def >= 0 ? def : 0].id : cancelId);
       return;
     }
-    // number keys pick an option, but not while typing in the text field
-    if (/^[1-9]$/.test(e.key) && (!field || document.activeElement !== field)) {
-      const idx = Number(e.key) - 1;
-      if (buttons[idx]) { e.preventDefault(); finish(buttons[idx].id); }
-    }
+    // THE NUMBER KEYS ARE GONE (v16.75, the pilot's report: "I can't type a
+    // number in the altitude as it also activates the delete waypoint button").
+    // They were guarded against typing in `field` - the FIRST field - and a
+    // dialog has carried SEVERAL fields since v16.74, so a digit typed into the
+    // altitude box was a digit typed "outside the text field" and picked a
+    // button. Widening the guard was the wrong fix: a dialog that takes typed
+    // values cannot also treat bare digits as commands, and Enter plus Escape
+    // plus clicking are enough. The badges came out with them, because a badge
+    // showing a shortcut that does nothing is worse than no badge.
   }
 
   backdrop.addEventListener('mousedown', (/** @type {MouseEvent} */ e) => { if (e.target === backdrop) finish(cancelId); });

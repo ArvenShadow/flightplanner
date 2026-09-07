@@ -299,7 +299,7 @@
             <li>A via point <b>bends a leg without adding a row</b>. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
             <li><b>Forgot a waypoint in the middle of a route?</b> <b>Right-click the leg line</b> where you want it: it gets its own OFP row with its own altitude, times and fuel, the leg splits in two, and any via points on it stay on the correct half so the flown track does not move. (Clicking empty map adds a waypoint at the END of the route; right-clicking the line is how you get one in the middle.) The new waypoint inherits the altitude, OAT and wind of the waypoint it is inserted before — the leg was already planned to arrive at those, so nothing is invented — and all of it is editable in the row. Its magnetic variation is computed for the new position.</li>
             <li>Climb and descent no longer split legs into separate rows: each leg row shows <b>total</b> distance/time/burn for easy copying, with the CLB/DES portion and TOC/TOD marking distance in the sub-line.</li>
-            <li><b>Drag a climb or descent corner along the track</b> (v16.73). A <b>top</b> (TOC/TOD) is a <b>tick across</b> the track; a <b>bottom</b> (BOC/BOD) is a <b>ring on</b> it. Drag the <b>TOC</b> to say where you want to be level and the planner works the POH climb backwards and places the <b>BOC</b> ring where it has to begin; drag that ring to move the <b>whole climb</b> without changing its length. The descent works the same way from the other end. The climb and descent are never stretched — the POH prices a rate, not a wish — so moving either end moves the manoeuvre. <b>Right-click a mark</b> to open that leg’s panel; a left click still drops a waypoint as anywhere else on the map. Drag a <b>TOC further back than the aircraft can climb</b> and the planner starts the climb on the <b>leg before</b> — it raises that fix to the altitude you pass through, so the two halves are one continuous climb and the altitude column still says what you actually fly. On the <b>first leg</b> there is nothing behind it, so the TOC simply stops at the earliest the POH reaches and tells you. Neither case is an error, so neither raises the red banner.</li>
+            <li><b>Drag a climb or descent corner along the track</b> (v16.73). A <b>top</b> (TOC/TOD) is a <b>tick across</b> the track; a <b>bottom</b> (BOC/BOD) is a <b>ring on</b> it. Drag the <b>TOC</b> to say where you want to be level and the planner works the POH climb backwards and places the <b>BOC</b> ring where it has to begin; drag that ring to move the <b>whole climb</b> without changing its length. The descent works the same way from the other end. The climb and descent are never stretched — the POH prices a rate, not a wish — so moving either end moves the manoeuvre. <b>Right-click a mark</b> to open that leg’s panel; a left click still drops a waypoint as anywhere else on the map. Drag a corner <b>further than the aircraft can manage</b> and the leg simply goes back to the corner the POH puts there, with a note saying why. <b>No altitude you typed is ever changed to make a corner fit</b> (v16.77) — the altitude column is the level you plan to use, not a figure this tool rewrites. Neither outcome is an error, so neither raises the red banner.</li>
             <li><b>Right-click a waypoint</b> to edit its <b>name and altitude in one box</b> — press <b>Enter</b> to apply. The altitude carries forward to every later fix, so you set a whole phase of flight in one go. The <b>destination keeps its own altitude</b> so your descent survives, and <b>circuit stops keep their circuit altitude</b>, which is derived from the field rather than inherited. One Ctrl+Z takes the whole edit back.</li>
             <li><b>TOC and TOD are drawn as a short tick across the track</b>, the way you would mark them on the paper chart, with a small <b>TOC</b> / <b>TOD</b> chip beside it — <b>hover the chip</b> for the full sentence (which altitude, how far from which fix, and for a TOD the aerodrome being descended to). The distances are also in the leg's ↳ sub-line and the plotting list, which is what you copy from and what prints. A descent that fills a whole leg starts <b>at</b> the previous fix, and the mark is drawn there and says so.</li>
             <li>Press <b>👁 View Mode</b> to lock all editing for in-flight use; tapping a map waypoint then highlights its OFP row. The button flips to <b>✏ Edit Mode</b> to switch back.</li>
@@ -362,7 +362,7 @@
             <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service. <b>Both charts need internet</b> — neither is stored on your machine. The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
             <li><b>⬢ Airspace</b> draws the published airspace from <b>AIP Norge</b> — CTR and TIZ solid, TMA and TIA dashed, CTA finely dashed, the mandatory zones (RMZ/TMZ) in orange. <b>Hover any airspace</b> for a card showing its type, ICAO class, published vertical limits, and one row per <b>position</b> you would actually call — <b>ATIS, Approach, Tower</b>, or <b>Information</b> at an AFIS field. <b>A row is a position, not a service type</b>: Gardermoen publishes four approach positions (Final, Director, and Oslo Approach working TMA sectors E and W), so it gets a row each with its own frequency, rather than one row of six numbers you cannot attribute. Where a field publishes an arrival and a departure ATIS you get one row each. Nothing is drawn below zoom 7: at country zoom the polygons bury the chart you are trying to read. Clicking still adds a waypoint, so route building inside a TMA is unaffected — the information is on hover only. The choice is remembered with your settings.</li>
             <li><b>Right-click the track</b> for that leg's settings: the altitude it is crossed at, and <b>where its climb and descent sit</b>. Three corners are yours to name — <b>start the climb</b> N&nbsp;NM after the fix (hold your current altitude, then go up), <b>be level by</b> N&nbsp;NM after it (which sets the start of the climb for you), and <b>level off</b> N&nbsp;NM before the next fix (get down early, then run in level). Both are pure geometry: the climb and descent are unchanged, they just move, so they are always flyable. The <b>Here</b> buttons turn the spot you right-clicked into the number. A live preview shows the leg's time, fuel and where each corner lands before you apply anything, and the pinned corners are drawn on the map as <b>BOC</b> and <b>BOD</b> marks beside the usual TOC and TOD. Right-clicking used to insert a waypoint outright; that is now the first action <i>in</i> the panel, at the exact point you clicked, so nothing was lost.</li>
-            <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it tells you <b>what altitude the previous fix would have to be crossed at</b> — always a <b>whole hundred feet</b>, rounded <i>up</i>, because the figure is a minimum and the nearest hundred would be below it half the time — with a button to set it — because that keeps the altitude column honest about what is actually flown where, instead of the schedule quietly doing something the column denies. Taking it gives you <b>one continuous climb</b>: the earlier leg's climb is delayed so it tops out exactly on that fix and runs straight on, rather than levelling off there and climbing again. The rounding buys you a little height, so you top out slightly <i>before</i> the distance you asked for rather than exactly on it — "be level by" is a deadline, and early is safe. Every such suggestion is <b>tried before it is offered</b>: raising a fix also changes the leg before it, and if those earlier legs cannot climb that high by then, the panel says so rather than giving advice that does not work. On the very first leg there is no earlier fix to raise — you cannot climb before takeoff — so there the only honest answer is the rate it would need, and you get it. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is likewise <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
+            <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it <b>says so, and changes nothing</b> — you get the rate it would have needed, as a figure to judge, and the climb stays exactly where the POH puts it. <b>No altitude you entered is ever rewritten to make a corner fit</b>: until v16.76 the panel offered to raise the previous fix for you, and that offer is gone, because the altitude column is the level you plan to use rather than a promise about your exact height at a point. Move the target later, or raise the fix yourself — both are one edit. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
             <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
             <li><b>Skins — the same planner, arranged differently.</b> <b>Settings → 🗺 Map → Look</b> offers <b>Default</b> (the shipped design), <b>Menu</b> (the plan collapses to a narrow rail and opens when you hover or tab into it, giving the map the whole window), <b>Compact</b> (smaller type and tighter rows for a 13&quot; laptop) and <b>Bold</b> (larger hit targets and heavier type for a touchscreen). A skin is <b>appearance only</b>: it never changes what a button does. Most of it is pure CSS; a skin may also <b>move a control into another panel</b> (Menu puts Undo, Redo and Settings on the map, since the plan is collapsed) — and that moves the <i>same</i> button, handler and all, then puts it back exactly where it came from when you switch away. It is a standing preference, and it travels in your exported settings; the <b>layout</b> selector in the header is a separate, per-session choice and still wins.</li>
@@ -497,7 +497,8 @@
           <div class="setting-row">
             <label title="Hold the current altitude, then climb">Start the climb:</label>
             <div style="display:flex; gap:6px; align-items:center;">
-              <input type="number" id="leg-boc" step="0.5" min="0" style="width:80px;" oninput="updateLegPreview()">
+              <input type="number" id="leg-boc" step="0.5" min="0" style="width:80px;" readonly
+                     title="Derived: where the climb has to begin to be level by your target. Set the target below.">
               <span style="font-size:10px;">NM after <b id="leg-from-name2">the fix</b></span>
               <button class="btn btn-outline btn-sm" id="leg-boc-here" onclick="pinLegHere('boc')">Here</button>
               <span id="leg-boc-note" style="display:none; font-size:9px; color:var(--text-muted);">set by your target below</span>
@@ -1055,7 +1056,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 133 inline on*= handlers - 103 written
+    // map, markers, undoStack...) plus 132 inline on*= handlers - 102 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1280,7 +1281,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.74';
+    const APP_VERSION = '16.77';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3314,89 +3315,161 @@
     }
 
     /**
-     * A TOC dropped where the POH climb cannot reach it (v16.74).
+     * The integrity problems a candidate plan would ADD (v16.75).
      *
-     * THE BOC IS ALLOWED TO CROSS THE LEG BOUNDARY - by the ONE mechanism that
-     * keeps the altitude column honest. Simply starting the climb on the
-     * previous leg would make the shared fix be crossed at an altitude the
-     * column denies, which is the flaw CLAUDE.md refuses (and which the
-     * descent's own spill-back still has). Instead the planner raises the
-     * PREVIOUS fix to the altitude the climb has to pass through, and pins that
-     * leg's own climb to finish exactly on the fix - so the two halves are one
-     * continuous climb and every stated altitude is still what is flown. That
-     * machinery is v16.38-v16.40's, already verified by running the real engine
-     * on a copy; this only reaches for it automatically instead of putting a
-     * red banner up and waiting to be asked.
+     * A DRAG MUST NEVER COMMIT A PLAN THE APP ITSELF CALLS UNUSABLE. The sweep
+     * found it on a plan whose last leg is 3.6 NM: delaying the climb on the
+     * leg before pushes it into the tail the descent needs, so two reasonable
+     * requests contradict and the red banner appeared AFTER a gesture. A pin is
+     * a request; where it cannot be honoured the answer is to refuse it and say
+     * why, exactly as a refused BOD already does - not to accept it and then
+     * tell the pilot the figures are unusable.
      *
-     * WHERE THERE IS NO EARLIER FIX - the first leg, because you cannot climb
-     * before takeoff - the TOC is CLAMPED to the earliest the POH can reach and
-     * a toast says so. That is a valid plan, so it gets no banner.
+     * PROBLEMS THAT WERE ALREADY THERE ARE NOT THE DRAG'S FAULT, so only what
+     * the candidate ADDS counts. `signals` are the three read from what was
+     * RENDERED (a NaN in the table, an invalid daylight time, negative fuel
+     * remaining); a pin cannot change them, so both sides are measured without
+     * them and the comparison stays honest.
+     *
+     * @param {any[]} candidate the whole flights array, with one flight replaced
+     * @returns {string[]} problems present in the candidate and not now
      */
-    function settleTocDrag(fIdx, legIdx, wantNM) {
+    function addedProblems(candidate) {
+      const now = collectIntegrityProblems(flights, {});
+      const then = collectIntegrityProblems(candidate, {});
+      return then.filter((p) => !now.includes(p));
+    }
+
+    /** `flights` with one flight swapped for a modified copy. */
+    function flightsWith(fIdx, fl) {
+      return flights.map((f, i) => (i === fIdx ? fl : f));
+    }
+
+    /**
+     * A corner dropped where the POH manoeuvre cannot reach it (v16.74,
+     * simplified at v16.77).
+     *
+     * TWO OUTCOMES, AND NEITHER TOUCHES AN ALTITUDE THE PILOT TYPED. Either the
+     * target fits and is applied, or it does not and the leg goes back to the
+     * corner the POH puts there - with a toast saying why.
+     *
+     * v16.74 had a third: it carried an unreachable climb onto the leg before
+     * by RAISING that fix to the altitude the climb passes through (and cached
+     * the pilot's figure in altBase so the raises could be walked back). That
+     * kept the altitude column literally true, which was the argument for it.
+     * The pilot's answer retired it: "the planned altitude on my OFP isnt
+     * really a super restricting value. I set what altitude i plan on using,
+     * not the exact altitude i will have at that point... Id prefer the Climb
+     * and descent doesnt really fuck with the altitudes that much. Just a
+     * simple 'climb here, descend there'." A number they wrote is theirs.
+     *
+     * Both outcomes are valid plans, so neither raises the red banner.
+     */
+    function settleTargetDrag(fIdx, legIdx, wantNM) {
       const fl = flights[fIdx];
       const to = fl && fl.waypoints[legIdx + 1];
       if (!to) { refreshMap(); return; }
-      const trial = (mutate) => {
-        // EVERY TRIAL RUNS THE REAL ENGINE ON A COPY, so what is offered and
-        // what is applied cannot disagree - the v16.35 preview rule.
+      const from = fl.waypoints[legIdx];
+      const unit = aircraftProfile.distUnit || 'NM';
+
+      /** One candidate plan: a copy of the flight with `mutate` applied, its
+       *  schedule, and the integrity problems it would ADD. Every trial runs
+       *  the real engine on a copy, so what is offered and what is applied
+       *  cannot disagree - the v16.35 preview rule. */
+      const build = (mutate) => {
         const copy = JSON.parse(JSON.stringify(fl));
         mutate(copy);
-        return { copy, sched: computeFlightSchedule(copy) };
+        return { copy, sched: computeFlightSchedule(copy), added: addedProblems(flightsWith(fIdx, copy)) };
       };
-      const wanted = trial((c) => { c.waypoints[legIdx + 1].tocNM = wantNM; c.waypoints[legIdx + 1].bocNM = null; });
-      const L = wanted.sched[legIdx];
-      pushUndoState('move the TOC');
-      // 1. It fits. Nothing else to decide.
-      if (wantNM === null || !L || L.tocTargetNM == null || L.tocTargetMet !== false) {
-        to.tocNM = wantNM;
-        to.bocNM = null;
-        commitProfileEdit();
+      // ONE FIELD, and the legacy pins are cleared with it so an old route
+      // file cannot shadow the new target once the pilot has dragged anything.
+      const pinOnly = (c) => {
+        const w = c.waypoints[legIdx + 1];
+        w.altAtNM = wantNM;
+        w.tocNM = null; w.bocNM = null; w.bodNM = null;
+      };
+
+      // CANDIDATE 1: exactly what was asked for.
+      const asked = build(pinOnly);
+      const L = asked.sched[legIdx];
+      // WHETHER THE TARGET WAS HONOURED IS ASKED PER PHASE. `tocTargetNM` and
+      // `tocTargetMet` only exist on a CLIMB; on a descent the engine applies
+      // the target through `bodPinNM` and says so with `bodRefused`. Consulting
+      // only the climb flags made every DESCENT drop look unachievable, so it
+      // fell through to "clear the target" and no BOD could ever be placed -
+      // caught by verify:leg, which drags both.
+      const fits = wantNM !== null && !!L && (
+        L.tocTargetNM != null ? L.tocTargetMet !== false
+        : L.descDistNM > 0.05 ? !L.bodRefused
+        : false);
+      if (wantNM !== null && fits && !asked.added.length) {
+        commitFlightCopy(fIdx, asked.copy, 'move the TOC');
         return;
       }
-      // 2. An earlier fix can carry the climb. Take the offer the engine has
-      //    already verified, and say what it did - it changes an altitude the
-      //    pilot set, so it must never be silent.
-      const from = fl.waypoints[legIdx];
-      if (legIdx > 0 && L.tocNeedsEntryAlt !== null && from) {
-        to.tocNM = wantNM;
-        to.bocNM = null;
-        from.alt = L.tocNeedsEntryAlt;
-        if (L.tocAdviceLevelByNM) from.tocNM = L.tocAdviceLevelByNM;
-        if (legIdx === 0) fl.depElev = L.tocNeedsEntryAlt;
-        commitProfileEdit();
-        say('Climb begins on the leg before \u2014 ' + from.name + ' is now crossed at ' +
-            L.tocNeedsEntryAlt + ' ft, in one continuous climb.', 'info', 5000);
+
+      // THERE IS NO CANDIDATE 2 ANY MORE, and that is the pilot's call
+      // (v16.77): "the planned altitude on my OFP isn't really a super
+      // restricting value... I'd prefer the climb and descent doesn't really
+      // fuck with the altitudes that much. Just a simple climb here, descend
+      // there."
+      //
+      // v16.74 carried an unreachable climb onto the leg before by RAISING that
+      // fix, which kept the altitude column literally true - but the column is
+      // a PLAN, not a promise about the exact height at a point, and rewriting
+      // a number the pilot typed to satisfy a corner they dragged is the tool
+      // arguing with them. It also brought the altBase/tocBase cache, and the
+      // compounding it existed to undo. Two outcomes now: it fits, or it does
+      // not and the corner goes back to where the POH puts it.
+
+      // CANDIDATE 3: NO PIN AT ALL. With nothing pinned the climb starts at this
+      // leg's first fix, so its natural TOC IS the earliest one reachable - and
+      // clearing is strictly better than clamping to it. A clamp lands a
+      // fraction of a mile in and the engine then derives a BOC there, so the
+      // pilot got a spurious ring a hundred metres past the departure (v16.75,
+      // the pilot's second report). With no pin, no BOC is drawn at all, which
+      // is the truth: the bottom of the climb IS the fix.
+      const bare = build((c) => {
+        const w = c.waypoints[legIdx + 1];
+        w.altAtNM = null; w.tocNM = null; w.bocNM = null; w.bodNM = null;
+      });
+      // CANDIDATE 3 IS THE LAST RESORT AND IS NEVER REFUSED, because it is the
+      // pilot's OWN plan: no pin on this leg, and every cached altitude given
+      // back. It cannot be worse than what they typed. Refusing it is what
+      // stranded a fix at an altitude they never asked for with no way to drag
+      // it back down - found by the sweep on a plan that was ALREADY unflyable
+      // before anything was dragged, where every candidate "added" a problem
+      // relative to the raised state rather than to the pilot's own.
+      commitFlightCopy(fIdx, bare.copy, 'move the TOC');
+      const natural = bare.sched[legIdx] && bare.sched[legIdx].tocAlongNM;
+      if (wantNM === null) return;      // dragged to the fix itself: nothing to say
+      if (bare.added.length) {
+        // Putting it back re-exposes something the pilot's OWN altitudes cause.
+        // Say that plainly rather than letting it read as the drag's fault.
+        say('That TOC does not fit this plan, so the leg is back as you had it. ' +
+            bare.added[0], 'warn', 6500);
         return;
       }
-      // 3. Nothing helps: clamp to the earliest the POH can reach and say so.
-      //    The unpinned climb starts at this leg's first fix, so its TOC IS the
-      //    earliest possible one.
-      const bare = trial((c) => { c.waypoints[legIdx + 1].tocNM = null; c.waypoints[legIdx + 1].bocNM = null; });
-      const earliest = bare.sched[legIdx] && bare.sched[legIdx].tocAlongNM;
-      const unit = aircraftProfile.distUnit || 'NM';
-      if (earliest !== null && earliest !== undefined && isFinite(earliest)) {
-        // IT ROUNDS UP, NEVER TO THE NEAREST, and that is not tidiness - it is
-        // the same rule v16.40 states for the crossing altitude. The figure is
-        // a MINIMUM, so the nearest tenth is BELOW it half the time, and a
-        // clamp that lands 0.004 NM early misses the very target it was
-        // computed to meet and puts the red banner straight back up.
-        to.tocNM = Math.ceil(earliest * 10) / 10;
-        to.bocNM = null;
-        commitProfileEdit();
-        // THE NUMBER IN THE NOTE IS WHERE THE MARK ACTUALLY LANDED, not the raw
-        // figure it was derived from - they differ by the rounding, and a note
-        // that disagrees with the chart is the drift this project keeps naming.
-        say('The TOC cannot go further back \u2014 climbing from ' + (from ? from.name : 'the start') +
-            ' takes ' + convertDist(to.tocNM, unit).toFixed(1) + ' ' + distLabel(unit) +
-            ' at the POH rate.', 'warn', 5000);
-      } else {
-        // The climb does not finish on this leg at all, so there is no corner
-        // here to pin. Clearing is the truthful answer.
-        to.tocNM = null;
-        to.bocNM = null;
-        commitProfileEdit();
-        say('The climb does not top out on this leg, so there is no TOC here to move.', 'warn', 5000);
-      }
+      // `Number.isFinite`, NOT the global `isFinite`: the global coerces, so
+      // `isFinite(null)` is TRUE (Number(null) is 0) and a descent leg's null
+      // TOC went down the numeric branch and threw on `.toFixed`. The same
+      // null-versus-finite trap this file already names, in a new place.
+      const climbs = !!bare.sched[legIdx] && bare.sched[legIdx].climbDistNM > 0.05;
+      say(Number.isFinite(natural)
+        ? (climbs
+            ? 'The TOC cannot go further back \u2014 climbing from ' +
+              (from ? from.name : 'the start') + ' takes '
+            : 'That corner cannot move further \u2014 the manoeuvre takes ') +
+          convertDist(natural, unit).toFixed(1) + ' ' + distLabel(unit) + ' at the POH rate.'
+        : 'That manoeuvre does not fit on this leg, so there is no corner here to move.',
+        'warn', 5000);
+    }
+
+    /** Swap a verified copy in as the live flight, as ONE undo step. */
+    function commitFlightCopy(fIdx, copy, label) {
+      pushUndoState(label);
+      flights[fIdx] = copy;
+      if (copy.waypoints[0] && isFinite(copy.waypoints[0].alt)) copy.depElev = copy.waypoints[0].alt;
+      commitProfileEdit();
     }
 
     function commitProfileEdit() {
@@ -3409,29 +3482,43 @@
      *  already live. @param {any} d */
     function applyProfileDrop(d) {
       const fl = flights[d.fIdx];
-      const to = fl && fl.waypoints[d.legIdx + 1];
-      if (!to) { refreshMap(); return; }
+      if (!fl || !fl.waypoints[d.legIdx + 1]) { refreshMap(); return; }
       const SL = d.SL;
       const D = SL.distNM;
       const at = d.dropNM;
       const round = (v) => Math.round(v * 10) / 10;   // a tenth of a mile, as the OFP prints
       // A TOC DRAGGED FURTHER BACK THAN THE POH CAN CLIMB IS NOT AN ERROR
-      // (v16.74, the pilot's report: "when moving the TOC backwards it
-      // automatically resets, the red integrity banner appears"). It is a
-      // request the planner can usually GRANT by starting the climb on the leg
-      // before - and where it cannot, the honest answer is a clamp and a note,
-      // not a banner that says the plan is unusable.
-      if (d.kind === 'TOC') { settleTocDrag(d.fIdx, d.legIdx, at > 0.05 ? round(at) : null); return; }
-      pushUndoState('move the ' + d.kind);
+      // (v16.74). It has its own settler, which can carry the climb onto the leg
+      // before or fall back to no pin at all.
+      // ONE FIELD FOR ALL FOUR MARKS (v16.76). Every drop is the same question -
+      // where must this leg's altitude be attained - and the four kinds differ
+      // only in which END of the manoeuvre the pilot grabbed. The manoeuvre
+      // keeps its POH length, so grabbing the BOTTOM means the target sits one
+      // manoeuvre-length further on.
+      //
+      // This is what replaced the three pins: there is no longer a BOC that can
+      // contradict a TOC, so there are no rules about which wins.
+      const climbLen = isFinite(SL.climbDistNM) ? SL.climbDistNM : 0;
+      const descLen = isFinite(SL.descDistNM) ? SL.descDistNM : 0;
+      const attain = d.kind === 'TOC' ? at
+        : d.kind === 'BOC' ? at + climbLen
+        : d.kind === 'BOD' ? at
+        : at + descLen;                       // TOD
+      settleTargetDrag(d.fIdx, d.legIdx, attain > 0.05 ? round(Math.min(attain, D)) : null);
+      return;
+      // A DROP IS TRIED BEFORE IT IS COMMITTED, exactly like the TOC (v16.75).
+      // The sweep found drags that turned a clean plan into one the app itself
+      // calls unusable; a pin is a REQUEST, and one that cannot be honoured is
+      // refused with a reason rather than accepted and then reported as
+      // DO NOT USE THESE FIGURES.
+      const copy = JSON.parse(JSON.stringify(fl));
+      const to = copy.waypoints[d.legIdx + 1];
       if (d.kind === 'BOC') {
         // A POSITION AND A DEADLINE CANNOT BOTH BE THE TRUTH. Setting one
         // clears the other, so the leg never carries two answers for where the
         // climb begins - which the engine would report as contradicting.
         to.bocNM = at > 0.05 ? round(at) : null;
         to.tocNM = null;
-      } else if (d.kind === 'TOC') {
-        to.tocNM = at > 0.05 ? round(at) : null;
-        to.bocNM = null;
       } else if (d.kind === 'BOD') {
         const tail = D - at;
         to.bodNM = tail > 0.05 ? round(tail) : null;
@@ -3444,9 +3531,13 @@
         const tail = (SL.bodTailNM || 0) - (at - todWas);
         to.bodNM = tail > 0.05 ? round(tail) : null;
       }
-      refreshMap();
-      renderAllFlightTables();
-      saveActiveState();
+      const added = addedProblems(flightsWith(d.fIdx, copy));
+      if (added.length) {
+        refreshMap();
+        say('That ' + d.kind + ' does not fit this plan \u2014 nothing was changed. ' + added[0], 'warn', 6000);
+        return;
+      }
+      commitFlightCopy(d.fIdx, copy, 'move the ' + d.kind);
     }
 
     /** Right-click a waypoint: rename it and set its altitude in ONE dialog,
@@ -4773,9 +4864,9 @@
     // backwards from the top at the profile's own rate - see climbStartForToc
     // in src/lib/legs.js. Nothing steeper than the POH tables is invented; only
     // the climb's position moves. When it cannot fit even from the leg's first
-    // fix, applySuggestedEntryAlt offers the crossing altitude the previous fix
-    // needs AND delays that leg's climb, so the result is ONE continuous climb
-    // through the fix rather than two with a level stretch between (v16.39).
+    // fix, that is SAID and nothing is changed: v16.77 removed the offer to
+    // raise the previous fix, because an altitude on the OFP is the pilot's
+    // plan, not a figure the planner may rewrite to make a corner fit.
     //
     // The panel remembers WHERE on the leg you right-clicked, so "Here" turns
     // the gesture into the number. That is the whole reason the pin is easier
@@ -4805,8 +4896,11 @@
       for (const id of ['leg-from-name2', 'leg-from-name3']) document.getElementById(id).textContent = from.name;
       document.getElementById('leg-alt').value = String(to.alt);
       document.getElementById('leg-boc').value = to.bocNM ? String(to.bocNM) : '';
+      // SHOWN AS AN ATTAIN-BY, whichever box the pilot last used. One field,
+      // read back into the box that matches the leg's phase.
       document.getElementById('leg-bod').value = to.bodNM ? String(to.bodNM) : '';
-      document.getElementById('leg-toc').value = to.tocNM ? String(to.tocNM) : '';
+      document.getElementById('leg-toc').value =
+        to.altAtNM ? String(to.altAtNM) : (to.tocNM ? String(to.tocNM) : '');
       document.getElementById('leg-hint').textContent =
         'The leg is ' + along.totalNM.toFixed(1) + ' NM along the flown path. You right-clicked ' +
         along.alongNM.toFixed(1) + ' NM after ' + from.name + ' (' +
@@ -4827,7 +4921,15 @@
     function pinLegHere(which) {
       if (!legPanel) return;
       const after = legPanel.alongNM, before = legPanel.totalNM - legPanel.alongNM;
-      if (which === 'boc') document.getElementById('leg-boc').value = after.toFixed(1);
+      // "START THE CLIMB HERE" IS THE SAME TARGET, one climb-length further on
+      // (v16.76). The BOC box is a derived display, so the request goes into the
+      // one attain-by field like every other way of asking for a corner.
+      if (which === 'boc') {
+        const SLh = computeFlightSchedule(flights[legPanel.fIdx])[legPanel.legEnd - 1];
+        const climbLen = SLh && isFinite(SLh.climbDistNM) ? SLh.climbDistNM : 0;
+        document.getElementById('leg-toc').value =
+          Math.min(after + climbLen, legPanel.totalNM).toFixed(1);
+      }
       if (which === 'toc') document.getElementById('leg-toc').value = after.toFixed(1);
       if (which === 'bod') document.getElementById('leg-bod').value = before.toFixed(1);
       updateLegPreview();
@@ -4864,13 +4966,6 @@
      * also where an unmet target or a refused pin is shown before the pilot
      * commits, rather than only afterwards in the red banner.
      */
-    /** Name of the fix one before the leg's start fix - where the continuous
-     *  climb offered by the "cross this fix at" advice actually begins. */
-    function prevFixName(S) {
-      const w = flights[legPanel.fIdx].waypoints[S.i - 1];
-      return w ? w.name : 'the previous fix';
-    }
-
     function updateLegPreview() {
       const host = document.getElementById('leg-preview');
       if (!host || !legPanel) return;
@@ -4909,37 +5004,21 @@
       }
       let warn = '';
       if (S.tocTargetNM != null && !S.tocTargetMet) {
-        // The target could not be met even climbing from this leg's first fix.
-        // Offer the change that WOULD work rather than a rate to admire.
-        if (S.tocNeedsEntryAlt !== null) {
-          legPanel.suggestAlt = S.tocNeedsEntryAlt;
-          legPanel.suggestLevelByNM = S.tocAdviceLevelByNM;
-          warn += '<div class="leg-warn">The climb would have to begin before ' + esc(S.from.name) +
-            '. Cross ' + esc(S.from.name) + ' at <b>' + S.tocNeedsEntryAlt + ' ft</b> instead of ' +
-            Math.round(S.entryAlt) + ' ft and it fits' +
-            (S.tocAdviceClimbFromNM !== null
-              ? ' \u2014 one continuous climb, starting ' + f(S.tocAdviceClimbFromNM) +
-                ' NM after ' + esc(prevFixName(S)) + ' and passing ' + esc(S.from.name) +
-                ' on the way up'
-              : '') +
-            ' \u2014 ' +
-            '<button class="btn btn-outline btn-sm" style="padding:1px 6px; font-size:10px;" ' +
-            'onclick="applySuggestedEntryAlt()">Do that</button></div>';
-        } else {
-          legPanel.suggestAlt = null;
-          legPanel.suggestLevelByNM = null;
-          warn += '<div class="leg-warn">The climb would have to begin before ' + esc(S.from.name) +
-            (S.tocNoAltHelps
-              ? ', and crossing ' + esc(S.from.name) + ' higher does not help either \u2014 the earlier ' +
-                'legs cannot climb that high by then'
-              : ', and there is no earlier leg to start it on') +
-            (S.climbRateReqFpm ? ' \u2014 reaching it from ' + esc(S.from.name) + ' would need about ' +
-              S.climbRateReqFpm + ' ft/min' : '') +
-            '. Nothing steeper than your profile is ever invented.</div>';
-        }
-      } else {
-        legPanel.suggestAlt = null;
-        legPanel.suggestLevelByNM = null;
+        // REPORT ONLY (v16.77). This used to offer to RAISE the previous fix -
+        // "cross MID at 6800 ft instead of 2500" - and then rewrite the
+        // altitude the pilot had typed. Their call: "I set what altitude i plan
+        // on using, not the exact altitude i will have at that point... Id
+        // prefer the Climb and descent doesnt really fuck with the altitudes
+        // that much." So an unreachable target is stated and NOTHING is changed
+        // on their behalf. Moving the target, or raising the fix, is theirs.
+        warn += '<div class="leg-warn">The climb cannot be level at ' +
+          Math.round(Number(S.to.alt)) + ' ft by ' + f(S.tocTargetNM) + ' NM \u2014 it ' +
+          'would have to begin before ' + esc(S.from.name) +
+          (S.climbRateReqFpm ? ', or need about ' + S.climbRateReqFpm +
+            ' ft/min from there' : '') +
+          '. Nothing steeper than your profile is ever invented, and no altitude ' +
+          'you typed is changed \u2014 move the target later, or raise ' +
+          esc(S.from.name) + ' yourself.</div>';
       }
       if (S.bodRefused) {
         warn += '<div class="leg-warn">Cannot be level ' + f(S.bodPinNM) + ' NM before ' + esc(S.to.name) +
@@ -4952,43 +5031,6 @@
       host.innerHTML = rows.map((r) =>
         '<div class="lp-row"><span class="lp-k">' + esc(r[0]) + '</span><span class="lp-v">' + esc(r[1]) + '</span></div>'
       ).join('') + warn;
-    }
-
-    /**
-     * Raise the leg's START fix to the altitude that makes the "be level by"
-     * target reachable at the profile's own climb rate.
-     *
-     * This is the honest way to grant the request: the altitude column stays
-     * the single source of truth for what is crossed where, so after this the
-     * fix's stated altitude, every leg's numbers and the target all agree -
-     * rather than the schedule quietly flying something the column denies.
-     */
-    function applySuggestedEntryAlt() {
-      if (!legPanel || !legPanel.suggestAlt) return;
-      const fl = flights[legPanel.fIdx];
-      const from = fl.waypoints[legPanel.legEnd - 1];
-      if (!from) return;
-      pushUndoState('raise the crossing altitude');
-      from.alt = legPanel.suggestAlt;
-      // AND DELAY THE EARLIER LEG'S CLIMB so the two halves are ONE climb
-      // (v16.39). Raising the fix alone tops the earlier leg out early and holds
-      // the new altitude all the way to the fix, which is two climbs with a
-      // level stretch between them - not what "be level by" asked for. A "be
-      // level by" pin at the earlier leg's full length moves that same climb
-      // (same minutes, same fuel, same TAS) to the end of the leg, where it runs
-      // straight on into this one. The figure comes from the trial that verified
-      // the advice, so this cannot apply something the offer did not describe.
-      if (legPanel.suggestLevelByNM) from.tocNM = legPanel.suggestLevelByNM;
-      // The first waypoint's altitude IS the departure elevation; keep them in
-      // step exactly as setFlightDepElevation does.
-      if (legPanel.legEnd - 1 === 0) fl.depElev = legPanel.suggestAlt;
-      refreshMap();
-      renderAllFlightTables();
-      saveActiveState();
-      updateLegPreview();
-      say('Cross ' + from.name + ' at ' + legPanel.suggestAlt + ' ft' +
-          (legPanel.suggestLevelByNM ? ', climbing through it in one continuous climb.' : '.'),
-          'info', 4500);
     }
 
     function clearLegPins() {
@@ -5008,9 +5050,34 @@
       if (isFinite(form.alt)) to.alt = form.alt;
       // Stored as null rather than 0 when cleared, so a saved route carries no
       // pin at all and reads identically to one made before pins existed.
-      to.bocNM = form.bocNM;
-      to.bodNM = form.bodNM;
-      to.tocNM = form.tocNM;
+      // THE PANEL WRITES THE SAME ONE FIELD THE DRAG DOES (v16.76). It still
+      // shows three boxes, because a pilot who thinks in "hold for 12 NM" should
+      // be able to type that - but all three mean one thing, so they are folded
+      // into the single attain-by target here. LEAVING THE PANEL ON THE LEGACY
+      // PINS WOULD HAVE SHIPPED A REAL BUG: `legTarget` prefers `altAtNM`, so a
+      // leg that had been dragged would silently IGNORE anything typed here.
+      const SLp = computeFlightSchedule(fl)[legPanel.legEnd - 1];
+      const climbLen = SLp && isFinite(SLp.climbDistNM) ? SLp.climbDistNM : 0;
+      const descLen = SLp && isFinite(SLp.descDistNM) ? SLp.descDistNM : 0;
+      const legLen = SLp && isFinite(SLp.distNM) ? SLp.distNM : 0;
+      // THE BOC BOX IS A DERIVED DISPLAY, NOT AN INPUT (v16.38 made it one), so
+      // it must never be read back as the target. `updateLegPreview` writes the
+      // computed climb start into it - reading that as input fed the derived
+      // value straight back in, and a "clear" then re-applied a target one
+      // climb-length short of the one it had just removed. Caught by the
+      // clear-the-pins test.
+      let attain = null;
+      if (form.tocNM != null) attain = form.tocNM;                       // be level by here
+      else if (form.bodNM != null) attain = Math.max(0, legLen - form.bodNM);
+      void climbLen;
+      to.altAtNM = attain != null && attain > 0.05
+        ? Math.round(Math.min(attain, legLen || attain) * 10) / 10
+        : null;
+      // The legacy pins are cleared so there is exactly one answer on the leg.
+      to.bocNM = null;
+      to.bodNM = null;
+      to.tocNM = null;
+      void descLen;
       closeLegModal();
       refreshMap();
       renderAllFlightTables();

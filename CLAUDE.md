@@ -1379,6 +1379,15 @@ is forgotten.
    backwards rather than adding a second place where the altitude column lies.
    Fixing it means deciding what an OFP row should say when the plan is only
    flyable by crossing a fix off its stated altitude.
+   - **STILL OPEN AT v16.77, AND STILL WORTH SAYING PLAINLY.** v16.77 removed
+     everything that CHANGED a stated altitude; it did nothing to make a spilled
+     descent's stated altitudes true. What it did change is the priority: the
+     pilot's own reading is that "the planned altitude on my OFP isnt really a
+     super restricting value... not the exact altitude i will have at that
+     point", so a plan figure differing from the flown height is a nit rather
+     than the accuracy failure it looked like. Measured live at v16.76:
+     `ENDU 254 -> A 8000 -> ENTC 2000` (72.3 / 18.1 NM) crosses A at ~6 525 ft
+     while the column says 8 000, with no banner.
 2. **SPLITTING A PINNED LEG LEAVES THE PIN ON THE SECOND HALF, MEASURED FROM A
    NEW FIX.** `insertWaypointOnLeg` copies alt/OAT/wind from the waypoint it
    inserts before (correct) but does not touch `bocNM`/`bodNM`/`tocNM`.
@@ -2023,6 +2032,253 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## THE ALTITUDE COLUMN IS THE PILOT'S, AND NOTHING REWRITES IT (v16.77)
+
+The pilot, on the v16.74/v16.75 carry-back that had just been built for them:
+*"TBH, the planned altitude on my OFP isnt really a super restricting value. I
+set what altitude i plan on using, not the exact altitude i will have at that
+point, thats more nitpicky and detail than a flight school vfr plan requires. Id
+prefer the Climb and descent doesnt really fuck with the altitudes that much.
+Just a simple 'climb here, descend there'."*
+
+**THIS REVERSES A FEATURE REQUESTED TWO TURNS EARLIER, and it is recorded as a
+reversal rather than a refinement.** v16.74 was asked for in these words: *"Even
+if there is a leg behind it, id like the BOC to move across the legs."* It was
+built the only way that keeps the altitude column literally true - by RAISING
+the earlier fix to the altitude the climb passes through - and v16.75 then added
+the `altBase`/`tocBase` cache so the raises could be walked back instead of
+compounding. Both were correct implementations of the request. What the pilot
+saw when they flew it was the tool arguing with a number they had typed.
+
+### WHAT CAME OUT, AND WHAT REPLACED IT
+
+The engine's whole advice-and-repair layer is gone, not disabled:
+
+- `entryAltForClimbBy` (the bisection that computed the crossing altitude),
+  `tocNeedsEntryAlt`, `tocNoAltHelps`, `tocAdviceLevelByNM`,
+  `tocAdviceClimbFromNM`, and the `verifyAdvice` recursion - the only reason
+  `computeFlightSchedule` ever called itself. The `opts` parameter went with it.
+- The panel's `applySuggestedEntryAlt` and its "Do that" button, and the
+  drag's CANDIDATE 2 (the carry-back).
+- `altBase`/`tocBase` from the sanitiser, the types and the route file. They
+  existed ONLY to undo the raising; with nothing raising a fix there is nothing
+  to cache, and a cache with no writer is a field a future reader can misread.
+
+**WHAT IS KEPT IS EVERYTHING THAT ONLY REPORTS.** `tocTargetMet` and
+`climbRateReqFpm` stay: the first says the request was not honoured, the second
+is a rate to JUDGE and is never used to recompute a climb. So an unreachable
+target now has exactly one outcome on every surface - the panel, the red banner
+and the toast all say what could not be done and name the rate - and the leg's
+climb is bit-identical to the same leg with no target at all.
+
+**TWO OUTCOMES REMAIN FOR A DRAG**: it fits, or the leg goes back to the corner
+the POH puts there. Both are flyable plans, so neither raises the banner.
+
+### THE INVARIANT, AND WHY IT IS ABSOLUTE AND NOT A ROUND TRIP
+
+*A drag, a pin or a target never changes an altitude the pilot typed.*
+
+- `sweep-drag.mjs` asserted this as a RATCHET check - drag it back and the
+  altitudes must return. v16.74 and v16.75 both PASSED that check, because the
+  cache gave the figure back. Restoring what you took is a weaker promise than
+  never taking it, so the sweep now compares the altitudes after EVERY drop
+  against the ones the plan started with.
+- The pure sweep that used to verify the advice (3 000 generated routes) now
+  verifies its absence: for every unmet target, the waypoints come back exactly
+  as they went in and the climb minutes equal the same leg with no target.
+  Measured: 900 targets met, 1 373 unreachable, 0 rewrote an altitude, 0 changed
+  a climb.
+- `verify:leg` no longer looks for the offer button; it asserts the report
+  carries the rate AND the sentence "no altitude you typed is changed", that no
+  button is present, and that MID still reads 2 500 ft after a preview, after
+  Apply, and after a real mouse drag on the later leg.
+- **PROVED LOAD-BEARING BY MUTATION**, because a guard nobody has seen fail is
+  not known to guard anything. Making the no-pin fallback raise the previous fix
+  by 100 ft fails two jsdom tests by name (0 `error TS` lines - not the
+  typechecker trap) and produces **87 sweep problems**, of which the new
+  `ALTITUDE` finding is the one the old round-trip check could not see.
+
+### WHAT THIS DOES **NOT** FIX, and it must not be read as fixing it
+
+Deferred nit 1 is untouched: a descent that spills back onto an earlier leg
+still REPORTS that leg's planned exit altitude rather than the one actually
+crossed (measured live: `ENDU 254 -> A 8000 -> ENTC 2000`, A crossed at ~6 525
+ft while the column says 8 000). v16.77 removes the machinery that CHANGED an
+altitude; it does not make the spilled descent's stated altitudes true. The
+pilot's message is also the reason that is now low priority rather than urgent -
+the column is a plan, not a promise about a height at a point - but the entry
+stays on the deferred list because a stated figure that is not flown is still
+worth being honest about.
+
+## ONE TARGET PER LEG, AND THE CORNERS ARE DERIVED (v16.76)
+
+The pilot asked the right question: *"is the amount of work to fix all these
+bugs worth it? Or should we decide to revert to a simple TOD, TOC logic before
+it gets too complex"* - and pointed at `1ntray/flight_planner`.
+
+### WHAT THE COMPARISON ACTUALLY SHOWED
+
+Their `performancePhaseBoundaries.ts` is **85 lines** against our pin machinery,
+and the reason is the DATA MODEL, not a better algorithm:
+
+- A leg carries `altitudeFtMsl` plus a `targetPlacement` (`automatic` |
+  `distance-along-leg`), and optionally a second `endAltitudeFtMsl`. One concept.
+- BOC/TOC/TOD/BOD are **scanned out of the integrated step list** by looking for
+  phase transitions. Nothing is stored; nothing can disagree.
+- They run THE SAME SOLVER we do: `addTransition` bisects the climb start to hit
+  a target distance, which is `climbStartForToc`.
+- **Their answer to an unreachable target is strictly worse for a pilot**:
+  `insufficient-leg-distance` returns `no-solution` for the WHOLE route, and the
+  nav log and route tables blank out behind an error line. One bad drag and every
+  figure disappears. Ours repairs instead.
+
+So the feature was never the problem. THE REPRESENTATION WAS: three pins
+measured from different ends (`bocNM` after the start fix, `bodNM` before the end
+fix, `tocNM` a deadline) which could CONTRADICT each other - forcing rules about
+which wins, a state where a target is "missed", and a repair layer on top. Every
+bug report from v16.73 to v16.75 lived in that layer.
+
+### ONE FIELD REPLACES ALL THREE, AND IT WAS ALREADY PROVEN
+
+`altAtNM` - where this leg's altitude must be attained, from the leg's start fix.
+Absent means "as soon as the POH allows", the derived v16.5 behaviour.
+
+    attain EARLY  ->  the climb begins at the fix and tops out sooner   (a TOC)
+    attain LATE   ->  the climb is DELAYED, level flight first          (a BOC)
+    descending    ->  the descent finishes there, level flight after    (a BOD)
+
+**`bocNM` WAS ALREADY A SECOND SPELLING OF `tocNM`.** `climbStartForToc` bisects
+the climb's START so it ENDS on the target, so a target beyond the natural top
+delays the whole climb. Measured before the change, which is why it was safe:
+dragging the TOC to 26.4 NM with `tocNM` alone placed the BOC at 6.4 NM and kept
+the climb's POH length.
+
+- ALL FOUR MARKS NOW WRITE THE ONE FIELD, differing only in which end of the
+  manoeuvre was grabbed: a bottom is the same target one manoeuvre-length on.
+  There is no BOC that can contradict a TOC, so there are no rules about which
+  wins - the contradiction warning has nothing left to warn about.
+- **LEGACY FIELDS ARE READ, NEVER WRITTEN.** `legTarget` falls back to the three
+  pins, so a route saved before this reads identically - proven by all 480
+  existing tests passing UNCHANGED across the engine swap.
+- THE FOUR CORNERS WERE ALREADY DERIVED: `computeLegMarkers` drew the BOC from
+  `climbStartNM > EDGE_NM`, not from pin presence. That half was right already.
+
+### HONEST ABOUT WHAT THIS STEP DID AND DID NOT DO
+
+- The ENGINE IS NOT SMALLER YET - 44 pin references before, 51 after - because
+  the one-field path was ADDED while the three-pin fallback stayed for saved
+  routes. The simplification is in the interaction model: one thing is written,
+  and contradictions are now unrepresentable.
+- DELETING the old machinery (`tocTargetMet`, the advice, the caching) needs a
+  one-time migration on load so no file in the wild still carries the old pins.
+  That is the next step, and it is where the line count comes down.
+
+### THREE BUGS THE REFACTOR ITSELF PRODUCED, ALL CAUGHT
+
+- **`isFinite(null)` IS TRUE.** The global coerces (`Number(null)` is 0), so a
+  descent leg's null TOC went down the numeric branch and threw on `.toFixed`.
+  `Number.isFinite` is the one that means what it says.
+- **A PHASE-BLIND FIT TEST BROKE EVERY DESCENT DRAG.** `tocTargetNM` and
+  `tocTargetMet` exist only on a CLIMB; consulting them alone made every descent
+  drop look unachievable, so it fell through to "clear the target" and no BOD
+  could be placed. `verify:leg` drags both ends, which is why it was caught.
+- **A DERIVED DISPLAY MUST NEVER BE READ BACK AS INPUT.** `updateLegPreview`
+  writes the computed climb start into the BOC box; the panel then read that box
+  as the target, so a "clear" re-applied a target one climb-length short of the
+  one it had just removed. The box is `readonly` now, and "start the climb here"
+  goes into the one target field like every other request.
+
+## A DRAG NEVER COMMITS A PLAN THE APP CALLS UNUSABLE (v16.75)
+
+Four reports on v16.74, and the fourth was *"there are several bugs, some also
+throw red banner. Please do extensive chromium testing."* That one shaped the
+work: a targeted check finds the case you imagined, a SWEEP finds the case you
+did not.
+
+### `tools/sweep-drag.mjs` - 266 real mouse drags over 11 deliberately awkward plans
+
+`npm run sweep:drag` drags EVERY mark on each plan to seven positions along the
+mark's OWN leg, and after each drop asserts what must hold whatever was asked
+for: no NEW red banner, no page error, `exit(k) == entry(k+1)`, every phase
+finite and >= 0, the climb inside its leg, no duplicate mark, every mark on the
+track, and NOTHING RATCHETING (drag it back and the pilot's altitudes must
+return).
+
+- **THE FIRST RUN FOUND 46 DISTINCT PROBLEMS AND 38 OF THEM WERE THE SWEEP'S OWN
+  FAULT.** A sweep has to be calibrated before it can be believed:
+  1. a plan can be unflyable BEFORE anything is dragged (`short-final-leg`
+     genuinely cannot lose 6000 ft in 3.6 NM), so the banner is baselined and
+     only what the drag ADDS counts;
+  2. a NULL schedule leg is legitimate - a circuit stop breaks the chain (v16.5)
+     and those legs render through `computeLegTotals` instead;
+  3. the off-track tolerance is the great circle's own bow against the straight
+     chord `alongLegNM` measures from - 0.18 NM on these legs, and v16.63
+     measured 5.16 NM on a 229 NM east-west one.
+- **WHAT SURVIVED WAS ONE REAL BUG, AND IT IS A WHOLE CLASS.** On a plan whose
+  last leg is 3.6 NM, delaying the climb on the leg before pushes it into the
+  tail the descent needs: two reasonable requests contradict, and v16.74
+  ACCEPTED the pin and then raised the banner. **A pin is a REQUEST. One that
+  cannot be honoured is refused with a reason** - never accepted and then
+  reported as figures not to use. `addedProblems` runs
+  `collectIntegrityProblems` on a candidate copy and compares it with now;
+  problems that were already there are not the drag's fault.
+- **THE SWEEP'S BLIND SPOT, recorded because it is the interesting part.** It
+  first dropped at a fraction of the WHOLE route line, and on a three-fix plan
+  every fraction past the first leg projects onto that leg's END - so a TOC two
+  thirds along its own leg, which is exactly where the conflict lives, was never
+  asked for. Drops are leg-relative now. **And a mutation of the guard STILL
+  escapes the sweep through the real-mouse path** while a direct call reproduces
+  it in one line: the sweep is a broad net that found the bug, and the targeted
+  jsdom tests are what actually hold it down. Do not read a green sweep as proof.
+
+### THE OTHER THREE REPORTS
+
+- **THE NUMBER KEYS ARE GONE FROM EVERY DIALOG.** They were guarded against
+  typing in `field` - the FIRST field - and a dialog has carried SEVERAL fields
+  since v16.74, so a digit typed into the altitude box counted as "outside the
+  text field" and pressed Delete. Widening the guard was the wrong fix: a dialog
+  that takes typed values cannot also treat bare digits as commands. The badges
+  came out with them, because a badge showing a dead shortcut is worse than none.
+  A test that pressed `2` and awaited the promise now HUNG the whole suite -
+  which printed 476 passes, no summary, and exit 0. **A suite that exits 0 with
+  no RESULT line has not passed; it has stopped.**
+- **A CLAMPED TOC DREW A BOC AT THE DEPARTURE.** v16.74 clamped the pin to the
+  earliest reachable TOC; the engine then derived a bottom-of-climb a fraction
+  of a mile in, so the pilot got a ring just past the departure. It now CLEARS
+  the pin instead, which is strictly better rather than a change of mind: with
+  nothing pinned the climb starts at the fix, that IS the earliest possible, and
+  no BOC is drawn - the bottom of the climb is the fix itself.
+- **THE RAISED CROSSING ALTITUDE IS CACHED AND GIVEN BACK.** *(REMOVED at
+  v16.77 - see the section above. Nothing raises a fix any more, so there is
+  nothing to cache; kept here for why the cache existed.)* `altBase` (plus
+  `tocBase`) remembers what the pilot typed when a carried-back climb raised a
+  fix, and EVERY drag is judged from that baseline. Without it the raises
+  COMPOUND - each drag lifts the fix again from the already-lifted figure and it
+  can never come down. With it, moving the TOC forward walks the crossing
+  altitude back to the original and drops the cache when it is no longer needed.
+  It travels in the route file, because a fix stranded at a raised figure with
+  nothing to restore it to is worse than not caching at all.
+
+### THE LAST RESORT IS THE PILOT'S OWN PLAN, AND IT IS NEVER REFUSED
+
+The sweep's second useful find, on a plan that was ALREADY unflyable before
+anything was dragged. `addedProblems` compares a candidate with the state NOW -
+so once a fix had been raised, EVERY candidate including "put it back" looked
+like it was adding a problem, all three were refused, and the fix was stranded
+at an altitude the pilot never typed with no way to drag it back down.
+
+- **A refusal cannot undo the past.** The no-pin candidate is the pilot's own
+  plan - this leg unpinned and every cached altitude restored - so it can never
+  be worse than what they typed, and it is now committed unconditionally. Where
+  putting it back re-exposes a problem their own altitudes cause, the toast says
+  the leg is back as they had it rather than letting it read as the drag's fault.
+- **AND I EMPTIED A SOURCE FILE AGAIN GETTING THERE** - `src/index.html` this
+  time, by the same `b"""` typo, because `io.open(p,'w')` truncates before the
+  argument to `.write()` is evaluated. The edit pattern that survives it is:
+  read, replace, ASSERT on the finished string, and only then open for writing.
+  The next attempt used it and the assert fired harmlessly on a bad anchor
+  instead of destroying the file.
+
 ## The waypoint box, and a TOC dragged past what the aircraft can climb (v16.74)
 
 The pilot, on the v16.73 menu: *"the 'set altitude from here' button is
@@ -2045,6 +2301,10 @@ type-type-Enter without reaching for the mouse.
   `input[data-field="name"]`. Both had been picking the first input.
 
 ### A TOC DRAGGED TOO FAR BACK IS A REQUEST, NOT AN ERROR
+
+*(Outcome 2 below - carrying the climb onto the leg before by RAISING that
+fix - was REMOVED at v16.77 on the pilot's instruction. Outcomes 1 and 3
+stand. See "THE ALTITUDE COLUMN IS THE PILOT'S" above.)*
 
 Three outcomes, and **none of them is the red banner** - in every case the
 resulting plan is flyable, so "DO NOT USE THESE FIGURES" would be false.

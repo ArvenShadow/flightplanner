@@ -156,6 +156,12 @@ function sanitiseWaypoint(/** @type {any} */ w) {
   if (out.isPattern) out.laps = Math.max(1, Math.floor(num(w.laps)) || 1);
   // Pins: cleared is null, never 0, so a route saved before pins existed reads
   // identically to one made after.
+  // ONE TARGET (v16.76): where the leg's altitude must be attained, from the
+  // leg's start fix. The three v16.37 pins are still ACCEPTED so a route saved
+  // before this reads identically, and still written back out if that is all the
+  // file carries - but nothing writes them any more.
+  const at = num(w.altAtNM);
+  if (Number.isFinite(at) && at > 0) out.altAtNM = at;
   for (const k of ['bocNM', 'bodNM', 'tocNM']) {
     const v = num(w[k]);
     if (Number.isFinite(v) && v > 0) out[k] = v;

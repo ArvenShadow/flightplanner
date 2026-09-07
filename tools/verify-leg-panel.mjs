@@ -123,24 +123,29 @@ await page.evaluate(() => {
   document.getElementById('leg-boc-here').click();
   updateLegPreview();
 });
-check(await page.evaluate(() => !document.getElementById('leg-boc').disabled),
-  'clearing the target hands the BOC box back');
+// v16.76: THE BOC BOX IS ALWAYS A DERIVED DISPLAY. There is one target field
+// now, so the bottom of climb is never an input - reading it back as one fed
+// the derived value straight into the write.
+check(await page.evaluate(() => document.getElementById('leg-boc').readOnly),
+  'the BOC box is a derived, read-only display');
 
 await page.evaluate(() => saveLegSettings());   // Apply - the button is
 // wired to this; the GESTURE is what this file is testing, not the click target.
 await page.waitForTimeout(320);
 const applied = await page.evaluate(() => ({
-  boc: flights[0].waypoints[1].bocNM,
+  target: flights[0].waypoints[1].altAtNM,
   closed: getComputedStyle(document.getElementById('leg-modal')).display !== 'flex',
   climbStart: computeFlightSchedule(flights[0])[0].climbStartNM
 }));
 check(applied.closed, 'Apply closed the panel');
-check(applied.boc > 1 && Math.abs(applied.boc - applied.climbStart) < 1e-6,
-  'the pin reached the schedule: pin ' + applied.boc + ', climb starts ' + applied.climbStart);
+// THE OBSERVABLE IS WHERE THE CLIMB STARTS, not the stored number: "start the
+// climb here" is the same attain-by target one climb-length further on.
+check(applied.target > 1 && applied.climbStart > 1,
+  'the target reached the schedule: target ' + applied.target + ', climb starts ' + applied.climbStart);
 
-// ---- the ALTITUDE advice, and the one-click fix ---------------------------
-// A target on a LATER leg that does not fit must offer the altitude the
-// previous fix needs - and pressing the button must actually satisfy it.
+// ---- an unreachable target on a LATER leg (v16.77) ------------------------
+// It is REPORTED and nothing is rewritten. This block used to check the offer
+// to raise MID, and the button that took it.
 await page.evaluate(async () => {
   flights = [{ id: 1, title: 'F2', depElev: 254, waypoints: [
     { lat: 68.40, lng: 18.50, name: 'ENDU', alt: 254,  oat: 5, wdir: 0, wspd: 0, var: -11 },
@@ -162,72 +167,79 @@ await page.mouse.click(mid2[0], mid2[1], { button: 'right' });
 await page.waitForTimeout(320);
 const onMid = await page.evaluate(() => document.getElementById('leg-modal-title').textContent);
 check(/MID/.test(onMid), 'the panel opened on the MID leg: ' + onMid);
+// AN UNREACHABLE TARGET IS REPORTED AND NOTHING ELSE HAPPENS (v16.77).
+// Until v16.76 this warning carried a "Do that" button that RAISED MID to the
+// altitude the climb passes through. The pilot retired it: "I set what altitude
+// i plan on using, not the exact altitude i will have at that point." So the
+// panel states the problem, offers no button, and MID keeps its 2500 ft.
 await page.evaluate(() => { document.getElementById('leg-toc').value = '5'; updateLegPreview(); });
 await page.waitForTimeout(200);
-const advice = await page.evaluate(() => {
+const reported = await page.evaluate(() => {
   const w = document.querySelector('#leg-preview .leg-warn');
-  return { text: w ? w.innerText : '', hasButton: !!document.querySelector('#leg-preview .leg-warn button') };
+  return { text: w ? w.innerText : '',
+           hasButton: !!document.querySelector('#leg-preview .leg-warn button'),
+           midAlt: flights[0].waypoints[1].alt };
 });
-check(/Cross MID at/.test(advice.text) && advice.hasButton,
-  'it offers the altitude MID needs, with a button: ' + JSON.stringify(advice.text));
-// v16.39: the offer must PROMISE one continuous climb, because that is what
-// taking it now does. The user's report was that it delivered two.
-check(/one continuous climb/.test(advice.text) && /passing MID on the way up/.test(advice.text),
-  'the offer describes the continuous climb: ' + JSON.stringify(advice.text));
-await page.evaluate(() => document.querySelector('#leg-preview .leg-warn button').click());
-await page.waitForTimeout(400);
-// The button raises the fix straight away (it is a route edit, and undoable);
-// the target itself is still only in the form until Apply, so the PREVIEW is
-// what shows whether the advice worked.
-const afterFix = await page.evaluate(() => ({
-  midAlt: flights[0].waypoints[1].alt,
-  warn: !!document.querySelector('#leg-preview .leg-warn'),
-  preview: document.getElementById('leg-preview').innerText.replace(/\n+/g, ' | ')
-}));
-check(afterFix.midAlt > 2500, 'the button raised MID: ' + afterFix.midAlt + ' ft');
-check(!afterFix.warn, 'the warning is gone once the advice is taken: ' + afterFix.preview);
-// ONE CLIMB, NOT TWO (v16.39, the user's report). Raising MID alone topped the
-// ENDU leg out early and held the new altitude to MID, so the pilot got a climb,
-// a long level stretch and a second climb. The advice must also delay the
-// earlier leg's climb so it ends ON MID and runs straight into the next one.
-const oneClimb = await page.evaluate(() => {
-  const S = computeFlightSchedule(flights[0]);
-  return { levelBy: flights[0].waypoints[1].tocNM,
-           leadDist: S[0].distNM, leadStart: S[0].climbStartNM, leadClimb: S[0].climbDistNM,
-           continues: S[0].climbContinues, nextStart: S[1].climbStartNM };
-});
-check(oneClimb.levelBy > 0, 'the earlier leg was given a "be level by" pin: ' + oneClimb.levelBy);
-check(oneClimb.leadStart > 1 && oneClimb.continues === true,
-  'the earlier climb was delayed to end on MID: starts ' + oneClimb.leadStart.toFixed(1) +
-  ' NM in, continues ' + oneClimb.continues);
-check(Math.abs(oneClimb.leadDist - (oneClimb.leadStart + oneClimb.leadClimb)) < 0.05 &&
-      oneClimb.nextStart < 0.05,
-  'no level stretch is left at MID: ' +
-  (oneClimb.leadDist - (oneClimb.leadStart + oneClimb.leadClimb)).toFixed(3) + ' NM before, ' +
-  oneClimb.nextStart.toFixed(3) + ' NM after');
-// Now commit the target and confirm the schedule really lands on it.
+check(/cannot be level/.test(reported.text) && /ft\/min/.test(reported.text),
+  'an unreachable target was not reported with the rate it would need: ' + JSON.stringify(reported.text));
+check(/no altitude you typed is changed/.test(reported.text),
+  'the report does not promise the altitudes are left alone: ' + JSON.stringify(reported.text));
+check(!reported.hasButton,
+  'the removed "raise the previous fix" button is still offered');
+check(reported.midAlt === 2500, 'MID was rewritten by a preview: ' + reported.midAlt + ' ft');
+// APPLYING IT MUST ALSO LEAVE MID ALONE. The panel commits the target it was
+// given; whether the climb reaches it is reported, never bargained for.
 await page.evaluate(() => saveLegSettings());
+await page.waitForTimeout(320);
+const applied2 = await page.evaluate(() => ({
+  midAlt: flights[0].waypoints[1].alt, pin: flights[0].waypoints[2].altAtNM,
+  banner: getComputedStyle(document.getElementById('integrity-banner')).display
+}));
+check(applied2.midAlt === 2500, 'Apply rewrote MID: ' + applied2.midAlt + ' ft');
+check(applied2.pin === 5, 'the target was not stored: ' + applied2.pin);
+
+// A REACHABLE TARGET ON THE SAME LEG IS HONOURED, and still touches no
+// altitude - which is the whole of the v16.76 one-field model.
+const reach = await page.evaluate(() => {
+  const S = computeFlightSchedule(flights[0])[1];
+  return { dist: S.distNM, natural: S.tocAlongNM };
+});
+const want = Math.round(reach.dist - 2);
+await page.evaluate((v) => {
+  openLegPanel(0, L.latLng(69.58, 18.5));   // the MID -> ENTC leg
+  document.getElementById('leg-toc').value = String(v);
+  updateLegPreview();
+  saveLegSettings();
+}, want);
 await page.waitForTimeout(320);
 const committed = await page.evaluate(() => {
   const S = computeFlightSchedule(flights[0])[1];
-  return { pin: flights[0].waypoints[2].tocNM, met: S.tocTargetMet, toc: S.tocAlongNM };
+  return { pin: flights[0].waypoints[2].altAtNM, met: S.tocTargetMet, toc: S.tocAlongNM,
+           midAlt: flights[0].waypoints[1].alt };
 });
-check(committed.pin === 5, 'the target was stored: ' + committed.pin);
-// AT OR BEFORE the deadline: the crossing altitude is rounded up to a whole
-// hundred (v16.40), so the aircraft reaches the fix a little higher than the
-// minimum and tops out a little sooner than asked. "Be level BY" is a deadline.
-check(committed.met && committed.toc > 0 && committed.toc <= 5.05,
-  'the schedule tops out at or before the target - TOC at ' +
-  (committed.toc && committed.toc.toFixed(3)) + ' NM against 5');
-// ...and the map must PAINT one top of climb, not one at MID and one after it.
+check(committed.pin === want, 'the reachable target was not stored: ' + committed.pin);
+check(committed.met && Math.abs(committed.toc - want) < 0.1,
+  'the schedule did not top out on the target - TOC at ' +
+  (committed.toc && committed.toc.toFixed(3)) + ' NM against ' + want);
+check(committed.midAlt === 2500,
+  'honouring a reachable target rewrote MID: ' + committed.midAlt + ' ft');
+
+// ...and the map paints exactly one top of climb for it.
 await page.evaluate(() => { map.setView([69.2, 18.5], 9, { animate: false }); });
 await page.waitForTimeout(400);
 await page.evaluate(() => { applyZoomDeclutter(); refreshMap(); });
 await page.waitForTimeout(320);
-const painted = await page.evaluate(() => [...document.querySelectorAll('.toc-label, .tod-label')]
-  .map((el) => el.textContent.trim()));
-check(painted.filter((t) => /TOC/.test(t) && !/BOC/.test(t)).length === 1,
-  'one continuous climb paints exactly one TOC: ' + JSON.stringify(painted));
+const painted = await page.evaluate(() => ({
+  labels: [...document.querySelectorAll('.toc-label, .tod-label')].map((el) => el.textContent.trim()),
+  climbing: computeFlightSchedule(flights[0]).filter((L) => L && L.climbDistNM > 0.05).length
+}));
+// ONE TOP PER CLIMB, counted over the whole flight: with a target part way
+// along the second leg the FIRST leg legitimately climbs to MID as well, so
+// asserting a single mark would assert a plan this is not.
+check(painted.labels.filter((t) => /TOC/.test(t) && !/BOC/.test(t)).length === painted.climbing,
+  'each climb paints exactly one TOC: ' + JSON.stringify(painted));
+check(painted.labels.some((t) => /BOC/.test(t)),
+  'the delayed climb painted no bottom-of-climb ring: ' + JSON.stringify(painted.labels));
 
 // ---- A STUCK DRAG HAS AN EXIT (v16.46) ------------------------------------
 // The drag used to end only on a mouseup, so Escape / a blur / a right-click
@@ -458,7 +470,7 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     const sc = computeFlightSchedule(flights[0]);
     return { climbStart: +sc[0].climbStartNM.toFixed(2), toc: +sc[0].tocAlongNM.toFixed(2),
              climbDist: +sc[0].climbDistNM.toFixed(2),
-             boc: flights[0].waypoints[1].bocNM, tocPin: flights[0].waypoints[1].tocNM };
+             boc: flights[0].waypoints[1].bocNM, tocPin: flights[0].waypoints[1].altAtNM };
   });
   const dragMark = async (kind, dx, dy) => {
     const m = (await marks()).find((x) => x.k === kind);
@@ -487,8 +499,11 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     `dragging the TOC placed a BOC ring (${JSON.stringify(m1.map((x) => x.k + ':' + x.shape))})`);
   check(s1.toc > s0.toc + 1,
     `the top of climb actually moved (${s0.toc} -> ${s1.toc} NM)`);
-  check(s1.tocPin !== null && s1.boc === null,
-    'dragging the top must set the "be level by" pin and clear any BOC pin - a leg cannot carry two answers');
+  // v16.76: ONE field. There is no longer a BOC that can contradict a TOC, so
+  // there is nothing to clear and no rule about which wins - which is the whole
+  // reason the three pins were collapsed.
+  check(s1.tocPin != null && s1.boc == null,
+    `dragging the top sets the one attain-by target (${s1.tocPin})`);
   // THE CLIMB IS NEVER STRETCHED: the POH prices a rate, not a wish, so the
   // manoeuvre keeps its length and only its position moves.
   check(Math.abs(s1.climbDist - s0.climbDist) < 0.35,
@@ -504,8 +519,8 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     `the bottom of climb moved (${s1.climbStart} -> ${s2.climbStart} NM)`);
   check(s2.toc > s1.toc + 1,
     `and the top came with it (${s1.toc} -> ${s2.toc} NM)`);
-  check(s2.boc !== null && s2.tocPin === null,
-    'dragging the bottom must set the BOC pin and clear the target');
+  check(s2.tocPin != null && s2.boc == null,
+    `dragging the bottom sets the SAME target, one climb-length further on (${s2.tocPin})`);
   check(Math.abs(s2.climbDist - s0.climbDist) < 0.35,
     `the climb still has its POH length after both drags (${s2.climbDist} NM)`);
 
@@ -621,19 +636,31 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
   for (let k = 1; k <= 10; k++) await page.mouse.move(firstMark.cx - 2 * k, firstMark.cy + 22 * k);
   await page.mouse.up();
   await page.waitForTimeout(520);
-  const clamped = await page.evaluate(() => ({
-    toc: flights[0].waypoints[1].tocNM,
-    met: computeFlightSchedule(flights[0])[0].tocTargetMet
-  }));
-  check(clamped.toc !== null && clamped.met !== false,
-    `dragging the TOC past the POH climb clamps to a target it can meet (${clamped.toc} NM)`);
+  const clamped = await page.evaluate(() => {
+    const sc = computeFlightSchedule(flights[0]);
+    const mk = computeLegMarkers(flights[0].waypoints[0], flights[0].waypoints[1], sc[0]);
+    return { toc: flights[0].waypoints[1].tocNM, met: sc[0].tocTargetMet,
+             kinds: mk.map((m) => m.kind).join(','), at: +sc[0].tocAlongNM.toFixed(2) };
+  });
+  // v16.75: the pin is CLEARED rather than clamped. With nothing pinned the
+  // climb starts at the fix, which IS the earliest reachable point - and no
+  // bottom-of-climb ring is drawn, where the clamp left one a fraction of a
+  // mile past the departure (the pilot's second report).
+  check(clamped.toc == null && clamped.met !== false,
+    `dragging the TOC past the POH climb leaves no pin and a target it can meet (${clamped.toc}, TOC at ${clamped.at} NM)`);
+  check(!/BOC/.test(clamped.kinds),
+    `and draws no BOC just past the departure (${clamped.kinds})`);
   check((await bannerText()) === '',
     `and raises no red banner (${JSON.stringify(await bannerText())})`);
   check(/cannot go further back/i.test(await toastText()),
     `it says why instead (${JSON.stringify(await toastText())})`);
 
-  // (2) A LEG WITH ONE BEHIND IT carries the climb back onto the earlier leg -
-  //     by raising that fix, so the altitude column still states what is flown.
+  // (2) A LEG WITH ONE BEHIND IT IS TREATED THE SAME WAY (v16.77). v16.74 and
+  //     v16.75 carried the climb back by RAISING the earlier fix; the pilot
+  //     retired that - "I set what altitude i plan on using, not the exact
+  //     altitude i will have at that point" - so the only two outcomes left are
+  //     "it fits" and "the corner goes back to the POH's own", and neither
+  //     touches a number they typed.
   await page.evaluate(async () => {
     document.getElementById('app-toasts').innerHTML = '';
     flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
@@ -654,16 +681,19 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
   await page.mouse.up();
   await page.waitForTimeout(560);
   const carried = await page.evaluate(() => ({
+    endu: flights[0].waypoints[0].alt,
     mid: flights[0].waypoints[1].alt,
+    entc: flights[0].waypoints[2].alt,
     met: computeFlightSchedule(flights[0])[1].tocTargetMet
   }));
-  check(carried.mid > midWas,
-    `the climb began on the leg before, by raising that fix (${midWas} -> ${carried.mid} ft)`);
+  check(carried.mid === midWas && carried.endu === 254 && carried.entc === 8500,
+    `a drag on a later leg rewrote no altitude (${midWas} -> ${carried.mid} ft, ` +
+    `${carried.endu}/${carried.entc})`);
   check(carried.met !== false, 'and the target is met rather than reported missed');
   check((await bannerText()) === '',
     `no red banner for a plan that is flyable (${JSON.stringify(await bannerText())})`);
-  check(/one continuous climb/i.test(await toastText()),
-    `the pilot is told what moved (${JSON.stringify(await toastText())})`);
+  check(/cannot go further back|does not fit/i.test(await toastText()),
+    `the pilot is told why the corner stopped (${JSON.stringify(await toastText())})`);
 }
 
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));

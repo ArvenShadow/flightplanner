@@ -589,61 +589,6 @@ export function climbStartForToc(segs, tocNM, timeMin, tas, wdir, wspd) {
 }
 
 /**
- * The LOWEST altitude a leg could start from and still be level at `targetAlt`
- * within `availMin` of climbing.
- *
- * This is what turns "I want to be level by here" into something actionable
- * when the climb does not fit on the leg: rather than inventing a steeper
- * climb, the planner says what altitude the PREVIOUS fix would have to be
- * crossed at. That keeps the altitude column the single source of truth for
- * what is flown where - the pilot raises the fix, and then every leg's numbers
- * and the target agree.
- *
- * Bisected against the real POH climb tables (via climbPerf), so it is exact
- * for the profile in force rather than a constant-rate estimate.
- *
- * BOTH SIDES MOVE WITH THE ANSWER, which is why the time available is a
- * CALLBACK rather than a number. A higher entry altitude shortens the climb
- * (less height to gain) but also raises its TAS, which covers the same
- * distance in LESS time - so comparing a candidate's climb time against a
- * fixed budget computed at the ORIGINAL TAS lands short. Measured: it missed
- * the target by 0.11 NM, which is exactly the kind of quietly-wrong
- * recommendation this project refuses to give.
- *
- * @param {number} targetAlt @param {number} oat
- * @param {number} lowAlt the altitude the leg would otherwise start from
- * @param {(tas: number) => number} timeAvailableAtTas minutes available to
- *        reach the target, for a given climb TAS
- * @returns {number|null} feet, or null when there is no time available at all
- */
-export function entryAltForClimbBy(targetAlt, oat, lowAlt, timeAvailableAtTas) {
-  const fits = (/** @type {number} */ a) => {
-    const cp = climbPerf(a, targetAlt, oat);
-    return cp.timeMin <= timeAvailableAtTas(cp.tasAvg);
-  };
-  if (!(timeAvailableAtTas(climbPerf(lowAlt, targetAlt, oat).tasAvg) > 0.001)) return null;
-  if (fits(lowAlt)) return lowAlt;
-  let lo = lowAlt, hi = targetAlt;
-  for (let n = 0; n < 40; n++) {
-    const mid = (lo + hi) / 2;
-    if (fits(mid)) hi = mid; else lo = mid;
-  }
-  // ROUNDED UP TO THE NEXT HUNDRED FEET (v16.40, the user's request): a pilot
-  // flies and writes whole hundreds, so an OFP crossing altitude should be one.
-  //
-  // It rounds UP, never to the NEAREST, and that is not a stylistic choice: the
-  // figure is a MINIMUM, so the nearest hundred is below it half the time and
-  // taking that advice would miss the target it was computed to meet. Rounding
-  // down by even half a foot makes the climb marginally too long.
-  //
-  // The extra height is why a target may now be met EARLY rather than exactly -
-  // see the handed-over-climb rule in computeFlightSchedule. Capped at the
-  // leg's own target altitude: crossing the previous fix ABOVE the altitude
-  // this leg climbs to would make it a descent, not a climb.
-  return Math.min(Math.ceil(Math.ceil(hi) / 100) * 100, Math.ceil(targetAlt));
-}
-
-/**
  * A leg's climb/descent PINS, and the reason only two of the four corners are
  * pinnable while the other two are checked.
  *
@@ -687,15 +632,64 @@ function pinNM(v, maxNM) {
   return Math.min(n, Math.max(0, maxNM));
 }
 
+/**
+ * ONE TARGET PER LEG (v16.76): the altitude on the leg's TO waypoint, plus
+ * WHERE it must be attained - `altAtNM`, measured along the flown path from the
+ * leg's START fix. Absent means "as soon as the POH allows", which is the
+ * derived v16.5 behaviour.
+ *
+ * WHY ONE FIELD REPLACES THREE, and it is not a tidy-up - it is where the bugs
+ * were coming from. v16.37 grew three pins measured from different ends
+ * (`bocNM` after the start fix, `bodNM` before the end fix, `tocNM` a deadline),
+ * which meant they could CONTRADICT one another: rules for which wins, a state
+ * where a target is "missed", and a repair layer on top of that. Every bug
+ * report between v16.73 and v16.75 lived in that layer.
+ *
+ * A single "attain by" distance expresses all of them, because
+ * `climbStartForToc` bisects the climb's START so the climb ENDS on the target:
+ *
+ *   attain EARLY  -> the climb begins at the fix and tops out sooner  (a TOC)
+ *   attain LATE   -> the climb is DELAYED, so level flight comes first (a BOC)
+ *   descending    -> the descent finishes there, level flight after     (a BOD)
+ *
+ * MEASURED before the change, which is why it was safe to make: dragging the
+ * TOC to 26.4 NM with `tocNM` alone and no `bocNM` placed the BOC at 6.4 NM and
+ * kept the climb's POH length. `bocNM` was already a second spelling of the
+ * same thing.
+ *
+ * THE FOUR CORNERS ARE DERIVED, NOT STORED - the approach 1ntray/flight_planner
+ * takes, and it is the right one: `computeLegMarkers` reads them off the walked
+ * profile (`climbStartNM > EDGE_NM` already drew the BOC that way), so a mark
+ * can never disagree with the schedule that produced it.
+ *
+ * LEGACY FIELDS ARE STILL READ, never written. A route saved before this reads
+ * identically: `tocNM` is an attain-by outright, `bodNM` is one measured from
+ * the other end, and `bocNM` is a delay whose old meaning is preserved exactly.
+ *
+ * @param {Waypoint} to the leg's TO waypoint
+ * @param {number} distNM the leg's flown length
+ * @param {boolean} climbing true when the leg climbs to `to.alt`
+ * @returns {{attainNM: number, legacyBocNM: number}} attainNM 0 when automatic
+ */
+function legTarget(to, distNM, climbing) {
+  const attain = pinNM(to.altAtNM, distNM);
+  if (attain > 0) return { attainNM: attain, legacyBocNM: 0 };
+  // Nothing new set: fall back to whatever an older route file carries.
+  if (climbing) {
+    const toc = pinNM(to.tocNM, distNM);
+    if (toc > 0) return { attainNM: toc, legacyBocNM: 0 };
+    return { attainNM: 0, legacyBocNM: pinNM(to.bocNM, distNM) };
+  }
+  const bod = pinNM(to.bodNM, distNM);
+  return { attainNM: bod > 0 ? Math.max(0, distNM - bod) : 0, legacyBocNM: 0 };
+}
+
 /** The whole-flight altitude plan: a forward pass so an unfinished climb
  *  spills onto later legs, then a backward pass so a descent starts early
  *  enough that every fix is crossed AT its planned altitude.
  *  @param {Flight} fl
- *  @param {{verifyAdvice?: boolean}} [opts] internal: verifyAdvice:false stops
- *         the one-level-deep trial that checks a tocNeedsEntryAlt suggestion,
- *         which is the only reason this function ever calls itself.
  *  @returns {Array<ScheduleLeg|null>} null where a pattern stop breaks the chain */
-export function computeFlightSchedule(fl, opts) {
+export function computeFlightSchedule(fl) {
   const wps = fl.waypoints || [];
   const legs = new Array(Math.max(0, wps.length - 1)).fill(null);
 
@@ -743,8 +737,6 @@ export function computeFlightSchedule(fl, opts) {
                 /** What the leg's START fix would have to be crossed at for the
                  *  target to be reachable at the profile's climb rate. Null on
                  *  the first leg, where there is no earlier fix to raise. */
-                /** @type {number|null} */ tocNeedsEntryAlt: null,
-                tocNoAltHelps: false,
                 // This leg's climb is handed over from the previous leg, which
                 // topped out on the shared fix: it starts AT the fix and cannot
                 // be delayed, so a "be level by" target here is a deadline to
@@ -754,8 +746,6 @@ export function computeFlightSchedule(fl, opts) {
                  *  its climb would then begin - both read from the trial that
                  *  VERIFIED the advice, so the sentence offering it cannot
                  *  describe something other than what applying it does. */
-                /** @type {number|null} */ tocAdviceLevelByNM: null,
-                /** @type {number|null} */ tocAdviceClimbFromNM: null,
                 // This leg's climb tops out ON its end fix and the next leg
                 // climbs straight on from there: ONE climb through the fix, so
                 // this leg has no top of climb to draw. See the pass below.
@@ -768,7 +758,11 @@ export function computeFlightSchedule(fl, opts) {
     // the descent that TERMINATES at this leg's end fix, and only the backward
     // pass knows whether such a descent exists here and whether the tail is
     // still free - so bodTailNM stays 0 until it decides.
-    L.bodPinNM = pinNM(to.bodNM, L.distNM);
+    // ONE TARGET, read once per leg. `legTarget` picks the descent form here
+    // and the climb form below; on an old route file it falls back to the
+    // three v16.37 pins so nothing a pilot saved changes meaning.
+    const descTgt = legTarget(to, L.distNM, false);
+    L.bodPinNM = descTgt.attainNM > 0 ? Math.max(0, L.distNM - descTgt.attainNM) : 0;
     const target = to.alt;
     if (target > alt + 1) {
       const cp = climbPerf(alt, target, Number(to.oat));
@@ -783,21 +777,23 @@ export function computeFlightSchedule(fl, opts) {
       // is invented: the rate, the fuel flow and the TAS are the POH's, and
       // only the climb's POSITION moves. It is the same kind of pin as a BOC,
       // just stated from the other end, and it is what a BOC pin becomes.
-      const tocT = pinNM(to.tocNM, L.distNM);
-      // IT DOES NOT FIT / IT OVERSHOT. Either way the honest answer is not a
-      // steeper climb - the POH says nothing about that - it is the altitude
-      // this leg would have to START from. The pilot raises the previous fix
-      // and then the altitude column, every leg's numbers and the target all
-      // agree. On the FIRST leg there is no earlier fix to raise (you cannot
-      // climb before takeoff), so only the required rate can be reported.
+      const climbTgt = legTarget(to, L.distNM, true);
+      const tocT = climbTgt.attainNM;
+      // IT DOES NOT FIT / IT OVERSHOT, AND THE ANSWER IS TO SAY SO (v16.77).
+      //
+      // Until v16.76 the engine also computed the altitude this leg would have
+      // to START from, verified it on a trial schedule, and the panel and the
+      // drag then OFFERED to raise the previous fix to it. The pilot's call
+      // retired all of that: "I set what altitude i plan on using, not the
+      // exact altitude i will have at that point... Id prefer the Climb and
+      // descent doesnt really fuck with the altitudes that much." A number they
+      // typed is never rewritten to make a dragged corner fit, so an unreachable
+      // target is reported - the rate it would need, which is a figure to judge
+      // and never one the climb is recomputed at - and nothing else happens.
       const missTarget = () => {
         const availMin = phaseMinutes(segs, 0, tocT, cp.tasAvg, wdirC, wspdC);
         L.tocTargetMet = false;
         L.climbRateReqFpm = availMin > 0.001 ? Math.round((target - L.entryAlt) / availMin) : null;
-        L.tocNeedsEntryAlt = i > 0
-          ? entryAltForClimbBy(target, Number(to.oat), L.entryAlt,
-              (tas) => phaseMinutes(segs, 0, tocT, tas, wdirC, wspdC))
-          : null;
       };
       if (tocT > 0) {
         L.tocTargetNM = tocT;
@@ -824,7 +820,9 @@ export function computeFlightSchedule(fl, opts) {
           if (back.shortMin > 0.001) missTarget();
         }
       } else {
-        L.climbStartNM = pinNM(to.bocNM, L.distNM);
+        // Only an OLD file can reach here now: a bocNM with no attain-by. Its
+        // meaning is preserved exactly - hold, then climb.
+        L.climbStartNM = climbTgt.legacyBocNM;
       }
       // The climb begins at the BOC, so the first climbStartNM of the leg is
       // skipped. With no pin that is 0 and this is the v16.5 walk exactly.
@@ -957,8 +955,8 @@ export function computeFlightSchedule(fl, opts) {
   // flies straight through.
   //
   // This is a property of the SCHEDULE, not of how it was built, so it holds
-  // whether the corners were pinned, suggested by the "cross this fix at" advice
-  // or fell out of the altitudes on their own.
+  // whether the corner was targeted by the pilot or fell out of the altitudes
+  // on their own.
   for (let k = 0; k + 1 < legs.length; k++) {
     const L = legs[k], N = legs[k + 1];
     if (!L || !N || L.tocAlongNM === null) continue;
@@ -975,54 +973,6 @@ export function computeFlightSchedule(fl, opts) {
     L.climbContinues = true;
   }
 
-  // ADVICE IS ONLY OFFERED IF IT ACTUALLY WORKS.
-  //
-  // "Cross the previous fix at 4122 ft and the target fits" is computed from
-  // THIS leg alone, but raising that fix also changes the leg BEFORE it - and
-  // if those earlier legs cannot climb that high by then, the aircraft arrives
-  // lower than the raised figure and the target is missed all over again.
-  // Measured over 20 000 generated routes: the per-leg figure alone was wrong
-  // 382 times in 947. So each candidate is TRIED on a copy of the flight and
-  // dropped unless the target is really met.
-  //
-  // A failed candidate means no altitude at that fix helps: a higher one is
-  // strictly harder for the earlier legs to reach, so verifying once is enough
-  // and there is nothing to search.
-  //
-  // THE TRIAL RAISES THE FIX **AND** DELAYS THE EARLIER CLIMB (v16.39), because
-  // that is what taking the advice does. Raising the fix alone tops the earlier
-  // leg out early and holds the new altitude to the fix, so the pilot gets two
-  // climbs with a level stretch between them instead of the one continuous
-  // climb they asked for. A "be level by" pin at the earlier leg's FULL length
-  // says "top out on that fix", which is the same climb - same minutes, same
-  // fuel - moved to the end of the leg, where it runs straight on into this
-  // leg's climb. Both legs' targets must then be met, or the advice is not
-  // offered: the earlier leg has a target of its own now.
-  if (!opts || opts.verifyAdvice !== false) {
-    for (const L of legs) {
-      if (!L || L.tocNeedsEntryAlt === null) continue;
-      const prev = legs[L.i - 1] || null;
-      const levelBy = prev ? prev.distNM : 0;
-      const trial = Object.assign({}, fl, {
-        waypoints: wps.map((w, k) => k === L.i
-          ? Object.assign({}, w, { alt: L.tocNeedsEntryAlt, tocNM: levelBy || w.tocNM })
-          : Object.assign({}, w))
-      });
-      const T = computeFlightSchedule(trial, { verifyAdvice: false });
-      const check = T[L.i], earlier = prev ? T[L.i - 1] : null;
-      if (!check || !check.tocTargetMet || (prev && (!earlier || !earlier.tocTargetMet))) {
-        L.tocNeedsEntryAlt = null;
-        L.tocNoAltHelps = true;
-      } else if (earlier && earlier.climbDistNM > EDGE_NM) {
-        // Only when there IS an earlier climb to delay. Where the aircraft
-        // DESCENDS into the raised fix (40 of 305 swept routes) the climb
-        // genuinely begins at the fix, nothing is split, and pinning "be level
-        // by" on a leg with no climb would write route data that does nothing.
-        L.tocAdviceLevelByNM = levelBy;
-        L.tocAdviceClimbFromNM = earlier.climbStartNM;
-      }
-    }
-  }
   return legs;
 }
 
