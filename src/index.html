@@ -299,8 +299,8 @@
             <li>A via point <b>bends a leg without adding a row</b>. The leg stays ONE row on the OFP; its distance, time and fuel follow the bent path. The row's <b>TT/MT/WCA/MH show the direct line between the two named waypoints</b> (what you measure on the chart between the fixes); the <b>flown per-segment tracks</b> are in the ↳ sub-line under the row and per-segment in the plotting list — when a leg bends, steer by those, not by the row heading.</li>
             <li><b>Forgot a waypoint in the middle of a route?</b> <b>Right-click the leg line</b> where you want it: it gets its own OFP row with its own altitude, times and fuel, the leg splits in two, and any via points on it stay on the correct half so the flown track does not move. (Clicking empty map adds a waypoint at the END of the route; right-clicking the line is how you get one in the middle.) The new waypoint inherits the altitude, OAT and wind of the waypoint it is inserted before — the leg was already planned to arrive at those, so nothing is invented — and all of it is editable in the row. Its magnetic variation is computed for the new position.</li>
             <li>Climb and descent no longer split legs into separate rows: each leg row shows <b>total</b> distance/time/burn for easy copying, with the CLB/DES portion and TOC/TOD marking distance in the sub-line.</li>
-            <li><b>Drag a climb or descent corner along the track</b> (v16.73). A <b>top</b> (TOC/TOD) is a <b>tick across</b> the track; a <b>bottom</b> (BOC/BOD) is a <b>ring on</b> it. Drag the <b>TOC</b> to say where you want to be level and the planner works the POH climb backwards and places the <b>BOC</b> ring where it has to begin; drag that ring to move the <b>whole climb</b> without changing its length. The descent works the same way from the other end. The climb and descent are never stretched — the POH prices a rate, not a wish — so moving either end moves the manoeuvre. <b>Right-click a mark</b> to open that leg’s panel; a left click still drops a waypoint as anywhere else on the map.</li>
-            <li><b>Right-click a waypoint → Set altitude from here…</b> to cross that fix at an altitude and hold it for the rest of the plan. The <b>destination keeps its own altitude</b> so your descent survives, and <b>circuit stops keep their circuit altitude</b>, which is derived from the field rather than inherited. One Ctrl+Z takes the whole thing back.</li>
+            <li><b>Drag a climb or descent corner along the track</b> (v16.73). A <b>top</b> (TOC/TOD) is a <b>tick across</b> the track; a <b>bottom</b> (BOC/BOD) is a <b>ring on</b> it. Drag the <b>TOC</b> to say where you want to be level and the planner works the POH climb backwards and places the <b>BOC</b> ring where it has to begin; drag that ring to move the <b>whole climb</b> without changing its length. The descent works the same way from the other end. The climb and descent are never stretched — the POH prices a rate, not a wish — so moving either end moves the manoeuvre. <b>Right-click a mark</b> to open that leg’s panel; a left click still drops a waypoint as anywhere else on the map. Drag a <b>TOC further back than the aircraft can climb</b> and the planner starts the climb on the <b>leg before</b> — it raises that fix to the altitude you pass through, so the two halves are one continuous climb and the altitude column still says what you actually fly. On the <b>first leg</b> there is nothing behind it, so the TOC simply stops at the earliest the POH reaches and tells you. Neither case is an error, so neither raises the red banner.</li>
+            <li><b>Right-click a waypoint</b> to edit its <b>name and altitude in one box</b> — press <b>Enter</b> to apply. The altitude carries forward to every later fix, so you set a whole phase of flight in one go. The <b>destination keeps its own altitude</b> so your descent survives, and <b>circuit stops keep their circuit altitude</b>, which is derived from the field rather than inherited. One Ctrl+Z takes the whole edit back.</li>
             <li><b>TOC and TOD are drawn as a short tick across the track</b>, the way you would mark them on the paper chart, with a small <b>TOC</b> / <b>TOD</b> chip beside it — <b>hover the chip</b> for the full sentence (which altitude, how far from which fix, and for a TOD the aerodrome being descended to). The distances are also in the leg's ↳ sub-line and the plotting list, which is what you copy from and what prints. A descent that fills a whole leg starts <b>at</b> the previous fix, and the mark is drawn there and says so.</li>
             <li>Press <b>👁 View Mode</b> to lock all editing for in-flight use; tapping a map waypoint then highlights its OFP row. The button flips to <b>✏ Edit Mode</b> to switch back.</li>
             <li><b>Undo / Redo</b> cover every change. <b>Esc</b> closes any window like this one.</li>
@@ -1280,7 +1280,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.73';
+    const APP_VERSION = '16.74';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3313,6 +3313,98 @@
       });
     }
 
+    /**
+     * A TOC dropped where the POH climb cannot reach it (v16.74).
+     *
+     * THE BOC IS ALLOWED TO CROSS THE LEG BOUNDARY - by the ONE mechanism that
+     * keeps the altitude column honest. Simply starting the climb on the
+     * previous leg would make the shared fix be crossed at an altitude the
+     * column denies, which is the flaw CLAUDE.md refuses (and which the
+     * descent's own spill-back still has). Instead the planner raises the
+     * PREVIOUS fix to the altitude the climb has to pass through, and pins that
+     * leg's own climb to finish exactly on the fix - so the two halves are one
+     * continuous climb and every stated altitude is still what is flown. That
+     * machinery is v16.38-v16.40's, already verified by running the real engine
+     * on a copy; this only reaches for it automatically instead of putting a
+     * red banner up and waiting to be asked.
+     *
+     * WHERE THERE IS NO EARLIER FIX - the first leg, because you cannot climb
+     * before takeoff - the TOC is CLAMPED to the earliest the POH can reach and
+     * a toast says so. That is a valid plan, so it gets no banner.
+     */
+    function settleTocDrag(fIdx, legIdx, wantNM) {
+      const fl = flights[fIdx];
+      const to = fl && fl.waypoints[legIdx + 1];
+      if (!to) { refreshMap(); return; }
+      const trial = (mutate) => {
+        // EVERY TRIAL RUNS THE REAL ENGINE ON A COPY, so what is offered and
+        // what is applied cannot disagree - the v16.35 preview rule.
+        const copy = JSON.parse(JSON.stringify(fl));
+        mutate(copy);
+        return { copy, sched: computeFlightSchedule(copy) };
+      };
+      const wanted = trial((c) => { c.waypoints[legIdx + 1].tocNM = wantNM; c.waypoints[legIdx + 1].bocNM = null; });
+      const L = wanted.sched[legIdx];
+      pushUndoState('move the TOC');
+      // 1. It fits. Nothing else to decide.
+      if (wantNM === null || !L || L.tocTargetNM == null || L.tocTargetMet !== false) {
+        to.tocNM = wantNM;
+        to.bocNM = null;
+        commitProfileEdit();
+        return;
+      }
+      // 2. An earlier fix can carry the climb. Take the offer the engine has
+      //    already verified, and say what it did - it changes an altitude the
+      //    pilot set, so it must never be silent.
+      const from = fl.waypoints[legIdx];
+      if (legIdx > 0 && L.tocNeedsEntryAlt !== null && from) {
+        to.tocNM = wantNM;
+        to.bocNM = null;
+        from.alt = L.tocNeedsEntryAlt;
+        if (L.tocAdviceLevelByNM) from.tocNM = L.tocAdviceLevelByNM;
+        if (legIdx === 0) fl.depElev = L.tocNeedsEntryAlt;
+        commitProfileEdit();
+        say('Climb begins on the leg before \u2014 ' + from.name + ' is now crossed at ' +
+            L.tocNeedsEntryAlt + ' ft, in one continuous climb.', 'info', 5000);
+        return;
+      }
+      // 3. Nothing helps: clamp to the earliest the POH can reach and say so.
+      //    The unpinned climb starts at this leg's first fix, so its TOC IS the
+      //    earliest possible one.
+      const bare = trial((c) => { c.waypoints[legIdx + 1].tocNM = null; c.waypoints[legIdx + 1].bocNM = null; });
+      const earliest = bare.sched[legIdx] && bare.sched[legIdx].tocAlongNM;
+      const unit = aircraftProfile.distUnit || 'NM';
+      if (earliest !== null && earliest !== undefined && isFinite(earliest)) {
+        // IT ROUNDS UP, NEVER TO THE NEAREST, and that is not tidiness - it is
+        // the same rule v16.40 states for the crossing altitude. The figure is
+        // a MINIMUM, so the nearest tenth is BELOW it half the time, and a
+        // clamp that lands 0.004 NM early misses the very target it was
+        // computed to meet and puts the red banner straight back up.
+        to.tocNM = Math.ceil(earliest * 10) / 10;
+        to.bocNM = null;
+        commitProfileEdit();
+        // THE NUMBER IN THE NOTE IS WHERE THE MARK ACTUALLY LANDED, not the raw
+        // figure it was derived from - they differ by the rounding, and a note
+        // that disagrees with the chart is the drift this project keeps naming.
+        say('The TOC cannot go further back \u2014 climbing from ' + (from ? from.name : 'the start') +
+            ' takes ' + convertDist(to.tocNM, unit).toFixed(1) + ' ' + distLabel(unit) +
+            ' at the POH rate.', 'warn', 5000);
+      } else {
+        // The climb does not finish on this leg at all, so there is no corner
+        // here to pin. Clearing is the truthful answer.
+        to.tocNM = null;
+        to.bocNM = null;
+        commitProfileEdit();
+        say('The climb does not top out on this leg, so there is no TOC here to move.', 'warn', 5000);
+      }
+    }
+
+    function commitProfileEdit() {
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
+    }
+
     /** Turn a drop into a pin on the leg's TO waypoint, where alt/OAT/wind
      *  already live. @param {any} d */
     function applyProfileDrop(d) {
@@ -3323,6 +3415,13 @@
       const D = SL.distNM;
       const at = d.dropNM;
       const round = (v) => Math.round(v * 10) / 10;   // a tenth of a mile, as the OFP prints
+      // A TOC DRAGGED FURTHER BACK THAN THE POH CAN CLIMB IS NOT AN ERROR
+      // (v16.74, the pilot's report: "when moving the TOC backwards it
+      // automatically resets, the red integrity banner appears"). It is a
+      // request the planner can usually GRANT by starting the climb on the leg
+      // before - and where it cannot, the honest answer is a clamp and a note,
+      // not a banner that says the plan is unusable.
+      if (d.kind === 'TOC') { settleTocDrag(d.fIdx, d.legIdx, at > 0.05 ? round(at) : null); return; }
       pushUndoState('move the ' + d.kind);
       if (d.kind === 'BOC') {
         // A POSITION AND A DEADLINE CANNOT BOTH BE THE TRUTH. Setting one
@@ -3350,79 +3449,87 @@
       saveActiveState();
     }
 
+    /** Right-click a waypoint: rename it and set its altitude in ONE dialog,
+     *  committed with Enter (v16.74, the pilot's request - "I want to be able
+     *  to pretty much finish the whole flight plan in the map only view").
+     *  The altitude carries forward to every later fix, which is how a phase of
+     *  flight is actually planned; `levelFromIndices` says which fixes that
+     *  reaches and why the destination and any circuit are left alone. */
     async function openWaypointMenu(fIdx, wpIdx) {
       const fl = flights[fIdx];
       const wp = fl && fl.waypoints[wpIdx];
       if (!wp || isDoneMode) return;
       const isPat = !!wp.isPattern;
+      const reach = levelFromIndices(fl.waypoints, wpIdx);
+      const onward = reach.length - 1;
+      // A CIRCUIT ALTITUDE IS DERIVED FROM ITS FIELD (v16.40) and belongs to
+      // that circuit alone, so it never carries forward.
+      const altHint = isPat
+        ? 'Circuit altitude for this stop only'
+        : onward > 0
+          ? 'Applies here and to the ' + onward + ' fix' + (onward === 1 ? '' : 'es') +
+            ' after it \u2014 ' + fl.waypoints[fl.waypoints.length - 1].name + ' keeps its own'
+          : 'Applies to this fix';
       const r = await ask({
         title: (isPat ? 'Circuit stop' : 'Waypoint ' + (wpIdx + 1)) + ': ' + wp.name,
         message: isPat
-          ? 'Logged at ' + wp.alt + " ft, " + (wp.laps || 3) + ' laps.'
-          : toDMM(wp.lat, true) + ' ' + toDMM(wp.lng, false) + ' \u00b7 ' + wp.alt + " ft",
-        input: isPat ? null : { label: 'Waypoint name', value: wp.name },
+          ? (wp.laps || 3) + ' laps.'
+          : toDMM(wp.lat, true) + ' ' + toDMM(wp.lng, false),
+        fields: [
+          ...(isPat ? [] : [{ id: 'name', label: 'Waypoint name', value: wp.name }]),
+          { id: 'alt', label: 'Altitude (ft AMSL)', value: String(wp.alt),
+            type: 'number', step: '500', hint: altHint }
+        ],
         buttons: [
-          ...(isPat ? [] : [{ id: 'rename', label: 'Rename', variant: 'primary' }]),
-          ...(isPat ? [] : [{ id: 'alt', label: 'Set altitude from here\u2026' }]),
+          { id: 'apply', label: 'Apply', variant: 'primary' },
           { id: 'delete', label: isPat ? 'Delete this circuit stop' : 'Delete this waypoint', variant: 'danger' },
           { id: 'cancel', label: 'Cancel', variant: 'ghost' }
         ]
       });
-      if (r.id === 'rename') renameWaypoint(fIdx, wpIdx, r.value);
-      else if (r.id === 'alt') await setAltitudeFromWaypoint(fIdx, wpIdx);
-      else if (r.id === 'delete') deleteWaypointFromFlight(fIdx, wpIdx);
+      if (r.id === 'delete') { deleteWaypointFromFlight(fIdx, wpIdx); return; }
+      if (r.id !== 'apply') return;
+      applyWaypointEdit(fIdx, wpIdx, r.values || {});
     }
 
-    /** Cross THIS fix at an altitude and hold it from here on (v16.73, the
-     *  pilot's request): "that way it's easier to set altitudes I want for
-     *  different phases of the flight". Which fixes it reaches is
-     *  `levelFromIndices` in legs.js - a pure rule, so the two exclusions (the
-     *  destination keeps its field elevation, a circuit keeps its derived
-     *  circuit altitude) are tested without a browser. */
-    async function setAltitudeFromWaypoint(fIdx, wpIdx) {
-      // RE-READ AFTER THE AWAIT (discipline rule 7): the dialog above has
-      // already yielded, so the flight this was opened on may have been
-      // rebound by an undo.
-      const fl0 = flights[fIdx];
-      const wp0 = fl0 && fl0.waypoints[wpIdx];
-      if (!wp0) return;
-      const reach = levelFromIndices(fl0.waypoints, wpIdx);
-      const onward = reach.length - 1;
-      const skipped = fl0.waypoints.slice(wpIdx + 1, fl0.waypoints.length - 1)
-        .filter((w) => w.isPattern).length;
-      // WHAT IT WILL NOT TOUCH IS SAID BEFORE IT RUNS, not discovered afterwards.
-      const keeps = [fl0.waypoints[fl0.waypoints.length - 1].name + ' keeps its own altitude']
-        .concat(skipped ? [skipped + ' circuit stop' + (skipped === 1 ? '' : 's') + ' keep theirs'] : []);
-      const r = await ask({
-        title: 'Altitude from ' + wp0.name,
-        message: onward > 0
-          ? 'Sets ' + wp0.name + ' and the ' + onward + ' fix' + (onward === 1 ? '' : 'es') +
-            ' after it. ' + keeps.join('; ') + '.'
-          : 'Sets ' + wp0.name + ' only - there is nothing after it.',
-        input: { label: 'Altitude (ft AMSL)', value: String(wp0.alt) },
-        buttons: [
-          { id: 'ok', label: 'Set', variant: 'primary' },
-          { id: 'cancel', label: 'Cancel', variant: 'ghost' }
-        ]
-      });
-      if (r.id !== 'ok') return;
-      const ft = Number(String(r.value == null ? '' : r.value).trim());
-      // AN UNREADABLE ALTITUDE IS REFUSED, NOT COERCED. `Number('')` is 0, and
-      // a plan silently levelled at sea level is the plausible wrong answer
-      // this project exists to refuse (the v16.43 wind-matrix rule).
-      if (!isFinite(ft)) { say('That is not an altitude - nothing was changed.', 'error'); return; }
+    /** Commit whatever the waypoint dialog changed - the name, the altitude, or
+     *  both - as ONE undo step. @param {Record<string,string>} vals */
+    function applyWaypointEdit(fIdx, wpIdx, vals) {
+      // RE-READ AFTER THE AWAIT (discipline rule 7): the dialog yielded, so the
+      // flight may have been rebound by an undo while it was open.
       const fl = flights[fIdx];
-      if (!fl || !fl.waypoints[wpIdx]) return;
-      const idxs = levelFromIndices(fl.waypoints, wpIdx);
-      pushUndoState('set the altitude from ' + fl.waypoints[wpIdx].name);
-      idxs.forEach((i) => { fl.waypoints[i].alt = ft; });
+      const wp = fl && fl.waypoints[wpIdx];
+      if (!wp) return;
+      const wantName = vals.name === undefined ? null : String(vals.name).trim();
+      const rawAlt = vals.alt === undefined ? '' : String(vals.alt).trim();
+      // AN UNREADABLE ALTITUDE IS REFUSED, NOT COERCED. `Number('')` is 0, and a
+      // plan silently levelled at sea level is the v16.43 wind-matrix defect.
+      const ft = rawAlt === '' ? null : Number(rawAlt);
+      if (rawAlt !== '' && !isFinite(ft)) {
+        say('That is not an altitude - nothing was changed.', 'error');
+        return;
+      }
+      const nameChanged = wantName !== null && wantName !== '' && wantName !== wp.name;
+      const altChanged = ft !== null && ft !== wp.alt;
+      if (!nameChanged && !altChanged) return;
+      const idxs = altChanged
+        ? (wp.isPattern ? [wpIdx] : levelFromIndices(fl.waypoints, wpIdx))
+        : [];
+      pushUndoState(nameChanged && altChanged ? 'edit a waypoint'
+        : nameChanged ? 'rename a waypoint' : 'set the altitude from ' + wp.name);
+      if (nameChanged) renameWaypoint(fIdx, wpIdx, wantName, true);
+      if (altChanged) idxs.forEach((i) => { fl.waypoints[i].alt = ft; });
+      // The first waypoint's altitude IS the departure elevation; keep them in
+      // step exactly as setFlightDepElevation does.
+      if (altChanged && wpIdx === 0) fl.depElev = ft;
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
-      say(idxs.length === 1
-        ? fl.waypoints[wpIdx].name + ' set to ' + ft + ' ft.'
-        : ft + ' ft from ' + fl.waypoints[wpIdx].name + ' onwards (' + idxs.length + ' fixes).',
-        'success');
+      if (altChanged) {
+        say(idxs.length === 1
+          ? fl.waypoints[wpIdx].name + ' set to ' + ft + ' ft.'
+          : ft + ' ft from ' + fl.waypoints[wpIdx].name + ' onwards (' + idxs.length + ' fixes).',
+          'success');
+      }
     }
 
     function deleteWaypointFromFlight(fIdx, wpIdx) {
@@ -6390,7 +6497,9 @@
       host.innerHTML = html;
     }
 
-    function renameWaypoint(fIdx, wpIdx, value) {
+    /** @param {boolean} [batched] true when the caller already pushed an undo
+     *  state and will re-render itself, so a combined edit is ONE step. */
+    function renameWaypoint(fIdx, wpIdx, value, batched) {
       const name = String(value).trim();
       if (!name) { renderAllFlightTables(); return; }
       // "PATTERN" IS A RESERVED NAME, IN BOTH DIRECTIONS (L7, v16.48).
@@ -6406,8 +6515,9 @@
         renderAllFlightTables();
         return;
       }
-      pushUndoState('rename a waypoint');
+      if (!batched) pushUndoState('rename a waypoint');
       flights[fIdx].waypoints[wpIdx].name = name;
+      if (batched) return;
       refreshMap();
       renderAllFlightTables();
       saveActiveState();

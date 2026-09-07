@@ -2023,6 +2023,61 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## The waypoint box, and a TOC dragged past what the aircraft can climb (v16.74)
+
+The pilot, on the v16.73 menu: *"the 'set altitude from here' button is
+unnecessary. I just want an 'altitude' input box... it automatically applies it
+when pressing enter"* - with the goal stated plainly: *"I want to be able to
+pretty much finish the whole flight plan in the map only view."* And a bug:
+*"when moving the TOC backwards it automatically resets, the red integrity
+banner appears."*
+
+### ONE DIALOG, TWO FIELDS, ENTER COMMITS
+
+`ask()` grew a `fields` array beside its single `input` (which twenty call sites
+and `promptDialog` still use). The waypoint menu now edits the name AND the
+altitude in one box; the primary button applies whichever changed, as ONE undo
+step, and Enter is already bound to the primary button so the whole thing is
+type-type-Enter without reaching for the mouse.
+
+- A test helper that types into "the dialog's input" is now ambiguous;
+  `typeInDialog(value, fieldId)` takes the field, and the verifier selects
+  `input[data-field="name"]`. Both had been picking the first input.
+
+### A TOC DRAGGED TOO FAR BACK IS A REQUEST, NOT AN ERROR
+
+Three outcomes, and **none of them is the red banner** - in every case the
+resulting plan is flyable, so "DO NOT USE THESE FIGURES" would be false.
+
+1. **It fits** -> applied silently.
+2. **There is a leg behind it** -> the climb begins on that leg. **THE BOC
+   CROSSES THE LEG BOUNDARY BY THE ONE MECHANISM THAT KEEPS THE ALTITUDE COLUMN
+   HONEST**: the earlier fix is RAISED to the altitude the climb passes through
+   and that leg's own climb is pinned to finish exactly on it, so the two halves
+   are one continuous climb and every stated altitude is still what is flown.
+   Simply starting the climb early would make the shared fix be crossed at an
+   altitude the column denies - the flaw CLAUDE.md refuses, and the one the
+   descent's spill-back still has (deferred nit 1). Measured: MID 2500 -> 6800 ft,
+   target met, no banner.
+3. **There is no leg behind it** (the first leg - you cannot climb before
+   takeoff) -> the TOC is CLAMPED to the earliest the POH reaches, with a toast.
+
+- **THE MACHINERY IS v16.38-v16.40's, NOT NEW.** `tocNeedsEntryAlt` and
+  `tocAdviceLevelByNM` are already verified by running the real engine on a
+  copy; this only reaches for them automatically instead of raising a banner and
+  waiting to be asked. Every trial here runs on a `JSON.parse(JSON.stringify())`
+  copy for the same reason.
+- **THE CLAMP ROUNDS UP, NEVER TO THE NEAREST**, and that is the v16.40 rule
+  again: the figure is a MINIMUM, so the nearest tenth is below it half the time
+  and a clamp landing 0.004 NM early misses the very target it was computed to
+  meet - measured, and it put the banner straight back up.
+- **THE NUMBER IN THE NOTE IS WHERE THE MARK LANDED**, not the raw figure it was
+  derived from. They differ by the rounding, and a note that disagrees with the
+  chart is the drift this file keeps naming.
+- **RAISING A FIX THE PILOT SET IS NEVER SILENT.** The toast names the fix and
+  the new altitude, and one Ctrl+Z takes the whole gesture back - the pin and the
+  raised fix together, because it was one gesture.
+
 ## Dragging the corners, and setting an altitude for a phase (v16.73)
 
 Two requests in one: *"a separate icon for BOC and TOC, same with TOD and BOD...

@@ -52,11 +52,16 @@ export function closeDialog(result) {
  * @param {DialogButton[]} opts.buttons  variant: primary | danger | ghost
  * @param {{label?: string, value?: string, placeholder?: string}} [opts.input]
  *                                     adds a text field
+ * @param {{id: string, label?: string, value?: string, type?: string, step?: string,
+ *          placeholder?: string, hint?: string}[]} [opts.fields]
+ *                                     SEVERAL fields, returned in `values` keyed by id.
+ *                                     `input` stays for the single-field case that
+ *                                     promptDialog and twenty call sites already use.
  * @param {string} [opts.cancelId]     id returned on Esc / backdrop (default 'cancel')
- * @returns {Promise<{id: string, value: string|null}>}
+ * @returns {Promise<{id: string, value: string|null, values: Record<string,string>}>}
  */
 export function ask(opts) {
-  const { title, message, buttons = [], input = null, cancelId = 'cancel' } = opts;
+  const { title, message, buttons = [], input = null, fields = null, cancelId = 'cancel' } = opts;
   // Superseding an open dialog resolves it as a cancel. closeDialog takes a
   // button ID, not a result object: passing an object here made the first
   // dialog resolve with `id` set to that object, so a caller checking
@@ -80,6 +85,8 @@ export function ask(opts) {
 
   /** @type {HTMLInputElement|null} */
   let field = null;
+  /** @type {Record<string, HTMLInputElement>} */
+  const extra = {};
   if (input) {
     const wrap = el('div', { className: 'dlg-field' });
     if (input.label) wrap.appendChild(el('label', { textContent: input.label }));
@@ -87,6 +94,29 @@ export function ask(opts) {
     field.className = 'dlg-input';
     wrap.appendChild(field);
     box.appendChild(wrap);
+  }
+  // SEVERAL FIELDS IN ONE DIALOG (v16.74). The waypoint menu now edits a name
+  // AND an altitude, and making that two dialogs one after the other is exactly
+  // the click the pilot asked to remove. Enter still commits the PRIMARY button,
+  // so the whole thing is type-type-Enter without reaching for the mouse.
+  if (Array.isArray(fields)) {
+    for (const f of fields) {
+      if (!f || !f.id) continue;
+      const wrap = el('div', { className: 'dlg-field' });
+      if (f.label) wrap.appendChild(el('label', { textContent: f.label }));
+      const inp = /** @type {HTMLInputElement} */ (el('input', {
+        type: f.type || 'text', value: f.value == null ? '' : String(f.value),
+        placeholder: f.placeholder || ''
+      }));
+      inp.className = 'dlg-input';
+      if (f.step) inp.setAttribute('step', f.step);
+      inp.setAttribute('data-field', f.id);
+      wrap.appendChild(inp);
+      if (f.hint) wrap.appendChild(el('small', { className: 'dlg-hint', textContent: f.hint }));
+      box.appendChild(wrap);
+      extra[f.id] = inp;
+    }
+    if (!field) field = extra[fields[0] && fields[0].id] || null;
   }
 
   const row = el('div', { className: 'dlg-buttons' });
@@ -105,19 +135,22 @@ export function ask(opts) {
   box.appendChild(row);
   backdrop.appendChild(box);
 
-  /** @type {(r: {id: string, value: string|null}) => void} */
+  /** @type {(r: {id: string, value: string|null, values: Record<string,string>}) => void} */
   let settle;
-  /** @type {Promise<{id: string, value: string|null}>} */
+  /** @type {Promise<{id: string, value: string|null, values: Record<string,string>}>} */
   const promise = new Promise(resolve => { settle = resolve; });
 
   /** @param {string} id */
   function finish(id) {
     if (!openDialog) return;
     const value = field ? field.value : null;
+    /** @type {Record<string,string>} */
+    const values = {};
+    for (const k of Object.keys(extra)) values[k] = extra[k].value;
     document.removeEventListener('keydown', onKey, true);
     if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
     openDialog = null;
-    settle({ id, value });
+    settle({ id, value, values });
   }
 
   /** @param {KeyboardEvent} e */
