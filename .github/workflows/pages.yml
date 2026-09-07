@@ -43,10 +43,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          # 22, NOT 20, and this is a correctness requirement rather than
+          # housekeeping: test.js `require()`s ESM modules from tools/
+          # (aip-fields.mjs, lock-rules.mjs), which Node only supports from
+          # 20.19 / 22.12. Pinning the major to 20 happened to resolve to a
+          # 20.19+ patch and worked by luck; 22 matches the version this is
+          # developed on and states the floor honestly. See package.json engines.
+          node-version: '22'
       - run: npm install
       - run: npm test
 
@@ -92,10 +98,17 @@ jobs:
           test ! -f site-locked/app.js || { echo "::error::a plaintext app.js is in the locked build"; exit 1; }
           echo "locked build carries no readable app"
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site-locked
+          # HIDDEN FILES ARE EXCLUDED BY DEFAULT from v4 onwards, and the
+          # locked build ships a hidden one: .nojekyll. Bumping from v3
+          # without this would have dropped it silently - the artifact would
+          # upload, the deploy would go green, and one file would just be
+          # missing. Verified against the action's own README before bumping,
+          # not assumed.
+          include-hidden-files: true
 
   deploy:
     needs: build
@@ -105,4 +118,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
