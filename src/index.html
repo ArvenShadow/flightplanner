@@ -1295,7 +1295,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.81';
+    const APP_VERSION = '16.82';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -7428,9 +7428,21 @@
 
       if (withSettings && obj(parsed) && obj(parsed.planningPrefs)) {
         const pp = parsed.planningPrefs;
+        // AN EMPTY VALUE IN A FILE DOES NOT DESTROY A PRESENT ONE HERE (v16.82).
+        // Fuel and reserve had this guard; the ETD did not, so importing blanked
+        // it - and not as a rare edge case: `buildExportPayload` writes
+        // `etd: (planningPrefs && planningPrefs.etd) || ''`, so EVERY file
+        // exported from a session that had no ETD carries an empty one. It is
+        // the v16.44 "absent stays absent" rule read the other way round: a
+        // missing value must not be coerced INTO the plan, and equally must not
+        // overwrite something the pilot has set.
+        //
+        // The guard belongs HERE rather than in the exporter: the file format is
+        // internally consistent (savePlanningPrefs stores '' too), and it is the
+        // READ that loses data.
         if (pp.fuel !== undefined && pp.fuel !== '') document.getElementById('fuel-dep').value = pp.fuel;
         if (pp.reserve !== undefined && pp.reserve !== '') document.getElementById('fuel-reserve').value = pp.reserve;
-        if (pp.etd !== undefined) document.getElementById('def-etd').value = pp.etd;
+        if (pp.etd !== undefined && pp.etd !== '') document.getElementById('def-etd').value = pp.etd;
         savePlanningPrefs();
         applied.push('planning preferences');
       }

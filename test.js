@@ -9067,6 +9067,65 @@ TA('a colliding MISSION prompts too, with its plans side by side', async () => {
   ev(SEED);
 });
 
+TA('an empty planning pref in a file does not blank the one on screen', async () => {
+  // The pilot asked about this after v16.81: "the ETD in a file overwrites
+  // yours even when it's empty". Fuel and reserve were already guarded; the
+  // ETD was not - and it is not an edge case, because buildExportPayload
+  // writes `etd: ... || ''`, so EVERY export from a session with no ETD
+  // carries an empty one and would blank the importer's.
+  ev(`localStorage.removeItem('c182_custom_routes'); localStorage.removeItem('c182_custom_missions');`);
+  ev(`document.getElementById('def-etd').value = '07:30';
+      document.getElementById('fuel-dep').value = '60';
+      document.getElementById('fuel-reserve').value = '9';`);
+  importFile(JSON.stringify({
+    routes: { 'ETD-PROBE': [{ lat: 69, lng: 18, name: 'A', alt: 100, oat: 0, wdir: 0, wspd: 0, var: -11 },
+                            { lat: 69.4, lng: 18.4, name: 'B', alt: 2000, oat: 0, wdir: 0, wspd: 0, var: -11 }] },
+    planningPrefs: { fuel: '', reserve: '', etd: '' }
+  }));
+  await tick();
+  answerDialog('Routes and settings');   // the settings ARE wanted; they are just empty
+  await tick();
+  assert(doc.getElementById('def-etd').value === '07:30',
+    'an empty ETD in the file blanked the one on screen: ' + doc.getElementById('def-etd').value);
+  assert(doc.getElementById('fuel-dep').value === '60', 'the fuel was blanked');
+  assert(doc.getElementById('fuel-reserve').value === '9', 'the reserve was blanked');
+  // ...and a REAL value still lands, or the guard would have gone too far.
+  importFile(JSON.stringify({
+    routes: { 'ETD-PROBE-2': [{ lat: 69, lng: 18, name: 'A', alt: 100, oat: 0, wdir: 0, wspd: 0, var: -11 },
+                              { lat: 69.4, lng: 18.4, name: 'B', alt: 2000, oat: 0, wdir: 0, wspd: 0, var: -11 }] },
+    planningPrefs: { fuel: '48', reserve: '8.5', etd: '13:15' }
+  }));
+  await tick();
+  answerDialog('Routes and settings');
+  await tick();
+  assert(doc.getElementById('def-etd').value === '13:15',
+    'a real ETD no longer imports: ' + doc.getElementById('def-etd').value);
+  assert(doc.getElementById('fuel-dep').value === '48' &&
+         doc.getElementById('fuel-reserve').value === '8.5', 'a real fuel figure no longer imports');
+  ev(SEED);
+});
+
+T('all three planning prefs guard the same way', () => {
+  // The defect was ONE of three lines differing from the other two, which is
+  // the shape that hides: a rule applied to a surface and not to its
+  // neighbours. Asserted on the source so a fourth pref cannot be added
+  // without it.
+  const fn = APP_SRC.split('async function importMissionFile')[1]
+                    .split('\n    /** What the import actually did')[0];
+  // SPLIT ON THE CALL, NOT THE NAME: the first version split on the bare word
+  // `savePlanningPrefs`, and the comment written with the fix MENTIONS it - so
+  // the block ended at the comment, before the three lines being inspected,
+  // and the test failed against correct code. An anchor that prose can match
+  // is not an anchor (the v16.52 marker lesson, in a smaller shape).
+  const block = fn.split('obj(parsed.planningPrefs)')[1].split('savePlanningPrefs();')[0];
+  const guarded = [...block.matchAll(/pp\.(\w+) !== undefined && pp\.\1 !== ''/g)].map((m) => m[1]);
+  for (const k of ['fuel', 'reserve', 'etd']) {
+    assert(guarded.includes(k), k + ' does not guard against an empty value in the file');
+  }
+  assert(guarded.length === (block.match(/pp\.\w+ !== undefined/g) || []).length,
+    'a planning pref is read without the empty-value guard the others have');
+});
+
 T('the import path holds no state across an await', () => {
   // Discipline rule 7, disposed of by STRUCTURE rather than by vigilance:
   // every dialog happens before anything is written, so there is no

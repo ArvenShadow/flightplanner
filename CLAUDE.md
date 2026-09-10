@@ -2144,6 +2144,36 @@ read `''` and the check passed while a control was three places adrift - a
 comparison against a value that cannot be there proves nothing in either
 direction.
 
+### AN EMPTY PREF IN A FILE DOES NOT BLANK THE ONE ON SCREEN (v16.82)
+
+The pilot's follow-up, after being told about it: the ETD was the one planning
+pref read without the empty-value guard its two neighbours had, so importing
+blanked it.
+
+**AND IT WAS NOT AN EDGE CASE.** `buildExportPayload` writes
+`etd: (planningPrefs && planningPrefs.etd) || ''`, so EVERY file exported from a
+session that had no ETD carries an empty one - which means the normal shape of a
+route file silently cleared the importer's departure time. Fuel and reserve were
+already guarded; only the ETD was not.
+
+It is the v16.44 **"absent stays absent"** rule read the other way round: a
+missing value must not be coerced INTO the plan, and equally must not overwrite
+something the pilot has set. The guard belongs on the READ, not in the exporter:
+the file format is internally consistent (`savePlanningPrefs` stores `''` too),
+and it is the read that loses data.
+
+- **THE SHAPE WAS ONE OF THREE LINES DIFFERING FROM THE OTHER TWO**, which is
+  how it hid - a rule applied to a surface and not to its neighbours, this
+  file's first named failure shape. A test now walks the block and requires
+  EVERY `pp.<key>` read to carry the guard, so a fourth pref cannot be added
+  without it.
+- **AND THAT TEST FAILED AGAINST CORRECT CODE FIRST.** It sliced the block on
+  the bare word `savePlanningPrefs` - which the comment written with the fix
+  MENTIONS - so the slice ended at the comment, before the three lines it meant
+  to inspect. An anchor that prose can match is not an anchor; it splits on
+  `savePlanningPrefs();` now. Same lesson as the v16.52 `@KEY-DISPATCH` marker,
+  in a smaller shape.
+
 ### THE TOAST DISTINGUISHES SIX OUTCOMES
 
 Applied, replaced (a saved entry is gone), kept (the pilot chose theirs),
