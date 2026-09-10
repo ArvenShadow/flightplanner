@@ -209,3 +209,137 @@ export function buildExportPayload({ routes, missions, flights, profile, plannin
     keybinds: normaliseKeymap(keybinds)
   };
 }
+
+// ---------------------------------------------------------------------------
+// IMPORT: WHAT IS IN THE FILE, AND WHETHER IT COLLIDES (v16.81)
+//
+// The pilot asked for two things after finding out what import actually did:
+// a choice between "routes and settings" and "routes only", and a prompt with
+// a side-by-side preview when a route in the file has the same NAME as one
+// they have saved.
+//
+// THE SILENT OVERWRITE WAS THE REAL DEFECT. Import merges into the saved
+// library - your other routes are kept - but a same-named entry replaced yours
+// with nothing said, and the undo snapshot covers `flights` and the plan
+// fields, NOT localStorage. So that one was unrecoverable, and it was the only
+// unrecoverable thing import did.
+//
+// These are pure so the rules are testable without a browser; the page turns
+// the comparison into DOM nodes.
+// ---------------------------------------------------------------------------
+
+/**
+ * A canonical string for a value, for EQUALITY ONLY - never for display.
+ *
+ * Keys are sorted, so two waypoints that differ only in the order their keys
+ * happened to be written compare equal. `JSON.stringify(NaN)` is `null`, which
+ * this file warns about elsewhere; here it is the behaviour wanted, because a
+ * missing OAT and a missing OAT ARE the same thing and must not read as a
+ * difference the pilot has to adjudicate.
+ * @param {any} v @returns {string}
+ */
+function stableString(v) {
+  if (Array.isArray(v)) return '[' + v.map(stableString).join(',') + ']';
+  if (v && typeof v === 'object') {
+    return '{' + Object.keys(v).sort()
+      .map((k) => JSON.stringify(k) + ':' + stableString(v[k])).join(',') + '}';
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+
+/** Canonical signature of one saved route (an array of waypoints).
+ *  @param {any} wps @returns {string} */
+export function routeSignature(wps) {
+  return stableString(Array.isArray(wps) ? wps : []);
+}
+
+/** @param {any} w the four fields the side-by-side preview shows. A difference
+ *  OUTSIDE them (OAT, wind, a pin, a via) is reported as "other values differ"
+ *  rather than flagged on a row that looks identical - two visually identical
+ *  rows marked as different, with no way to see why, is worse than saying so. */
+function diffCell(w) {
+  return { name: String(w.name == null ? '' : w.name),
+           lat: num(w.lat), lng: num(w.lng), alt: num(w.alt) };
+}
+
+/**
+ * Compare two versions of one route, for the replace-or-keep prompt.
+ *
+ * ALIGNED BY INDEX, not by a longest-common-subsequence diff, and that is a
+ * deliberate limit rather than an oversight: the case this exists for is a
+ * route edited in place, where index alignment is exactly right. Insert a fix
+ * in the middle and every later row reads as changed - which overstates the
+ * difference but never understates it, so the pilot is never told two routes
+ * agree when they do not. Both sides must already be sanitised.
+ *
+ * @param {any[]} before the saved route
+ * @param {any[]} after the one in the file
+ * @returns {{identical: boolean,
+ *            rows: {i: number, before: any, after: any, state: string}[],
+ *            summary: {before: number, after: number, changed: number,
+ *                      added: number, removed: number, hidden: number}}}
+ */
+export function compareRoutes(before, after) {
+  const a = Array.isArray(before) ? before : [];
+  const b = Array.isArray(after) ? after : [];
+  const rows = [];
+  let changed = 0, added = 0, removed = 0, hidden = 0;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const o = a[i], w = b[i];
+    if (!o) { added++; rows.push({ i, before: null, after: diffCell(w), state: 'added' }); continue; }
+    if (!w) { removed++; rows.push({ i, before: diffCell(o), after: null, state: 'removed' }); continue; }
+    const cellO = diffCell(o), cellW = diffCell(w);
+    let state = 'same';
+    if (stableString(o) !== stableString(w)) {
+      // `Object.is`, NOT `!==`, for the numbers: a missing OAT is NaN and
+      // `NaN !== NaN`, so a plain comparison would call every absent value a
+      // difference. Written out rather than looped over a key list, which the
+      // typechecker rejected as an unsafe index and which was less clear anyway.
+      const shownDiffers = cellO.name !== cellW.name
+        || !Object.is(cellO.lat, cellW.lat)
+        || !Object.is(cellO.lng, cellW.lng)
+        || !Object.is(cellO.alt, cellW.alt);
+      if (shownDiffers) { state = 'changed'; changed++; } else { state = 'other'; hidden++; }
+    }
+    rows.push({ i, before: cellO, after: cellW, state });
+  }
+  return {
+    identical: routeSignature(a) === routeSignature(b),
+    rows,
+    summary: { before: a.length, after: b.length, changed, added, removed, hidden }
+  };
+}
+
+/**
+ * What an import file actually carries, so the scope question is only asked
+ * when there is a choice to make.
+ *
+ * A file with routes and no settings gets no dialog: offering "routes only"
+ * when that is the only possibility is a click for nothing. Same the other way
+ * round.
+ *
+ * @param {any} parsed the parsed JSON
+ * @returns {{routeKinds: string[], settingKinds: string[],
+ *            hasRoutes: boolean, hasSettings: boolean}}
+ */
+export function importScopeOf(parsed) {
+  const obj = (/** @type {any} */ v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  const filled = (/** @type {any} */ v) => obj(v) && Object.keys(v).length > 0;
+  const routeKinds = [], settingKinds = [];
+  if (Array.isArray(parsed)) {
+    if (parsed.length) routeKinds.push('a route');
+  } else if (obj(parsed)) {
+    if (filled(parsed.routes)) routeKinds.push('saved routes');
+    if (filled(parsed.missions)) routeKinds.push('saved missions');
+    if (Array.isArray(parsed.currentFlights) && parsed.currentFlights.length) {
+      routeKinds.push('the open flight plans');
+    }
+    // A SETTINGS KIND COUNTS EVEN IF EMPTY-ISH, because `planningPrefs: {}`
+    // still reaches the branch that writes the ETD field.
+    if (obj(parsed.profile)) settingKinds.push('aircraft settings');
+    if (obj(parsed.planningPrefs)) settingKinds.push('planning preferences');
+    if (obj(parsed.keybinds)) settingKinds.push('keyboard shortcuts');
+  }
+  return { routeKinds, settingKinds,
+           hasRoutes: routeKinds.length > 0, hasSettings: settingKinds.length > 0 };
+}

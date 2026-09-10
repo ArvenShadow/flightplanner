@@ -57,11 +57,21 @@ export function closeDialog(result) {
  *                                     SEVERAL fields, returned in `values` keyed by id.
  *                                     `input` stays for the single-field case that
  *                                     promptDialog and twenty call sites already use.
+ * @param {HTMLElement} [opts.body]     a DOM NODE appended under the message.
+ *                                     A NODE, never an HTML string, and that is
+ *                                     the point: the route-collision preview
+ *                                     (v16.81) shows waypoint names the pilot
+ *                                     typed, and building it with createElement
+ *                                     and textContent means there is no
+ *                                     innerHTML sink to remember to escape -
+ *                                     discipline rule 6 satisfied by
+ *                                     construction rather than by vigilance.
  * @param {string} [opts.cancelId]     id returned on Esc / backdrop (default 'cancel')
  * @returns {Promise<{id: string, value: string|null, values: Record<string,string>}>}
  */
 export function ask(opts) {
-  const { title, message, buttons = [], input = null, fields = null, cancelId = 'cancel' } = opts;
+  const { title, message, buttons = [], input = null, fields = null,
+          body = null, cancelId = 'cancel' } = opts;
   // Superseding an open dialog resolves it as a cancel. closeDialog takes a
   // button ID, not a result object: passing an object here made the first
   // dialog resolve with `id` set to that object, so a caller checking
@@ -80,6 +90,16 @@ export function ask(opts) {
       if (i) body.appendChild(el('br'));
       body.appendChild(document.createTextNode(line));
     });
+    box.appendChild(body);
+  }
+
+  // Under the message, above any fields: it is context for the question, not
+  // an answer to it. Duck-typed on nodeType so the jsdom harness and Chromium
+  // agree - `instanceof HTMLElement` is false across jsdom realms.
+  if (body && typeof body === 'object' && body.nodeType === 1) {
+    // A side-by-side comparison does not fit the 460 px question box, and
+    // widening every dialog to suit one of them would re-lay out twenty.
+    box.classList.add('dlg-wide');
     box.appendChild(body);
   }
 

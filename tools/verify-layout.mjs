@@ -717,6 +717,117 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
   await ctx.close();
 }
 
+// ---- THE ROUTE-COLLISION PREVIEW IS A LAYOUT (v16.81) ---------------------
+// jsdom asserts that both routes reach the dialog; it cannot say whether they
+// sit SIDE BY SIDE, nor whether a long route pushes the answer buttons off a
+// short window - which is the v16.49 below-the-fold failure in a box that
+// cannot scroll, and the whole reason .rd-scroll has a max-height.
+{
+  // 720 px tall on purpose: the 13" laptop this project already sizes for.
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  const perr = [];
+  page.on('pageerror', (e) => perr.push(String(e)));
+  await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
+  await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => { closeHelpModal(); });
+
+  // A LONG route on both sides: 30 waypoints is what makes the cap matter.
+  const wps = (tag, n) => Array.from({ length: n }, (_, i) => ({
+    lat: 68.5 + i * 0.05, lng: 18.5, name: tag + '-' + (i + 1), alt: 1000 + i * 100,
+    oat: 0, wdir: 0, wspd: 0, var: -11 }));
+
+  // Fire the import WITHOUT awaiting it: page.evaluate awaits what the
+  // function returns, so returning the promise would deadlock against the
+  // dialog it is waiting for us to answer (the v16.37 trap, same shape).
+  await page.evaluate(([mine, theirs]) => {
+    localStorage.setItem('c182_custom_routes', JSON.stringify({ 'LONG': mine }));
+    const json = JSON.stringify({ routes: { 'LONG': theirs } });
+    const reader = { readAsText() { this.onload({ target: { result: json } }); } };
+    const orig = window.FileReader;
+    window.FileReader = function () { return reader; };
+    importMissionFile({ target: { files: [{}], value: '' } });
+    window.FileReader = orig;
+  }, [wps('FIX', 30), (() => {
+    // MOSTLY THE SAME ROUTE, two waypoints edited - which is the case the
+    // preview exists for, and the only fixture that has BOTH an unchanged and
+    // a changed row to compare the highlight against. The first version made
+    // every row differ, so there was no `.rd-same` on the page and the
+    // highlight check read `null` for the baseline and failed a working style.
+    const t = wps('FIX', 30);
+    t[4] = { ...t[4], name: 'MOVED' };
+    t[5] = { ...t[5], alt: 9500 };
+    return t;
+  })()]);
+  await page.waitForTimeout(500);
+
+  const box = await page.evaluate(() => {
+    const dlg = document.querySelector('#app-dialog .dlg');
+    if (!dlg) return null;
+    const rows = [...dlg.querySelectorAll('.rd-table tr')];
+    const cells = rows.length ? [...rows[0].children].map((c) => c.getBoundingClientRect()) : [];
+    const scroll = dlg.querySelector('.rd-scroll');
+    const btns = [...dlg.querySelectorAll('.dlg-btn')].map((btn) => {
+      const r = btn.getBoundingClientRect();
+      return { label: btn.textContent.trim().slice(0, 24), bottom: Math.round(r.bottom),
+               h: Math.round(r.height) };
+    });
+    const changed = dlg.querySelector('.rd-changed td');
+    const same = dlg.querySelector('.rd-same td');
+    return {
+      dlg: dlg.getBoundingClientRect(),
+      wide: dlg.classList.contains('dlg-wide'),
+      rows: rows.length,
+      cells,
+      scrollH: scroll ? Math.round(scroll.getBoundingClientRect().height) : -1,
+      scrolls: scroll ? scroll.scrollHeight > scroll.clientHeight + 1 : false,
+      btns,
+      changedRows: dlg.querySelectorAll('.rd-changed').length,
+      changedBg: changed ? getComputedStyle(changed).backgroundColor : null,
+      sameBg: same ? getComputedStyle(same).backgroundColor : null,
+      vh: window.innerHeight
+    };
+  });
+
+  check(!!box, 'the collision prompt opened in a real browser');
+  if (box) {
+    check(box.wide && box.dlg.width > 560,
+      `a dialog carrying a preview is widened (${Math.round(box.dlg.width)} px)`);
+    check(box.dlg.width <= 1280,
+      `and still fits the window (${Math.round(box.dlg.width)} px of 1280)`);
+    check(box.cells.length === 2 && box.cells[0].width > 40 && box.cells[1].width > 40
+          && box.cells[0].x + box.cells[0].width <= box.cells[1].x + 1,
+      'the two routes are side by side, both with a real box: ' +
+      box.cells.map((c) => Math.round(c.x) + '+' + Math.round(c.width)).join(' | '));
+    check(box.rows === 30, 'every row of the longer route is present: ' + box.rows);
+    // THE CAP IS WHAT KEEPS THE ANSWER REACHABLE. 30 rows would be ~700 px.
+    check(box.scrollH > 0 && box.scrollH <= 260 && box.scrolls,
+      `the list scrolls instead of growing (${box.scrollH} px, scrollable ${box.scrolls})`);
+    const lowest = Math.max(...box.btns.map((x) => x.bottom));
+    check(lowest <= box.vh,
+      `every answer button is on screen (lowest edge ${lowest} of ${box.vh})`);
+    check(box.btns.every((x) => x.h > 0), 'no answer button collapsed to nothing');
+    check(!!box.changedBg && !!box.sameBg && box.changedBg !== box.sameBg,
+      `a differing row is highlighted and an unchanged one is not ` +
+      `(${box.changedBg} vs ${box.sameBg})`);
+    check(box.changedRows === 2,
+      'exactly the two edited rows are highlighted: ' + box.changedRows);
+  }
+  // Leave nothing behind for the next context, and prove Cancel is honest.
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('#app-dialog .dlg-btn')]
+      .find((x) => /Cancel the import/.test(x.textContent));
+    if (btn) btn.click();
+  });
+  await page.waitForTimeout(300);
+  check(await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('c182_custom_routes')).LONG[4].name === 'FIX-5'),
+    'cancelling in the browser left the saved route alone');
+  check(perr.length === 0, 'no page errors around the collision prompt: ' + perr.join(' | '));
+  await ctx.close();
+}
+
 await b.close();
 console.log(fails.length ? `\n${fails.length} layout check(s) FAILED` : '\nall layout checks passed');
 process.exit(fails.length ? 1 : 0);
