@@ -2036,6 +2036,153 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## IMPORT ASKS BEFORE IT OVERWRITES ANYTHING (v16.81)
+
+The pilot asked what import actually did - *"does it override all my other
+routes/settings?"* - and the answer was mostly reassuring and had one hole in
+it. Reading the code rather than answering from memory is what found the hole.
+
+### WHAT IT ALREADY DID RIGHT, AND THE ONE THING IT DID NOT
+
+- The saved library was always MERGED: importing three routes left the other
+  twenty alone. The profile was merged key by key through `PROFILE_KEYS`.
+- **BUT A SAME-NAMED ENTRY REPLACED THEIRS WITH NOTHING SAID, AND THAT ONE WAS
+  UNRECOVERABLE.** `pushUndoState` snapshots `{flights, loadedRouteRef,
+  planFieldState()}` - the plan on screen and the plan fields. It does NOT
+  cover `localStorage`, so the saved route that a collision overwrote was gone
+  for good. Every other thing an import does is undoable; that was the
+  exception, and it was silent.
+- A second surprise, found on the way: **`keybinds` is a WHOLESALE
+  replacement.** `normaliseKeymap` builds from `defaultKeymap()` and falls back
+  per action to the SHIPPED default, not to what the pilot had - so importing a
+  file with a `keybinds` block resets every shortcut the file does not mention.
+  That is now stated in the guide, in a comment at the assignment, and is half
+  the reason "Routes only" exists.
+
+### TWO FEATURES, BOTH THE PILOT'S WORDS
+
+1. **A SCOPE CHOICE**: `Routes and settings` or `Routes only`. Asked ONLY when
+   the file carries both, because offering "routes only" for a file with no
+   settings is a click with nothing to choose between - `importScopeOf` decides
+   that, and it is pure. `Routes and settings` is the primary, so Enter
+   reproduces exactly what every import did before the choice existed.
+2. **A COLLISION PROMPT WITH THE TWO ROUTES SIDE BY SIDE**, yours left and the
+   file's right, rows that differ highlighted. **`Keep mine` is the primary**:
+   the destructive answer must never be what Enter does when the pilot is
+   clearing a dialog out of the way.
+
+### DECIDE, THEN APPLY - AND THAT IS WHAT MAKES CANCEL HONEST
+
+Every question is asked before a single write; the whole import then applies in
+one synchronous pass. So Cancel really means nothing changed, including routes
+the loop had already got past - the v16.44 rule (refuse before touching the
+live plan) applied to a CHOICE rather than to a validation failure.
+
+**IT ALSO DISPOSES OF DISCIPLINE RULE 7 BY CONSTRUCTION.** There is no
+`flights` reference held across an await because nothing touches `flights`
+until every dialog has closed. A test asserts that structurally - every
+`await ask(...)` / `await resolveImportCollisions(...)` sits before
+`pushUndoState`, and the first write comes after the last question - rather
+than hoping one example case would notice.
+
+### WHAT THE COMPARISON IS, AND THE LIMIT IT ADMITS
+
+- **ALIGNED BY INDEX, not by a longest-common-subsequence diff.** The case this
+  exists for is a route edited in place, where index alignment is exactly
+  right. Insert a fix in the middle and every later row reads as changed -
+  which OVERSTATES the difference and never understates it, so the pilot is
+  never told two routes agree when they do not. Stated in the function rather
+  than left to be discovered.
+- **A DIFFERENCE OUTSIDE THE FOUR SHOWN FIELDS GETS ITS OWN STATE AND ITS OWN
+  SENTENCE.** Name, altitude and position are on screen; OAT, wind, a pin and a
+  via are not. Flagging a row as different when all four visible values match,
+  with nothing to explain why, would read as a bug in the preview - so those
+  rows say "match by name, altitude and position but differ in other values".
+- **`Object.is`, NOT `!==`, FOR THE NUMBERS.** A missing OAT is NaN and
+  `NaN !== NaN`, so a plain comparison would call every absent value a
+  difference and make a route with a blank field collide with itself. The
+  signature side uses a key-SORTED stringify for the same reason plus one more:
+  a route saved by an older build must not differ from an identical one saved
+  by a newer just because the keys were written in another order.
+- **IDENTICAL NEEDS NO QUESTION.** Replace and keep produce the same library,
+  so it is counted and reported, never adjudicated.
+- Both sides go through `sanitiseFlights` before comparing, or a route saved
+  before a field existed would read as different in every row.
+
+### THE PREVIEW IS DOM NODES, WHICH IS STRONGER THAN ESCAPING
+
+`ask()` grew a `body` slot that takes a **NODE, never an HTML string**. Every
+cell is a waypoint name the pilot typed or one out of a file - exactly the
+`Bodø <VOR>` case discipline rule 6 exists for - and `textContent` has no
+parser behind it, so there is no `innerHTML` sink to remember to escape.
+Discipline rule 6 satisfied by construction rather than by vigilance, and a
+test asserts a hostile name neither executes nor gets mangled.
+
+### MISSIONS GET THE SAME QUESTION, WITH A DIFFERENT PREVIEW
+
+The pilot asked about routes; missions have the identical silent-overwrite
+hazard, so leaving them out would be the "old rule not applied to a new
+surface" failure this file names. A waypoint table would misrepresent a
+multi-plan mission, so the preview is one line per plan with its fix chain -
+enough to tell "the same mission, edited" from "a different mission with the
+same name" without inventing a mission-diff model.
+
+### AND THE FIRST BROWSER CHECK FAILED A WORKING STYLE
+
+`verify:layout` measures the preview at 1280x720: both columns side by side
+with real boxes (341+300 | 640+300), 30 rows present, the list capped at 240 px
+so every answer button stays on screen (lowest edge 586 of 720), the highlight
+painted, and Cancel leaving the saved route alone.
+
+The highlight check failed on its first run and **the style was fine** - the
+FIXTURE was wrong. It compared `MINE-1..30` against `THEIRS-1..30`, so every
+row differed, there was no `.rd-same` on the page at all, and the baseline read
+`null`. A comparison needs both states present to mean anything; the fixture is
+now one route with two waypoints edited, which is the case the preview exists
+for anyway. Same family as the v16.66 finding where both sides of a comparison
+read `''` and the check passed while a control was three places adrift - a
+comparison against a value that cannot be there proves nothing in either
+direction.
+
+### AN EMPTY PREF IN A FILE DOES NOT BLANK THE ONE ON SCREEN (v16.82)
+
+The pilot's follow-up, after being told about it: the ETD was the one planning
+pref read without the empty-value guard its two neighbours had, so importing
+blanked it.
+
+**AND IT WAS NOT AN EDGE CASE.** `buildExportPayload` writes
+`etd: (planningPrefs && planningPrefs.etd) || ''`, so EVERY file exported from a
+session that had no ETD carries an empty one - which means the normal shape of a
+route file silently cleared the importer's departure time. Fuel and reserve were
+already guarded; only the ETD was not.
+
+It is the v16.44 **"absent stays absent"** rule read the other way round: a
+missing value must not be coerced INTO the plan, and equally must not overwrite
+something the pilot has set. The guard belongs on the READ, not in the exporter:
+the file format is internally consistent (`savePlanningPrefs` stores `''` too),
+and it is the read that loses data.
+
+- **THE SHAPE WAS ONE OF THREE LINES DIFFERING FROM THE OTHER TWO**, which is
+  how it hid - a rule applied to a surface and not to its neighbours, this
+  file's first named failure shape. A test now walks the block and requires
+  EVERY `pp.<key>` read to carry the guard, so a fourth pref cannot be added
+  without it.
+- **AND THAT TEST FAILED AGAINST CORRECT CODE FIRST.** It sliced the block on
+  the bare word `savePlanningPrefs` - which the comment written with the fix
+  MENTIONS - so the slice ended at the comment, before the three lines it meant
+  to inspect. An anchor that prose can match is not an anchor; it splits on
+  `savePlanningPrefs();` now. Same lesson as the v16.52 `@KEY-DISPATCH` marker,
+  in a smaller shape.
+
+### THE TOAST DISTINGUISHES SIX OUTCOMES
+
+Applied, replaced (a saved entry is gone), kept (the pilot chose theirs),
+already identical, dropped as unreadable, and declined by choice. **Keeping
+every colliding route is not "nothing was recognised"** - the file was
+understood perfectly and the pilot chose their own copy each time - so it gets
+its own sentence instead of the v16.44 warning, and the undo step is popped
+because nothing was applied.
+
 ## THE DEPLOYED COPY IS ENCRYPTED, AND THE SOURCE IS NOT (v16.78)
 
 The author asked for "a password set in an encrypted file only i can access so

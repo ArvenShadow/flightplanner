@@ -594,11 +594,23 @@ T('copy text includes TOC marking info', () => {
 });
 
 console.log('\n=== 21. Export / import portability ===');
+/** Feed a JSON string through the real import path. The FileReader stub calls
+ *  onload synchronously; importMissionFile is async since v16.81, so every
+ *  caller must `await tick()` before asserting - and again after answering
+ *  each dialog. */
+function importFile(json) {
+  ev(`(function(){
+    const reader = { readAsText(){ this.onload({ target: { result: ${JSON.stringify(json)} } }); } };
+    const orig = window.FileReader; window.FileReader = function(){ return reader; };
+    importMissionFile({ target: { files: [{}], value: '' } });
+    window.FileReader = orig;
+  })()`);
+}
 TA('export carries profile and planning prefs', async () => {
   w.exportMissionFile();
   assert(w.__lastBlob, 'no blob captured');
 });
-T('import of v2 file applies aircraft settings', () => {
+TA('import of v2 file applies aircraft settings', async () => {
   const v2 = JSON.stringify({
     formatVersion: 2,
     routes: {}, missions: {},
@@ -608,27 +620,30 @@ T('import of v2 file applies aircraft settings', () => {
     profile: { roc: 833, climbTas: 91, evilExtra: 'ignored' },
     planningPrefs: { fuel: '55', reserve: '9.5', etd: '07:45' }
   });
-  ev(`(function(){
-    const reader = { readAsText(){ this.onload({ target: { result: ${JSON.stringify(v2)} } }); } };
-    const orig = window.FileReader; window.FileReader = function(){ return reader; };
-    importMissionFile({ target: { files: [{}], value: '' } });
-    window.FileReader = orig;
-  })()`);
+  importFile(v2);
+  await tick();
+  // IT CARRIES BOTH ROUTES AND SETTINGS, so the scope question is asked
+  // (v16.81). "Routes and settings" is the primary, i.e. what Enter does and
+  // what every import did before the choice existed.
+  answerDialog('Routes and settings');
+  await tick();
   assert(ev('aircraftProfile.roc') === 833, 'roc not imported: ' + ev('aircraftProfile.roc'));
   assert(ev('aircraftProfile.evilExtra') === undefined, 'non-whitelisted key leaked in');
   assert(doc.getElementById('fuel-dep').value === '55', 'fuel pref not imported');
   assert(doc.getElementById('def-etd').value === '07:45', 'etd not imported');
   assert(ev('flights.length') === 1 && ev("flights[0].title") === 'T', 'flights not imported');
 });
-T("user's actual v1 export imports cleanly (5 flights, no settings)", () => {
+TA("user's actual v1 export imports cleanly (5 flights, no settings)", async () => {
   const v1 = fs.readFileSync('c182_flight_routes.json', 'utf8');
   const rocBefore = ev('aircraftProfile.roc');
-  ev(`(function(){
-    const reader = { readAsText(){ this.onload({ target: { result: ${JSON.stringify(v1)} } }); } };
-    const orig = window.FileReader; window.FileReader = function(){ return reader; };
-    importMissionFile({ target: { files: [{}], value: '' } });
-    window.FileReader = orig;
-  })()`);
+  // A CLEAN LIBRARY, so the collision prompts (v16.81) cannot fire and make
+  // this test depend on what an earlier one happened to save.
+  ev(`localStorage.removeItem('c182_custom_routes'); localStorage.removeItem('c182_custom_missions');`);
+  importFile(v1);
+  await tick();
+  // No settings in the file, so no scope question - asking it would be a click
+  // with nothing to choose between.
+  assert(!openDlg(), 'a settings-free file should not ask about scope');
   assert(ev('flights.length') === 5, 'expected 5 flights, got ' + ev('flights.length'));
   assert(ev('aircraftProfile.roc') === rocBefore, 'v1 import should not touch profile');
   const txt = doc.getElementById('flight-plans-container').textContent;
@@ -8787,6 +8802,351 @@ TA('a reporting point still adds with no dialog', async () => {
   assert(!openDlg(), 'a reporting point opened a dialog');
   assert(ev('flights[0].waypoints.length') === before + 1, 'the point was not added');
   ev(SEED);
+});
+
+console.log('\n=== 21a. Import scope, and the collision prompt (v16.81) ===');
+
+// The pilot's two requests, after being told what import actually did:
+// a choice between routes-and-settings and routes-only, and a prompt with a
+// side-by-side preview when a route name collides. The prompt exists because
+// a same-named overwrite was the ONE thing an import did that Ctrl+Z could not
+// take back - the undo snapshot carries `flights` and the plan fields, never
+// localStorage.
+
+T('the pure comparison says what differs, and what only LOOKS the same', () => {
+  const X = moduleExports.exch;
+  const wp = (name, alt, x) => ({ lat: 69, lng: 18, name, alt, oat: 0, wdir: 0,
+    wspd: 0, var: -11, ...(x || {}) });
+  const mine = [wp('ENDU', 254), wp('MID', 2500), wp('ENTC', 32)];
+
+  // Identical means identical: no prompt is worth showing.
+  const same = X.compareRoutes(mine, mine.map((w) => ({ ...w })));
+  assert(same.identical === true, 'two copies of one route were called different');
+  assert(same.rows.every((r) => r.state === 'same'), 'a row of an identical route is flagged');
+
+  // A changed ALTITUDE is visible in the preview, so it is a 'changed' row.
+  const alt = X.compareRoutes(mine, [wp('ENDU', 254), wp('MID', 4500), wp('ENTC', 32)]);
+  assert(alt.identical === false, 'a changed altitude was called identical');
+  assert(alt.summary.changed === 1 && alt.rows[1].state === 'changed',
+    'the changed row was not flagged: ' + JSON.stringify(alt.summary));
+
+  // A changed WIND is NOT visible in the four shown fields. Flagging that row
+  // as different with nothing on screen to explain it would read as a bug in
+  // the preview, so it gets its own state and its own sentence.
+  const wind = X.compareRoutes(mine, [wp('ENDU', 254), wp('MID', 2500, { wspd: 30 }), wp('ENTC', 32)]);
+  assert(wind.identical === false, 'a changed wind was called identical');
+  assert(wind.summary.hidden === 1 && wind.summary.changed === 0
+    && wind.rows[1].state === 'other',
+    'a difference outside the shown fields was not reported separately: ' +
+    JSON.stringify(wind.summary));
+
+  // Length differences are added / removed, never "changed".
+  const longer = X.compareRoutes(mine, [...mine, wp('ENAT', 500)]);
+  assert(longer.summary.added === 1 && longer.rows[3].state === 'added' &&
+    longer.rows[3].before === null, 'an extra waypoint was not reported as added');
+  const shorter = X.compareRoutes(mine, mine.slice(0, 2));
+  assert(shorter.summary.removed === 1 && shorter.rows[2].after === null,
+    'a missing waypoint was not reported as removed');
+});
+
+T('a missing value equals a missing value - NaN must not read as a difference', () => {
+  // `NaN !== NaN`, so a plain comparison calls every absent OAT a change and
+  // every route with a blank field collides with itself. Object.is is what
+  // makes the four shown fields behave, and stableString the rest.
+  const X = moduleExports.exch;
+  const blank = [{ lat: 69, lng: 18, name: 'A', alt: NaN, oat: NaN, wdir: NaN,
+                   wspd: NaN, var: NaN, isPattern: false }];
+  const cmp = X.compareRoutes(blank, blank.map((w) => ({ ...w })));
+  assert(cmp.identical === true, 'a route with blank values differs from itself');
+  assert(cmp.summary.changed === 0 && cmp.summary.hidden === 0,
+    'a blank field was reported as a difference: ' + JSON.stringify(cmp.summary));
+  assert(X.routeSignature(blank) === X.routeSignature(blank.map((w) => ({ ...w }))),
+    'the signature of a route with blank values is unstable');
+  // Key ORDER must not matter, or a route saved by an older build collides
+  // with an identical one saved by a newer.
+  assert(X.routeSignature([{ lat: 1, lng: 2 }]) === X.routeSignature([{ lng: 2, lat: 1 }]),
+    'the signature depends on key order');
+});
+
+T('the scope question is only asked when the file carries both', () => {
+  const X = moduleExports.exch;
+  const wps = [{ lat: 69, lng: 18, name: 'A', alt: 100 }];
+  const both = X.importScopeOf({ routes: { R: wps }, profile: { roc: 800 } });
+  assert(both.hasRoutes && both.hasSettings, 'a mixed file was not seen as mixed');
+  const routesOnly = X.importScopeOf({ routes: { R: wps } });
+  assert(routesOnly.hasRoutes && !routesOnly.hasSettings,
+    'a routes-only file claims to carry settings');
+  const settingsOnly = X.importScopeOf({ profile: { roc: 800 } });
+  assert(!settingsOnly.hasRoutes && settingsOnly.hasSettings, 'a settings-only file claims routes');
+  // An EMPTY routes object is not routes, or a full export with no saved
+  // routes would ask a question with one real answer.
+  assert(X.importScopeOf({ routes: {}, missions: {}, profile: { roc: 1 } }).hasRoutes === false,
+    'an empty routes object counted as routes');
+  // A bare array is the v1 shape: a route, and never settings.
+  assert(X.importScopeOf(wps).hasRoutes && !X.importScopeOf(wps).hasSettings,
+    'a bare array was misread');
+  assert(X.importScopeOf(null).hasRoutes === false && X.importScopeOf('x').hasSettings === false,
+    'a non-object file was not handled');
+  // The kinds are NAMED, because the dialog says which settings it would touch.
+  assert(both.settingKinds.includes('aircraft settings'), 'the settings are not named');
+});
+
+TA('"Routes only" imports the routes and leaves every setting alone', async () => {
+  ev(`localStorage.removeItem('c182_custom_routes'); localStorage.removeItem('c182_custom_missions');`);
+  const rocBefore = ev('aircraftProfile.roc');
+  const etdBefore = doc.getElementById('def-etd').value;
+  const undoBefore = ev('keybinds.undo');
+  importFile(JSON.stringify({
+    routes: { 'FROM-FILE': [{ lat: 69, lng: 18, name: 'A', alt: 100 },
+                            { lat: 69.4, lng: 18.4, name: 'B', alt: 2000 }] },
+    profile: { roc: 1234 },
+    planningPrefs: { etd: '23:45' },
+    keybinds: { undo: 'Alt+Q' }
+  }));
+  await tick();
+  answerDialog('Routes only');
+  await tick();
+  assert(Object.keys(ev('getStoredSingleRoutes()')).includes('FROM-FILE'),
+    'the route was not imported');
+  assert(ev('aircraftProfile.roc') === rocBefore,
+    'the profile changed despite "routes only": ' + ev('aircraftProfile.roc'));
+  assert(doc.getElementById('def-etd').value === etdBefore, 'the ETD changed');
+  assert(ev('keybinds.undo') === undoBefore, 'the keybinds changed');
+  assert(/Left your/.test(toastText()), 'the toast does not say what was left alone: ' + toastText());
+  ev(SEED);
+});
+
+TA('a colliding route name prompts, and "Keep mine" really keeps mine', async () => {
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({
+        'SHARED': [{ lat: 69, lng: 18, name: 'MINE', alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+                   { lat: 69.5, lng: 18.5, name: 'ALSO-MINE', alt: 2000, oat: 0, wdir: 0, wspd: 0, var: -11 }]
+      }));`);
+  importFile(JSON.stringify({ routes: { 'SHARED': [
+    { lat: 69, lng: 18, name: 'THEIRS', alt: 5000, oat: 0, wdir: 0, wspd: 0, var: -11 }] } }));
+  await tick();
+  const dlg = openDlg();
+  assert(dlg, 'a colliding name did not prompt');
+  const text = dlg.textContent;
+  // BOTH SIDES ARE ON SCREEN - that is the whole point of the preview.
+  assert(/MINE/.test(text) && /THEIRS/.test(text),
+    'the preview does not show both routes: ' + text.slice(0, 300));
+  assert(/SHARED/.test(text), 'the prompt does not name the route');
+  // AND THE WARNING IS THERE, because this is the one unrecoverable step.
+  assert(/cannot be undone/i.test(text), 'the prompt does not say it cannot be undone');
+  // KEEPING IS THE PRIMARY, so Enter is the non-destructive answer.
+  const primary = dlg.querySelector('.dlg-primary');
+  assert(primary && /Keep mine/.test(primary.textContent),
+    'the default answer is not the safe one: ' + (primary && primary.textContent));
+  answerDialog('Keep mine');
+  await tick();
+  const kept = ev(`getStoredSingleRoutes()['SHARED']`);
+  assert(kept.length === 2 && kept[0].name === 'MINE',
+    'the saved route was overwritten after choosing to keep it: ' + JSON.stringify(kept));
+  assert(/Kept your own version/.test(toastText()), 'the toast does not report the keep: ' + toastText());
+  ev(SEED);
+});
+
+TA('"Replace" overwrites it, and only then', async () => {
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({
+        'SHARED': [{ lat: 69, lng: 18, name: 'MINE', alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -11 }]
+      }));`);
+  importFile(JSON.stringify({ routes: { 'SHARED': [
+    { lat: 69, lng: 18, name: 'THEIRS', alt: 5000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.6, lng: 18.6, name: 'THEIRS-2', alt: 6000, oat: 0, wdir: 0, wspd: 0, var: -11 }] } }));
+  await tick();
+  answerDialog('Replace with the imported one');
+  await tick();
+  const now = ev(`getStoredSingleRoutes()['SHARED']`);
+  assert(now.length === 2 && now[0].name === 'THEIRS',
+    'the route was not replaced: ' + JSON.stringify(now));
+  assert(/Replaced 1 saved entry/.test(toastText()), 'the toast does not report the replace: ' + toastText());
+  ev(SEED);
+});
+
+TA('cancelling a collision changes NOTHING - not the library, not the plan', async () => {
+  // The v16.44 rule (refuse before touching anything) applied to a CHOICE.
+  // Everything is decided before a single write, so Cancel is honest.
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({
+        'SHARED': [{ lat: 69, lng: 18, name: 'MINE', alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -11 }]
+      }));`);
+  ev(SEED);
+  const planBefore = ev('JSON.stringify(flights)');
+  const undoDepth = ev('undoStack.length');
+  importFile(JSON.stringify({
+    routes: { 'SHARED': [{ lat: 70, lng: 19, name: 'THEIRS', alt: 9000, oat: 0, wdir: 0, wspd: 0, var: -11 }],
+              'NEW-ONE': [{ lat: 69, lng: 18, name: 'N', alt: 100, oat: 0, wdir: 0, wspd: 0, var: -11 }] }
+  }));
+  await tick();
+  answerDialog('Cancel the import');
+  await tick();
+  const lib = ev('getStoredSingleRoutes()');
+  assert(lib['SHARED'][0].name === 'MINE', 'the colliding route was written despite cancelling');
+  assert(lib['NEW-ONE'] === undefined,
+    'a NON-colliding route was written despite cancelling - the import was half-applied');
+  assert(ev('JSON.stringify(flights)') === planBefore, 'the plan on screen changed after cancelling');
+  assert(ev('undoStack.length') === undoDepth,
+    'cancelling left an undo step for something it did not do');
+  ev(SEED);
+});
+
+TA('an identical route is not worth a question', async () => {
+  const route = [{ lat: 69, lng: 18, name: 'A', alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+                 { lat: 69.5, lng: 18.5, name: 'B', alt: 2000, oat: 0, wdir: 0, wspd: 0, var: -11 }];
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({ 'SAME': ${JSON.stringify(route)} }));`);
+  importFile(JSON.stringify({ routes: { 'SAME': route } }));
+  await tick();
+  assert(!openDlg(), 'a byte-for-byte identical route asked to be adjudicated');
+  assert(/already identical/.test(toastText()),
+    'the toast does not say it was already there: ' + toastText());
+  const lib = ev(`getStoredSingleRoutes()['SAME']`);
+  assert(lib.length === 2 && lib[0].name === 'A', 'the identical route was disturbed');
+  ev(SEED);
+});
+
+TA('several collisions can be settled in one answer', async () => {
+  const mk = (n) => [{ lat: 69, lng: 18, name: n, alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -11 }];
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify(
+        { A: ${JSON.stringify(mk('MINE-A'))}, B: ${JSON.stringify(mk('MINE-B'))},
+          C: ${JSON.stringify(mk('MINE-C'))} }));`);
+  importFile(JSON.stringify({ routes: { A: mk('NEW-A'), B: mk('NEW-B'), C: mk('NEW-C') } }));
+  await tick();
+  const dlg = openDlg();
+  assert(dlg, 'three collisions did not prompt');
+  assert(/Keep mine for all 3/.test(dlg.textContent),
+    'a bulk answer is not offered for several collisions: ' + dlg.textContent.slice(0, 200));
+  answerDialog('Keep mine for all 3');
+  await tick();
+  assert(!openDlg(), 'a bulk answer still asked about the rest');
+  const lib = ev('getStoredSingleRoutes()');
+  for (const k of ['A', 'B', 'C']) {
+    assert(lib[k][0].name === 'MINE-' + k, k + ' was replaced despite "keep all"');
+  }
+  ev(SEED);
+});
+
+TA('a hostile route name cannot execute in the preview', async () => {
+  // The preview is built with createElement and textContent, so there is no
+  // innerHTML sink at all - this asserts that stays true (discipline rule 6).
+  const bad = '<img src=x onerror="window.__pwn=1" class="xss-probe">';
+  ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({ 'H': [
+        { lat: 69, lng: 18, name: ${JSON.stringify(bad)}, alt: 1, oat: 0, wdir: 0, wspd: 0, var: -11 }] }));`);
+  importFile(JSON.stringify({ routes: { 'H': [
+    { lat: 70, lng: 19, name: 'plain', alt: 2, oat: 0, wdir: 0, wspd: 0, var: -11 }] } }));
+  await tick();
+  const dlg = openDlg();
+  assert(dlg, 'no prompt for the hostile-named collision');
+  assert(!doc.querySelector('.xss-probe'), 'the preview parsed a waypoint name as markup');
+  assert(ev('window.__pwn') === undefined, 'the payload ran');
+  // ...and the name is still READABLE, or escaping it would be a different bug.
+  assert(dlg.textContent.includes(bad), 'the name was mangled instead of shown as text');
+  answerDialog('Cancel the import');
+  await tick();
+  ev(SEED);
+});
+
+TA('a colliding MISSION prompts too, with its plans side by side', async () => {
+  // The pilot asked about routes; missions have the identical silent-overwrite
+  // hazard, so they get the same question. A waypoint table would misrepresent
+  // a multi-plan mission, so the preview is one line per plan.
+  const mission = (tag) => [
+    { id: 1, title: 'S1', depElev: 254, waypoints: [
+      { lat: 69, lng: 18, name: tag + '-1', alt: 254, oat: 0, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.4, lng: 18.4, name: tag + '-2', alt: 2000, oat: 0, wdir: 0, wspd: 0, var: -11 }] }];
+  ev(`localStorage.setItem('c182_custom_missions', JSON.stringify({ 'M': ${JSON.stringify(mission('MINE'))} }));`);
+  importFile(JSON.stringify({ missions: { 'M': mission('THEIRS') } }));
+  await tick();
+  const dlg = openDlg();
+  assert(dlg, 'a colliding mission did not prompt');
+  assert(/mission/.test(dlg.textContent), 'the prompt does not say it is a mission');
+  assert(/MINE-1/.test(dlg.textContent) && /THEIRS-1/.test(dlg.textContent),
+    'the mission preview does not show both sides: ' + dlg.textContent.slice(0, 300));
+  answerDialog('Keep mine');
+  await tick();
+  assert(ev(`getStoredMissions()['M'][0].waypoints[0].name`) === 'MINE-1',
+    'the mission was overwritten after choosing to keep it');
+  ev(SEED);
+});
+
+TA('an empty planning pref in a file does not blank the one on screen', async () => {
+  // The pilot asked about this after v16.81: "the ETD in a file overwrites
+  // yours even when it's empty". Fuel and reserve were already guarded; the
+  // ETD was not - and it is not an edge case, because buildExportPayload
+  // writes `etd: ... || ''`, so EVERY export from a session with no ETD
+  // carries an empty one and would blank the importer's.
+  ev(`localStorage.removeItem('c182_custom_routes'); localStorage.removeItem('c182_custom_missions');`);
+  ev(`document.getElementById('def-etd').value = '07:30';
+      document.getElementById('fuel-dep').value = '60';
+      document.getElementById('fuel-reserve').value = '9';`);
+  importFile(JSON.stringify({
+    routes: { 'ETD-PROBE': [{ lat: 69, lng: 18, name: 'A', alt: 100, oat: 0, wdir: 0, wspd: 0, var: -11 },
+                            { lat: 69.4, lng: 18.4, name: 'B', alt: 2000, oat: 0, wdir: 0, wspd: 0, var: -11 }] },
+    planningPrefs: { fuel: '', reserve: '', etd: '' }
+  }));
+  await tick();
+  answerDialog('Routes and settings');   // the settings ARE wanted; they are just empty
+  await tick();
+  assert(doc.getElementById('def-etd').value === '07:30',
+    'an empty ETD in the file blanked the one on screen: ' + doc.getElementById('def-etd').value);
+  assert(doc.getElementById('fuel-dep').value === '60', 'the fuel was blanked');
+  assert(doc.getElementById('fuel-reserve').value === '9', 'the reserve was blanked');
+  // ...and a REAL value still lands, or the guard would have gone too far.
+  importFile(JSON.stringify({
+    routes: { 'ETD-PROBE-2': [{ lat: 69, lng: 18, name: 'A', alt: 100, oat: 0, wdir: 0, wspd: 0, var: -11 },
+                              { lat: 69.4, lng: 18.4, name: 'B', alt: 2000, oat: 0, wdir: 0, wspd: 0, var: -11 }] },
+    planningPrefs: { fuel: '48', reserve: '8.5', etd: '13:15' }
+  }));
+  await tick();
+  answerDialog('Routes and settings');
+  await tick();
+  assert(doc.getElementById('def-etd').value === '13:15',
+    'a real ETD no longer imports: ' + doc.getElementById('def-etd').value);
+  assert(doc.getElementById('fuel-dep').value === '48' &&
+         doc.getElementById('fuel-reserve').value === '8.5', 'a real fuel figure no longer imports');
+  ev(SEED);
+});
+
+T('all three planning prefs guard the same way', () => {
+  // The defect was ONE of three lines differing from the other two, which is
+  // the shape that hides: a rule applied to a surface and not to its
+  // neighbours. Asserted on the source so a fourth pref cannot be added
+  // without it.
+  const fn = APP_SRC.split('async function importMissionFile')[1]
+                    .split('\n    /** What the import actually did')[0];
+  // SPLIT ON THE CALL, NOT THE NAME: the first version split on the bare word
+  // `savePlanningPrefs`, and the comment written with the fix MENTIONS it - so
+  // the block ended at the comment, before the three lines being inspected,
+  // and the test failed against correct code. An anchor that prose can match
+  // is not an anchor (the v16.52 marker lesson, in a smaller shape).
+  const block = fn.split('obj(parsed.planningPrefs)')[1].split('savePlanningPrefs();')[0];
+  const guarded = [...block.matchAll(/pp\.(\w+) !== undefined && pp\.\1 !== ''/g)].map((m) => m[1]);
+  for (const k of ['fuel', 'reserve', 'etd']) {
+    assert(guarded.includes(k), k + ' does not guard against an empty value in the file');
+  }
+  assert(guarded.length === (block.match(/pp\.\w+ !== undefined/g) || []).length,
+    'a planning pref is read without the empty-value guard the others have');
+});
+
+T('the import path holds no state across an await', () => {
+  // Discipline rule 7, disposed of by STRUCTURE rather than by vigilance:
+  // every dialog happens before anything is written, so there is no
+  // `flights` reference to go stale. Asserted on the source because that is
+  // the property worth keeping, not a behaviour a single case can show.
+  const fn = APP_SRC.split('async function importMissionFile')[1]
+                    .split('\n    /** What the import actually did')[0];
+  const applyAt = fn.indexOf('pushUndoState');
+  assert(applyAt > 0, 'the import no longer pushes an undo step');
+  const asks = [...fn.matchAll(/await (ask|resolveImportCollisions)\(/g)].map((m) => m.index);
+  assert(asks.length >= 3, 'expected the scope question and both collision passes');
+  for (const at of asks) {
+    assert(at < applyAt,
+      'a dialog is awaited AFTER the apply phase begins - state can go stale there');
+  }
+  // And nothing may be written before the last question is answered.
+  const firstWrite = Math.min(
+    ...['localStorage.setItem', 'flights ='].map((t) => {
+      const i = fn.indexOf(t); return i < 0 ? Infinity : i;
+    }));
+  assert(Math.max(...asks) < firstWrite, 'the import writes before it finishes asking');
 });
 
 console.log('\n=== 62a000m. The locked build (v16.78) ===');

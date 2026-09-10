@@ -405,6 +405,9 @@
             <li>Work is auto-saved in <b>this browser's storage</b> — it survives restarts, but it does NOT live inside the HTML file and won't follow you to another browser or computer.</li>
             <li><b>Save</b> stores a named route or whole mission; the dropdown loads them back.</li>
             <li><b>Export</b> writes a JSON file with everything: routes, missions, current flights, aircraft settings and planning preferences. <b>Import</b> restores it anywhere. Export after any session you'd mind losing.</li>
+            <li><b>Import asks what to bring in</b> when the file carries both: <b>Routes and settings</b> (everything, which is what import always did) or <b>Routes only</b>, which leaves your aircraft settings, planning preferences and keyboard shortcuts exactly as they are. A file with no settings in it is not asked about — there would be nothing to choose.</li>
+            <li><b>Your saved library is added to, not replaced.</b> Importing three routes leaves your other twenty alone. If a route or mission in the file has the <b>same name</b> as one you have saved, you are asked which to keep, with the two shown <b>side by side</b> — your version on the left, the file's on the right, with the rows that differ highlighted. <b>Keep mine</b> is the default, so pressing Enter never destroys anything. With several collisions you can settle the rest in one answer.</li>
+            <li><b>Why you are asked at all:</b> replacing a saved route is the one thing an import does that <b>Ctrl+Z cannot take back</b> — undo restores the plan on screen and the plan fields, not the saved library. Everything else an import does is undoable. A route in the file that is byte-for-byte what you already have is not worth a question and does not ask one. <b>Cancel</b> at any point leaves everything exactly as it was, including routes it had already got past.</li>
           </ul>
         </div>
 
@@ -1292,7 +1295,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.80';
+    const APP_VERSION = '16.82';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -7052,155 +7055,490 @@
       URL.revokeObjectURL(url);
     }
 
-    // defaultFlights / sanitiseFlights -> src/lib/exchange.js
-    function importMissionFile(event) {
-      const file = event.target.files[0];
+    // defaultFlights / sanitiseFlights / importScopeOf / compareRoutes
+    //   -> src/lib/exchange.js
+
+    /** One route entry from a file or from storage, sanitised, or null if
+     *  nothing usable survives. Both sides of a comparison go through this, so
+     *  a route saved before a field existed compares against a new one on equal
+     *  terms rather than reading as different in every row. */
+    function asRouteWaypoints(entry) {
+      const ok = sanitiseFlights([{ id: 1, title: 'cmp', depElev: 0, waypoints: entry }]);
+      return ok && ok[0].waypoints.length ? ok[0].waypoints : null;
+    }
+
+    /** One side of one row of the collision preview. */
+    function routeDiffCell(c) {
+      const td = document.createElement('td');
+      if (!c) { td.className = 'rd-none'; td.textContent = '—'; return td; }
+      const name = document.createElement('span');
+      name.className = 'rd-name';
+      name.textContent = c.name || '(unnamed)';
+      td.appendChild(name);
+      const alt = document.createElement('span');
+      alt.className = 'rd-alt';
+      alt.textContent = isFinite(c.alt) ? Math.round(c.alt) + ' ft' : '—';
+      td.appendChild(alt);
+      const pos = document.createElement('span');
+      pos.className = 'rd-pos';
+      pos.textContent = (isFinite(c.lat) && isFinite(c.lng))
+        ? toDMM(c.lat, true) + '  ' + toDMM(c.lng, false) : '';
+      td.appendChild(pos);
+      return td;
+    }
+
+    /** What the two routes differ by, in a sentence. */
+    function routeDiffSummary(cmp) {
+      const s = cmp.summary, bits = [];
+      if (s.changed) bits.push(s.changed + ' waypoint' + (s.changed > 1 ? 's' : '') + ' differ');
+      if (s.added) bits.push(s.added + ' only in the file');
+      if (s.removed) bits.push(s.removed + ' only in yours');
+      // NAMED RATHER THAN FLAGGED: these rows look identical because the four
+      // shown fields ARE identical - it is the OAT, the wind, a pin or a via
+      // that moved. Marking them different with nothing visible to explain it
+      // would read as a bug in the preview.
+      if (s.hidden) {
+        bits.push(s.hidden + ' match by name, altitude and position but differ in ' +
+          'other values (OAT, wind, or a climb/descent target)');
+      }
+      return (bits.length ? bits.join(' · ') : 'No difference found')
+        + ' — yours has ' + s.before + ' waypoint' + (s.before === 1 ? '' : 's')
+        + ', the file has ' + s.after + '.';
+    }
+
+    /**
+     * The side-by-side preview (v16.81, the pilot's request).
+     *
+     * BUILT AS DOM NODES, NOT AN HTML STRING, and that is not a style
+     * preference: every cell here is a waypoint name the pilot typed or a name
+     * out of a file, which is exactly the `Bodø <VOR>` case discipline rule 6
+     * exists for. `textContent` has no parser behind it, so there is no sink to
+     * remember to escape.
+     */
+    function routeDiffNode(cmp) {
+      const wrap = document.createElement('div');
+      wrap.className = 'route-diff';
+
+      const head = document.createElement('div');
+      head.className = 'rd-head';
+      for (const t of ['Saved on this browser', 'In the file']) {
+        const h = document.createElement('div');
+        h.textContent = t;
+        head.appendChild(h);
+      }
+      wrap.appendChild(head);
+
+      const scroll = document.createElement('div');
+      scroll.className = 'rd-scroll';
+      const table = document.createElement('table');
+      table.className = 'rd-table';
+      const tbody = document.createElement('tbody');
+      for (const r of cmp.rows) {
+        const tr = document.createElement('tr');
+        tr.className = 'rd-' + r.state;
+        tr.appendChild(routeDiffCell(r.before));
+        tr.appendChild(routeDiffCell(r.after));
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      scroll.appendChild(table);
+      wrap.appendChild(scroll);
+
+      const sum = document.createElement('p');
+      sum.className = 'rd-sum';
+      sum.textContent = routeDiffSummary(cmp);
+      wrap.appendChild(sum);
+      return wrap;
+    }
+
+    /** A MISSION is several plans, so a waypoint table would misrepresent it.
+     *  One line per plan, each side, with its fix chain - enough to tell "the
+     *  same mission, edited" from "a different mission with the same name". */
+    function missionDiffNode(mine, theirs) {
+      const lines = (fl) => (fl || []).map((f, i) =>
+        (i + 1) + '. ' + (f.waypoints || []).map((w) => w.name || '?').join(' → ') +
+        '  (' + (f.waypoints || []).length + ')');
+      const wrap = document.createElement('div');
+      wrap.className = 'route-diff';
+      const head = document.createElement('div');
+      head.className = 'rd-head';
+      for (const t of ['Saved on this browser', 'In the file']) {
+        const h = document.createElement('div');
+        h.textContent = t;
+        head.appendChild(h);
+      }
+      wrap.appendChild(head);
+      const scroll = document.createElement('div');
+      scroll.className = 'rd-scroll';
+      const grid = document.createElement('div');
+      grid.className = 'rd-mission';
+      for (const side of [lines(mine), lines(theirs)]) {
+        const col = document.createElement('div');
+        for (const t of (side.length ? side : ['(nothing)'])) {
+          const row = document.createElement('div');
+          row.className = 'rd-mrow';
+          row.textContent = t;
+          col.appendChild(row);
+        }
+        grid.appendChild(col);
+      }
+      scroll.appendChild(grid);
+      wrap.appendChild(scroll);
+      const sum = document.createElement('p');
+      sum.className = 'rd-sum';
+      sum.textContent = 'Yours has ' + (mine || []).length + ' flight plan' +
+        ((mine || []).length === 1 ? '' : 's') + ', the file has ' + (theirs || []).length + '.';
+      wrap.appendChild(sum);
+      return wrap;
+    }
+
+    /**
+     * Ask about ONE name collision.
+     *
+     * KEEPING IS THE DEFAULT, so Enter is the non-destructive answer. Replacing
+     * a saved route is the one thing an import does that Ctrl+Z cannot take
+     * back - the undo snapshot carries `flights` and the plan fields, not
+     * localStorage - so it must never be what happens when the pilot presses
+     * Enter to get the dialog out of the way.
+     */
+    async function askImportCollision(kind, name, previewNode, remaining) {
+      const buttons = [
+        { id: 'keep', label: 'Keep mine', variant: 'primary',
+          hint: 'The ' + kind + ' in the file is skipped' },
+        { id: 'replace', label: 'Replace with the imported one', variant: 'danger',
+          hint: 'Your saved version is lost' }
+      ];
+      if (remaining > 1) {
+        buttons.push({ id: 'keep-all', label: 'Keep mine for all ' + remaining });
+        buttons.push({ id: 'replace-all', label: 'Replace all ' + remaining });
+      }
+      buttons.push({ id: 'cancel', label: 'Cancel the import', variant: 'ghost' });
+      const r = await ask({
+        title: 'You already have a ' + kind + ' called “' + name + '”',
+        message: 'Replacing it cannot be undone — Ctrl+Z restores the plan on '
+               + 'screen, not the saved library.',
+        body: previewNode,
+        buttons
+      });
+      return r.id;
+    }
+
+    /**
+     * Decide every collision BEFORE anything is written.
+     *
+     * Nothing is applied until this returns, so cancelling leaves the library
+     * and the plan exactly as they were - the v16.44 rule that a malformed
+     * route is refused before the live plan is touched, applied to a choice
+     * rather than to a validation failure.
+     *
+     * @returns {Promise<Map<string,string>|null>} null if the pilot cancelled
+     */
+    async function resolveImportCollisions(kind, candidates, existing, nodeFor) {
+      const decisions = new Map();
+      const conflicts = [];
+      for (const [name, value] of candidates) {
+        if (!Object.prototype.hasOwnProperty.call(existing, name)) continue;
+        // IDENTICAL NEEDS NO QUESTION: replace and keep produce the same
+        // library, so asking would be a click with no consequence. The pilot
+        // asked to be prompted when two routes collide; being prompted about a
+        // route that is byte-for-byte what they already have is noise.
+        const node = nodeFor(existing[name], value);
+        if (node === null) { decisions.set(name, 'identical'); continue; }
+        conflicts.push([name, node]);
+      }
+      let bulk = null;
+      for (let i = 0; i < conflicts.length; i++) {
+        const name = conflicts[i][0];
+        if (bulk) { decisions.set(name, bulk); continue; }
+        const r = await askImportCollision(kind, name, conflicts[i][1], conflicts.length - i);
+        if (r === 'cancel') return null;
+        if (r === 'replace-all') { bulk = 'replace'; decisions.set(name, 'replace'); }
+        else if (r === 'keep-all') { bulk = 'keep'; decisions.set(name, 'keep'); }
+        else decisions.set(name, r === 'replace' ? 'replace' : 'keep');
+      }
+      return decisions;
+    }
+
+    /**
+     * Import a file (v16.81: restructured into DECIDE, then APPLY).
+     *
+     * Everything the pilot is asked happens first and writes nothing; the whole
+     * import is then applied in one synchronous pass. That is what makes
+     * Cancel mean "nothing changed", and it also disposes of discipline rule 7
+     * by construction - there is no `flights` reference held across an await,
+     * because nothing touches `flights` until every dialog has closed.
+     */
+    async function importMissionFile(event) {
+      const file = event.target.files && event.target.files[0];
+      // Cleared FIRST: every early return below must still leave the same file
+      // selectable again, which it is not if the input keeps its value.
+      event.target.value = '';
       if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          pushUndoState('import a file');
-          const parsed = JSON.parse(e.target.result);
-          // What actually landed, so the toast can say so instead of claiming
-          // success for a file it did not understand.
-          const applied = [], rejected = [];
+      let text;
+      try {
+        text = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(String(e.target.result));
+          reader.onerror = () => reject(reader.error || new Error('the file could not be read'));
+          reader.readAsText(file);
+        });
+      } catch (err) {
+        say('Could not read that file: ' + ((err && err.message) || err), 'bad', 9000);
+        return;
+      }
 
-          // A ROUTE LIBRARY ENTRY MUST BE AN ARRAY OF WAYPOINTS (v16.44).
-          // `Object.assign` used to copy whatever was in the file - including a
-          // number or a string - straight into storage, and the next load of
-          // that name threw with the live plan already half-replaced.
-          if (parsed.routes && typeof parsed.routes === 'object' && !Array.isArray(parsed.routes)) {
-            const customRoutes = getStoredSingleRoutes();
-            let kept = 0, dropped = 0;
-            for (const [rn, entry] of Object.entries(parsed.routes)) {
-              const ok = sanitiseFlights([{ id: 1, title: rn, depElev: 0, waypoints: entry }]);
-              if (ok && ok[0].waypoints.length) { customRoutes[rn] = ok[0].waypoints; kept++; }
-              else dropped++;
-            }
-            if (kept) {
-              localStorage.setItem('c182_custom_routes', JSON.stringify(customRoutes));
-              applied.push(kept + ' route' + (kept > 1 ? 's' : ''));
-            }
-            if (dropped) rejected.push(dropped + ' unreadable route' + (dropped > 1 ? 's' : ''));
+      let parsed;
+      try { parsed = JSON.parse(text); }
+      catch (err) { say('Could not read that file: ' + err.message, 'bad', 9000); return; }
 
-            const first = parsed.current && parsed.current.length ? parsed.current
-              : parsed.routes[Object.keys(parsed.routes)[0]];
-            const live = sanitiseFlights([{ id: flights[0].id, title: flights[0].title,
-                                            depElev: flights[0].depElev, waypoints: first }]);
-            if (live && live[0].waypoints.length) {
-              flights[0].waypoints = live[0].waypoints;
-              // No house default: an invented field elevation is a wrong climb
-              // datum on every leg. Keep what the plan already had.
-              if (isFinite(live[0].waypoints[0].alt)) flights[0].depElev = live[0].waypoints[0].alt;
-              // The plan on screen came from a FILE now, not from whatever saved
-              // route was last loaded (L8) - offering to update that route would
-              // overwrite it with something else entirely.
-              loadedRouteRef = null;
-              document.getElementById('route-selector').value = '';
-              applied.push('the current route');
-            }
-          }
+      const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
-          if (parsed.missions && typeof parsed.missions === 'object' && !Array.isArray(parsed.missions)) {
-            const customMissions = getStoredMissions();
-            let kept = 0, dropped = 0;
-            for (const [mn, entry] of Object.entries(parsed.missions)) {
-              const ok = sanitiseFlights(entry);
-              if (ok) { customMissions[mn] = ok; kept++; } else dropped++;
-            }
-            if (kept) {
-              localStorage.setItem('c182_custom_missions', JSON.stringify(customMissions));
-              applied.push(kept + ' mission' + (kept > 1 ? 's' : ''));
-            }
-            if (dropped) rejected.push(dropped + ' unreadable mission' + (dropped > 1 ? 's' : ''));
-          }
+      // ---- 1. SCOPE (the pilot's request) ---------------------------------
+      // ASKED ONLY WHEN THERE IS A CHOICE. A routes-only file has no settings
+      // to decline and a settings-only file has no routes to keep, so offering
+      // the question there is a click for nothing.
+      const scope = importScopeOf(parsed);
+      let withSettings = true;
+      const declined = [];
+      if (scope.hasRoutes && scope.hasSettings) {
+        const pick = await ask({
+          title: 'What should this file bring in?',
+          message: 'It carries ' + scope.routeKinds.join(', ') + ', and also ' +
+                   scope.settingKinds.join(', ') + '.',
+          buttons: [
+            { id: 'all', label: 'Routes and settings', variant: 'primary',
+              hint: 'Everything in the file' },
+            { id: 'routes', label: 'Routes only',
+              hint: 'Your ' + scope.settingKinds.join(', ') + ' are left as they are' },
+            { id: 'cancel', label: 'Cancel', variant: 'ghost' }
+          ]
+        });
+        if (pick.id === 'cancel') { say('Import cancelled — nothing changed.', 'warn', 5000); return; }
+        withSettings = pick.id === 'all';
+        if (!withSettings) declined.push(...scope.settingKinds);
+      }
 
-          if (parsed.profile && typeof parsed.profile === 'object') {
-            // ONE whitelist, shared with the export side -> src/lib/exchange.js
-            Object.assign(aircraftProfile, pickProfileKeys(parsed.profile));
-            localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
-            toggleTheme(aircraftProfile.theme || 'light');
-            updateUnitLabels();
-            updatePerfBadge();
-            applied.push('aircraft settings');
-          }
+      // ---- 2. PREPARE. Reads and validates; writes NOTHING. ---------------
+      const rejected = [];
+      const routeCandidates = [], missionCandidates = [];
+      let routesDropped = 0, missionsDropped = 0;
 
-          if (parsed.planningPrefs && typeof parsed.planningPrefs === 'object') {
-            const pp = parsed.planningPrefs;
-            if (pp.fuel !== undefined && pp.fuel !== '') document.getElementById('fuel-dep').value = pp.fuel;
-            if (pp.reserve !== undefined && pp.reserve !== '') document.getElementById('fuel-reserve').value = pp.reserve;
-            if (pp.etd !== undefined) document.getElementById('def-etd').value = pp.etd;
-            savePlanningPrefs();
-            applied.push('planning preferences');
-          }
-
-          if (parsed.keybinds && typeof parsed.keybinds === 'object' && !Array.isArray(parsed.keybinds)) {
-            // Normalised, not trusted: a file can carry an unknown action, an
-            // unstorable chord, one the browser owns, or a duplicate.
-            keybinds = normaliseKeymap(parsed.keybinds);
-            saveKeybinds();
-            if (typeof populateKeybindForm === 'function') populateKeybindForm();
-            applied.push('keyboard shortcuts');
-          }
-
-          if (parsed.currentFlights && Array.isArray(parsed.currentFlights) && parsed.currentFlights.length > 0) {
-            const ok = sanitiseFlights(parsed.currentFlights);
-            if (ok) {
-              flights = ok;
-              loadedRouteRef = null;   // it came from a file, not a saved route (L8)
-              document.getElementById('route-selector').value = '';
-              applied.push(ok.length + ' flight plan' + (ok.length > 1 ? 's' : ''));
-            } else rejected.push('the flight plans');
-          }
-
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const asFlights = parsed[0] && parsed[0].waypoints
-              ? sanitiseFlights(parsed)
-              : sanitiseFlights([{ id: flights[activeFlightIndex].id,
-                                   title: flights[activeFlightIndex].title,
-                                   depElev: flights[activeFlightIndex].depElev, waypoints: parsed }]);
-            if (asFlights && asFlights[0].waypoints.length) {
-              if (parsed[0] && parsed[0].waypoints) flights = asFlights;
-              else {
-                flights[activeFlightIndex].waypoints = asFlights[0].waypoints;
-                if (isFinite(asFlights[0].waypoints[0].alt))
-                  flights[activeFlightIndex].depElev = asFlights[0].waypoints[0].alt;
-              }
-              loadedRouteRef = null;   // it came from a file, not a saved route (L8)
-              document.getElementById('route-selector').value = '';
-              applied.push('a route');
-            } else rejected.push('the file contents');
-          }
-
-          // AN UNRECOGNISED FILE IS NOT AN IMPORT (v16.44). `{"hello":"world"}`
-          // matched no branch, changed nothing, and was reported as "Import
-          // complete" - a silent no-op dressed as success, and the same for a
-          // file from another tool.
-          if (!applied.length) {
-            say('Nothing in this file was recognised' +
-                (rejected.length ? ' (' + rejected.join(', ') + ')' : '') +
-                ' - your plan is unchanged.', 'warn', 9000);
-            return;
-          }
-
-          populateRouteDropdown();
-          activeFlightIndex = 0;
-          if (isFinite(flights[0].depElev))
-            document.getElementById('def-dep-elev').value = flights[0].depElev;
-          refreshMap();
-          renderAllFlightTables();
-          saveActiveState();
-          say('Imported ' + applied.join(', ') + '.' +
-              (rejected.length ? ' Skipped ' + rejected.join(', ') + '.' : '') +
-              (parsed.profile ? '' : ' This file has no aircraft settings (older export) - your performance profile is kept.'),
-              'good', 8000);
-        } catch (err) {
-          say('Could not read that file: ' + err.message, 'bad', 9000);
+      if (obj(parsed) && obj(parsed.routes)) {
+        for (const [rn, entry] of Object.entries(parsed.routes)) {
+          const wps = asRouteWaypoints(entry);
+          if (wps) routeCandidates.push([rn, wps]); else routesDropped++;
         }
-      };
-      reader.readAsText(file);
-      event.target.value = '';
+      }
+      if (obj(parsed) && obj(parsed.missions)) {
+        for (const [mn, entry] of Object.entries(parsed.missions)) {
+          const ok = sanitiseFlights(entry);
+          if (ok) missionCandidates.push([mn, ok]); else missionsDropped++;
+        }
+      }
+      if (routesDropped) rejected.push(routesDropped + ' unreadable route' + (routesDropped > 1 ? 's' : ''));
+      if (missionsDropped) rejected.push(missionsDropped + ' unreadable mission' + (missionsDropped > 1 ? 's' : ''));
+
+      // ---- 3. ASK ABOUT COLLISIONS ----------------------------------------
+      const existingRoutes = getStoredSingleRoutes();
+      const routeDecisions = await resolveImportCollisions('route', routeCandidates, existingRoutes,
+        (mineRaw, theirs) => {
+          const mine = asRouteWaypoints(mineRaw) || [];
+          const cmp = compareRoutes(mine, theirs);
+          return cmp.identical ? null : routeDiffNode(cmp);
+        });
+      if (!routeDecisions) { say('Import cancelled — nothing changed.', 'warn', 5000); return; }
+
+      const existingMissions = getStoredMissions();
+      const missionDecisions = await resolveImportCollisions('mission', missionCandidates, existingMissions,
+        (mineRaw, theirs) => {
+          const mine = sanitiseFlights(mineRaw) || [];
+          return routeSignature(mine) === routeSignature(theirs) ? null : missionDiffNode(mine, theirs);
+        });
+      if (!missionDecisions) { say('Import cancelled — nothing changed.', 'warn', 5000); return; }
+
+      // ---- 4. APPLY. Synchronous from here; no dialog can interleave. -----
+      pushUndoState('import a file');
+      const applied = [];
+      let replaced = 0, keptMine = 0, already = 0;
+
+      if (routeCandidates.length) {
+        const lib = existingRoutes;
+        let added = 0;
+        for (const [rn, wps] of routeCandidates) {
+          const d = routeDecisions.get(rn);
+          if (d === 'keep') { keptMine++; continue; }
+          if (d === 'identical') { already++; continue; }
+          if (d === 'replace') replaced++; else added++;
+          lib[rn] = wps;
+        }
+        if (added || replaced) {
+          localStorage.setItem('c182_custom_routes', JSON.stringify(lib));
+          if (added) applied.push(added + ' route' + (added > 1 ? 's' : ''));
+        }
+      }
+
+      if (missionCandidates.length) {
+        const lib = existingMissions;
+        let added = 0;
+        for (const [mn, fl] of missionCandidates) {
+          const d = missionDecisions.get(mn);
+          if (d === 'keep') { keptMine++; continue; }
+          if (d === 'identical') { already++; continue; }
+          if (d === 'replace') replaced++; else added++;
+          lib[mn] = fl;
+        }
+        if (added || replaced) {
+          localStorage.setItem('c182_custom_missions', JSON.stringify(lib));
+          if (added) applied.push(added + ' mission' + (added > 1 ? 's' : ''));
+        }
+      }
+
+      // THE PLAN ON SCREEN. The file's own idea of what was open, or its first
+      // route. This is the one part of an import Ctrl+Z fully covers.
+      if (obj(parsed) && obj(parsed.routes)) {
+        const firstKey = Object.keys(parsed.routes)[0];
+        const first = (parsed.current && parsed.current.length) ? parsed.current
+          : (firstKey === undefined ? null : parsed.routes[firstKey]);
+        const live = first === null ? null : sanitiseFlights([{ id: flights[0].id,
+          title: flights[0].title, depElev: flights[0].depElev, waypoints: first }]);
+        if (live && live[0].waypoints.length) {
+          flights[0].waypoints = live[0].waypoints;
+          // No house default: an invented field elevation is a wrong climb
+          // datum on every leg. Keep what the plan already had.
+          if (isFinite(live[0].waypoints[0].alt)) flights[0].depElev = live[0].waypoints[0].alt;
+          // The plan on screen came from a FILE now, not from whatever saved
+          // route was last loaded (L8) - offering to update that route would
+          // overwrite it with something else entirely.
+          loadedRouteRef = null;
+          document.getElementById('route-selector').value = '';
+          applied.push('the current route');
+        }
+      }
+
+      if (withSettings && obj(parsed) && obj(parsed.profile)) {
+        // ONE whitelist, shared with the export side -> src/lib/exchange.js
+        Object.assign(aircraftProfile, pickProfileKeys(parsed.profile));
+        localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+        toggleTheme(aircraftProfile.theme || 'light');
+        updateUnitLabels();
+        updatePerfBadge();
+        applied.push('aircraft settings');
+      }
+
+      if (withSettings && obj(parsed) && obj(parsed.planningPrefs)) {
+        const pp = parsed.planningPrefs;
+        // AN EMPTY VALUE IN A FILE DOES NOT DESTROY A PRESENT ONE HERE (v16.82).
+        // Fuel and reserve had this guard; the ETD did not, so importing blanked
+        // it - and not as a rare edge case: `buildExportPayload` writes
+        // `etd: (planningPrefs && planningPrefs.etd) || ''`, so EVERY file
+        // exported from a session that had no ETD carries an empty one. It is
+        // the v16.44 "absent stays absent" rule read the other way round: a
+        // missing value must not be coerced INTO the plan, and equally must not
+        // overwrite something the pilot has set.
+        //
+        // The guard belongs HERE rather than in the exporter: the file format is
+        // internally consistent (savePlanningPrefs stores '' too), and it is the
+        // READ that loses data.
+        if (pp.fuel !== undefined && pp.fuel !== '') document.getElementById('fuel-dep').value = pp.fuel;
+        if (pp.reserve !== undefined && pp.reserve !== '') document.getElementById('fuel-reserve').value = pp.reserve;
+        if (pp.etd !== undefined && pp.etd !== '') document.getElementById('def-etd').value = pp.etd;
+        savePlanningPrefs();
+        applied.push('planning preferences');
+      }
+
+      if (withSettings && obj(parsed) && obj(parsed.keybinds)) {
+        // Normalised, not trusted: a file can carry an unknown action, an
+        // unstorable chord, one the browser owns, or a duplicate. NOTE this is
+        // a WHOLESALE replacement - an action the file does not mention goes
+        // back to its shipped default, not to what the pilot had - which is
+        // why "Routes only" exists and why the guide says so.
+        keybinds = normaliseKeymap(parsed.keybinds);
+        saveKeybinds();
+        if (typeof populateKeybindForm === 'function') populateKeybindForm();
+        applied.push('keyboard shortcuts');
+      }
+
+      if (obj(parsed) && Array.isArray(parsed.currentFlights) && parsed.currentFlights.length > 0) {
+        const ok = sanitiseFlights(parsed.currentFlights);
+        if (ok) {
+          flights = ok;
+          loadedRouteRef = null;   // it came from a file, not a saved route (L8)
+          document.getElementById('route-selector').value = '';
+          applied.push(ok.length + ' flight plan' + (ok.length > 1 ? 's' : ''));
+        } else rejected.push('the flight plans');
+      }
+
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const asFlights = parsed[0] && parsed[0].waypoints
+          ? sanitiseFlights(parsed)
+          : sanitiseFlights([{ id: flights[activeFlightIndex].id,
+                               title: flights[activeFlightIndex].title,
+                               depElev: flights[activeFlightIndex].depElev, waypoints: parsed }]);
+        if (asFlights && asFlights[0].waypoints.length) {
+          if (parsed[0] && parsed[0].waypoints) flights = asFlights;
+          else {
+            flights[activeFlightIndex].waypoints = asFlights[0].waypoints;
+            if (isFinite(asFlights[0].waypoints[0].alt))
+              flights[activeFlightIndex].depElev = asFlights[0].waypoints[0].alt;
+          }
+          loadedRouteRef = null;   // it came from a file, not a saved route (L8)
+          document.getElementById('route-selector').value = '';
+          applied.push('a route');
+        } else rejected.push('the file contents');
+      }
+
+      // AN UNRECOGNISED FILE IS NOT AN IMPORT (v16.44). `{"hello":"world"}`
+      // matched no branch, changed nothing, and was reported as "Import
+      // complete" - a silent no-op dressed as success, and the same for a
+      // file from another tool.
+      //
+      // KEEPING EVERY COLLIDING ROUTE IS NOT "NOTHING RECOGNISED" EITHER
+      // (v16.81): the file was understood perfectly and the pilot chose their
+      // own copy each time, so it needs its own sentence rather than a warning
+      // that reads as a failure.
+      if (!applied.length && (replaced || keptMine || already)) {
+        undoStack.pop();
+        updateUndoButtons();
+        say(importOutcomeText([], replaced, keptMine, already, rejected, declined), 'good', 8000);
+        return;
+      }
+      if (!applied.length) {
+        undoStack.pop();          // nothing was applied, so offer no undo step
+        updateUndoButtons();
+        say('Nothing in this file was recognised' +
+            (rejected.length ? ' (' + rejected.join(', ') + ')' : '') +
+            ' - your plan is unchanged.', 'warn', 9000);
+        return;
+      }
+
+      populateRouteDropdown();
+      activeFlightIndex = 0;
+      if (isFinite(flights[0].depElev))
+        document.getElementById('def-dep-elev').value = flights[0].depElev;
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
+      say(importOutcomeText(applied, replaced, keptMine, already, rejected, declined) +
+          (withSettings && obj(parsed) && !obj(parsed.profile)
+            ? ' This file has no aircraft settings (older export) - your performance profile is kept.'
+            : ''),
+          'good', 8000);
+    }
+
+    /** What the import actually did, in one sentence. Each outcome is its own
+     *  clause because they are different things: applied, replaced (a saved
+     *  entry is gone), kept (the pilot chose theirs), already present, dropped
+     *  as unreadable, and declined by choice. */
+    function importOutcomeText(applied, replaced, keptMine, already, rejected, declined) {
+      const parts = [];
+      parts.push(applied.length ? 'Imported ' + applied.join(', ') + '.' : 'Nothing new to import.');
+      if (replaced) parts.push('Replaced ' + replaced + ' saved ' + (replaced > 1 ? 'entries' : 'entry') + '.');
+      if (keptMine) parts.push('Kept your own version of ' + keptMine + '.');
+      if (already) parts.push(already + ' already identical.');
+      if (rejected.length) parts.push('Skipped ' + rejected.join(', ') + '.');
+      if (declined.length) parts.push('Left your ' + declined.join(', ') + ' alone.');
+      return parts.join(' ');
     }
 
     // Initialize
