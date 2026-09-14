@@ -276,6 +276,7 @@
           <ul style="margin-left:16px;">
             <li><b>Click the map</b> to add a waypoint. Name it in the prompt — the first click is your departure.</li>
             <li>Type <b>PATTERN</b> as the name — or press the <b>traffic-circuit</b> option — to log circuit laps (time &amp; fuel, no distance). The <b>circuit altitude is filled in from the aerodrome you are at</b>: the published field elevation rounded to the nearest 100 ft, plus 1000 ft — so ENTC's published 32 ft gives 1000 ft. ENDU is set to <b>1500 ft</b>, the figure the school flies. This is a <b>derived default, not a published value</b> — the eAIP gives us elevations, never circuit altitudes, so check the VAC and edit the cell if it differs. More than 5 NM from any aerodrome nothing is derived and the cell is yours to fill.</li>
+            <li><b>A PATTERN is a place, so you can put one anywhere</b> &mdash; click a spot out on the route and name it PATTERN to log <b>airwork</b> (a practice area, a hold, upper airwork), or put one first in a plan to fly <b>circuits before you depart</b>. The <b>transit out to it is an ordinary leg</b>: it has a distance, a track, a climb or descent, and it takes <b>via points</b> like any other leg, so you can bend the way out and the way back. The laps are charged on their own line at the point itself. A circuit made by a <b>touch &amp; go or a full stop</b> sits exactly on the aerodrome, so there is no ground between it and the fix &mdash; that stays one line with time and fuel and no distance, exactly as before. (Before v16.83 <i>every</i> PATTERN was treated as having no ground track, so a point you clicked out on the route had the flight out to it silently dropped from the plan &mdash; distance, time and fuel &mdash; and neither of its legs could be bent.)</li>
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Click a published aerodrome and say what happens there.</b> Three things mean three different plans, so the planner asks rather than guessing:
@@ -1295,7 +1296,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.82';
+    const APP_VERSION = '16.83';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2959,13 +2960,21 @@
           // The dot is absolutely pinned on the anchor (= the true lat/lng);
           // the name label hangs centered below it. Neither the label's width
           // nor the per-flight stagger can shift the dot off the coordinate.
+          // A CIRCUIT ATTACHED TO A FIX MOVES WITH THAT FIX; AN AIRWORK BLOCK
+          // IS ITS OWN PLACE (v16.83). A touch & go or a full stop sits exactly
+          // on the aerodrome that produced it - dragging it off would silently
+          // turn a landing into a cross-country detour and strand the stop and
+          // refuel figures that read the fix before it. A PATTERN the pilot
+          // clicked out on the route already stands alone, and not being able
+          // to nudge it would be the one place a position is not editable.
+          const patternPinned = isPattern && idx > 0 && !legIsFlown(fl.waypoints[idx - 1], wp);
           const markerHtml = isPattern 
             ? `<div class="pattern-label" style="position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(0px,${fIdx * 15}px);">🔄 ${fPrefix}${esc(wp.name)} (${wp.laps} laps)</div>`
             : `<div class="wp-dot" style="position:absolute; left:-7px; top:-7px; background:${dotColor};"></div>
                <div class="wp-label" style="position:absolute; left:0; top:${7 + labelDrop}px; transform:translateX(-50%); margin-top:0; background:${labelBg}; color:${labelColor}; border:${labelBorder}; border-left:4px solid ${color};">${idx + 1}. ${fPrefix}${esc(wp.name)} (${wp.alt}')</div>`;
 
           const marker = L.marker([wp.lat, wp.lng], {
-            draggable: !isPattern && !isDoneMode && !dimmed,
+            draggable: !patternPinned && !isDoneMode && !dimmed,
             interactive: !dimmed,
             opacity: dimmed ? 0.35 : 1,
             icon: L.divIcon({
@@ -2999,7 +3008,7 @@
             if (rowEl && rowEl.scrollIntoView) rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
           });
 
-          if (!isPattern && !isDoneMode) {
+          if (!patternPinned && !isDoneMode) {
             marker.on('dragstart', function() {
               pushUndoState('move a waypoint');
             });
@@ -3090,7 +3099,10 @@
         // Via point markers: diamonds in the flight colour. Drag to reshape,
         // right-click to remove.
         fl.waypoints.forEach((wp, idx) => {
-          if (idx === 0 || wp.isPattern || !Array.isArray(wp.via)) return;
+          // A PATTERN WAYPOINT MAY CARRY VIAS SINCE v16.83: the leg reaching an
+          // airwork point is a real ground track and can be bent like any
+          // other, so its diamonds have to be drawn or the bend is invisible.
+          if (idx === 0 || !Array.isArray(wp.via)) return;
           wp.via.forEach((v, vIdx) => {
             if (!v || !isFinite(v.lat) || !isFinite(v.lng)) return;
             const vm = L.marker([v.lat, v.lng], {
@@ -3681,7 +3693,10 @@
         for (let i = 0; i < fl.waypoints.length - 1; i++) {
           const from = fl.waypoints[i];
           const to = fl.waypoints[i + 1];
-          if (to.isPattern) continue;
+          // The transit out to an airwork point is a real leg and needs a real
+          // wind and OAT (v16.83); only a circuit flown where you already are
+          // has no leg to give one to.
+          if (!legIsFlown(from, to)) continue;
 
           const tr = document.createElement('tr');
           tr.innerHTML = `
@@ -4894,9 +4909,11 @@
       const best = findPathInsertion(fl.waypoints, latlng);
       if (!best) { say('Draw at least two waypoints first.', 'warn'); return; }
       const from = fl.waypoints[best.legEnd - 1], to = fl.waypoints[best.legEnd];
-      if (from.isPattern || to.isPattern) {
-        // A pattern stop is not a line on the ground - it costs time and fuel
-        // but no distance, so there is nothing to place a climb along.
+      if (!legIsFlown(from, to)) {
+        // A circuit flown at the fix before it costs time and fuel but no
+        // distance, so there is nothing to place a climb along. The transit out
+        // to an airwork point HAS a ground track and takes a pin like any other
+        // leg - findPathInsertion no longer offers this one at all (v16.83).
         say('A traffic-circuit stop has no ground track, so it has no climb or descent to place.', 'warn');
         return;
       }
@@ -5669,13 +5686,24 @@
         const printRows = [];
         const sched = computeFlightSchedule(fl);   // climbs/descents may span legs
 
-        for (let i = 0; i < fl.waypoints.length - 1; i++) {
-          const from = fl.waypoints[i];
-          const to = fl.waypoints[i + 1];
-          legStartTimes[fIdx + '-' + i] = runningAccTime;
-
-          // PATTERN Leg
-          if (to.isPattern) {
+        /**
+         * The circuit row: laps' worth of time and fuel, no distance.
+         *
+         * A FUNCTION SINCE v16.83, BECAUSE IT IS NO LONGER ONE PER LEG. It used
+         * to be the whole of the `to.isPattern` branch, which meant two things
+         * that are only now separable:
+         *   - a circuit was charged INSTEAD OF the leg that reached it, so the
+         *     transit out to an airwork point was deleted from the plan;
+         *   - a plan that STARTS with circuits was charged NOTHING, because the
+         *     first waypoint is never anybody's `to`. Measured: four laps at
+         *     ENDU before departure cost 0 minutes and 0 gallons.
+         *
+         * @param {any} pat the PATTERN waypoint
+         * @param {number} wpIdx its index in the plan
+         * @param {string} placeName where the laps are flown
+         * @param {boolean} idFree whether no leg row has claimed this row id
+         */
+        const emitCircuitRow = (to, wpIdx, placeName, idFree) => {
             const patternLaps = to.laps || 3;
             const patternMinutes = Math.round(patternLaps * aircraftProfile.patternTime);
             const patternBurnGal = (patternMinutes / 60) * aircraftProfile.patternFf;
@@ -5688,26 +5716,31 @@
             sectorTime += patternMinutes;
             sectorBurn += patternBurn;
 
-            printRows.push({ pattern: true, from: from.name, to: to.name, laps: patternLaps,
+            printRows.push({ pattern: true, from: placeName, to: to.name, laps: patternLaps,
               accDist: sectorAccDist ? sectorAccDist.toFixed(1) : '', pl: to.alt,
               accTime: formatTimeHHMM(runningAccTime), accBurn: runningAccBurn,
               ff: patternFFUnit, legBurn: patternBurn, time: formatTimeHHMM(patternMinutes),
               eto: computeETO(runningAccTime) || '', rem: runningFuelRemaining });
 
-            const isHighlighted = (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === (i+1));
+            const isHighlighted = (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === wpIdx);
             const tr = document.createElement('tr');
             if (isHighlighted) tr.className = "row-highlight";
-            tr.id = `row-${fIdx}-${i+1}`;
-            // A circuit has no ground track; showLegHover draws nothing for it,
-            // but the leave handler still clears whatever the last row drew.
-            tr.addEventListener('mouseenter', () => showLegHover(fIdx, i + 1));
+            // The plain id belongs to the LEG row when there is one, because
+            // that is the row a marker click wants to scroll to. Where the
+            // circuit is the only row for this waypoint it takes the plain id,
+            // so the click still lands somewhere.
+            tr.id = idFree ? `row-${fIdx}-${wpIdx}` : `row-${fIdx}-${wpIdx}-circuit`;
+            // Traces the transit that reached the point, where there was one.
+            // A circuit flown at the fix before it has no ground track, so this
+            // draws nothing - but the leave handler still clears the last row's.
+            tr.addEventListener('mouseenter', () => showLegHover(fIdx, wpIdx));
             tr.addEventListener('mouseleave', clearLegHover);
 
             tr.innerHTML = `
-              <td><b>${esc(from.name)}</b></td>
-              <td><b>PATTERN</b></td>
+              <td><b>${esc(placeName)}</b></td>
+              <td><b>${esc(to.name)}</b></td>
               <td class="cc"><span class="type-pattern">PATTERN</span></td>
-              <td><input type="number" class="alt-input" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority; \u2191/\u2193 steps 100 ft)" onfocus="this.select()" onchange="pushUndoState('change the circuit altitude'); flights[${fIdx}].waypoints[${i+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+              <td><input type="number" class="alt-input" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority; \u2191/\u2193 steps 100 ft)" onfocus="this.select()" onchange="pushUndoState('change the circuit altitude'); flights[${fIdx}].waypoints[${wpIdx}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
               <td class="cc">${to.oat}°</td>
               <td class="cc">-</td>
               <td class="cc">-</td>
@@ -5720,23 +5753,44 @@
               <td class="calc-cell">0.0</td>
               <td class="calc-cell cc">-</td>
               <td class="calc-cell">
-                <input type="number" style="width:36px; display:inline-block;" value="${to.laps}" title="Pattern Laps" onfocus="this.select()" onchange="pushUndoState('change the number of laps'); flights[${fIdx}].waypoints[${i+1}].laps=Math.max(1,parseInt(this.value)); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}> laps (${formatTimeHHMM(patternMinutes)})
+                <input type="number" style="width:36px; display:inline-block;" value="${to.laps}" title="Pattern Laps" onfocus="this.select()" onchange="pushUndoState('change the number of laps'); flights[${fIdx}].waypoints[${wpIdx}].laps=Math.max(1,parseInt(this.value)); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}> laps (${formatTimeHHMM(patternMinutes)})
               </td>
               <td class="calc-cell">${formatTimeHHMM(runningAccTime)}${etoCellHTML(runningAccTime)}</td>
               <td class="calc-cell cc" style="min-width:44px;">${patternFFUnit.toFixed(1)}</td>
               <td class="calc-cell" style="min-width:48px;">${patternBurn.toFixed(1)}</td>
               <td class="calc-cell acc-fuel-cell cc" style="min-width:52px;">${runningAccBurn.toFixed(1)}</td>
               <td class="calc-cell ${runningFuelRemaining < getReserveDisplayUnits() ? 'low-fuel' : ''}" style="min-width:52px; font-weight:700;">${runningFuelRemaining.toFixed(1)}</td>
-              <td class="no-print row-actions"><button class="btn btn-danger btn-sm" onclick="deleteWaypointFromFlight(${fIdx}, ${i+1})" ${isDoneMode ? 'disabled' : ''}>×</button></td>
+              <td class="no-print row-actions"><button class="btn btn-danger btn-sm" onclick="deleteWaypointFromFlight(${fIdx}, ${wpIdx})" ${isDoneMode ? 'disabled' : ''}>×</button></td>
             `;
             tbody.appendChild(tr);
-            continue;
-          }
+        };
+
+        // A PLAN MAY BEGIN WITH CIRCUITS (v16.83, the pilot: "start the plan in
+        // pattern"). The first waypoint is never a leg's `to`, so until this
+        // line those laps were charged nothing at all.
+        if (fl.waypoints[0] && fl.waypoints[0].isPattern) {
+          emitCircuitRow(fl.waypoints[0], 0, fl.waypoints[0].name, true);
+        }
+
+        for (let i = 0; i < fl.waypoints.length - 1; i++) {
+          const from = fl.waypoints[i];
+          const to = fl.waypoints[i + 1];
+          legStartTimes[fIdx + '-' + i] = runningAccTime;
 
           // ---- ONE row per leg: totals over the (possibly via-bent) path;
           //      climb / descent / via detail goes in a sub-line underneath. ----
+          //
+          // A LEG THAT REACHES A CIRCUIT IS STILL A LEG (v16.83). Where the
+          // circuit is flown at the fix before it - every touch & go and full
+          // stop - there is no ground between them, computeLegTotals returns
+          // null, and the only row is the circuit's, exactly as before. Where
+          // the pilot clicked an airwork point out on the route, the transit is
+          // real flying and is priced here first.
           const res = computeLegTotals(from, to, sched[i]);
-          if (!res) continue;
+          if (!res) {
+            if (to.isPattern) emitCircuitRow(to, i + 1, from.name, true);
+            continue;
+          }
 
           const dist = Number(convertDist(res.distNM, distUnit).toFixed(1));
           const tt = res.rowTT;
@@ -5786,6 +5840,11 @@
 
           const subTr = buildSubLegRow(from, to, res, distUnit, fuelUnit);
           if (subTr) tbody.appendChild(subTr);
+
+          // The laps are charged AT the point, under the transit that reached
+          // it - so the chain reads down the sheet as A -> PATTERN, at PATTERN,
+          // PATTERN -> B, with the `to` of each row the `from` of the next.
+          if (to.isPattern) emitCircuitRow(to, i + 1, to.name, false);
         }
 
         // Sector Totals
@@ -6284,8 +6343,9 @@
       const fl = flights[fIdx];
       if (!fl) return;
       const from = fl.waypoints[wpIdx - 1], to = fl.waypoints[wpIdx];
-      // A circuit is not a line on the ground, so there is nothing to trace.
-      if (!from || !to || from.isPattern || to.isPattern) return;
+      // A circuit flown where you already are is not a line on the ground, so
+      // there is nothing to trace. The transit out to an airwork point is.
+      if (!legIsFlown(from, to)) return;
       const pts = legPath(from, to).map((p) => [p.lat, p.lng]);
       if (pts.length < 2) return;
       hoverLegLine = L.polyline(pts, {
@@ -6659,7 +6719,9 @@
       const schedP = computeFlightSchedule(fl);
       for (let i = 0; i < fl.waypoints.length - 1; i++) {
         const from = fl.waypoints[i], to = fl.waypoints[i + 1];
-        if (from.isPattern || to.isPattern) continue;
+        // computeLegTotals is null for a leg with no ground, which is the test
+        // that matters (v16.83) - the legs either side of an airwork point are
+        // real tracks and belong on the plotting sheet.
         const res = computeLegTotals(from, to, schedP[i]);
         if (!res) continue;
         const profs = computeLegMarkers(from, to, schedP[i]);

@@ -1416,6 +1416,15 @@ is forgotten.
 6. **Halti** cites the Finland-Sweden border, which is not in Norwegian data.
 7. **18 offshore HTZ/ADS are published as a circle radius**, not a polygon
    (`insufficient-coordinates`). Needs arc/circle support in `ringOf`.
+8a. **A PATTERN waypoint is skipped when the daylight card picks the departure
+   and destination, and when the printed form fills its DEP/DEST boxes.** So a
+   plan that opens with circuits is judged for day VFR at the next fix instead
+   (measured: the card named A where the aircraft took off from ENDU, 16 NM
+   away - well under a minute of sun, but the wrong place). Including it would
+   put the literal word "PATTERN" in the DEP box and on the card, because the
+   add flow forces that name and v16.48's L7 rule makes it the marker that
+   MAKES a waypoint a circuit. Needs the naming settled first - see v16.83.
+
 8. **29 of 53 aerodromes publish their reporting points on the chart face
    only.** Needs Avinor's AIXM 5.1 export, or per-aerodrome VAC transcription.
    ENSG additionally prints ONE stray coordinate, refused as `not-a-table`.
@@ -2035,6 +2044,145 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 - CLAUDE.md said "ENTC's published 32 ft gives 1000 ft" - the published figure is **32 ft**
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
+
+## A PATTERN IS A PLACE, AND THE FLIGHT OUT TO IT IS REAL (v16.83)
+
+The pilot: *"Sometimes i want to do airwork during a route or start the plan in
+pattern. If i set pattern as a point (which is fine btw, i dont mind writing
+pattern to do airwork) i cant set via-points on the same leg."*
+
+The via points were the symptom. **Measuring before touching anything found that
+the plan underneath them was wrong**, and by a lot.
+
+### WHAT WAS MEASURED, ON `ENDU -> A -> PATTERN -> B -> ENTC`
+
+| | before | true |
+|---|---|---|
+| sector distance | **51.7 NM** | 65.6 NM |
+| the leg A -> PATTERN | charged **nothing** - no distance, no time, no fuel | 13.9 NM |
+| what the map drew | A -> B, 27.8 NM | A -> PATTERN -> B |
+| what the table priced for that stretch | PATTERN -> B, 13.9 NM | |
+| red banner | **none** | |
+
+A right-click meant for either of the pattern's legs did not decline politely
+either: `findPathInsertion` skipped them and **handed back the nearest OTHER
+leg** - 5.6 NM away - so the gesture silently bent a different part of the
+route. That is what "i cant set via-points" looks like from the cockpit.
+
+And **a plan that STARTS with circuits was charged nothing at all**: the circuit
+row was emitted from the `to.isPattern` branch, and the first waypoint is never
+anybody's `to`. Four laps at ENDU before departure cost 0 minutes and 0 gallons.
+
+### THE CAUSE IS THIS FILE'S OWN FIRST NAMED FAILURE SHAPE
+
+**An old rule whose PRECONDITION a new surface silently broke.** `from.isPattern
+|| to.isPattern` meant "this leg covers no ground", and that was TRUE while the
+only way to make a circuit was `addPatternStop` - which COPIES the previous
+waypoint's coordinates. The map-click path never had that property: it puts the
+PATTERN where you clicked. From then on the pattern's position was used as the
+START of the next leg and never as the END of the previous one, and the transit
+fell down the gap between the two.
+
+### THE FIX IS TO DERIVE IT, NOT TO DECLARE IT
+
+`legIsFlown(from, to)` is `pathSegments(from, to).length > 0`, and
+`pathSegments` already drops any span under 0.01 NM. So:
+
+- a circuit flown **where you already are** (touch & go, full stop) has no
+  segments - no line, no row of its own, no schedule leg, chain broken exactly
+  as v16.43 requires;
+- an **airwork point out on the route** has segments, so both its legs are
+  ordinary flying: distance, track, climb or descent, wind sampling, integrity
+  checks, plotting list, TOC/TOD marks, **and via points**.
+
+One test, one source, and it cannot disagree with what the engine walks - the
+v16.76 lesson (*the corners are derived*) applied to the ground track.
+
+**NOTHING ABOUT AN AERODROME CIRCUIT CHANGES**, and that is checked rather than
+assumed: `addPatternStop` copies the coordinates exactly, so the transit leg is
+degenerate and every existing plan computes what it always did.
+
+### THE OFP GREW A ROW, AND THE CHAIN READS DOWN THE SHEET
+
+    ENDU    -> A          16.6 NM      the leg
+    A       -> PATTERN    13.9 NM      the transit out to the airwork  (NEW)
+    PATTERN -> PATTERN    3 laps       the circuit, at the point
+    PATTERN -> B          13.9 NM
+    B       -> ENTC       21.2 NM
+
+The circuit row's first cell is now **where the laps are flown**, not the fix
+before them, so `to` of each row is `from` of the next all the way down - which
+is how a pilot reads the sheet, and a test asserts it. `emitCircuitRow` is a
+function precisely because it is no longer one-per-leg: it is also called before
+the loop for a plan that opens with circuits.
+
+### A CIRCUIT ATTACHED TO A FIX IS NOT DRAGGABLE; AN AIRWORK BLOCK IS
+
+Dragging a touch & go off its aerodrome would silently turn a landing into a
+cross-country detour and strand the stop and refuel figures, which read the fix
+before it. A PATTERN the pilot clicked already stands alone, and a place you
+cannot nudge would be the one position in the app that is not editable.
+`patternPinned` is the same derived test.
+
+### WHAT IS DELIBERATELY NOT CHANGED, AND IT IS A KNOWN LIMIT
+
+**The daylight card and the form's DEP/DEST box still skip PATTERN waypoints.**
+So a plan that starts with circuits at ENDU is still judged for day VFR at the
+NEXT fix, and the DEP box still names it. That is pre-existing and it is the
+lesser of two wrong answers while the add-flow forces the name to the literal
+"PATTERN": a card reading *"Departure PATTERN"* is not an improvement. The sun's
+position over 16 NM moves by well under a minute, so the legality verdict is
+unaffected - it is the LABEL that has no good value. Fixing it properly means
+letting an airwork point keep its own name, which collides with the v16.48 L7
+rule that "PATTERN" is the reserved marker in both directions. On the deferred
+list, not silently absorbed.
+
+### SIX MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+Skipping patterns in `flightLineCoords` (3 tests), refusing them in the hit-test
+(2), breaking the chain on the flag again (3), dropping `alt = null` from the
+degenerate leg - the v16.43 regression - (2, reporting the original 2500 ft
+stale figure), emitting the circuit instead of the transit (2, reporting the
+original **51.7 vs 65.6 NM**), and no row for an opening circuit (1). The
+browser check fails three ways on the hit-test mutation, one of them printing
+`Leg ENDU -> ENTC` for a right-click on the AIRWORK -> ENTC leg: the pilot's
+report, reproduced.
+
+### THE INVARIANT THAT WOULD HAVE CAUGHT IT ON DAY ONE
+
+*The route the pilot READS off the map and the route the OFP PRICES are the same
+route.* The sweep now walks `flightLineCoords` and sums the scheduled legs, and
+requires them equal. **The tolerance is derived, not picked**: `pathSegments`
+measures each span with `calcDistanceNM`, which rounds to 0.1 NM, so the two
+sides may differ by 0.05 NM PER SPAN and by nothing else - three orders of
+magnitude below the 13.9 NM leg this exists to catch.
+
+### THE SWEEP HAD BEEN GENERATING A SHAPE THAT EXISTS NOWHERE
+
+It offset every circuit **0.6 NM** from the fix before it - neither of the two
+shapes the app can produce. So for forty versions it swept the middle case and
+neither real one. It now generates both, and asserts each count separately: a
+tally of "routes with a circuit" is what let this hide.
+
+**AND FIXING THAT KNOCKED OUT AN UNRELATED PATH, WHICH IS THE INTERESTING PART.**
+`bodRefused` - a BOD pin refused because a later, lower fix has already claimed
+the leg's tail - was being reached by LUCK, 12 times in 4000 routes. Re-weighting
+the generator dropped it to **0 across three seeds**. Luck is not coverage, and a
+path nothing exercises is a path nothing guards, so the squeeze shape (a low fix
+close behind a high one, with a BOD pin on it) is now BUILT on purpose: 513 per
+run, 48 refusals. The directed construction was verified to still produce
+`bodRefused` before the sweep was changed, so the coverage is real and not a
+threshold moved to fit.
+
+### FIVE FIXTURES WERE ASSERTING THE EXPIRED PREMISE
+
+Five existing tests failed, and every one of them placed its PATTERN a little
+OFF the fix - 0.37 NM, 1.2 NM, 5 NM - which is not a shape `addPatternStop` can
+make. Each was moved onto the fix's own coordinates, where the rule it was
+written for still holds exactly, rather than having its assertion weakened. Two
+of them were testing nothing once moved (`sch[3]` was not the leg after the
+break; "PATTERN is not in the title" was a proxy for "the leg has ground") and
+now assert the thing itself.
 
 ## IMPORT ASKS BEFORE IT OVERWRITES ANYTHING (v16.81)
 

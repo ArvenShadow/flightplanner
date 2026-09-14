@@ -31,7 +31,10 @@ export function buildPlottingText(fl, distUnit) {
   const schedT = computeFlightSchedule(fl);
   for (let i = 0; i < fl.waypoints.length - 1; i++) {
     const from = fl.waypoints[i], to = fl.waypoints[i + 1];
-    if (from.isPattern || to.isPattern) continue;
+    // computeLegTotals returns null for a leg that covers no ground, which is
+    // the honest test (v16.83): the legs either side of an airwork PATTERN are
+    // real tracks and belong on the plotting sheet, while a circuit flown
+    // where you already are still contributes nothing.
     const res = computeLegTotals(from, to, schedT[i]);
     if (!res) continue;
     const profs = computeLegMarkers(from, to, schedT[i]);
