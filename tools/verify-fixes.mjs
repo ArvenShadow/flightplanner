@@ -112,9 +112,16 @@ check(after === before + 1, `one click added exactly one waypoint (${before} -> 
 const dlg = await page.evaluate(() => document.querySelectorAll('#app-dialog').length);
 check(dlg === 0, 'the click did not also reach the map (no naming dialog open)');
 
+// A MISSING WAYPOINT IS A FAILED CHECK, NOT A CRASHED RUN. When the click
+// above added nothing, `slice(-1)[0]` is undefined and reading `.name` threw
+// out of the script - taking the ~40 checks below it with it, so one broken
+// thing reported itself as a whole verifier that "did not run". Found by
+// mutation while chasing the v16.83 bare-map failure; same family as the
+// v16.75 lesson that a suite exiting 0 with no RESULT line has not passed.
 const wp = await page.evaluate(() => {
   const w = flights[activeFlightIndex].waypoints.slice(-1)[0];
-  return { name: w.name, lat: w.lat, lng: w.lng, alt: w.alt, anchor: w.anchor };
+  return w ? { name: w.name, lat: w.lat, lng: w.lng, alt: w.alt, anchor: w.anchor }
+           : { name: null, lat: null, lng: null, alt: null, anchor: null };
 });
 const published = await page.evaluate(() => {
   const p = window.C182_AIP.aerodromes.find((a) => a.icao === 'ENDU').points.find((x) => x.name === 'ELLA');
@@ -415,11 +422,48 @@ check(byZoom[9].rp > 0, 'zoom 9 draws reporting points (' + byZoom[9].rp + ')');
 
 // And clicking bare map still adds a waypoint the old way - the fixes layer
 // must not have taken over route building.
+//
+// THE POINT IS DERIVED, AND THE CHECK PROVES IT IS REALLY BARE MAP BEFORE IT
+// CLICKS. This was `page.mouse.click(700, 450)` - a literal written at v16.34,
+// when 1400x900 laid out SPLIT and that was the middle of the map. Two later
+// changes moved the ground under it without anyone noticing:
+//   - the v16.49 layout auto-pick made this viewport STACKED, so the map is
+//     only 378 px tall and y=450 is 4 px off its bottom edge;
+//   - v16.67 gave the divider a grab area (`#splitter::after`, inset -6px 0 in
+//     the stacked layout) spanning the FULL WIDTH at y=448-462.
+// So the click landed on the divider, no dialog opened, and the check reported
+// "bare map no longer adds a waypoint" - a true statement about the click it
+// made and a false one about the app. A hardcoded coordinate is an assertion
+// about the layout that nothing re-checks; the failure it produces accuses the
+// feature instead of the arithmetic, which is the expensive kind of wrong.
 await page.evaluate(async () => { map.setView([69.6, 21.6], 9, { animate: false });
   await new Promise((r) => setTimeout(r, 300)); drawFixes(); });
 await page.waitForTimeout(300);
 const n0 = await page.evaluate(() => flights[activeFlightIndex].waypoints.length);
-await page.mouse.click(700, 450);
+const bare = await page.evaluate(() => {
+  const mr = document.getElementById('map').getBoundingClientRect();
+  // What the map's OWN click handler must be able to receive: inside #map, and
+  // not a marker, a route line, a control or the divider's grab area.
+  const isBare = (el) => !!el && !!el.closest('#map') && !el.closest('#splitter') &&
+    !el.closest('#map-controls') && !el.closest('.leaflet-marker-icon') &&
+    !el.closest('.leaflet-overlay-pane');
+  // Walk in from the centre. A fix symbol or a tooltip can sit on the exact
+  // middle, and a point that is merely NEAR the edge is not bare either.
+  for (const fy of [0.5, 0.4, 0.6, 0.3, 0.7]) {
+    for (const fx of [0.5, 0.35, 0.65, 0.25, 0.75]) {
+      const x = mr.left + mr.width * fx, y = mr.top + mr.height * fy;
+      const el = document.elementFromPoint(x, y);
+      if (isBare(el)) return { x, y, hit: el.className || el.tagName, mr: { w: mr.width, h: mr.height } };
+    }
+  }
+  const mid = document.elementFromPoint(mr.left + mr.width / 2, mr.top + mr.height / 2);
+  return { x: null, y: null, hit: mid ? (mid.id || mid.className || mid.tagName) : 'none',
+           mr: { w: mr.width, h: mr.height } };
+});
+check(bare.x !== null,
+  'a point on bare map can be found to click (map ' + Math.round(bare.mr.w) + 'x' +
+  Math.round(bare.mr.h) + ', centre hit-tests to ' + JSON.stringify(bare.hit) + ')');
+if (bare.x !== null) await page.mouse.click(bare.x, bare.y);
 await page.waitForTimeout(400);
 const asked = await page.evaluate(() => [...document.querySelectorAll('#app-dialog .dlg-title')].map((x) => x.textContent));
 check(asked.length === 1 && /waypoint|departure/i.test(asked[0]),

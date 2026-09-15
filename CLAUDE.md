@@ -2174,6 +2174,59 @@ run, 48 refusals. The directed construction was verified to still produce
 `bodRefused` before the sweep was changed, so the coverage is real and not a
 threshold moved to fit.
 
+### AND ONE FAILING CHECK WAS THE CHECK'S OWN ARITHMETIC (found chasing v16.83)
+
+`verify:fixes` reported **"a click on bare map still asks for a waypoint name
+([])"** - on v16.83 and, when stashed, identically on v16.82, so not from this
+work. It was not the app: it was `page.mouse.click(700, 450)`, a literal written
+at v16.34 when 1400x900 laid out SPLIT and that was the middle of the map. Two
+later changes moved the ground under it and nothing re-checked:
+
+- **v16.49's layout auto-pick** made this viewport STACKED, so the map is only
+  **1400x378** and y=450 is 4 px PAST its bottom edge;
+- **v16.67 gave the divider a grab area** - `#splitter::after`, `inset: -6px 0`
+  in the stacked layout - spanning the **full width** at y=448-462.
+
+So the click landed on the divider. `elementFromPoint(700, 450)` returns
+`DIV|no-print|splitter`, one probe, and that was the whole diagnosis.
+
+- **A HARDCODED COORDINATE IS AN UNCHECKED ASSERTION ABOUT THE LAYOUT**, and the
+  failure it produces ACCUSES THE FEATURE. "Bare map no longer adds a waypoint"
+  was a true statement about the click it made and a false one about the app -
+  the expensive kind of wrong, and the reason this sat failing unnoticed.
+- THE POINT IS DERIVED NOW, and the check **proves it is bare map BEFORE it
+  clicks**: it walks in from the map's own centre until `elementFromPoint`
+  resolves to something inside `#map` that is not the splitter, a control, a
+  marker or the overlay pane, and fails by name if no such point exists. It
+  picked (700, **265**) - the old literal was right about x and 185 px wrong
+  about y. It is the only hardcoded click left in any verifier; `verify:layout`'s
+  three all derive their y from the bar's own rect.
+- **BOTH HALVES PROVED BY MUTATION.** Restoring the literal reproduces the
+  original `([])` failure, so the derivation is what fixed it. And widening
+  `#splitter::after` to `inset: -400px 0` - an overlay that really does eat the
+  map - makes the finder return `found: false` naming `splitter`, so the new
+  check still fails on a genuine regression of this shape rather than hunting
+  around until something works.
+- **THE 6 px GRAB BAND IS NOT A BUG AND STAYS.** It is v16.67's stated
+  trade-off, the same one the 20 px invisible route hit-line makes: a 2 px bar
+  is not a 2 px target. It costs 6 px of the map's bottom edge (stacked) or
+  right edge (split), at the panel boundary, and that is the price of the bar
+  being findable at all.
+
+**A VERIFIER THAT THROWS LOSES EVERY CHECK BELOW IT**, and the mutation found
+that too. With no waypoint added, `waypoints.slice(-1)[0]` is undefined and
+reading `.name` threw out of the script at line 115 - so ONE broken thing
+reported itself as a verifier that "did not run", taking ~40 checks with it.
+It returns nulls and lets the checks FAIL now: the mutated run reaches 21 checks
+instead of 8 before Playwright stops it with `#splitter intercepts pointer
+events`, which names the cause exactly. Same family as the v16.75 lesson that a
+suite exiting 0 with no RESULT line has not passed.
+
+**NO VERSION BUMP FOR THIS.** `src/` is untouched, so the shipped artifact is
+byte-identical to v16.83, and numbering two identical builds differently is the
+same documentation-versus-artifact drift discipline rule 5 warns about, pointing
+the other way.
+
 ### FIVE FIXTURES WERE ASSERTING THE EXPIRED PREMISE
 
 Five existing tests failed, and every one of them placed its PATTERN a little
