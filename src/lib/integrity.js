@@ -87,7 +87,11 @@ export function collectIntegrityProblems(flights, signals) {
     /** @type {Waypoint|null} */ let lastTravelTo = null;
     for (let i = 0; i < (fl.waypoints || []).length - 1; i++) {
       const from = fl.waypoints[i], to = fl.waypoints[i + 1];
-      if (from.isPattern || to.isPattern) continue;
+      // A leg with no ground has nothing to check, and computeLegTotals
+      // already says so by returning null (v16.83). Testing isPattern instead
+      // exempted the REAL legs either side of an airwork point from every
+      // rule in this file - a NaN or an out-of-bounds GS there raised no
+      // banner at all.
       const res = computeLegTotals(from, to, schedI[i]);
       if (!res) continue;
       lastTravelRes = res; lastTravelTo = to;

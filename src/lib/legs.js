@@ -90,10 +90,45 @@ export function pointAlongSegments(segs, dNM) {
 // Perpendicular distance (NM, equirectangular approx - fine at leg scale)
 // from a point to a segment, for finding which leg segment was clicked.
 /**
- * The full drawn path of a flight: every real waypoint in order, with the via
+ * WHETHER A LEG IS FLOWN OVER THE GROUND IS DERIVED, NOT DECLARED (v16.83).
+ *
+ * Until v16.83 this was the flag `from.isPattern || to.isPattern`, written when
+ * the only way to make a circuit stop was `addPatternStop` - which copies the
+ * PREVIOUS waypoint's coordinates, so a circuit really did occupy no ground.
+ * The map-click path never had that property: it puts the PATTERN waypoint
+ * where you clicked. So a pilot dropping one mid-route to log airwork got a
+ * waypoint whose position was used as the START of the next leg and never as
+ * the END of the previous one - the transit out to it was deleted from the
+ * plan, distance, time and fuel alike, with no banner. Measured on
+ * ENDU -> A -> PATTERN -> B -> ENTC: the sector read 51.7 NM against 65.6 NM
+ * actually flown, and the map drew A -> B (27.8 NM) while the table priced
+ * PATTERN -> B (13.9 NM).
+ *
+ * The honest test is the geometry, and `pathSegments` already applies it: it
+ * drops any span under 0.01 NM, so a circuit flown where you already are has
+ * NO segments and a transit to an airwork point has one. Same rule, one
+ * source, and it cannot disagree with what the engine walks - which is the
+ * v16.76 lesson (the corners are derived) in a new place.
+ *
+ * @param {Waypoint} from @param {Waypoint} to
+ * @returns {boolean} true when the leg covers ground
+ */
+export function legIsFlown(from, to) {
+  return !!from && !!to && pathSegments(from, to).length > 0;
+}
+
+/**
+ * The full drawn path of a flight: every waypoint in order, with the via
  * points of the leg ARRIVING at each one placed just before it, so the line
- * follows the bent path rather than the direct one. PATTERN waypoints are not
- * places on the ground and contribute nothing.
+ * follows the bent path rather than the direct one.
+ *
+ * A PATTERN WAYPOINT IS A PLACE AND IS DRAWN (v16.83). It used to be skipped
+ * outright, which was right only while a circuit could only sit on top of the
+ * fix before it: an airwork point clicked mid-route was then missing from the
+ * line the pilot reads while still being priced in the table. A circuit flown
+ * where you already are still adds nothing, because it repeats the point
+ * already emitted and the dedupe below drops it - so nothing about an
+ * aerodrome circuit changes.
  *
  * refreshMap draws from this, and so does every live drag - which is the
  * point. Before v16.27 the drag handler rebuilt the line from waypoints
@@ -107,14 +142,23 @@ export function flightLineCoords(fl) {
   /** @type {[number, number][]} */
   const out = [];
   const wps = (fl && fl.waypoints) || [];
+  // Repeating a point draws nothing and costs a zero-length span every
+  // renderer downstream then has to reason about. The tolerance is
+  // pathSegments' own, so "the line has a segment here" and "the engine has a
+  // segment here" are the same statement.
+  const push = (/** @type {number} */ lat, /** @type {number} */ lng) => {
+    const last = out[out.length - 1];
+    if (last && calcDistanceNM(last[0], last[1], lat, lng) < 0.01) return;
+    out.push([lat, lng]);
+  };
   wps.forEach((wp, idx) => {
-    if (wp.isPattern) return;
+    if (!isFinite(wp.lat) || !isFinite(wp.lng)) return;
     if (idx > 0 && Array.isArray(wp.via)) {
       wp.via.forEach(v => {
-        if (v && isFinite(v.lat) && isFinite(v.lng)) out.push([v.lat, v.lng]);
+        if (v && isFinite(v.lat) && isFinite(v.lng)) push(v.lat, v.lng);
       });
     }
-    out.push([wp.lat, wp.lng]);
+    push(wp.lat, wp.lng);
   });
   return out;
 }
@@ -178,8 +222,18 @@ export function drawnLineCoords(fl) {
  * so span k lies between path point k and k+1, and splicing a new via in at
  * index k puts it exactly there.
  *
- * Legs touching a PATTERN waypoint are skipped: a circuit is not a line on
- * the ground and cannot be bent or split.
+ * A leg that covers NO ground is skipped - a circuit flown where you already
+ * are cannot be bent or split, and a zero-length span would otherwise win the
+ * hit-test outright (every point on it is the same point, so it measures the
+ * distance to a single fix and beats any real span nearby).
+ *
+ * THAT TEST USED TO BE `from.isPattern || to.isPattern`, and it was the pilot's
+ * bug (v16.83): with an airwork PATTERN clicked mid-route, BOTH of its legs are
+ * real ground tracks, and refusing them did not merely decline to bend the leg
+ * under the cursor - it handed back the nearest OTHER leg. Measured: a
+ * right-click halfway along a 13.9 NM PATTERN -> B leg returned the leg
+ * B -> ENTC, 5.6 NM away, so the gesture silently bent a different part of the
+ * route.
  *
  * @param {Waypoint[]} waypoints
  * @param {{lat: number, lng: number}} point
@@ -192,7 +246,7 @@ export function findPathInsertion(waypoints, point) {
   const wps = waypoints || [];
   for (let i = 0; i < wps.length - 1; i++) {
     const from = wps[i], to = wps[i + 1];
-    if (from.isPattern || to.isPattern) continue;
+    if (!legIsFlown(from, to)) continue;
     const pts = legPath(from, to);
     for (let k = 0; k < pts.length - 1; k++) {
       const d = distToSegmentNM(point, pts[k], pts[k + 1]);
@@ -493,7 +547,9 @@ export function computeLegTotals(from, to, SL) {
 /** @param {Waypoint} from @param {Waypoint} to
  *  @returns {any} the climb/descent breakdown shown under a leg row */
 export function computeLegProfile(from, to) {
-  if (from.isPattern || to.isPattern) return null;
+  // No ground, no corner. computeLegTotals returns null for a leg with no
+  // segments anyway; this is only here so the reason reads at the top.
+  if (!legIsFlown(from, to)) return null;
   const res = computeLegTotals(from, to);
   if (!res) return null;
   if (res.climbInfo && res.climbInfo.completed && res.climbInfo.tocAlongNM < res.distNM - 0.05) {
@@ -714,9 +770,19 @@ export function computeFlightSchedule(fl) {
     // circuit should resume from (field elevation after a full stop, circuit
     // altitude after a touch & go) is roadmap item 17 and is a separate question
     // from this one: the stale cursor is wrong under every answer to it.
-    if (from.isPattern || to.isPattern) { alt = null; continue; }
+    //
+    // WHAT BREAKS THE CHAIN IS A LEG WITH NO GROUND, NOT THE PATTERN FLAG
+    // (v16.83). Those were the same statement while a circuit could only sit
+    // on the fix before it. They are not the same for an airwork PATTERN
+    // clicked mid-route: BOTH its legs cover real ground, the transit out to
+    // it is a real climb or descent to the height the laps are flown at, and
+    // the leg on from it starts at that height - so the chain through it is
+    // continuous and every stated altitude is one the aircraft is really at.
+    // The v16.43 defect is untouched: the leg into a circuit flown where you
+    // already are still has no segments, so the cursor is still cleared and
+    // the next real leg still starts from its own `from.alt`.
     const segs = pathSegments(from, to);
-    if (!segs.length) continue;
+    if (!segs.length) { alt = null; continue; }
     const L = { i, from, to, segs, distNM: segs.reduce((a, s) => a + s.distNM, 0),
                 climbMin: 0, climbFuelGal: 0, climbDistNM: 0, climbTas: 0,
                 /** @type {number|null} */ tocAlongNM: null, stillClimbing: false,

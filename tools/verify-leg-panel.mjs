@@ -696,6 +696,100 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     `the pilot is told why the corner stopped (${JSON.stringify(await toastText())})`);
 }
 
+// ---- AIRWORK ON THE ROUTE (v16.83, the pilot's report) ---------------------
+// "Sometimes i want to do airwork during a route ... i cant set via-points on
+// the same leg". A PATTERN dropped out on the route is a place the aircraft
+// flies to, so BOTH its legs are ordinary ground tracks. jsdom drives the
+// stubbed handlers; only a real mouse proves the gesture reaches the hit line
+// at all - which is the v16.53 lesson, and the reason the first report of this
+// could exist while every test was green.
+await page.evaluate(async () => {
+  flights = [{ id: 1, title: 'F4', depElev: 254, waypoints: [
+    { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254,  oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.20, lng: 18.50, name: 'AIRWORK', alt: 3000, oat: 0, wdir: 0, wspd: 0, var: -11,
+      isPattern: true, laps: 3 },
+    { lat: 69.80, lng: 18.50, name: 'ENTC', alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -12 }] }];
+  activeFlightIndex = 0;
+  map.setView([69.2, 18.5], 8, { animate: false });
+  await new Promise((r) => setTimeout(r, 320));
+  applyZoomDeclutter(); refreshMap(); renderAllFlightTables();
+});
+await page.waitForTimeout(340);
+{
+  const at = (lat) => page.evaluate((la) => {
+    const p = map.latLngToContainerPoint([la, 18.5]);
+    const r = document.getElementById('map').getBoundingClientRect();
+    return [r.left + p.x, r.top + p.y];
+  }, lat);
+  // the airwork point is DRAWN, so the line really passes through it
+  const drawn = await page.evaluate(() => flightLineCoords(flights[0]).length);
+  check(drawn === 3, `the airwork point is on the drawn route (${drawn} points)`);
+
+  // 1. a right-click opens the leg panel ON the airwork leg. Until v16.83 the
+  //    hit-test skipped both of this point's legs, and it did not decline
+  //    politely - it handed back the nearest OTHER leg, so the gesture landed
+  //    somewhere the pilot was not pointing. Checked BEFORE the drags, while
+  //    the line is still straight and the click point is still on it.
+  const onOut = await at(69.50);
+  await page.mouse.click(onOut[0], onOut[1], { button: 'right' });
+  await page.waitForTimeout(220);
+  const title = await page.evaluate(() => document.getElementById('leg-modal-title').textContent);
+  check(/AIRWORK/.test(title) && /ENTC/.test(title),
+    `the panel opened on the leg that was clicked (${JSON.stringify(title)})`);
+  // Closed through the function the Cancel button is wired to: what this
+  // section is testing is the DRAG below, not the way out of the panel.
+  await page.evaluate(() => closeLegModal());
+  await page.waitForTimeout(340);
+  const shut = await page.evaluate(() =>
+    getComputedStyle(document.getElementById('leg-modal')).display !== 'flex');
+  check(shut, 'the leg panel closed again before the drag checks');
+
+  // 2. press-drag the leg REACHING the airwork point
+  const inbound = await at(68.90);
+  await page.mouse.move(inbound[0], inbound[1]);
+  await page.mouse.down();
+  await page.mouse.move(inbound[0] + 45, inbound[1], { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(280);
+  const viaIn = await page.evaluate(() => (flights[0].waypoints[1].via || []).length);
+  check(viaIn === 1, `the leg reaching the airwork point took a via point (${viaIn})`);
+
+  // 3. and the leg LEAVING it
+  const outbound = await at(69.50);
+  await page.mouse.move(outbound[0], outbound[1]);
+  await page.mouse.down();
+  await page.mouse.move(outbound[0] - 45, outbound[1], { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(280);
+  const viaOut = await page.evaluate(() => (flights[0].waypoints[2].via || []).length);
+  check(viaOut === 1, `the leg leaving the airwork point took a via point (${viaOut})`);
+
+  // 4. the bend is FLOWN, not merely stored: both legs got longer.
+  const bent = await page.evaluate(() => {
+    const W = flights[0].waypoints;
+    return [computeLegTotals(W[0], W[1]).distNM, computeLegTotals(W[1], W[2]).distNM];
+  });
+  check(bent[0] > 36 && bent[1] > 36,
+    `both bent legs walk the longer path (${bent.map((d) => d.toFixed(1)).join(' / ')} NM vs 36.0 direct)`);
+
+  // 5. the sector total really contains both legs - the defect underneath the
+  //    pilot's report was that the transit out to the point was charged nothing.
+  const totals = await page.evaluate(() => ({
+    shown: Number(document.getElementById('f-tot-dist-0').innerText),
+    ground: (() => { let t = 0; const W = flights[0].waypoints;
+      for (let i = 0; i < W.length - 1; i++) { const r = computeLegTotals(W[i], W[i + 1]); if (r) t += r.distNM; }
+      return t; })()
+  }));
+  check(Math.abs(totals.shown - totals.ground) < 0.2,
+    `the sector total is the ground actually flown (${totals.shown} vs ${totals.ground.toFixed(1)} NM)`);
+  const banner = await page.evaluate(() => {
+    const el = document.getElementById('integrity-banner');
+    return el && getComputedStyle(el).display !== 'none'
+      ? el.textContent.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+  });
+  check(banner === '', `no red banner for a plan with airwork on it (${JSON.stringify(banner)})`);
+}
+
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
 await b.close();
 if (fails.length) { console.error('\n' + fails.length + ' check(s) FAILED'); process.exit(1); }

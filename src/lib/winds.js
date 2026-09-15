@@ -49,14 +49,16 @@ export function uvToWind(u, v) {
  *  app state owned by the page, and reading them off the ambient scope is
  *  what made this module unusable outside a browser.
  *  @param {Flight[]} flights @param {Record<string, number>} [legStartTimes]
- *  @returns {WindSamplePoint[]} three per non-pattern leg */
+ *  @returns {WindSamplePoint[]} three per leg that covers ground */
 export function buildWindSamplePoints(flights, legStartTimes) {
   /** @type {WindSamplePoint[]} */
   const pts = [];
   (flights || []).forEach((/** @type {Flight} */ fl, /** @type {number} */ fIdx) => {
     for (let i = 0; i < fl.waypoints.length - 1; i++) {
       const from = fl.waypoints[i], to = fl.waypoints[i + 1];
-      if (from.isPattern || to.isPattern) continue;
+      // The segment test below IS the pattern test (v16.83), and the more
+      // honest one: a transit out to an airwork point is a real leg that needs
+      // real winds, and a circuit flown where you already are has no segments.
       const segs = pathSegments(from, to);
       if (segs.length === 0) continue;
       const totalD = segs.reduce((a2, s2) => a2 + s2.distNM, 0);
