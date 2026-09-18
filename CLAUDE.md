@@ -1417,7 +1417,10 @@ is forgotten.
 7. **18 offshore HTZ/ADS are published as a circle radius**, not a polygon
    (`insufficient-coordinates`). Needs arc/circle support in `ringOf`.
 8a. **A PATTERN waypoint is skipped when the daylight card picks the departure
-   and destination, and when the printed form fills its DEP/DEST boxes.** So a
+   and destination, and when the printed form fills its DEP/DEST boxes.**
+   (Narrower since v16.84: a circuit now sits ON the fix it follows, so the only
+   case left is a plan that OPENS with one, where there is no earlier fix to
+   name and the card falls through to the next.) So a
    plan that opens with circuits is judged for day VFR at the next fix instead
    (measured: the card named A where the aircraft took off from ENDU, 16 NM
    away - well under a minute of sun, but the wrong place). Including it would
@@ -2045,7 +2048,115 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
-## A PATTERN IS A PLACE, AND THE FLIGHT OUT TO IT IS REAL (v16.83)
+## A CIRCUIT IS TIME AND FUEL, NEVER A PLACE (v16.84) - THIS REVERSES v16.83
+
+The pilot, three days after v16.83 shipped: *"pattern should NOT be a point
+where things can be flown out and in from. If i start a flight from ENDU in
+pattern, i want to be able to fly pattern at ENDU and after pattern continue my
+flight plan from ENDU to ENEV for instance. If the pattern is its own point, the
+next leg will be flown from where i placed the PATTERN sign. Pattern should only
+be a 'time and fuel addon' not a place."*
+
+**READ THE v16.83 SECTION BELOW AS HISTORY, NOT AS THE RULE.** Its diagnosis was
+right - the pattern's position was used as the START of the next leg and never
+as the END of the previous one, and the transit fell down the gap. Its FIX chose
+the wrong side of that asymmetry: it made the marker real at both ends, which
+priced the detour honestly and gave the pilot a detour they never wanted.
+
+Measured on `ENDU -> PATTERN -> ENEV` with the marker dropped 23 NM off track:
+the sector walked **76.1 NM** where ENDU -> ENEV is **53.0**.
+
+### ONE INVARIANT, AND EVERYTHING ELSE FALLS OUT OF IT
+
+*A PATTERN waypoint sits at the position of the waypoint it follows, always.*
+
+- the leg REACHING a circuit then covers no ground, so it has no row, no
+  schedule leg, and breaks the altitude chain exactly as v16.43 requires;
+- the leg LEAVING one runs from the fix you were already at, so a circuit at
+  ENDU is followed by **ENDU -> ENEV** - and that leg takes **via points** like
+  any other, which is the thing v16.83 was originally asked for. It is fixed
+  here by the cleaner route: there is one leg to bend instead of two.
+- **A LEADING CIRCUIT KEEPS ITS OWN POSITION.** There is no waypoint before it
+  to borrow one from and it IS where the plan starts.
+
+`applyPatternPositions` (exchange.js) is the rule. **v16.83's machinery is kept
+and does the right thing once positions are snapped** - `legIsFlown`, the
+circuit row, the leading-circuit charge, the map-vs-engine sweep invariant all
+stand unchanged. The reversal is one normaliser, not a rewrite.
+
+### ENFORCED WHERE A POSITION IS READ, NOT WHERE ONE IS WRITTEN
+
+There are a dozen writers - the add flow, a drag, a delete, an insert, a rename
+to PATTERN, an import, a route load - and a normaliser that has to be remembered
+at each of them is this file's first named failure shape waiting to happen. So
+it runs at the three places a position is READ (`refreshMap`,
+`renderAllFlightTables`, `drawLiveLine`, via one `syncPatternPositions`) plus
+`sanitiseFlights` for the load door. Dragging the fix a circuit hangs off takes
+the circuit with it; deleting that fix re-homes the circuit onto whatever now
+precedes it; a plan saved by v16.83 is corrected on the way in.
+
+**THE ADD FLOW SNAPS ANYWAY, AND THAT IS NOT REDUNDANT.** The render doors fix
+the POSITION, but the circuit altitude and the variation are derived at the
+moment of adding - so deriving them from the click describes an aerodrome the
+aircraft never goes near. Clicking 38 NM away at ENTC while sitting at ENDU must
+give ENDU's told 1500 ft, not ENTC's derived 1000. A mutation proves it: with
+the snap removed the test reports `1000 ft` by name. The toast says out loud
+where the circuits were logged, because a control that silently ignores where
+you clicked is worse than one that explains itself.
+
+**A CIRCUIT IS NOT DRAGGABLE** (except a leading one, which is its own
+position). A marker you can drag that snaps straight back offers a gesture the
+plan cannot honour.
+
+### THE SWEEP GENERATES THE DISPLACED SHAPE ON PURPOSE
+
+Half the generated circuits arrive off-fix - not a shape the app writes, but
+exactly what a v16.83 file or a hand-edit carries - and the sweep runs the REAL
+`applyPatternPositions` over them, then asserts on every plan that no circuit is
+anywhere but on its fix. So it exercises the normaliser rather than a
+restatement of it, and everything downstream computes what the app computes.
+v16.83's generator kept the displaced shape as a first-class case and asserted
+its legs got scheduled; keeping that would be a sweep defending a rule the app
+no longer has.
+
+### SEVEN MUTATIONS: SIX CAUGHT BY NAME, ONE PROVED REDUNDANT AND DELETED
+
+Emptying the normaliser (5 tests + 492 sweep violations), stopping the render
+doors syncing (4), letting the sanitiser through (1), the add flow using the
+click (1, reporting the wrong circuit altitude), and making circuits draggable
+(1). None died only in `tsc`. The seventh is the stop-time guard below.
+
+## THE GROUND TIME BELONGS TO THE SECTOR IT DELAYS (v16.84)
+
+The pilot: *"If i have a final full stop at a point, the 10 minutes get added at
+the total flight time in the bottom place for total values ... even after having
+deleted the next flight plan. I dont mind it adding a new flight plan for me to
+delete, but the 10 minutes should be a part of the new flight plan, not added to
+the old time."*
+
+Measured on one 18-minute sector ending in a full stop: the mission read
+**00:28**. The ground time was added to the running clock at the END of the
+sector the stop was made on, so it fell into that plan's share of the mission
+rather than into the one whose off-block it actually moves - which is also the
+plan whose header the pilot edits it in (v16.54 said so and the code did the
+other thing).
+
+- It is QUEUED now and applied at the START of the next sector, before
+  `sectorStartMin` is taken, because the delay is exactly what moves that
+  sector's off-block. Its minutes open that plan's total; its circuit fuel, its
+  refuel and its taxi re-arm go with them.
+- **A STOP WITH NO SECTOR AFTER IT COSTS NOTHING.** A full stop is a landing:
+  with nothing to delay, ten minutes of ground time is not flight time and not
+  fuel. Add a sector and the figures appear on it.
+- **THE QUEUE IS WHAT MAKES THAT TRUE, AND THE EXPLICIT GUARD WAS DELETED.**
+  The first version also tested `fIdx + 1 < flights.length`. Mutating that away
+  changed no figure and failed no test - a stop queued on the last sector is
+  never applied because there is no iteration left to apply it. Two mechanisms
+  for one job, one of them invisible: v16.61's rule says prefer the deletion,
+  so the redundant test is gone and the mutation that DOES bite (re-adding the
+  end-of-sector charge) reports the pilot's own symptom, `00:29 vs 00:19`.
+
+## A PATTERN IS A PLACE, AND THE FLIGHT OUT TO IT IS REAL (v16.83 - REVERSED at v16.84, see above)
 
 The pilot: *"Sometimes i want to do airwork during a route or start the plan in
 pattern. If i set pattern as a point (which is fine btw, i dont mind writing

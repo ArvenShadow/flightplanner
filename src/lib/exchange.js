@@ -91,6 +91,12 @@ export function sanitiseFlights(candidate) {
     .filter((f) => f && typeof f === 'object')
     .map((f, i) => {
       const dep = num(f.depElev);
+      const waypoints = Array.isArray(f.waypoints)
+        ? f.waypoints.filter((/** @type {any} */ w) => w && typeof w === 'object'
+            && isFinite(num(w.lat)) && isFinite(num(w.lng))).map(sanitiseWaypoint)
+        : [];
+      // Freshly built objects, so this mutates nothing the caller owns.
+      applyPatternPositions(waypoints);
       return {
         id: Number.isFinite(num(f.id)) ? num(f.id) : (i + 1),
         title: f.title === null || f.title === undefined ? `Flight Plan ${i + 1}` : String(f.title),
@@ -98,13 +104,57 @@ export function sanitiseFlights(candidate) {
         // schedule needs a finite datum, and the first waypoint's own altitude
         // overrides it everywhere it matters.
         depElev: Number.isFinite(dep) ? dep : 0,
-        waypoints: Array.isArray(f.waypoints)
-          ? f.waypoints.filter((/** @type {any} */ w) => w && typeof w === 'object'
-              && isFinite(num(w.lat)) && isFinite(num(w.lng))).map(sanitiseWaypoint)
-          : []
+        waypoints
       };
     });
   return cleaned.length ? cleaned : null;
+}
+
+/**
+ * A CIRCUIT IS A TIME-AND-FUEL ADDON, NOT A PLACE (v16.84).
+ *
+ * A PATTERN waypoint sits at the position of the waypoint it follows, always.
+ * That one invariant is the whole feature, and everything else falls out of
+ * it: the leg REACHING a circuit then covers no ground (so it has no row, no
+ * schedule leg, and breaks the altitude chain exactly as v16.43 requires), and
+ * the leg LEAVING one runs from the fix you were already at - so a circuit at
+ * ENDU is followed by ENDU -> ENEV, which can be bent with via points like any
+ * other leg.
+ *
+ * **THIS REVERSES v16.83**, on the pilot's instruction: *"pattern should NOT be
+ * a point where things can be flown out and in from... If the pattern is its
+ * own point, the next leg will be flown from where i placed the PATTERN sign.
+ * Pattern should only be a 'time and fuel addon' not a place."* v16.83 had made
+ * the marker's position real at both ends, which fixed the numbers for an
+ * airwork detour and introduced one the pilot never asked for. Measured on
+ * `ENDU -> PATTERN -> ENEV` with the marker dropped 23 NM off the track: the
+ * sector walked 76.1 NM where ENDU -> ENEV is 53.0.
+ *
+ * A LEADING PATTERN KEEPS ITS OWN POSITION, because there is no waypoint
+ * before it to borrow one from and it IS where the plan starts.
+ *
+ * IT MUTATES DELIBERATELY. This is a normaliser, not a transform: the page
+ * calls it on the LIVE waypoints after an edit, and returning copies there
+ * would detach every marker and pin from the plan they belong to.
+ *
+ * @param {any[]} waypoints the plan's waypoints, in order
+ * @returns {number} how many were moved
+ */
+export function applyPatternPositions(waypoints) {
+  if (!Array.isArray(waypoints)) return 0;
+  let moved = 0;
+  for (let i = 1; i < waypoints.length; i++) {
+    const wp = waypoints[i], prev = waypoints[i - 1];
+    if (!wp || !prev || !wp.isPattern) continue;
+    // Two circuits in a row chain correctly: the one before has already been
+    // snapped by the time this reads it.
+    if (wp.lat !== prev.lat || wp.lng !== prev.lng) {
+      wp.lat = prev.lat;
+      wp.lng = prev.lng;
+      moved++;
+    }
+  }
+  return moved;
 }
 
 /** Absent is NaN, not 0. A missing OAT or wind must STAY missing so the red
