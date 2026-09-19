@@ -5035,6 +5035,7 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   // back on the same leg.
   const L2 = moduleExports.legs;
   const GEO = moduleExports.geodesy;
+  const EX = moduleExports.exch;
   const W = (n, lat, lng, alt) => ({ name: n, lat, lng, alt, oat: 0, wdir: 250, wspd: 20, var: -11 });
   const rnd = (() => { let s = 12345; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
   const bad = [];
@@ -5042,7 +5043,7 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   // CIRCUIT STOPS ARE GENERATED NOW (v16.43). This sweep had never produced one,
   // which is why C1 - the forward altitude cursor surviving a pattern pair -
   // went unseen through every run of it.
-  let patterns = 0, afterPattern = 0, airworkPoints = 0, circuitsAtFix = 0, airworkLegs = 0, squeezes = 0;
+  let patterns = 0, afterPattern = 0, displacedCircuits = 0, circuitsOnFix = 0, legsFromCircuit = 0, squeezes = 0;
   for (let iter = 0; iter < sweep(4000); iter++) {
     const nWp = 2 + Math.floor(rnd() * 3);
     const wps = []; let lat = 68.5 + rnd() * 1.0;
@@ -5074,26 +5075,38 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
       squeezes++;
     }
 
-    // Drop a circuit into the middle of some routes - BOTH SHAPES, and until
-    // v16.83 only one of them was ever generated.
+    // Drop a circuit into the middle of some routes.
     //
-    // The sweep always offset the circuit 0.6 NM from the fix before it, which
-    // is not a shape the app produces: `addPatternStop` COPIES the previous
-    // coordinates, and a map-clicked PATTERN lands wherever the pilot clicked.
-    // So the sweep tested a middle case that existed nowhere, and the two that
-    // exist - a circuit ON its fix, whose leg covers no ground and breaks the
-    // altitude chain, and an airwork point out on the route, whose two legs are
-    // ordinary flying - were both unswept.
+    // HALF OF THEM ARRIVE DISPLACED ON PURPOSE (v16.84). That is not a shape
+    // the app writes - a circuit takes the position of the fix it follows -
+    // but it IS what a plan saved by v16.83 or edited by hand carries, and the
+    // rule has to hold for what is on disk rather than only for what the add
+    // flow produces. `applyPatternPositions` is the real normaliser the page
+    // and the sanitiser both call, so the sweep exercises it rather than a
+    // restatement of it, and everything below then runs on the normalised plan
+    // exactly as the app computes.
+    //
+    // (v16.83's generator kept the displaced shape as a FIRST-CLASS case and
+    // asserted its legs got scheduled. The pilot reversed that premise, so
+    // asserting it now would be a sweep defending a rule the app no longer has.)
     if (nWp >= 3 && rnd() < 0.35) {
       const at = 1 + Math.floor(rnd() * (pin.length - 1));
-      const airwork = rnd() < 0.5;
-      if (airwork) airworkPoints++; else circuitsAtFix++;
+      const displaced = rnd() < 0.5;
+      if (displaced) displacedCircuits++; else circuitsOnFix++;
       pin.splice(at, 0, { ...W('PATTERN',
-                            pin[at - 1].lat + (airwork ? 0.05 + rnd() * 0.3 : 0),
-                            pin[at - 1].lng + (airwork ? (rnd() - 0.5) * 0.3 : 0),
-                            airwork ? Math.round((500 + rnd() * 5000) / 100) * 100 : 1000),
+                            pin[at - 1].lat + (displaced ? 0.05 + rnd() * 0.3 : 0),
+                            pin[at - 1].lng + (displaced ? (rnd() - 0.5) * 0.3 : 0),
+                            Math.round((500 + rnd() * 5000) / 100) * 100),
                           isPattern: true, laps: 1 + Math.floor(rnd() * 3) });
       patterns++;
+      EX.applyPatternPositions(pin);
+    }
+    // THE INVARIANT ITSELF, asserted on every generated plan: no circuit is
+    // ever anywhere but on the fix before it, so no leg can be flown out to
+    // one or back from one.
+    for (let k = 1; k < pin.length; k++) {
+      if (pin[k].isPattern && (pin[k].lat !== pin[k - 1].lat || pin[k].lng !== pin[k - 1].lng))
+        bad.push('a circuit is off its fix at ' + k);
     }
     const sch = L2.computeFlightSchedule({ id: 1, waypoints: pin });
     // THE INVARIANT C1 BROKE: a real leg that follows a break in the chain must
@@ -5145,7 +5158,7 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
     for (const S of sch) {
       if (!S) continue;
       legs++;
-      if (S.from.isPattern || S.to.isPattern) airworkLegs++;
+      if (S.from.isPattern || S.to.isPattern) legsFromCircuit++;
       // EVERY PHASE IS NON-NEGATIVE, ASSERTED DIRECTLY (M5). The bounds checks
       // below catch a phase that leaves the leg, but a negative duration or
       // fuel figure would sail through them and land straight on the form.
@@ -5234,13 +5247,17 @@ T('pins never produce impossible geometry - swept over generated routes', () => 
   assert(continues > 0, 'the sweep never produced a climb continuing through a fix');
   assert(patterns > 100 && afterPattern > 100,
     'the sweep barely exercised circuit stops: ' + patterns + ' routes, ' + afterPattern + ' legs after one');
-  // BOTH SHAPES, and each asserted separately (v16.83) - a count of "routes
-  // with a circuit" was what let the sweep run for forty versions generating
-  // only the middle case that the app cannot produce.
-  assert(circuitsAtFix > 350 && airworkPoints > 350,
-    'the sweep did not generate both circuit shapes: ' + circuitsAtFix + ' at a fix, ' + airworkPoints + ' airwork');
-  assert(airworkLegs > 1000,
-    'the legs either side of an airwork point are still not being scheduled: ' + airworkLegs);
+  // BOTH SHAPES, and each asserted separately - a count of "routes with a
+  // circuit" is what let the sweep run for forty versions generating only a
+  // middle case the app cannot produce.
+  assert(circuitsOnFix > 350 && displacedCircuits > 350,
+    'the sweep did not generate both circuit shapes: ' + circuitsOnFix + ' on the fix, ' +
+    displacedCircuits + ' displaced');
+  // A circuit still leaves exactly one scheduled leg behind it - the one that
+  // flies ON from the fix it was flown at. If that stopped happening the
+  // circuit would have swallowed a real leg rather than costing only time.
+  assert(legsFromCircuit > 300,
+    'the leg leaving a circuit is no longer being scheduled: ' + legsFromCircuit);
   // A MISSING OAT OR WIND MUST SURVIVE THE PIN MACHINERY (M5). The v16.20 rule
   // is that an absent value yields NaN and the banner NAMES it - never calm
   // wind at 0 C. The pins added a lot of arithmetic between the input and the
@@ -5788,10 +5805,16 @@ T('a circuit stop prints as a circuit, not as a leg', () => {
   assert(c.time === '00:15' && c.legBurn === '1.0', 'the circuit time/fuel is missing');
 });
 
-console.log('\n=== 62a1. Airwork on the route, and a plan that starts in the pattern (v16.83) ===');
-// The pilot: "Sometimes i want to do airwork during a route or start the plan
-// in pattern. If i set pattern as a point ... i cant set via-points on the same
-// leg". The via points were the symptom; the numbers underneath were the bug.
+console.log('\n=== 62a1. A circuit is time and fuel, never a place (v16.84) ===');
+// THE PILOT REVERSED v16.83 HERE, and these tests encode the reversal rather
+// than softening it: "pattern should NOT be a point where things can be flown
+// out and in from... If the pattern is its own point, the next leg will be
+// flown from where i placed the PATTERN sign. Pattern should only be a 'time
+// and fuel addon' not a place."
+//
+// The fixture stores the marker 23 NM OFF the track on purpose - a plan saved
+// by v16.83, or a hand-edited file - because the invariant has to hold for
+// what is on disk, not only for what the add flow writes.
 const AIRWORK = `flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
   { lat: 69.0558, lng: 18.5404, name: 'ENDU', alt: 254,  oat: 0, wdir: 0, wspd: 0, var: -11 },
   { lat: 69.30,   lng: 18.90,   name: 'A',    alt: 3000, oat: 0, wdir: 0, wspd: 0, var: -11 },
@@ -5801,33 +5824,43 @@ const AIRWORK = `flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
   { lat: 69.6833, lng: 18.9189, name: 'ENTC', alt: 32,   oat: 0, wdir: 0, wspd: 0, var: -11 }
 ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
 
-T('the transit out to an airwork point is on the sheet, not deleted from it', () => {
+T('a circuit never moves the route, however far off the marker was stored', () => {
   ev(AIRWORK);
-  // MEASURED BEFORE THE FIX: 51.7 NM against 65.6 NM actually flown. The leg
-  // A -> PATTERN was charged nothing at all - no distance, no time, no fuel -
-  // because the circuit row was emitted INSTEAD OF the leg that reached it.
-  const shown = Number(txtOf('f-tot-dist-0'));
-  const flown = ev(`(function(){ let t = 0, W = flights[0].waypoints;
-    for (let i = 0; i < W.length - 1; i++) { const r = computeLegTotals(W[i], W[i + 1]);
-      if (r) t += r.distNM; } return t; })()`);
-  assert(Math.abs(shown - flown) < 0.2,
-    'the sector total is ' + shown + ' NM against ' + flown.toFixed(1) + ' NM of ground');
-  assert(shown > 60, 'the transit is still missing from the sector total: ' + shown);
+  // MEASURED BEFORE THE FIX, on ENDU -> PATTERN -> ENEV with the marker 23 NM
+  // off track: the sector walked 76.1 NM where ENDU -> ENEV is 53.0. Here the
+  // route must cost exactly what it costs with the circuit taken out of it.
+  const withCircuit = Number(txtOf('f-tot-dist-0'));
+  ev('flights[0].waypoints.splice(2, 1); renderAllFlightTables();');
+  const without = Number(txtOf('f-tot-dist-0'));
+  assert(Math.abs(withCircuit - without) < 0.05,
+    'the circuit added ' + (withCircuit - without).toFixed(1) + ' NM of ground to the route');
 });
 
-T('the sheet reads down continuously across the airwork', () => {
+T('the circuit sits on the fix it follows, and the route never visits the marker', () => {
+  ev(AIRWORK);
+  const at = ev('JSON.stringify([flights[0].waypoints[1].lat, flights[0].waypoints[1].lng, ' +
+                'flights[0].waypoints[2].lat, flights[0].waypoints[2].lng])');
+  const [aLat, aLng, pLat, pLng] = JSON.parse(at);
+  assert(aLat === pLat && aLng === pLng,
+    'the circuit was left at its stored position: ' + at);
+  // ...so the drawn line has no excursion in it: five waypoints, four points.
+  const line = ev('flightLineCoords(flights[0])');
+  assert(line.length === 4, 'the drawn route visits the marker: ' + JSON.stringify(line));
+});
+
+T('the sheet reads down continuously across the circuit', () => {
   ev(AIRWORK);
   const rows = [...doc.querySelectorAll('#tbody-flight-0 > tr')]
     .filter((r) => !/sub-leg/.test(r.className))
     .map((r) => [...r.children].slice(0, 3).map((c) => c.textContent.trim()));
-  // ENDU->A, A->PATTERN (the transit), the laps, PATTERN->B, B->ENTC
-  assert(rows.length === 5, 'expected five rows, got ' + rows.length + ': ' + JSON.stringify(rows));
-  assert(rows[1][0] === 'A' && rows[1][1] === 'PATTERN' && !/PATTERN/.test(rows[1][2]),
-    'the transit row is missing or is marked as a circuit: ' + JSON.stringify(rows[1]));
-  assert(/PATTERN/.test(rows[2][2]), 'the circuit row is missing: ' + JSON.stringify(rows[2]));
+  // ENDU->A, the laps at A, A(PATTERN)->B, B->ENTC. There is NO transit row,
+  // because there is no ground between A and the circuit flown at A.
+  assert(rows.length === 4, 'expected four rows, got ' + rows.length + ': ' + JSON.stringify(rows));
+  assert(/PATTERN/.test(rows[1][2]), 'the circuit row is missing: ' + JSON.stringify(rows[1]));
+  assert(!rows.some((r) => r[1] === 'PATTERN' && !/PATTERN/.test(r[2])),
+    'a leg row was emitted for flying out to the circuit: ' + JSON.stringify(rows));
   // THE CHAIN: what one row arrives at is what the next leaves from, all the
-  // way down. That is the invariant a pilot reads the sheet by, and a circuit
-  // row labelled with the fix BEFORE the airwork point would break it.
+  // way down. That is the invariant a pilot reads the sheet by.
   for (let i = 1; i < rows.length; i++)
     assert(rows[i][0] === rows[i - 1][1],
       'row ' + i + ' starts at ' + rows[i][0] + ' but the row above arrives at ' + rows[i - 1][1]);
@@ -5862,6 +5895,99 @@ T('a plan that starts in the pattern is charged for the circuits', () => {
   // ...and the departure is drawn where it happens.
   assert(ev('flightLineCoords(flights[0])').length === 3,
     'the circuit at the departure field is not on the drawn route');
+});
+
+TA('clicking a circuit logs it where you are, and prices it for THAT field', async () => {
+  // THE CLICK SAYS WHEN IN THE PLAN THE CIRCUITS HAPPEN, NEVER WHERE (v16.84).
+  // The render doors put a displaced marker back on its fix, so the position
+  // alone would be corrected either way - but the CIRCUIT ALTITUDE and the
+  // variation are derived at the moment of adding, and deriving them from the
+  // click describes an aerodrome the aircraft never goes near. ENDU's circuit
+  // altitude is the told 1500 ft; ENTC's derived figure is 1000.
+  ev(`flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+    { lat: 69.05583, lng: 18.54028, name: 'ENDU', alt: 254, oat: 0, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  // click 38 NM away, right on ENTC, and ask for circuits
+  const pr = w.__mapHandlers.click({ latlng: { lat: 69.67895, lng: 18.91143 } });
+  await tick();
+  answerDialog('traffic-circuit');
+  await tick();
+  typeInDialog('3');
+  answerDialog('Add pattern');
+  await pr;
+  await tick();
+  const wp = ev('JSON.stringify(flights[0].waypoints[1])');
+  const got = JSON.parse(wp);
+  assert(got && got.isPattern, 'no circuit was added: ' + wp);
+  assert(got.lat === ev('flights[0].waypoints[0].lat') && got.lng === ev('flights[0].waypoints[0].lng'),
+    'the circuit was placed where the click was, not where the aircraft is: ' + wp);
+  assert(got.alt === 1500,
+    "the circuit was priced for the field under the CURSOR, not the one it is flown at: " +
+    got.alt + " ft (ENDU is 1500, ENTC's derived figure is 1000)");
+  ev(SEED);
+});
+
+T('a circuit is not draggable, because it has no position of its own', () => {
+  // A marker you can drag and that snaps straight back is worse than one that
+  // does not move: it offers a gesture the plan cannot honour. A LEADING
+  // circuit is the exception - there is no fix before it to borrow a position
+  // from, so that one really is where the plan starts.
+  ev(`flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+    { lat: 69.0558, lng: 18.5404, name: 'ENDU', alt: 254, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.0558, lng: 18.5404, name: 'PATTERN', alt: 1500, oat: 0, wdir: 0, wspd: 0, var: -11,
+      isPattern: true, laps: 2 },
+    { lat: 69.6833, lng: 18.9189, name: 'ENTC', alt: 32, oat: 0, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap();`);
+  const drag = (i) => ev(`markers[${i}] && markers[${i}]._opts ? markers[${i}]._opts.draggable : null`);
+  assert(drag(0) === true, 'an ordinary waypoint stopped being draggable: ' + drag(0));
+  assert(drag(1) === false, 'the circuit marker is draggable: ' + drag(1));
+
+  ev(`flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+    { lat: 69.0558, lng: 18.5404, name: 'PATTERN', alt: 1500, oat: 0, wdir: 0, wspd: 0, var: -11,
+      isPattern: true, laps: 2 },
+    { lat: 69.6833, lng: 18.9189, name: 'ENTC', alt: 32, oat: 0, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap();`);
+  assert(drag(0) === true, 'a circuit that opens a plan IS its position and must move: ' + drag(0));
+});
+
+T('a circuit follows its fix through every edit the page makes', () => {
+  // THE RULE IS ENFORCED WHERE A POSITION IS READ, not at each of the dozen
+  // places one is written - so this drives the page's own paths rather than
+  // calling the normaliser, which would prove the normaliser and not the app.
+  const at = (i) => ev(`flights[0].waypoints[${i}].lat + ',' + flights[0].waypoints[${i}].lng`);
+  const seed = `flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
+    { lat: 69.0558, lng: 18.5404, name: 'ENDU', alt: 254, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.3000, lng: 18.9000, name: 'MID',  alt: 3000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.3000, lng: 18.9000, name: 'PATTERN', alt: 1500, oat: 0, wdir: 0, wspd: 0, var: -11,
+      isPattern: true, laps: 2 },
+    { lat: 69.6833, lng: 18.9189, name: 'ENTC', alt: 32, oat: 0, wdir: 0, wspd: 0, var: -11 }
+  ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+
+  // 1. the fix it hangs off is DRAGGED - the circuit has to come along, or the
+  //    leg out of it starts from where that fix used to be.
+  ev(seed);
+  ev('flights[0].waypoints[1].lat = 69.44; flights[0].waypoints[1].lng = 19.10; refreshMap();');
+  assert(at(2) === at(1), 'the circuit stayed behind when its fix moved: ' + at(2) + ' vs ' + at(1));
+
+  // 2. that fix is DELETED - the circuit re-homes onto whatever now precedes it,
+  //    and the route costs what it costs without the circuit in it.
+  ev(seed);
+  ev('deleteWaypointFromFlight(0, 1); renderAllFlightTables();');
+  assert(at(1) === at(0), 'the circuit did not re-home after a delete: ' + at(1) + ' vs ' + at(0));
+  const withCircuit = Number(txtOf('f-tot-dist-0'));
+  ev('flights[0].waypoints.splice(1, 1); renderAllFlightTables();');
+  assert(Math.abs(withCircuit - Number(txtOf('f-tot-dist-0'))) < 0.05,
+    'the re-homed circuit still adds ground: ' + withCircuit + ' vs ' + txtOf('f-tot-dist-0'));
+
+  // 3. a file that carries a displaced circuit is corrected on the way IN, so a
+  //    plan saved by v16.83 does not keep its detour.
+  const cleaned = moduleExports.exch.sanitiseFlights([{ id: 1, depElev: 254, waypoints: [
+    { lat: 69.0, lng: 18.0, name: 'A', alt: 254 },
+    { lat: 69.9, lng: 19.9, name: 'PATTERN', alt: 1500, isPattern: true, laps: 3 },
+    { lat: 70.0, lng: 18.0, name: 'C', alt: 2000 }] }]);
+  const w = cleaned[0].waypoints;
+  assert(w[1].lat === w[0].lat && w[1].lng === w[0].lng,
+    'the sanitiser let a displaced circuit through: ' + JSON.stringify(w[1]));
 });
 
 console.log('\n=== 62a2. Circuit altitude from the field elevation (v16.40) ===');
@@ -6318,24 +6444,28 @@ T('a circuit on its own fix has no ground track, so the panel refuses it', () =>
   }
   assert(ev('flights[0].waypoints.length') === before, 'the route changed');
 });
-T('the leg reaching an airwork PATTERN takes a via point like any other', () => {
-  // THE PILOT'S REPORT (v16.83): "if i set pattern as a point i cant set
-  // via-points on the same leg". Both of an airwork point's legs are real
-  // ground tracks and both must bend.
+T('the leg leaving a circuit takes a via point like any other', () => {
+  // THE PILOT'S ORIGINAL REPORT (v16.83): "if i set pattern as a point i cant
+  // set via-points on the same leg". That is still fixed under v16.84's rule,
+  // and by the cleaner route: the circuit covers no ground, so the leg either
+  // side of it is ONE ordinary leg - ENDU -> FINNSNES here - and it bends.
   ev(SEED);
   ev(`flights[0].waypoints.splice(1, 0, { name: 'PATTERN', lat: 69.15, lng: 18.30, alt: 1200, oat: 0, wdir: 0, wspd: 0, var: -11, isPattern: true, laps: 3 }); refreshMap();`);
   const before = ev('flights[0].waypoints.length');
-  // press on the ENDU -> PATTERN leg, a little off the straight line
-  ev(`hitLines[0]._h.mousedown({ latlng: { lat: 69.10, lng: 18.44 }, originalEvent: { preventDefault: function(){}, button: 0 } })`);
+  // press on the leg LEAVING the circuit, a little off the straight line
+  ev(`hitLines[0]._h.mousedown({ latlng: { lat: 69.16, lng: 18.20 }, originalEvent: { preventDefault: function(){}, button: 0 } })`);
   assert(ev('flights[0].waypoints.length') === before, 'bending a leg must not add a waypoint');
-  assert(ev('(flights[0].waypoints[1].via || []).length') === 1,
-    'the leg reaching an airwork point took no via point: ' +
-    ev('JSON.stringify(flights[0].waypoints[1].via || [])'));
-  // ...and the bent path is longer than the direct one, i.e. the via is really
-  // being flown rather than merely stored.
+  assert(ev('(flights[0].waypoints[2].via || []).length') === 1,
+    'the leg leaving a circuit took no via point: ' +
+    ev('JSON.stringify(flights[0].waypoints[2].via || [])'));
+  // ...and the bent path really walks two spans, i.e. the via is flown rather
+  // than merely stored.
   const L2 = moduleExports.legs;
-  const bent = L2.computeLegTotals(ev('flights[0].waypoints[0]'), ev('flights[0].waypoints[1]'));
+  const bent = L2.computeLegTotals(ev('flights[0].waypoints[1]'), ev('flights[0].waypoints[2]'));
   assert(bent && bent.segs.length === 2, 'the bent leg does not walk two spans');
+  // The leg REACHING the circuit has no ground at all, so it can take none.
+  assert(!ev('legIsFlown(flights[0].waypoints[0], flights[0].waypoints[1])'),
+    'the leg reaching a circuit still covers ground');
 });
 T('the OFP row carries only the delete button', () => {
   // v16.28: the per-row "+" was removed at the user's request - clicking the
@@ -8612,6 +8742,50 @@ T('a full stop adds its ground time between sectors, a touch & go its circuit ti
   assert(toMin(finalAcc()) - toMin(plain) === 5, 'a touch & go should add 5 min');
   ev(twoSectors('full-stop', 25));
   assert(toMin(finalAcc()) - toMin(plain) === 25, 'an edited ground time was ignored');
+
+  // ...AND IT LANDS ON THE SECTOR IT DELAYS, NOT THE ONE BEFORE IT (v16.84).
+  // The ground time used to be added to the running clock at the END of the
+  // sector the stop was made on, so it fell into that plan's share of the
+  // mission rather than into the one whose off-block it actually moves - which
+  // is also the plan whose header the pilot edits it in.
+  ev(twoSectors(null));
+  const s1Plain = toMin(txtOf('f-tot-time-0')), s2Plain = toMin(txtOf('f-tot-time-1'));
+  ev(twoSectors('full-stop'));
+  assert(toMin(txtOf('f-tot-time-0')) === s1Plain,
+    'the stop lengthened the sector BEFORE it: ' + txtOf('f-tot-time-0') + ' vs ' + s1Plain);
+  assert(toMin(txtOf('f-tot-time-1')) - s2Plain === 10,
+    'the stop did not open the sector after it: ' + txtOf('f-tot-time-1') + ' vs ' + s2Plain);
+  ev(SEED);
+});
+
+T('a stop with no sector after it costs nothing at all', () => {
+  // THE PILOT'S REPORT (v16.84): "If i have a final full stop at a point, the
+  // 10 minutes get added at the total flight time in the bottom place for
+  // total values ... even after having deleted the next flight plan."
+  //
+  // Measured before the fix on one 18-minute sector: the mission read 00:28.
+  // A full stop is a landing - with nothing after it there is no off-block to
+  // delay, so ten minutes of ground time is not flight time and not fuel.
+  const onePlan = (stop) => `
+    flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+      { lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12
+        ${stop ? `, stop: '${stop}'` : ''} }]}];
+    activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+  const mission = () => txtOf('grand-tot-time');
+  const burn = () => Number(txtOf('grand-tot-burn').split(' ')[0]);
+
+  ev(onePlan(null));
+  const plainTime = mission(), plainBurn = burn();
+  ev(onePlan('full-stop'));
+  assert(mission() === plainTime,
+    'a final full stop still lengthens the mission: ' + mission() + ' vs ' + plainTime);
+  // A touch & go is charged its circuit FUEL as well, so check both are gone.
+  ev(onePlan('touch-go'));
+  assert(mission() === plainTime,
+    'a final touch & go still lengthens the mission: ' + mission() + ' vs ' + plainTime);
+  assert(Math.abs(burn() - plainBurn) < 0.05,
+    'a final touch & go still burns fuel: ' + burn() + ' vs ' + plainBurn);
   ev(SEED);
 });
 
