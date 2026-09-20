@@ -276,7 +276,7 @@
           <ul style="margin-left:16px;">
             <li><b>Click the map</b> to add a waypoint. Name it in the prompt — the first click is your departure.</li>
             <li>Type <b>PATTERN</b> as the name — or press the <b>traffic-circuit</b> option — to log circuit laps (time &amp; fuel, no distance). The <b>circuit altitude is filled in from the aerodrome you are at</b>: the published field elevation rounded to the nearest 100 ft, plus 1000 ft — so ENTC's published 32 ft gives 1000 ft. ENDU is set to <b>1500 ft</b>, the figure the school flies. This is a <b>derived default, not a published value</b> — the eAIP gives us elevations, never circuit altitudes, so check the VAC and edit the cell if it differs. More than 5 NM from any aerodrome nothing is derived and the cell is yours to fill.</li>
-            <li><b>A PATTERN is a place, so you can put one anywhere</b> &mdash; click a spot out on the route and name it PATTERN to log <b>airwork</b> (a practice area, a hold, upper airwork), or put one first in a plan to fly <b>circuits before you depart</b>. The <b>transit out to it is an ordinary leg</b>: it has a distance, a track, a climb or descent, and it takes <b>via points</b> like any other leg, so you can bend the way out and the way back. The laps are charged on their own line at the point itself. A circuit made by a <b>touch &amp; go or a full stop</b> sits exactly on the aerodrome, so there is no ground between it and the fix &mdash; that stays one line with time and fuel and no distance, exactly as before. (Before v16.83 <i>every</i> PATTERN was treated as having no ground track, so a point you clicked out on the route had the flight out to it silently dropped from the plan &mdash; distance, time and fuel &mdash; and neither of its legs could be bent.)</li>
+            <li><b>A PATTERN is time and fuel, never a place.</b> It logs circuits or airwork <b>where you already are</b>: it takes the position of the waypoint before it, whatever you clicked, so it can never move your route. Put one after ENDU and the next leg still runs <b>ENDU &rarr; ENEV</b>, and that leg takes <b>via points</b> like any other. The laps get their own line with time and fuel and no distance; the circuit altitude is derived from the field you are at, not the one under the cursor. Drag that fix and the circuit goes with it; delete it and the circuit re-homes onto whatever now comes before it. A <b>PATTERN first in a plan</b> is the one that keeps its own position &mdash; there is no waypoint before it to sit on, and it is where the plan starts &mdash; so you can fly circuits before departing. (v16.83 briefly made the marker a real place with the route flying out to it and back; v16.84 reversed that on the author's instruction.)</li>
             <li><b>Dialogs are keyboard-driven</b>: <b>Enter</b> takes the highlighted option, <b>1</b>–<b>9</b> pick an option directly, <b>Esc</b> cancels. Confirmations that used to be two chained OK/Cancel questions (like saving) are now a single list of every option. Notifications appear as a small note in the corner and fade on their own — no click needed.</li>
             <li><b>Drag</b> any waypoint to move it — tracks, distances and magnetic variation recalculate live.</li>
             <li><b>Click a published aerodrome and say what happens there.</b> Three things mean three different plans, so the planner asks rather than guessing:
@@ -284,7 +284,8 @@
               <b>🛩 Full stop</b> — <b>10 minutes</b> on the ground, and the next sector pays a fresh <b>start-up and taxi</b>, because the engine was shut down and started again. If you refuel there, put the fuel on board into the <b>⛽ Fuel after</b> box in the next plan's header and that sector departs with it; leave it empty and whatever is left carries over. It is <b>not</b> checked against tank capacity — the planner holds no published usable-fuel figure for the aircraft, so what fits in the tanks is your call. (A touch & go gets no such box: the engine never stops.)
               <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing.
               <br><b>The first waypoint of a plan is asked a different question</b>, because you cannot touch down or shut down before you have taken off: a fresh plan offers <b>🛫 Departure</b> (on the field, at its published elevation, and it sets the plan's departure elevation to match) and <b>➡ Fly-by</b> (you are already airborne and pass overhead — it stays at your planned altitude and leaves the departure elevation alone). Nothing is guessed from the position in the plan: whichever you pick is what you get.
-              <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
+              <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type.
+              <br><b>The ground time belongs to the sector it delays</b>, which is the one whose header you edit it in: it opens that plan's total and moves every ETO in it, and it is <i>not</i> added to the sector you just landed from. So a plan that <b>ends</b> in a full stop — nothing after it, or you deleted the sector it opened — is charged <b>no ground time and no circuit fuel at all</b>: a landing is the end of the mission, and there is no off-block left for it to delay. Add a sector after it and the figures appear on that one. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
@@ -1296,7 +1297,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.83';
+    const APP_VERSION = '16.84';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2353,7 +2354,27 @@
     // Redraw one flight's line from the CURRENT waypoints and via points.
     // Used by every live drag; the OFP tables deliberately do not rebuild
     // here, because that fires per mousemove and makes the drag stutter.
+    /**
+     * KEEP EVERY CIRCUIT ON THE FIX IT FOLLOWS (v16.84).
+     *
+     * `applyPatternPositions` is the rule; this is where the LIVE plan is held
+     * to it. It runs at the three places a waypoint position is READ - the map
+     * redraw, the table render and the live line during a drag - rather than at
+     * each of the dozen places one is WRITTEN, because a normaliser that has to
+     * be remembered at every writer is the "old rule not applied to a new
+     * surface" failure this project keeps producing. Dragging the fix a circuit
+     * hangs off therefore takes the circuit with it, and so does deleting the
+     * fix in front of it.
+     *
+     * It is cheap - one comparison per waypoint - and writes nothing when the
+     * invariant already holds, which is every call but the one after an edit.
+     */
+    function syncPatternPositions() {
+      (flights || []).forEach((fl) => { if (fl) applyPatternPositions(fl.waypoints || []); });
+    }
+
     function drawLiveLine(fIdx) {
+      syncPatternPositions();
       if (polylines[fIdx]) polylines[fIdx].setLatLngs(drawnLineCoords(flights[fIdx]));
       if (hitLines[fIdx]) hitLines[fIdx].setLatLngs(drawnLineCoords(flights[fIdx]));
     }
@@ -2692,7 +2713,19 @@
       }
 
       pushUndoState('clear the ruler');
-      const magData = resolveMagVar(e.latlng.lat, e.latlng.lng);
+
+      // A CIRCUIT IS FLOWN WHERE YOU ALREADY ARE (v16.84, the pilot's
+      // instruction). It is a time-and-fuel addon, not a place, so it takes the
+      // position of the waypoint it follows and the click only says WHEN in the
+      // plan it happens - never where. The variation and the circuit altitude
+      // below are therefore derived from THAT position too: deriving them from
+      // the click would describe an aerodrome the aircraft never goes near.
+      const prevWp = activeFlight.waypoints[activeFlight.waypoints.length - 1];
+      const snapToPrev = isPattern && !!prevWp;
+      const addLat = snapToPrev ? prevWp.lat : e.latlng.lat;
+      const addLng = snapToPrev ? prevWp.lng : e.latlng.lng;
+
+      const magData = resolveMagVar(addLat, addLng);
       const initialAlt = isFirstInFlight ? activeFlight.depElev : Number(document.getElementById('def-alt').value);
 
       // A CIRCUIT IS FLOWN AT A KNOWN HEIGHT ABOVE A KNOWN FIELD (v16.40).
@@ -2702,11 +2735,11 @@
       // src/lib/anchors.js for the rule and where the 1500 ft ENDU figure comes
       // from. If the stop is not near a known aerodrome nothing is invented and
       // the old inherit-the-previous-altitude behaviour stands.
-      const patAlt = isPattern ? patternAltitudeAt(e.latlng.lat, e.latlng.lng, AIP_ANCHORS) : null;
+      const patAlt = isPattern ? patternAltitudeAt(addLat, addLng, AIP_ANCHORS) : null;
 
       activeFlight.waypoints.push({
-        lat: e.latlng.lat,
-        lng: e.latlng.lng,
+        lat: addLat,
+        lng: addLng,
         name: finalName,
         alt: isPattern
           ? (patAlt ? patAlt.alt : (activeFlight.waypoints[activeFlight.waypoints.length-1]?.alt || activeFlight.depElev))
@@ -2731,6 +2764,14 @@
                 ' ft elevation, rounded. Check the VAC.'), 'info', 6000);
       } else if (isPattern) {
         say('No aerodrome within ' + PATTERN_AD_MAX_NM + ' NM, so no circuit altitude was derived \u2014 set it in the row.',
+            'info', 6000);
+      }
+      // Said out loud, because the marker does not land under the cursor and a
+      // control that silently ignores where you clicked is worse than one that
+      // explains itself.
+      if (snapToPrev) {
+        say('Circuits logged at ' + esc(prevWp.name) + '. A circuit is time and fuel where you already are, ' +
+            'so it does not move the route \u2014 the next leg still starts from ' + esc(prevWp.name) + '.',
             'info', 6000);
       }
     });
@@ -2905,6 +2946,7 @@
     }
 
     function refreshMap() {
+      syncPatternPositions();
       markers.forEach(m => map.removeLayer(m));
       profileMarkers.forEach(m => map.removeLayer(m));
       polylines.forEach(p => map.removeLayer(p));
@@ -2960,14 +3002,12 @@
           // The dot is absolutely pinned on the anchor (= the true lat/lng);
           // the name label hangs centered below it. Neither the label's width
           // nor the per-flight stagger can shift the dot off the coordinate.
-          // A CIRCUIT ATTACHED TO A FIX MOVES WITH THAT FIX; AN AIRWORK BLOCK
-          // IS ITS OWN PLACE (v16.83). A touch & go or a full stop sits exactly
-          // on the aerodrome that produced it - dragging it off would silently
-          // turn a landing into a cross-country detour and strand the stop and
-          // refuel figures that read the fix before it. A PATTERN the pilot
-          // clicked out on the route already stands alone, and not being able
-          // to nudge it would be the one place a position is not editable.
-          const patternPinned = isPattern && idx > 0 && !legIsFlown(fl.waypoints[idx - 1], wp);
+          // A CIRCUIT IS NEVER DRAGGED, because it has no position of its own
+          // to move (v16.84). It sits on the fix it follows, so dragging THAT
+          // fix takes the circuit with it. v16.83 briefly made a clicked
+          // PATTERN draggable on the reasoning that it was its own place, which
+          // is exactly the premise the pilot reversed.
+          const patternPinned = isPattern && idx > 0;
           const markerHtml = isPattern 
             ? `<div class="pattern-label" style="position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(0px,${fIdx * 15}px);">🔄 ${fPrefix}${esc(wp.name)} (${wp.laps} laps)</div>`
             : `<div class="wp-dot" style="position:absolute; left:-7px; top:-7px; background:${dotColor};"></div>
@@ -5548,6 +5588,7 @@
     // 7. RENDER STACKED FLIGHT TABLES & CORRECT UNIT CONVERSIONS
     // =========================================================================
     function renderAllFlightTables() {
+      syncPatternPositions();
       const container = document.getElementById('flight-plans-container');
       container.innerHTML = '';
 
@@ -5602,9 +5643,42 @@
       let grandTotalTime = 0;
       let grandTotalBurn = 0;
       const sectorTimeWindows = [];   // per flight: minutes after ETD at takeoff & landing
+      /** The ground or circuit time of a stop, waiting for the sector it
+       *  delays. See the two blocks below. @type {null|{min:number, kind:string,
+       *  burn:number, refuelGal:number|null}} */
+      let pendingStop = null;
 
       flights.forEach((fl, fIdx) => {
         const isSelected = (fIdx === activeFlightIndex);
+        // What this sector starts owing because of the stop before it.
+        let sectorPrefixMin = 0, sectorPrefixBurn = 0;
+
+        // THE GROUND TIME BELONGS TO THE SECTOR IT DELAYS (v16.84, the pilot's
+        // report). It used to be added to the running clock and the MISSION
+        // total at the end of the sector the stop was made on - so a plan
+        // ending in a full stop read 00:28 against 00:18 of flying, and the
+        // ten minutes stayed in the total even after the sector they were
+        // meant for had been deleted. The pilot's words: "the 10 minutes
+        // should be a part of the new flight plan, not added to the old time".
+        //
+        // Applied HERE, before sectorStartMin is taken, because the delay is
+        // exactly what moves this sector's off-block - which is also why the
+        // ground time is edited in THIS plan's header (v16.54).
+        if (pendingStop) {
+          runningAccTime += pendingStop.min;
+          sectorPrefixMin = pendingStop.min;
+          if (pendingStop.kind === 'full-stop') {
+            taxiFuelApplied = false;    // the next departure pays for its own start-up
+            if (pendingStop.refuelGal !== null) {
+              runningFuelRemaining = Number(convertFuel(pendingStop.refuelGal, fuelUnit).toFixed(1));
+            }
+          } else if (pendingStop.burn > 0) {
+            runningAccBurn = Number((runningAccBurn + pendingStop.burn).toFixed(1));
+            runningFuelRemaining = Number((runningFuelRemaining - pendingStop.burn).toFixed(1));
+            sectorPrefixBurn = pendingStop.burn;
+          }
+          pendingStop = null;
+        }
         const sectorStartMin = runningAccTime;
         const sectionDiv = document.createElement('div');
         sectionDiv.className = 'flight-section';
@@ -5682,7 +5756,10 @@
         container.appendChild(sectionDiv);
 
         const tbody = table.querySelector(`#tbody-flight-${fIdx}`);
-        let sectorDist = 0, sectorTime = 0, sectorBurn = 0, sectorAccDist = 0;
+        // The sector opens with whatever the stop before it cost, so the
+        // figures the pilot reads for THIS plan already contain the delay.
+        let sectorDist = 0, sectorTime = sectorPrefixMin, sectorBurn = sectorPrefixBurn,
+            sectorAccDist = 0;
         const printRows = [];
         const sched = computeFlightSchedule(fl);   // climbs/descents may span legs
 
@@ -5894,29 +5971,37 @@
         // stopped - and its minutes are priced at the PATTERN fuel flow, which
         // is the rate the pilot already set for circuit work. Neither figure is
         // invented here.
+        // A STOP WITH NO SECTOR AFTER IT COSTS NOTHING, and that is the other
+        // half of the pilot's report. A full stop is a landing: the mission is
+        // over at touchdown, so ten minutes of ground time with nothing to
+        // delay is not flight time, not fuel, and not a taxi to re-arm. The
+        // moment a following sector exists the figures reappear on it - which
+        // is where they were always meant to be, and where they are edited.
+        //
+        // THE QUEUE IS WHAT MAKES THAT TRUE, and there is deliberately no
+        // second guard saying `fIdx + 1 < flights.length`. A stop on the last
+        // sector is queued and then simply never applied, because there is no
+        // iteration left to apply it - so the explicit test was a second
+        // mechanism for one job, and mutating it away changed no figure and
+        // failed no test. A guard nothing can see fail is not a guard.
         const lastReal = [...fl.waypoints].reverse().find((w) => !w.isPattern);
         const stopKind = lastReal ? normaliseStopKind(lastReal.stop) : null;
         if (stopKind) {
           const stopMin = normaliseStopMinutes(stopKind, lastReal.stopMin);
-          runningAccTime += stopMin;
-          if (stopKind === 'full-stop') {
-            taxiFuelApplied = false;      // the next departure pays for its own start-up
-            // A REFUELLING STOP SETS THE FUEL ON BOARD OUTRIGHT (v16.57). It is
-            // stored in gallons and converted here, so the figure survives a
-            // change of display units. Absent means "carry on with what is
-            // left", which is what every plan did before this existed.
-            const refuelGal = normaliseRefuelGal(lastReal.fuelAfterGal);
-            if (refuelGal !== null) {
-              runningFuelRemaining = Number(convertFuel(refuelGal, fuelUnit).toFixed(1));
-            }
-          } else {
-            const gal = (Number(aircraftProfile.patternFf) || 0) * (stopMin / 60);
-            const burn = Number(convertFuel(gal, fuelUnit).toFixed(1));
-            runningAccBurn = Number((runningAccBurn + burn).toFixed(1));
-            runningFuelRemaining = Number((runningFuelRemaining - burn).toFixed(1));
-            grandTotalBurn = Number((grandTotalBurn + burn).toFixed(1));
-          }
-          grandTotalTime += stopMin;
+          // A REFUELLING STOP SETS THE FUEL ON BOARD OUTRIGHT (v16.57). It is
+          // stored in gallons and converted where it is applied, so the figure
+          // survives a change of display units. Absent means "carry on with
+          // what is left", which is what every plan did before this existed.
+          // A touch & go's minutes are priced at the PATTERN fuel flow - the
+          // rate the pilot already set for circuit work - and a full stop
+          // burns nothing here because the engine is shut down.
+          const gal = stopKind === 'full-stop'
+            ? 0 : (Number(aircraftProfile.patternFf) || 0) * (stopMin / 60);
+          pendingStop = {
+            min: stopMin, kind: stopKind,
+            burn: Number(convertFuel(gal, fuelUnit).toFixed(1)),
+            refuelGal: normaliseRefuelGal(lastReal.fuelAfterGal)
+          };
         }
       });
 

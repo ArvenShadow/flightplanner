@@ -696,19 +696,23 @@ check(via1 > via0, `a left click on the line still drops a via point (${via0} ->
     `the pilot is told why the corner stopped (${JSON.stringify(await toastText())})`);
 }
 
-// ---- AIRWORK ON THE ROUTE (v16.83, the pilot's report) ---------------------
-// "Sometimes i want to do airwork during a route ... i cant set via-points on
-// the same leg". A PATTERN dropped out on the route is a place the aircraft
-// flies to, so BOTH its legs are ordinary ground tracks. jsdom drives the
-// stubbed handlers; only a real mouse proves the gesture reaches the hit line
-// at all - which is the v16.53 lesson, and the reason the first report of this
-// could exist while every test was green.
+// ---- A CIRCUIT ON THE ROUTE (v16.84, the pilot reversing v16.83) -----------
+// "pattern should NOT be a point where things can be flown out and in from...
+// Pattern should only be a 'time and fuel addon' not a place." So the circuit
+// sits on the fix it follows, the route never visits the marker, and the leg
+// either side of it is ONE ordinary leg that bends like any other. jsdom drives
+// the stubbed handlers; only a real mouse proves the gesture reaches the hit
+// line at all - the v16.53 lesson, and why the first report of this could exist
+// while every test was green.
+//
+// The fixture stores the marker 40 NM off the track deliberately: a plan saved
+// by v16.83 has to come back onto its fix, not keep its detour.
 await page.evaluate(async () => {
   flights = [{ id: 1, title: 'F4', depElev: 254, waypoints: [
     { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254,  oat: 0, wdir: 0, wspd: 0, var: -11 },
     { lat: 69.20, lng: 18.50, name: 'AIRWORK', alt: 3000, oat: 0, wdir: 0, wspd: 0, var: -11,
       isPattern: true, laps: 3 },
-    { lat: 69.80, lng: 18.50, name: 'ENTC', alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -12 }] }];
+    { lat: 69.90, lng: 18.50, name: 'ENTC', alt: 1000, oat: 0, wdir: 0, wspd: 0, var: -12 }] }];
   activeFlightIndex = 0;
   map.setView([69.2, 18.5], 8, { animate: false });
   await new Promise((r) => setTimeout(r, 320));
@@ -721,9 +725,14 @@ await page.waitForTimeout(340);
     const r = document.getElementById('map').getBoundingClientRect();
     return [r.left + p.x, r.top + p.y];
   }, lat);
-  // the airwork point is DRAWN, so the line really passes through it
+  // the route does NOT visit the marker: three waypoints, two drawn points
   const drawn = await page.evaluate(() => flightLineCoords(flights[0]).length);
-  check(drawn === 3, `the airwork point is on the drawn route (${drawn} points)`);
+  check(drawn === 2, `the route does not visit the circuit marker (${drawn} points)`);
+  const onFix = await page.evaluate(() => {
+    const W = flights[0].waypoints;
+    return W[1].lat === W[0].lat && W[1].lng === W[0].lng;
+  });
+  check(onFix, 'the circuit sits on the fix it follows');
 
   // 1. a right-click opens the leg panel ON the airwork leg. Until v16.83 the
   //    hit-test skipped both of this point's legs, and it did not decline
@@ -744,17 +753,12 @@ await page.waitForTimeout(340);
     getComputedStyle(document.getElementById('leg-modal')).display !== 'flex');
   check(shut, 'the leg panel closed again before the drag checks');
 
-  // 2. press-drag the leg REACHING the airwork point
-  const inbound = await at(68.90);
-  await page.mouse.move(inbound[0], inbound[1]);
-  await page.mouse.down();
-  await page.mouse.move(inbound[0] + 45, inbound[1], { steps: 6 });
-  await page.mouse.up();
-  await page.waitForTimeout(280);
-  const viaIn = await page.evaluate(() => (flights[0].waypoints[1].via || []).length);
-  check(viaIn === 1, `the leg reaching the airwork point took a via point (${viaIn})`);
+  // 2. the leg REACHING the circuit covers no ground, so there is nothing there
+  //    to bend - and nothing for a press to land on either.
+  const noGround = await page.evaluate(() => !legIsFlown(flights[0].waypoints[0], flights[0].waypoints[1]));
+  check(noGround, 'the leg reaching the circuit covers no ground');
 
-  // 3. and the leg LEAVING it
+  // 3. the leg LEAVING it is the whole ENDU -> ENTC line and bends normally
   const outbound = await at(69.50);
   await page.mouse.move(outbound[0], outbound[1]);
   await page.mouse.down();
@@ -764,13 +768,9 @@ await page.waitForTimeout(340);
   const viaOut = await page.evaluate(() => (flights[0].waypoints[2].via || []).length);
   check(viaOut === 1, `the leg leaving the airwork point took a via point (${viaOut})`);
 
-  // 4. the bend is FLOWN, not merely stored: both legs got longer.
-  const bent = await page.evaluate(() => {
-    const W = flights[0].waypoints;
-    return [computeLegTotals(W[0], W[1]).distNM, computeLegTotals(W[1], W[2]).distNM];
-  });
-  check(bent[0] > 36 && bent[1] > 36,
-    `both bent legs walk the longer path (${bent.map((d) => d.toFixed(1)).join(' / ')} NM vs 36.0 direct)`);
+  // 4. the bend is FLOWN, not merely stored.
+  const bent = await page.evaluate(() => computeLegTotals(flights[0].waypoints[1], flights[0].waypoints[2]).distNM);
+  check(bent > 72, `the bent leg walks the longer path (${bent.toFixed(1)} NM vs 72.0 direct)`);
 
   // 5. the sector total really contains both legs - the defect underneath the
   //    pilot's report was that the transit out to the point was charged nothing.
