@@ -34,15 +34,46 @@
 /**
  * Nothing is drawn below this zoom.
  *
- * A VAC covers roughly 60 km of ground. At zoom 9 a 1000 px window spans about
- * 110 km at these latitudes, so the whole sheet is a postage stamp and its ink
- * is a smear over the ICAO chart it is meant to add to; the raster is also
- * downscaled about 7x, which is pure decode cost for detail nobody can read.
- * At zoom 10 the sheet fills the window and reads as a chart. The build renders
- * at 600 dpi, which is 1:1 around zoom 12, so 10 to 13 is the band where the
- * overlay is worth its pixels.
+ * WAS 10 UNTIL v16.87, ON A REASON THAT WAS ONLY HALF RIGHT. The old note said
+ * the sheet is a smear further out and the decode is wasted. The legibility
+ * half is the pilot's call and they asked for it further out; the COST half was
+ * measured, and it turned out not to be about zoom at all - it is about HOW
+ * MANY sheets land on screen at once.
+ *
+ * MEASURED in Chromium, with Leaflet's own bounds on the real map container
+ * (597x874 in the split layout - an earlier scan assumed the whole window and
+ * overstated every count):
+ *
+ *     zoom   worst-case sheets in view, anywhere in Norway
+ *       7        20
+ *       8         9
+ *       9         6
+ *      10         4     <- the shipped floor until v16.87
+ *      11         3
+ *
+ * And the cost tracks the COUNT, not the zoom: 12 sheets froze the map for
+ * 2.2 s while it rasterised, and the same viewport with 3 settled in 727 ms.
+ * Once settled, even 12 sheets pan in 17 ms - the cost is all first paint.
+ *
+ * So the floor moves to 8 and VAC_MAX_DRAWN bounds the load. Zoom 7 is still
+ * refused, and not for cost: capping would hide 14 of 20 sheets, and a chart
+ * that is silently absent is worse than one that was never offered.
  */
-export const VAC_MIN_ZOOM = 10;
+export const VAC_MIN_ZOOM = 8;
+
+/**
+ * How many sheets may be drawn at once, nearest the middle of the map first.
+ *
+ * DERIVED, NOT PICKED: 6 is exactly the worst case zoom 9 already produced
+ * before the floor moved, so going further out can never cost more than the
+ * shipped floor's own neighbour already did. It only bites at zoom 8, whose
+ * worst viewport holds 9 - measured there at 2300 ms uncapped against 1493 ms
+ * capped.
+ *
+ * WHAT IS WITHHELD IS SAID, because this is the one place the overlay can be
+ * incomplete without being wrong - see vacLabel.
+ */
+export const VAC_MAX_DRAWN = 6;
 
 /** Opacity bounds, and the default. */
 export const VAC_OPACITY_MIN = 0.2;
@@ -127,28 +158,39 @@ export function visibleVacCharts(charts, view, zoom) {
  * @param {VacChart[]} charts @param {{lat: number, lng: number}} centre
  * @returns {VacChart[]}
  */
-export function vacDrawOrder(charts, centre) {
+export function vacDrawOrder(charts, centre, limit = VAC_MAX_DRAWN) {
   const d = (/** @type {VacChart} */ c) => {
     const cy = (c.bounds.north + c.bounds.south) / 2, cx = (c.bounds.east + c.bounds.west) / 2;
     const k = Math.cos((centre.lat || 0) * Math.PI / 180);
     return Math.hypot(cy - centre.lat, (cx - centre.lng) * k);
   };
-  return charts.slice().sort((a, b) => d(b) - d(a));
+  const ordered = charts.slice().sort((a, b) => d(b) - d(a));
+  // THE CAP TAKES FROM THE FRONT, because the list is farthest-first: the
+  // sheets dropped are the ones furthest from where the pilot is looking.
+  return Number.isFinite(limit) && limit >= 0 && ordered.length > limit
+    ? ordered.slice(ordered.length - limit) : ordered;
 }
 
 /**
  * What the label bar says while a VAC is drawn.
  * @param {VacChart[]} drawn @param {{editionLabel?: string}|null} set
  * @param {string|null} [airacEdition] the edition the airspace data is on
+ * @param {number} [inView] how many sheets overlap the viewport, drawn or not
  * @returns {string}
  */
-export function vacLabel(drawn, set, airacEdition) {
+export function vacLabel(drawn, set, airacEdition, inView) {
   if (!drawn || !drawn.length) return '';
   const names = drawn.map((c) => `${c.icao} VAC ${c.chartDate}`).join(' + ');
   const edition = set && set.editionLabel ? set.editionLabel : null;
   const mismatch = edition && airacEdition && edition !== airacEdition
     ? ` — prepared from ${edition}, airspace data is ${airacEdition}` : '';
-  return names + mismatch;
+  // AN INCOMPLETE OVERLAY MUST SAY SO. Everything else the overlay withholds is
+  // withheld for ACCURACY and is wrong to draw; these are correct sheets left
+  // out purely for load, so the pilot has to be told the picture is partial
+  // rather than concluding there is no chart at that aerodrome.
+  const held = typeof inView === 'number' && Number.isFinite(inView) && inView > drawn.length
+    ? ` — ${drawn.length} of ${inView} on screen, nearest first (zoom in for the rest)` : '';
+  return names + mismatch + held;
 }
 
 /**

@@ -376,14 +376,151 @@ check(worst <= 1.5, `every one lands within ${worst.toFixed(2)} px ` +
 // nobody has seen fire is not known to fire.
 {
   const counts = {};
-  for (const z of [9, 10]) {
+  for (const z of [7, 8]) {
     await page.evaluate(([lat, lng, zoom]) => { map.setView([lat, lng], zoom, { animate: false }); drawVac(); },
       [centre[0], centre[1], z]);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600);
     counts[z] = await page.locator('img.vac-image').count();
   }
-  check(counts[9] === 0, `nothing is drawn at zoom 9 (${counts[9]})`);
-  check(counts[10] > 0, `the chart appears at zoom ${'10'} (${counts[10]})`);
+  check(counts[7] === 0, `nothing is drawn at zoom 7 (${counts[7]})`);
+  check(counts[8] > 0, `the chart appears at the new zoom-8 floor (${counts[8]})`);
+}
+
+// ---- THE CAP, AT THE WORST VIEWPORT IN THE COUNTRY ----------------------
+// v16.87 lowered the floor, and what makes that safe is bounding the NUMBER of
+// sheets rather than the zoom. Measured over the whole country with Leaflet's
+// own bounds: the worst zoom-8 viewport is around 61.5 N 5.5 E.
+{
+  // THE VIEWPORT IS FOUND, NOT WRITTEN DOWN. A lat/lng literal is an unchecked
+  // assertion about the layout (the v16.83 lesson): the busiest viewport
+  // depends on the MAP CONTAINER, which differs with the window and the
+  // layout, so the first version of this check hardcoded a point found at
+  // 1500x950 and measured 5 sheets here instead of 9 - reporting a working cap
+  // as broken. It scans with Leaflet's own bounds at whatever size this run is.
+  const at = await page.evaluate(() => {
+    aircraftProfile.vacOn = true;
+    const count = () => {
+      const bb = map.getBounds();
+      const v = { west: bb.getWest(), east: bb.getEast(), south: bb.getSouth(), north: bb.getNorth() };
+      return window.C182_VAC.charts.filter((x) => window.vacDrawable(x)
+        && x.bounds.east > v.west && x.bounds.west < v.east
+        && x.bounds.north > v.south && x.bounds.south < v.north).length;
+    };
+    let best = { inView: -1, at: null };
+    for (let lat = 58; lat <= 71; lat += 0.25) {
+      for (let lng = 4; lng <= 31; lng += 0.5) {
+        map.setView([lat, lng], 8, { animate: false });
+        const n = count();
+        if (n > best.inView) best = { inView: n, at: [+lat.toFixed(2), +lng.toFixed(1)] };
+      }
+    }
+    map.setView(best.at, 8, { animate: false });
+    drawVac();
+    return { inView: best.inView, at: best.at, cap: window.VAC_MAX_DRAWN };
+  });
+  await page.waitForTimeout(1500);
+  const drawn = await page.locator('img.vac-image').count();
+  check(at.inView > at.cap,
+    `the worst zoom-8 viewport really does overflow the cap (${at.inView} in view at ` +
+    `${at.at}, cap ${at.cap}) - if it never does, the cap guards nothing`);
+  check(drawn === at.cap, `only the cap is drawn there (${drawn} of ${at.inView})`);
+  // AND THE PILOT IS TOLD. A correct sheet left out for load must not read as
+  // "no chart published at that aerodrome".
+  const bar = await page.evaluate(() => {
+    const el = document.getElementById('chart-label');
+    return el ? el.textContent.replace(/\s+/g, ' ') : '';
+  });
+  check(new RegExp(at.cap + ' of ' + at.inView).test(bar),
+    'the label bar says the overlay is partial: ' + bar.slice(-110));
+}
+
+// ---- THE OPACITY SLIDER LIVES UNDER THE BUTTON (v16.87) -----------------
+// The pilot's request. It is measured, not grepped: this project shipped two
+// map controls at y=900 on a 900 px viewport with every grep passing (v16.22).
+{
+  await page.evaluate(([lat, lng]) => { map.setView([lat, lng], 12, { animate: false }); }, centre);
+  await page.waitForTimeout(400);
+  // OFF first: a slider for a layer that is not drawn adjusts nothing visible.
+  const offState = await page.evaluate(() => {
+    if (vacEnabled()) toggleVac();
+    const el = document.getElementById('vac-opacity-ctl');
+    return { present: !!el, shown: el ? getComputedStyle(el).display !== 'none' : false };
+  });
+  check(offState.present, 'the opacity control exists in the stack');
+  check(!offState.shown, 'it is hidden while the VAC is off');
+
+  await page.locator('#vac-btn').click();
+  await page.waitForTimeout(900);
+  const box = await page.evaluate(() => {
+    const el = document.getElementById('vac-opacity-ctl');
+    const btn = document.getElementById('vac-btn');
+    if (!el || !btn) return null;
+    const r = el.getBoundingClientRect(), b = btn.getBoundingClientRect();
+    const input = el.querySelector('input[type="range"]').getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height),
+             below: r.top >= b.bottom - 1, inStack: !!el.closest('#map-controls'),
+             sliderW: Math.round(input.width), sliderH: Math.round(input.height) };
+  });
+  check(!!box && box.w > 0 && box.h > 0 && box.y >= 0 && box.y < 900 && box.x >= 0 && box.x < 1400,
+    'the slider is on screen when the VAC is on: ' + JSON.stringify(box));
+  check(!!box && box.below, 'it is UNDER the VAC button, which is what was asked for');
+  check(!!box && box.inStack, 'it is inside #map-controls, so it needs no CSS of its own');
+  check(!!box && box.sliderW > 40 && box.sliderH > 6,
+    `the range control itself has a real box (${box && box.sliderW}x${box && box.sliderH})`);
+
+  // DRAGGED FOR REAL, not called. v16.53: driving the function proves the
+  // function; only a real gesture proves the control.
+  const before = await page.evaluate(() => Number(getComputedStyle(document.querySelector('img.vac-image')).opacity));
+  const sb = await page.locator('#vac-opacity').boundingBox();
+  await page.mouse.click(sb.x + 6, sb.y + sb.height / 2);   // hard left = the 20% end
+  await page.waitForTimeout(350);
+  const after = await page.evaluate(() => ({
+    painted: Number(getComputedStyle(document.querySelector('img.vac-image')).opacity),
+    stored: aircraftProfile.vacOpacity,
+    readout: (document.getElementById('vac-opacity-val') || {}).textContent,
+    settings: (document.getElementById('map-vac-opacity') || {}).value
+  }));
+  check(after.painted < before,
+    `dragging the slider really repainted the chart (${before} -> ${after.painted})`);
+  check(Math.abs(after.painted - after.stored) < 0.02,
+    `what is painted is what is stored (${after.painted} vs ${after.stored})`);
+  check(after.readout === Math.round(after.stored * 100) + '%',
+    'the readout matches: ' + after.readout);
+  // TWO CONTROLS, ONE NUMBER. The settings slider must have moved with it, or
+  // the pilot has two truths for one value.
+  check(Number(after.settings) === Math.round(after.stored * 100),
+    `the Settings slider followed (${after.settings} vs ${Math.round(after.stored * 100)})`);
+
+  // BOTH DIRECTIONS, because one is not a test of the pair. The first version
+  // of this check only drove the MAP slider, so a mutation that made the
+  // SETTINGS slider write the value itself - the exact drift setVacOpacity
+  // exists to prevent - passed untouched. Drive the other one and read back.
+  const back = await page.evaluate(() => {
+    const el = document.getElementById('map-vac-opacity');
+    el.value = '70';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    if (typeof updateVacOpacity === 'function') updateVacOpacity();
+    return { stored: aircraftProfile.vacOpacity,
+             mapSlider: (document.getElementById('vac-opacity') || {}).value,
+             mapReadout: (document.getElementById('vac-opacity-val') || {}).textContent,
+             painted: Number(getComputedStyle(document.querySelector('img.vac-image')).opacity) };
+  });
+  check(Math.abs(back.stored - 0.7) < 0.02, `the Settings slider still writes the value (${back.stored})`);
+  check(Number(back.mapSlider) === 70,
+    `and the map slider followed IT (${back.mapSlider} vs 70) - one number, two controls`);
+  check(back.mapReadout === '70%', 'the map readout followed too: ' + back.mapReadout);
+  check(Math.abs(back.painted - 0.7) < 0.02, `and the chart repainted (${back.painted})`);
+
+  // And it goes away with the layer.
+  await page.locator('#vac-btn').click();
+  await page.waitForTimeout(500);
+  const gone = await page.evaluate(() => {
+    const el = document.getElementById('vac-opacity-ctl');
+    return el ? getComputedStyle(el).display === 'none' : false;
+  });
+  check(gone, 'the slider hides again when the VAC is turned off');
+  await page.evaluate(() => { aircraftProfile.vacOpacity = 0.85; if (!vacEnabled()) toggleVac(); });
+  await page.waitForTimeout(600);
 }
 
 // ---- THE OPACITY SETTING REACHES THE PIXEL ------------------------------

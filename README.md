@@ -105,7 +105,9 @@ is refused rather than shipped misspelt.
 ## Visual Approach Charts on the map
 
 **▦ VAC** draws the aerodrome's own Visual Approach Chart on the map, in place,
-from zoom 10 up. Opacity is on **Settings → Map**. It is drawn *under* the
+from zoom 8 up. Opacity is a slider that appears under the button while the
+layer is on (and on **Settings → Map** — one value, either control). It is
+drawn *under* the
 corridor, the airspace, the route line and the fix markers and takes no clicks
 at all, so everything you could do on that piece of map before, you can still
 do through the chart.
@@ -113,6 +115,16 @@ do through the chart.
 The sheets are georeferenced at build time by `npm run build:vac-raster` and
 ship as one lossless WebP per chart in `data/vac/`, listed in
 `data/vac-index.js`. **Nothing is fetched from Avinor at runtime.**
+
+**At most six sheets are drawn at once**, nearest the middle of the map first,
+and the label bar says when the picture is partial. That is what lets the
+overlay reach out to zoom 8 at all: the cost is almost entirely first paint and
+it tracks the *number* of sheets, not the zoom — twelve at once froze the map
+for 2.2 s while it rasterised, where three settled in 0.7 s. Six is the worst
+case zoom 9 already produced, so going further out never costs more than the
+previous floor's own neighbour did. Zoom 7 stays refused, and not for cost: the
+cap would hide fourteen of twenty sheets, and a chart that is silently absent is
+worse than one that was never offered.
 
 **How the fit is made, and what it is held to.** A VAC carries no georeference
 — no GeoPDF markers, no projection note — so the sheet is fitted from its own

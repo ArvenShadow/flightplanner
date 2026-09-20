@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 40 shared mutable
+    decision, not unfinished work: it is one web of 41 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -2061,10 +2061,121 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## THE FLOOR IS THE SHEET COUNT, NOT THE ZOOM (v16.87)
+
+The pilot: *"I would like it to show VAC further out than zoom 10 please, and
+when clicking Show VAC on the screen, make the opacity slider pop up under it
+for convenience."*
+
+### THE OLD FLOOR'S REASON WAS HALF RIGHT, AND THE HALF THAT MATTERED WAS WRONG
+
+v16.86 refused anything below zoom 10 on two grounds: the sheet is a smear that
+far out, and the downscaling is wasted decode. The legibility half is a
+judgement about their own eyes and their own chart - theirs to make, exactly
+like the v16.62 corridor ceiling. **The COST half was measured and turned out
+not to be about zoom at all.**
+
+MEASURED in Chromium, using Leaflet's own bounds on the REAL map container:
+
+| zoom | worst-case sheets in view, anywhere in Norway |
+|---|---|
+| 7 | 20 |
+| 8 | 9 |
+| 9 | 6 |
+| 10 | 4 (the shipped floor) |
+| 11 | 3 |
+
+And the cost follows that column, not the zoom: **12 sheets froze the map for
+2.2 s** while it rasterised; the same viewport with 3 settled in **727 ms**.
+**Once settled, even 12 sheets pan in 17 ms** - the whole cost is first paint.
+
+So the floor moves to **8** and `VAC_MAX_DRAWN` bounds the load. **6 is DERIVED,
+not picked**: it is exactly the worst case zoom 9 already produced, so going
+further out can never cost more than the old floor's own neighbour already did.
+
+**ZOOM 7 STAYS REFUSED, AND NOT FOR COST** - the cap would bound it just as
+well. Capping there would hide **14 of 20** sheets, and a chart that is silently
+absent is worse than one that was never offered. That is the same rule the
+fail-closed gate turns on, pointed at a different cause.
+
+**A PARTIAL OVERLAY SAYS IT IS PARTIAL.** Everything else this overlay withholds
+is withheld for ACCURACY and would be wrong to draw; these are CORRECT sheets
+left out for load, so the label bar reads `6 of 10 on screen, nearest first` and
+a pilot cannot read the gap as "no chart published at that aerodrome".
+
+### THREE OF MY OWN MEASUREMENTS WERE WRONG BEFORE ONE WAS RIGHT
+
+Worth recording, because each looked authoritative and each would have set a
+constant on a false premise:
+
+1. **`img.decode()` MEASURED NOTHING.** 1 chart 1235 ms, 9 charts 1193 ms - flat,
+   because decoding is off-thread and `decode()` resolves when the image is
+   decodable rather than when it is rasterised. `performance.memory` was flat at
+   10 MB for the same reason: image memory is not JS heap.
+2. **THE FIRST PAN MEASUREMENT CONFLATED FIRST PAINT WITH STEADY STATE.** It
+   reported 705 ms at z7 and 17 ms for the same 12 sheets a run later; the
+   difference was that the second run waited for the images to settle. I was one
+   step from adding a cap on the strength of a number that did not mean what I
+   thought. The honest measure is *how long until a pan is fast again*.
+3. **AN OFFLINE GRID SCAN OVERSTATED EVERY COUNT** because it assumed the whole
+   window. The map container is **597x874** in the split layout, not 1500x950,
+   so z8's worst was 9 and not the 13 I had computed. Leaflet's own `getBounds`
+   is the only authority for what is on screen.
+
+### THE OPACITY IS WHERE THE CHART IS
+
+A slider under the `▦ VAC` button, appearing with the layer and going away with
+it. The value a pilot is hunting for is found by sliding it and LOOKING at the
+chart, so reaching Settings, sliding, and coming back was the wrong shape.
+
+- **ONE WRITE POINT, because there are now two controls for one number.**
+  `setVacOpacity` is the only thing that assigns `vacOpacity`; both sliders call
+  it and it refreshes both. This project has been bitten by a second rendering
+  of one value drifting from the first (v16.35, which is why the fix preview
+  calls the map's own `fixSymbolSvg`).
+- **HIDDEN WHILE THE LAYER IS OFF.** A slider for something that is not drawn
+  adjusts nothing the pilot can see.
+- It is inside `#map-controls`, so like every control since v16.24 it needs no
+  CSS of its own to be on screen.
+
+### AND THE BROWSER CHECK FOR IT PASSED A BROKEN BUILD
+
+`verify:vac` drags the MAP slider and asserts the Settings one follows. A
+mutation making the SETTINGS slider write the value itself - the exact drift
+`setVacOpacity` exists to prevent - **passed untouched**, because the check only
+ever drove one of the pair. It drives both directions now, and the same mutation
+fails by name (`the map slider followed IT (20 vs 70)`).
+
+**THE SAME SHAPE AS v16.66**, where both sides of a comparison read `''` and the
+check passed while a control was three places adrift. One direction of a
+two-way binding is not a test of the binding.
+
+### A CONTROL HIDDEN ON PURPOSE IS NOT THE v16.22 FAILURE
+
+`verify:fixes` asserts every map control has a real box on screen, and the new
+slider starts hidden - so it failed a correct build. The guard was right to fire
+and wrong to fail: v16.22's bug was a control that was DISPLAYED and sat at
+y=900 on a 900 px viewport, not one the app had deliberately removed from the
+layout.
+
+Hidden controls are no longer measured, but **the SET of them is asserted**, or
+this would quietly excuse a button that vanished by accident. Proved by giving
+`corridor-btn` a `display:none` - it fails by name
+(`[corridor-btn,vac-opacity-ctl]`).
+
+### FOUR MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+The cap as `Infinity` (1 test), the slice disabled while the constant stayed
+6 (1 test + 2 browser checks - the mechanism, not just the number), the settings
+slider bypassing the one write point (2 browser checks, after the check was
+fixed to drive both directions), and a control hidden by accident (1 browser
+check).
+
 ## THE VAC IS DRAWN ON THE MAP, AND A SHEET THAT CANNOT BE PLACED IS NOT DRAWN (v16.86)
 
 `▦ VAC` puts each aerodrome's own Visual Approach Chart on the map in place, at
-its published position, from zoom 10 up. 49 charts, one lossless WebP each in
+its published position, from zoom 10 up (**8 since v16.87 - see the entry above
+for why that floor was the wrong thing to be measuring**). 49 charts, one lossless WebP each in
 `data/vac/`, listed in `data/vac-index.js`. Nothing is fetched from Avinor at
 runtime.
 

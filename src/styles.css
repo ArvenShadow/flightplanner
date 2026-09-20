@@ -859,6 +859,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
       cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35); white-space: nowrap; }
     .map-ctl:hover { background: var(--highlight-bg); }
     .map-ctl:disabled { opacity: 0.6; cursor: default; }
+    /* A control that HOLDS a control. It takes .map-ctl for the shell so it
+       cannot drift from its neighbours, then overrides the two things a button
+       assumes and a slider must not: the pointer stays default over the box
+       (only the thumb is draggable) and the row lays out horizontally. */
+    .map-ctl-range { display: flex; align-items: center; gap: 6px; cursor: default; }
+    .map-ctl-range input[type="range"] { width: 96px; margin: 0; cursor: pointer; }
+    /* The readout is fixed-width so the stack does not jump between 20% and
+       100% - a control that resizes as you drag it is hard to aim. */
+    .map-ctl-range span { min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
     #chart-label { position: absolute; bottom: 2px; left: 6px; z-index: 1000; font-size: 9px;
       color: #333; background: rgba(255,255,255,0.65); padding: 1px 6px; border-radius: 3px;
       pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

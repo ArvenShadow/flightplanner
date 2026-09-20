@@ -68,7 +68,22 @@
         <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo or the official ICAO VFR 1:500 000 from Avinor. Both are streamed and need internet. Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
         <button id="airspace-btn" class="map-ctl" title="Show published AIP airspace - CTR, TIZ, TMA, TIA, CTA and the mandatory zones. Hover an airspace for its class, vertical limits, callsign and frequency. Needs zoom 7 or closer. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleAirspace()">⬢ Airspace: Off</button>
         <button id="corridor-btn" class="map-ctl" title="Draw a band of a chosen radius either side of the whole track, so you can see which terrain and airspace actually lies beside your route. It is GEOMETRY ONLY - it shows you where to read the chart's contours and MEF, and never states a safe altitude of its own. Radius is set on the Map page of Settings." onclick="toggleCorridor()">◫ Corridor: Off</button>
-        <button id="vac-btn" class="map-ctl" title="Draw the published Visual Approach Chart over the map for the aerodromes on screen, georeferenced from the chart's own printed graticule and reporting points. Display only - every coordinate the planner uses still comes from the published tables, never from the picture. Needs zoom 10 or closer. Opacity is on Settings - Map. Charts from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleVac()">▦ VAC: Off</button>
+        <button id="vac-btn" class="map-ctl" title="Draw the published Visual Approach Chart over the map for the aerodromes on screen, georeferenced from the chart's own printed graticule and reporting points. Display only - every coordinate the planner uses still comes from the published tables, never from the picture. Needs zoom 8 or closer; at zoom 8 only the 6 sheets nearest the middle of the map are drawn, and the label bar says so. Opacity is the slider that appears under this button (and on Settings - Map). Charts from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleVac()">▦ VAC: Off</button>
+        <!-- THE OPACITY IS WHERE THE CHART IS (v16.87, the pilot's request).
+             It is also on Settings - Map, and both write through ONE function
+             so the two controls cannot drift: the value a pilot is hunting for
+             is found by sliding it and LOOKING at the chart, which means
+             reaching Settings, sliding, and coming back was the wrong shape.
+             It is inside #map-controls, so like every other control here it
+             needs no CSS of its own to be on screen. Hidden unless VAC is on -
+             a slider for a layer that is not drawn adjusts nothing visible. -->
+        <div id="vac-opacity-ctl" class="map-ctl map-ctl-range" style="display:none;"
+             title="How strongly the Visual Approach Chart is painted over the base chart. The same setting as Settings - Map; moving either moves both.">
+          <input type="range" id="vac-opacity" min="20" max="100" step="5"
+                 aria-label="Visual Approach Chart opacity"
+                 oninput="setVacOpacityPercent(this.value)">
+          <span id="vac-opacity-val"></span>
+        </div>
         <button id="fixes-btn" class="map-ctl" title="Show published AIP fixes - aerodromes (from zoom 7) and VFR reporting points (from zoom 9). Click one to add it as a waypoint at its PUBLISHED coordinate instead of clicking an approximate spot. Reporting points come from the printed table on each aerodrome's Visual Approach Chart; 29 aerodromes publish theirs graphically only and have none here. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleFixes()">⌖ Fixes: Off</button>
         <button id="fix-search-btn" class="map-ctl" title="Find a published aerodrome or VFR reporting point by name or ICAO and add it as a waypoint at its published coordinate. Norwegian letters are optional - SORKJOSEN finds SØRKJOSEN." onclick="searchFixes()">🔎 Find fix</button>
         <button id="chart-detail-btn" class="map-ctl" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
@@ -882,8 +897,17 @@
               <br><br>
               Below 20% the chart is not reliably readable, which is the whole point of drawing it.
               The default is 85%: enough to read the VAC's own small print while the base chart still
-              shows through at the sheet edges. Nothing is drawn below zoom 10 — a whole VAC at that
-              scale is a smear over the ICAO chart rather than an addition to it.
+              shows through at the sheet edges. The slider sits under the <b>▦ VAC</b> button on the
+              map while the layer is on, and on this page — it is one value, so moving either moves
+              both.
+              <br><br>
+              Nothing is drawn below <b>zoom 8</b>, and at most <b>6 sheets</b> are drawn at once,
+              nearest the middle of the map first. That cap is what lets the overlay reach out that
+              far: the cost is almost all first paint and it follows the <i>number</i> of sheets
+              rather than the zoom, so twelve at once locked the map for 2.2 s while it rasterised
+              where three settled in 0.7 s. When some are held back the label bar says so —
+              <i>6 of 10 on screen</i> — because a correct chart left out for speed must never read
+              as an aerodrome that has no chart published.
               <br><br>
               Charts are prepared at build time from AIP Norge (© Avinor AS, used with permission,
               <b>non-commercial</b>). A chart whose measured error exceeds its own recorded limit is
@@ -1118,7 +1142,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 135 inline on*= handlers - 105 written
+    // map, markers, undoStack...) plus 136 inline on*= handlers - 106 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1343,7 +1367,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.86';
+    const APP_VERSION = '16.87';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1733,7 +1757,7 @@
         .map((icao) => (window.C182_VAC && window.C182_VAC.charts || []).find((c) => c.icao === icao))
         .filter(Boolean);
       const vacText = vacLabel(drawnVac, window.C182_VAC || null,
-        (window.C182_AIP && window.C182_AIP.editionLabel) || null);
+        (window.C182_AIP && window.C182_AIP.editionLabel) || null, vacInView);
       if (vacText) text += '  ▦ ' + vacText;
       if (vacEnabled() && window.C182_VAC && window.C182_VAC.charts) {
         const withheld = window.C182_VAC.charts.filter((c) => !vacDrawable(c));
@@ -4593,22 +4617,76 @@
 
     function updateVacBtn() {
       const btn = document.getElementById('vac-btn');
+      const panel = document.getElementById('vac-opacity-ctl');
       if (!btn) return;
-      if (!VAC || !VAC.charts || !VAC.charts.length) { btn.style.display = 'none'; return; }
+      if (!VAC || !VAC.charts || !VAC.charts.length) {
+        btn.style.display = 'none';
+        if (panel) panel.style.display = 'none';
+        return;
+      }
       btn.textContent = '▦ VAC: ' + (vacEnabled() ? 'On' : 'Off');
+      // The slider follows the layer: it appears under the button when the
+      // chart is on and goes away with it. A slider for something that is not
+      // drawn adjusts nothing the pilot can see.
+      if (panel) panel.style.display = vacEnabled() ? '' : 'none';
+      syncVacOpacityControls();
     }
+
+    /**
+     * ONE WRITE POINT FOR THE OPACITY, and that is the whole reason this
+     * function exists rather than each slider setting the value itself.
+     *
+     * There are now TWO controls for one number - the one under the map button
+     * and the one on Settings - Map - and this project has been bitten before
+     * by a second rendering of the same value drifting from the first (the
+     * v16.35 fix preview, which is why that preview calls the map's own
+     * fixSymbolSvg). Both sliders call this; nothing else assigns vacOpacity.
+     * @param {number} o 0..1, validated here
+     */
+    function setVacOpacity(o) {
+      aircraftProfile.vacOpacity = normaliseVacOpacity(o);
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      for (const layer of vacLayers.values()) layer.setOpacity(vacOpacity());
+      syncVacOpacityControls();
+    }
+
+    /** Both sliders and both readouts, from the one stored value. */
+    function syncVacOpacityControls() {
+      const pct = Math.round(vacOpacity() * 100);
+      for (const [slider, out] of [['vac-opacity', 'vac-opacity-val'],
+                                   ['map-vac-opacity', 'map-vac-opacity-val']]) {
+        const el = document.getElementById(slider);
+        if (el) el.value = String(pct);
+        const val = document.getElementById(out);
+        if (val) val.textContent = pct + '%';
+      }
+    }
+
+    /** The map slider's handler: it reports a PERCENT, the store holds 0..1. */
+    function setVacOpacityPercent(pct) { setVacOpacity(Number(pct) / 100); }
+
+    /** How many sheets overlapped the viewport at the last draw, drawn or not.
+     *  The label bar needs it to say when the picture is deliberately partial
+     *  (VAC_MAX_DRAWN), which is the one way this overlay can be incomplete
+     *  without being wrong. */
+    let vacInView = 0;
 
     /** Charts on screen, drawn farthest-from-centre first so the aerodrome the
      *  pilot is looking at ends up on top. Nothing is blended. */
     function drawVac() {
       if (!VAC || !VAC.charts) return;
       const want = new Map();
+      vacInView = 0;
       if (vacEnabled() && typeof map.getBounds === 'function') {
         const b = map.getBounds();
         const view = { west: b.getWest(), east: b.getEast(), south: b.getSouth(), north: b.getNorth() };
         const zoom = typeof map.getZoom === 'function' ? map.getZoom() : 0;
         const centre = typeof map.getCenter === 'function' ? map.getCenter() : { lat: 0, lng: 0 };
-        for (const c of vacDrawOrder(visibleVacCharts(VAC.charts, view, zoom), centre)) want.set(c.icao, c);
+        const inView = visibleVacCharts(VAC.charts, view, zoom);
+        vacInView = inView.length;
+        // vacDrawOrder applies VAC_MAX_DRAWN: the load is bounded by the COUNT
+        // of sheets, not by the zoom, which is what lets the floor sit at 8.
+        for (const c of vacDrawOrder(inView, centre)) want.set(c.icao, c);
       }
       // Drop what has left the viewport, so the browser can release the bitmap.
       for (const [icao, layer] of [...vacLayers]) {
@@ -4641,10 +4719,13 @@
         const refused = VAC.charts.filter((c) => !vacDrawable(c));
         say(z < VAC_MIN_ZOOM
           ? 'VAC is on, but nothing is drawn below zoom ' + VAC_MIN_ZOOM +
-            ' - the whole sheet is a smear at that scale. Zoom in to an aerodrome.'
+            ' - further out the sheets pile up faster than the browser can paint them. ' +
+            'Zoom in towards an aerodrome.'
           : 'VAC on. The chart is drawn UNDER the route, the airspace and the fixes, so ' +
-            'clicking still works everywhere. Opacity is on Settings → Map. Display only - ' +
-            'verify against the current AIP and NOTAM.' +
+            'clicking still works everywhere. Opacity is the slider under the button. ' +
+            'Display only - verify against the current AIP and NOTAM.' +
+            (vacInView > VAC_MAX_DRAWN
+              ? ' ' + VAC_MAX_DRAWN + ' of ' + vacInView + ' sheets on screen are drawn, nearest first.' : '') +
             (refused.length ? ' ' + refused.length + ' chart(s) are withheld - see the label bar.' : ''),
           'info', 7000);
       }
@@ -5647,11 +5728,9 @@
     function updateVacOpacity() {
       const el = document.getElementById('map-vac-opacity');
       if (!el) return;
-      const o = normaliseVacOpacity(Number(el.value) / 100);
-      const val = document.getElementById('map-vac-opacity-val');
-      if (val) val.textContent = Math.round(o * 100) + '%';
-      aircraftProfile.vacOpacity = o;
-      for (const layer of vacLayers.values()) layer.setOpacity(o);
+      // Delegates: setVacOpacity is the one write point, and it refreshes the
+      // map's own slider too so the two controls always read the same.
+      setVacOpacity(Number(el.value) / 100);
     }
 
     async function resetFixStyle() {
