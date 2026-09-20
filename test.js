@@ -10128,6 +10128,65 @@ T('nothing is drawn below the min zoom, or off screen', () => {
     'culling drew a chart that is not drawable');
 });
 
+T('the load is bounded by how many sheets are drawn, not by the zoom', () => {
+  // THE MEASUREMENT BEHIND THIS (v16.87, in Chromium on the real map container):
+  // the worst viewport in Norway holds 20 sheets at z7, 9 at z8, 6 at z9 and 4
+  // at z10. 12 sheets froze the map for 2.2 s while it rasterised; the same
+  // viewport with 3 settled in 727 ms. Once settled even 12 pan in 17 ms - the
+  // whole cost is first paint, and it tracks the COUNT.
+  assert(VACM.VAC_MAX_DRAWN === 6, 'the cap moved: ' + VACM.VAC_MAX_DRAWN);
+  // 6 IS DERIVED: it is the worst case zoom 9 already produced before the floor
+  // moved, so going further out can never cost more than the old floor's
+  // neighbour already did. A cap above that would not bound anything new.
+  const many = [];
+  for (let i = 0; i < 12; i++) {
+    many.push(okChart({ icao: 'EN' + i, bounds: { west: 18 + i * 0.01, east: 19 + i * 0.01, south: 69, north: 69.3 } }));
+  }
+  const drawn = VACM.vacDrawOrder(many, { lat: 69.15, lng: 18.5 });
+  assert(drawn.length === VACM.VAC_MAX_DRAWN,
+    'the cap did not bite: ' + drawn.length + ' of ' + many.length);
+  // AND IT DROPS THE FAR ONES, not an arbitrary slice: the list is
+  // farthest-first, so the survivors must be the nearest the map centre.
+  const dist = (c) => Math.abs((c.bounds.west + c.bounds.east) / 2 - 18.5);
+  const kept = drawn.map(dist), dropped = many.map(dist).sort((a, b) => a - b).slice(VACM.VAC_MAX_DRAWN);
+  assert(Math.max(...kept) <= Math.min(...dropped) + 1e-9,
+    'the cap dropped a sheet nearer the centre than one it kept');
+  // Under the cap nothing is removed at all.
+  assert(VACM.vacDrawOrder(many.slice(0, 3), { lat: 69.15, lng: 18.5 }).length === 3,
+    'the cap fired when there was nothing to cap');
+});
+
+T('a partial overlay says it is partial', () => {
+  // Everything else this overlay withholds is withheld for ACCURACY and would
+  // be wrong to draw. These are CORRECT sheets left out for load, so a pilot
+  // must not read the gap as "no chart published here".
+  const a = okChart({ icao: 'ENDU' }), b = okChart({ icao: 'ENTC' });
+  const full = VACM.vacLabel([a, b], { editionLabel: 'X' }, 'X', 2);
+  assert(!/of/.test(full.replace('VAC', '')), 'a complete overlay claimed to be partial: ' + full);
+  const partial = VACM.vacLabel([a, b], { editionLabel: 'X' }, 'X', 9);
+  assert(/2 of 9/.test(partial), 'the label does not say how many are held back: ' + partial);
+  assert(/zoom in/i.test(partial), 'the label does not say what to do about it: ' + partial);
+  // Absent means "not counted", not "zero held back" - the old three-argument
+  // call sites must read exactly as they did.
+  assert(VACM.vacLabel([a], { editionLabel: 'X' }, 'X') === VACM.vacLabel([a], { editionLabel: 'X' }, 'X', 1),
+    'omitting the count changed the label');
+});
+
+T('the floor moved to 8, and 7 is still refused for a stated reason', () => {
+  assert(VACM.VAC_MIN_ZOOM === 8, 'the floor moved: ' + VACM.VAC_MIN_ZOOM);
+  const charts = [okChart()];
+  const over = { west: 18, east: 19, south: 69, north: 69.3 };
+  assert(VACM.visibleVacCharts(charts, over, 8).length === 1, 'nothing draws at the new floor');
+  assert(VACM.visibleVacCharts(charts, over, 7).length === 0, 'zoom 7 draws, and it should not');
+  // Zoom 7 is refused for a DIFFERENT reason from the cost, and the module has
+  // to say so: capping there would hide 14 of 20 sheets, and a chart silently
+  // absent is worse than one never offered.
+  const src = fs.readFileSync('src/lib/vac.js', 'utf8');
+  const note = src.slice(0, src.indexOf('export const VAC_MIN_ZOOM'));
+  assert(/silently absent|never offered/.test(note),
+    'the module does not say why zoom 7 stays refused');
+});
+
 T('overlapping charts are ordered, not blended', () => {
   // ENTC and ENDU genuinely abut. The sheet whose centre is nearest the middle
   // of the map is the aerodrome being looked at, so it goes on top - and the

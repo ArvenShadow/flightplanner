@@ -40,13 +40,26 @@ await page.waitForTimeout(900);
 await page.evaluate(() => { closeHelpModal(); });
 
 // EVERY map control must be inside the viewport. This is the v16.22 lesson.
+//
+// A CONTROL MAY BE HIDDEN ON PURPOSE, and that is a different thing from the
+// failure this check exists for. v16.22's bug was a control that was DISPLAYED
+// and sat at y=900 on a 900 px viewport - present, painted, off screen. A
+// control the app has deliberately taken out of the layout (the VAC opacity
+// slider, which follows its layer) has no box by design. So hidden controls
+// are not measured - but the set of them is ASSERTED, or this would quietly
+// excuse a button that vanished by accident.
+const EXPECT_HIDDEN = ['vac-opacity-ctl'];   // shown only while the VAC is on
 const ctls = await page.evaluate(() => [...document.querySelectorAll('#map-controls .map-ctl')]
   .map((b) => { const r = b.getBoundingClientRect();
-    return { id: b.id, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; }));
-for (const c of ctls) {
+    return { id: b.id, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height),
+             hidden: getComputedStyle(b).display === 'none' }; }));
+for (const c of ctls.filter((x) => !x.hidden)) {
   check(c.w > 0 && c.h > 0 && c.y >= 0 && c.y < 900 && c.x >= 0 && c.x < 1400,
     `control ${c.id} is on screen at ${c.x},${c.y} (${c.w}x${c.h})`);
 }
+const hidden = ctls.filter((x) => x.hidden).map((x) => x.id).sort();
+check(JSON.stringify(hidden) === JSON.stringify([...EXPECT_HIDDEN].sort()),
+  `exactly the controls meant to start hidden are hidden: [${hidden}]`);
 check(ctls.some((c) => c.id === 'fixes-btn') && ctls.some((c) => c.id === 'fix-search-btn'),
   'both fixes controls are in the stack');
 
