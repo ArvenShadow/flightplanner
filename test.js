@@ -9746,10 +9746,105 @@ T('exactly one trailing newline is stripped, and the env beats the file', () => 
     === 'from-the-environment-x', 'the file beat the environment');
 });
 
+T('a payload name carries its build, so a cached gate cannot meet another build', () => {
+  // THE LOCKOUT THIS EXISTS FOR (v16.88): GitHub Pages serves every file with
+  // max-age=600 and each URL ages out on its own clock, so for ten minutes
+  // after a deploy a browser can hold the OLD gate page and fetch the NEW
+  // payloads. Every lock run re-salts, so the key from the stale page cannot
+  // open fresh ciphertext - and the gate could only say "that passphrase does
+  // not unlock this build", which is a false claim about the passphrase.
+  const L = require('./tools/lock-rules.mjs');
+  const crypto = require('crypto');
+  const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+
+  assert(typeof L.payloadName === 'function', 'payloadName is gone');
+  assert(typeof L.buildIdFrom === 'function', 'buildIdFrom is gone');
+  // NO PART MAY CARRY A FIXED NAME. That field is what made a stale hit
+  // possible; its absence is the fix, so its return must fail here.
+  for (const p of L.PARTS) {
+    assert(!('file' in p),
+      `PARTS.${p.as} has a fixed file name again - a cached gate can meet another build's bytes`);
+  }
+
+  const salt = new Uint8Array([1, 2, 3, 4]);
+  const sealed = [new Uint8Array([9, 9]), new Uint8Array([8])];
+  const id = L.buildIdFrom(sha, salt, sealed);
+  assert(/^[0-9a-f]{8}$/.test(id), 'the build id is not 8 hex characters: ' + id);
+  assert(L.payloadName('body', id) === 'body-' + id + '.enc',
+    'the payload name is not content-addressed: ' + L.payloadName('body', id));
+
+  // A DIFFERENT SALT IS A DIFFERENT BUILD - that is the everyday case, since
+  // the salt is fresh per run even when nothing else changed.
+  const other = L.buildIdFrom(sha, new Uint8Array([1, 2, 3, 5]), sealed);
+  assert(other !== id, 'two salts produced the same build id');
+  // AND SO IS DIFFERENT CIPHERTEXT UNDER THE SAME SALT, which catches a
+  // payload swapped independently of the gate.
+  const swapped = L.buildIdFrom(sha, salt, [new Uint8Array([9, 9]), new Uint8Array([7])]);
+  assert(swapped !== id, 'changing a payload did not change the build id');
+  // Deterministic, or the locker would rename every file on every run for no
+  // reason and the browser cache would never hit.
+  assert(L.buildIdFrom(sha, salt, sealed) === id, 'the build id is not deterministic');
+});
+
+T('the locked build names exactly the payloads it wrote', () => {
+  // THE GATE AND THE ARTIFACT CANNOT DISAGREE. A gate asking for a file that
+  // was never written is the same lockout arriving from the other direction,
+  // and it would deploy green. This reads the real locked build if one is
+  // present - the suite does not lock (that needs a passphrase), so it is
+  // asserted here whenever `npm run lock` has been run.
+  const fs = require('fs');
+  if (!fs.existsSync('site-locked/index.html')) return;   // nothing locked here
+  const gate = fs.readFileSync('site-locked/index.html', 'utf8');
+  const meta = JSON.parse(gate.match(/var META = (\{.*?\});/)[1]);
+  assert(/^[0-9a-f]{8}$/.test(meta.buildId || ''), 'the gate carries no build id');
+  const onDisk = fs.readdirSync('site-locked').filter((f) => f.endsWith('.enc')).sort();
+  const asked = meta.parts.map((p) => p.file).sort();
+  assert(JSON.stringify(onDisk) === JSON.stringify(asked),
+    `the gate asks for ${asked} but the build wrote ${onDisk}`);
+  for (const f of asked) {
+    assert(f.includes(meta.buildId), `${f} is not stamped with this build's id ${meta.buildId}`);
+  }
+});
+
+T('a stale gate is told it is stale, and never that the passphrase is wrong', () => {
+  // The message is the whole point of the fix: the pilot spent an evening
+  // locked out of their own planner because a correct passphrase was reported
+  // as wrong. A missing payload now means "this page is out of date".
+  const fs = require('fs');
+  const gate = fs.readFileSync('src/unlock.html', 'utf8');
+  assert(/staleReload/.test(gate), 'the gate has no stale-page path');
+  // The missing branch must NOT fall through to the passphrase message.
+  // MATCH THE LINE, NOT A NESTED-PAREN SHAPE. The first version of this used
+  // `\([^)]*\)` for the condition and stopped at the `)` inside
+  // `String(e && e.message)`, so it reported correct code as missing the
+  // branch entirely - a test failing for its own reasons, which is the shape
+  // this file keeps recording.
+  const missingLine = gate.split('\n').find((l) => /\^missing /.test(l) && /if \(/.test(l));
+  assert(missingLine, 'the missing-payload branch is gone');
+  assert(/staleReload/.test(missingLine),
+    'a missing payload no longer routes to the stale-page path: ' + missingLine.trim());
+  // and it must RETURN, or it would fall through and blame the passphrase too
+  assert(/return/.test(missingLine),
+    'the missing-payload branch falls through to the passphrase message');
+  // ONCE PER SESSION, or a genuinely half-deployed site reloads for ever.
+  assert(/sessionStorage/.test(gate), 'the stale reload has no once-per-session guard');
+  // And it must drop the worker and its caches, which is what cemented the
+  // lockout past the ten-minute cache window.
+  assert(/unregister\(\)/.test(gate), 'the stale path does not unregister the service worker');
+  assert(/caches\.delete/.test(gate), 'the stale path does not clear the caches');
+});
+
 T('the gate template really carries its metadata, and the marker cannot survive', () => {
   const L = require('./tools/lock-rules.mjs');
   const tpl = fs.readFileSync('src/unlock.html', 'utf8');
-  const meta = { v: 1, salt: 'c2FsdHNhbHRzYWx0c2E=', iterations: L.ITERATIONS, parts: L.PARTS };
+  // THE NAMES MUST BE THE RESOLVED ONES, or this proves nothing. PARTS lost its
+  // fixed `file` at v16.88 (the name carries the build id now), so passing
+  // PARTS straight through made the filename check below compare undefined
+  // with undefined and pass vacuously - both sides constant, which v16.66 says
+  // is not a comparison at all. Resolve them exactly as the locker does.
+  const BID = 'a1b2c3d4';
+  const resolved = L.PARTS.map((p) => ({ as: p.as, file: L.payloadName(p.as, BID), replaces: p.replaces }));
+  const meta = { v: 1, buildId: BID, salt: 'c2FsdHNhbHRzYWx0c2E=', iterations: L.ITERATIONS, parts: resolved };
   const out = L.fillTemplate(tpl, meta);
   assert(!out.includes('/* @LOCKMETA */ null'), 'the gate would ship META === null');
   assert(out.includes(meta.salt), 'the salt is not in the gate page');
@@ -9761,9 +9856,11 @@ T('the gate template really carries its metadata, and the marker cannot survive'
   // part the gate does not know about is a payload nobody decrypts.
   assert(back.parts.length === L.PARTS.length,
     `the payload list did not travel: ${back.parts.length} of ${L.PARTS.length}`);
-  for (const p of L.PARTS) {
+  for (const p of resolved) {
     assert(back.parts.some((q) => q.file === p.file && q.as === p.as),
       'the gate does not know about the payload ' + p.file);
+    assert(/-[0-9a-f]{8}\.enc$/.test(p.file),
+      'a payload name carries no build id, so a cached gate could meet it: ' + p.file);
   }
   // A template with no marker is a build error, not a silent pass-through.
   let threw = '';

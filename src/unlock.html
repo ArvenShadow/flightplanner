@@ -10,8 +10,10 @@
      A prompt that reveals an app already sitting in the page protects
      nothing - the files are downloaded by then, and devtools or a direct
      fetch of app.js walks straight past it. So the deployed artifact carries
-     no app at all: body.enc, app.enc and aip.enc are AES-256-GCM ciphertext,
-     and the key exists only in the head of whoever knows the passphrase.
+     no app at all: the page, the bundle and the two datasets are AES-256-GCM
+     ciphertext, and the key exists only in the head of whoever knows the
+     passphrase. Their filenames carry the build id (v16.88), so a gate held
+     in a browser cache can never meet another build's payloads.
 
      WHAT VERIFIES THE PASSPHRASE IS THE GCM AUTHENTICATION TAG, and that is
      why no password hash is stored anywhere. A wrong key makes decrypt()
@@ -125,6 +127,9 @@
   /** Fetch one payload and decrypt it. The first 12 bytes are the IV; the
    *  rest is ciphertext with the GCM tag, so a wrong key THROWS here. */
   async function fetchPart(name, key) {
+    // PAYLOAD NAMES CARRY THIS BUILD'S ID (v16.88), so `cache: 'default'` is
+    // right and no longer risky: the URL changes whenever the bytes do, which
+    // is what makes a cached copy safe to reuse rather than a hazard.
     var res = await fetch(name, { cache: 'default' });
     if (!res.ok) throw new Error('missing ' + name);
     var buf = new Uint8Array(await res.arrayBuffer());
@@ -239,11 +244,58 @@
       // A DECRYPTION FAILURE AND A MISSING FILE ARE DIFFERENT PROBLEMS.
       // Reporting a broken deploy as "wrong passphrase" would send the pilot
       // hunting for a passphrase that was right all along.
-      say(/^missing /.test(String(e && e.message))
-        ? 'That build is incomplete — ' + e.message + '.'
-        : 'That passphrase does not unlock this build.', true);
+      //
+      // SINCE v16.88 A MISSING PAYLOAD ALMOST ALWAYS MEANS THIS PAGE IS STALE.
+      // The names carry the build id, so the only way to ask for one that is
+      // not there is to be an older gate held in a cache - which is exactly the
+      // lockout this release fixes. Say that, and offer to fix it.
+      if (/^missing /.test(String(e && e.message))) { await staleReload(); return; }
+      say('That passphrase does not unlock this build.', true);
     }
   });
+
+  /**
+   * This page is older than the site it is talking to. Fix it, once.
+   *
+   * WHY IT IS WORTH DOING RATHER THAN JUST SAYING: the service worker's own
+   * shellFirst fetches THROUGH the HTTP cache, so it can pull a stale gate and
+   * then cache.put it - which is how a ten-minute cache window turned into a
+   * lockout that outlived it and needed devtools to clear. Unregistering the
+   * worker and dropping its caches is the thing a pilot would otherwise be
+   * told to do by hand.
+   *
+   * ONCE PER SESSION, and that guard is not optional: if the payloads are
+   * genuinely absent - a half-finished deploy - reloading would loop forever.
+   * The second time through it says what is wrong and stops.
+   */
+  async function staleReload() {
+    var FLAG = 'c182_gate_refreshed';
+    var tried = false;
+    try { tried = sessionStorage.getItem(FLAG) === '1'; } catch (e) {}
+    if (tried) {
+      say('This page is out of date and refreshing did not fix it. The site may ' +
+          'be mid-deploy — wait a moment and reload. If it persists, clear this ' +
+          'site\u2019s data.', true);
+      return;
+    }
+    say('This page was out of date. Refreshing…');
+    try { sessionStorage.setItem(FLAG, '1'); } catch (e) {}
+    try {
+      if (navigator.serviceWorker) {
+        var regs = await navigator.serviceWorker.getRegistrations();
+        for (var i = 0; i < regs.length; i++) await regs[i].unregister();
+      }
+    } catch (e) {}
+    try {
+      if (window.caches) {
+        var names = await caches.keys();
+        for (var j = 0; j < names.length; j++) await caches.delete(names[j]);
+      }
+    } catch (e) {}
+    // A stored key belongs to the OLD build's salt and is now useless.
+    forget();
+    location.reload();
+  }
 
   (async function boot() {
     if (!CRYPTO_OK) {

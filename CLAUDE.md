@@ -2061,6 +2061,101 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## A CACHED GATE LOCKED THE PILOT OUT OF THEIR OWN SITE (v16.88)
+
+The pilot, the morning after v16.87 deployed: *"im not allowed into the
+flightplanner anymore, password isnt working"* - and then, decisively,
+*"private worked"*. The passphrase was right the whole time. An incognito
+window had no cache; the everyday profile did.
+
+### THE MECHANISM, MEASURED RATHER THAN GUESSED
+
+GitHub Pages sends **`cache-control: max-age=600`** on every file. Each URL
+ages out on its OWN clock, so for ten minutes after a deploy a browser can hold
+the OLD `index.html` while fetching the NEW payloads. And **every lock run
+re-salts** - proved by locking twice with one passphrase and reading the salts
+back: `d0fOUjsOnu5Q9hVso189rg==` against `aLqo6NjEhqEBdGenuIMEQQ==`, different
+ciphertext. So the key derived from the stale page cannot open fresh ciphertext,
+the GCM tag fails, and the gate said the one thing that was false:
+**"That passphrase does not unlock this build."**
+
+**REPRODUCED EXACTLY** before anything was changed: build A's gate + build B's
+payloads + the CORRECT passphrase -> that message.
+
+**AND IT CEMENTED ITSELF.** The service worker's `shellFirst` calls `fetch()`,
+which goes THROUGH the HTTP cache - so it could pull the stale gate and
+`cache.put` it, outliving the 600 s window entirely. That is why clearing site
+data was the only way back in and why a hard reload was not enough.
+
+### THE FIX IS THIS PROJECT'S OWN RULE, UNAPPLIED TO THIS SURFACE
+
+`data/vac/` has shipped content-addressed filenames since v16.86
+(`endu-2026-05-14-f93dd046-r1.webp`) for exactly this reason. The lock's
+payloads were `body.enc`, `app.enc`, `aip.enc`, `vac.enc` - **fixed names, so
+two builds' ciphertext occupy the same URLs and a cache can serve a mixture of
+them.** They now carry a build id derived from the salt and the sealed bytes
+(`buildIdFrom`, SHA-256, first 8 hex), so **a gate can only ever name payloads
+it was built with**: the mismatch becomes a 404 instead of a wrong-passphrase
+verdict. Straight *AN OLD RULE NOT APPLIED TO A NEW SURFACE*.
+
+**THE 404 IS THEN HEALED, NOT JUST REPORTED.** `staleReload` unregisters the
+service worker, drops its caches, forgets the stored key and reloads - which is
+precisely what the pilot would otherwise be told to do in devtools.
+
+- **`location.reload()` REVALIDATES, AND THAT HAD TO BE MEASURED** or the heal
+  would be a promise the platform revokes. Against a fixture serving Pages'
+  own `max-age=600`, the reload arrives as `cache-control: max-age=0` with the
+  ETag, reaches the server inside the window, and gets the fresh gate. Measured
+  end to end: booted, map up, no page errors.
+- **ONCE PER SESSION.** If the payloads really are absent - a half-finished
+  deploy - reloading for ever is worse than saying so. The second time it says
+  the page is out of date and stops.
+
+### THREE FIXTURES AND ONE ASSERT WERE WRONG BEFORE ANY CODE WAS
+
+- **THE FIRST HEAL FIXTURE WAS A STATIC DIRECTORY**, which serves the stale
+  gate for ever - so the reload met the same stale page, the loop guard
+  correctly stopped, and a WORKING heal reported `booted: false`. The fixture
+  is the bug, again.
+- **THE SECOND SENT NO `cache-control` AT ALL**, so the browser had nothing
+  cached and the reload could not demonstrate anything. A cache fixture that
+  does not cache is not the situation.
+- **THE GATE-METADATA TEST WAS VACUOUS.** `PARTS` lost its `file` field in this
+  change, and the test compared `q.file === p.file` - `undefined === undefined`
+  on both sides. It passed throughout. Same shape as the v16.66 finding where
+  both sides read `''`: *a comparison against a value that cannot be there
+  proves nothing in either direction.*
+- **`navs <= 3` PASSED WITH THE LOOP GUARD REMOVED.** The promise is ONE
+  self-heal per session, so the assert is `navs === 2`. M5 by name, caught only
+  because the mutation was run.
+
+### THE CI GUARD CANNOT LIST THE NAMES ANY MORE, SO IT COUNTS THEM
+
+The workflow's leak check used to name each payload. Names now change every
+run - which is the entire point - so it requires exactly four `.enc` files,
+greps every one of them plus the gate for the app's identifiers, and then
+**reads the payload names OUT OF THE GATE and requires each to exist**. A gate
+asking for a file that was never written is the same lockout arriving from the
+other direction, and it would otherwise ship green.
+
+`verify:locked` reads the names from `META` for the same reason, and its new
+section serves 404s for the payloads and asserts the gate does not blame the
+passphrase, refreshes itself once, and then says what is wrong.
+
+### THREE MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+Fixed payload names (2 tests, 0 `error TS`), the stale branch routed back to
+the passphrase message (3 browser checks, reproducing the pilot's exact
+sentence), and the once-per-session guard removed (2 browser checks, one of
+which only bites since the assert was tightened).
+
+### WHAT THIS DOES NOT FIX, AND IT WAS SAID RATHER THAN GUESSED
+
+Whether the `SITE_PASSWORD` secret was ever changed cannot be determined -
+GitHub stores it encrypted and will not show it back, which is the property
+that makes it the right place for it. The lockout is explained completely
+without that, and the passphrase was never asked for.
+
 ## THE FLOOR IS THE SHEET COUNT, NOT THE ZOOM (v16.87)
 
 The pilot: *"I would like it to show VAC further out than zoom 10 please, and
@@ -2343,7 +2438,8 @@ straight under the cursor and fails by name.
 decrypted page kept a link to a file `site-locked/` does not have: it 404s,
 `window.C182_VAC` is undefined, `updateVacBtn` HIDES the control, and the whole
 overlay is **missing from the deployed copy with nothing on screen saying so**.
-It is app data exactly as `aip.js` is, and it is encrypted as `vac.enc`.
+It is app data exactly as `aip.js` is, and it is encrypted as a `vac` payload
+(named `vac.enc` until v16.88 made the payload names content-addressed).
 
 **THE RASTERS ARE COPIED IN PLAINTEXT, AND THAT IS ARGUED RATHER THAN ASSUMED.**
 Encrypting them would be v16.78's own theatre argument pointed at a new asset:
@@ -2938,7 +3034,8 @@ own guide.
 ### HOW IT WORKS, AND WHAT IS DELIBERATELY ABSENT
 
 - `tools/lock-site.mjs` turns the TESTED `site/` into `site-locked/`: the page,
-  the bundle and the dataset become `body.enc`, `app.enc`, `aip.enc`, and
+  the bundle and the dataset become the `body`, `app` and `aip` payloads (fixed
+  names until v16.88; content-addressed since - see the entry above), and
   `src/unlock.html` becomes the gate. `npm run lock`, and CI deploys that.
 - **NO PASSWORD HASH IS STORED ANYWHERE.** The GCM authentication tag is what
   fails on a wrong key, so the artifact holds only salt, iteration count and

@@ -45,11 +45,12 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync, copyFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { webcrypto as wc } from 'node:crypto';
+import { webcrypto as wc, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  ITERATIONS, PARTS, readPassphrase, fillTemplate, relinkWorker, scriptBlocks
+  ITERATIONS, PARTS, readPassphrase, fillTemplate, relinkWorker, scriptBlocks,
+  payloadName, buildIdFrom
 } from './lock-rules.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -116,6 +117,16 @@ const kdfMs = Date.now() - t0;
 const sealed = {};
 for (const p of PARTS) sealed[p.as] = await seal(key, plain[p.as]);
 
+// THE PAYLOAD NAMES CARRY THIS BUILD'S IDENTITY (v16.88), so a gate page held
+// in a browser or CDN cache can never meet ciphertext from a different run.
+// See payloadName in lock-rules.mjs for the lockout this fixes.
+const buildId = buildIdFrom(
+  (bytes) => createHash('sha256').update(bytes).digest('hex'),
+  salt, PARTS.map((p) => new Uint8Array(sealed[p.as])));
+/** @type {Record<string,string>} as -> the file it is written to */
+const fileOf = {};
+for (const p of PARTS) fileOf[p.as] = payloadName(p.as, buildId);
+
 // ---- THE CHECK THAT MATTERS: is it actually unreadable? -------------------
 // Asserting "we called encrypt()" proves nothing about what got written. These
 // are strings a reader of the artifact would look for, one per payload, and
@@ -129,15 +140,16 @@ const MUST_NOT_APPEAR = [
 for (const p of PARTS) {
   const hay = sealed[p.as].toString('latin1');
   for (const needle of MUST_NOT_APPEAR) {
-    if (hay.includes(needle)) fail(`${p.file} still contains the plaintext "${needle}"`);
+    if (hay.includes(needle)) fail(`${fileOf[p.as]} still contains the plaintext "${needle}"`);
   }
 }
 
 const meta = {
   v: 1,
+  buildId,
   salt: b64(salt),
   iterations: ITERATIONS,
-  parts: PARTS.map((p) => ({ as: p.as, file: p.file, replaces: p.replaces }))
+  parts: PARTS.map((p) => ({ as: p.as, file: fileOf[p.as], replaces: p.replaces }))
 };
 const gate = fillTemplate(readFileSync(TEMPLATE, 'utf8'), meta);
 
@@ -175,7 +187,7 @@ try {
 // whose metadata stayed null asks for a passphrase and can never accept one.
 if (/var META = \/\* @LOCKMETA \*\/ null;/.test(gate)) fail('the gate page ships META === null');
 
-const assets = ['./', './index.html', ...PARTS.map((p) => './' + p.file)];
+const assets = ['./', './index.html', ...PARTS.map((p) => './' + fileOf[p.as])];
 const sw = relinkWorker(readFileSync(join(SITE, 'sw.js'), 'utf8'), assets);
 if (/'\.\/(app|aip)\.js'/.test(sw)) fail('the worker still precaches a plaintext asset');
 
@@ -187,7 +199,7 @@ mkdirSync(OUT, { recursive: true });
 
 writeFileSync(join(OUT, 'index.html'), gate);
 writeFileSync(join(OUT, 'sw.js'), sw);
-for (const p of PARTS) writeFileSync(join(OUT, p.file), sealed[p.as]);
+for (const p of PARTS) writeFileSync(join(OUT, fileOf[p.as]), sealed[p.as]);
 writeFileSync(join(OUT, '.nojekyll'), '');
 
 // ---- THE VAC RASTERS ARE COPIED IN PLAINTEXT, AND THAT IS A DECISION -------
@@ -219,7 +231,7 @@ if (existsSync(VAC_SRC)) {
 const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 console.log(
   `locked site-locked/  v${version}  gate ${kb(gate.length)} + ` +
-  PARTS.map((p) => p.file + ' ' + kb(sealed[p.as].length)).join(' + ') +
+  PARTS.map((p) => fileOf[p.as] + ' ' + kb(sealed[p.as].length)).join(' + ') +
   (copied ? ` + ${copied} VAC chart(s), NOT encrypted (already public in this repo)` : '') +
   `\n  PBKDF2-SHA256 x${ITERATIONS.toLocaleString('en-US')} derived in ${kdfMs} ms here ` +
   '(once per browser, not per load)' +

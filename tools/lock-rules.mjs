@@ -73,19 +73,76 @@ export function obviousResidue(pass) {
  * identical to an unlocked load, which the v16.45 entry says is load-bearing:
  * the bundle is a classic script whose functions the page's inline on*=
  * handlers need as globals, and the page script's top level calls into it.
+ *
+ * THERE IS NO `file` HERE ANY MORE. It was a fixed name per part, and a fixed
+ * name is what let a cached gate page meet fresh ciphertext - see payloadName
+ * below. The name is derived per build now, so it cannot be stated here.
  */
 export const PARTS = [
-  { as: 'aip', file: 'aip.enc', from: 'aip.js', replaces: 'aip.js' },
+  { as: 'aip', from: 'aip.js', replaces: 'aip.js' },
   // The VAC MANIFEST is app data exactly as aip.js is, and it has to be a part
   // or the decrypted page keeps a <script src="vac-index.js"> that 404s - after
   // which window.C182_VAC is undefined, updateVacBtn hides the control, and the
   // whole overlay is silently missing from the deployed copy with nothing said.
   // THE RASTERS THEMSELVES ARE NOT ENCRYPTED - see lock-site.mjs for why that
   // would be theatre rather than protection.
-  { as: 'vac', file: 'vac.enc', from: 'vac-index.js', replaces: 'vac-index.js' },
-  { as: 'app', file: 'app.enc', from: 'app.js', replaces: 'app.js' },
-  { as: 'body', file: 'body.enc', from: 'index.html', replaces: null }
+  { as: 'vac', from: 'vac-index.js', replaces: 'vac-index.js' },
+  { as: 'app', from: 'app.js', replaces: 'app.js' },
+  { as: 'body', from: 'index.html', replaces: null }
 ];
+
+/**
+ * The payload FILENAME for a build, and the reason this is a function.
+ *
+ * THE NAMES USED TO BE FIXED (`body.enc`, `app.enc`...) AND THAT LOCKED THE
+ * AUTHOR OUT OF THEIR OWN SITE (v16.88). GitHub Pages serves every file with
+ * `cache-control: max-age=600`, and each URL ages out on its own clock, so for
+ * ten minutes after a deploy a browser can hold the OLD gate page while
+ * fetching the NEW payloads. Every lock run re-salts, so the key derived from
+ * the stale page's salt cannot open the fresh ciphertext - and the only thing
+ * the gate could conclude was "that passphrase does not unlock this build",
+ * which is a FALSE CLAIM ABOUT THE PASSPHRASE. Reproduced exactly: gate from
+ * build A, payloads from build B, correct phrase, rejected.
+ *
+ * It then cemented itself: the worker's shellFirst calls fetch(), which goes
+ * THROUGH the HTTP cache, so it could pull the stale gate and cache.put it
+ * into the shell cache - persisting long past the 600 s window. That is why a
+ * private window unlocked and the everyday profile stayed shut.
+ *
+ * THE FIX IS THIS PROJECT'S OWN RULE, UNAPPLIED TO THIS SURFACE - the first
+ * failure shape CLAUDE.md names. The VAC rasters already carry their identity
+ * in the path ("a changed chart is a DIFFERENT URL and a stale hit is
+ * impossible"); the payloads did not. Now they do: a stale gate asks for ITS
+ * OWN payload URLs, which after a deploy are simply gone, so it gets a clean
+ * 404 and can say "this page is out of date" instead of blaming the phrase.
+ * @param {string} as @param {string} buildId
+ */
+export function payloadName(as, buildId) { return `${as}-${buildId}.enc`; }
+
+/** How many hex characters of the build hash name a payload. 8 is 4 bytes:
+ *  these are cache keys for one site, not a collision-resistant identifier,
+ *  and the same 8 the VAC assets use. */
+export const BUILD_ID_LENGTH = 8;
+
+/**
+ * The build id: a hash of the salt AND every sealed payload.
+ *
+ * THE SALT ALONE WOULD DO for the stale-page case, since it is fresh per run.
+ * Hashing the ciphertext too means the id also changes if a payload is ever
+ * swapped independently of the gate - which is the same mismatch arriving by a
+ * different route, and there is no reason to catch only one of them.
+ * @param {(buf: Uint8Array) => string} sha256hex @param {Uint8Array} salt
+ * @param {Uint8Array[]} sealed @returns {string}
+ */
+export function buildIdFrom(sha256hex, salt, sealed) {
+  let total = salt.length;
+  for (const s of sealed) total += s.length;
+  const all = new Uint8Array(total);
+  all.set(salt, 0);
+  let at = salt.length;
+  for (const s of sealed) { all.set(s, at); at += s.length; }
+  return sha256hex(all).slice(0, BUILD_ID_LENGTH);
+}
 
 /**
  * Read the passphrase, and refuse the ones that would make this theatre.
