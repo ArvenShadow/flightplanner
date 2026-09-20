@@ -76,6 +76,13 @@ export function obviousResidue(pass) {
  */
 export const PARTS = [
   { as: 'aip', file: 'aip.enc', from: 'aip.js', replaces: 'aip.js' },
+  // The VAC MANIFEST is app data exactly as aip.js is, and it has to be a part
+  // or the decrypted page keeps a <script src="vac-index.js"> that 404s - after
+  // which window.C182_VAC is undefined, updateVacBtn hides the control, and the
+  // whole overlay is silently missing from the deployed copy with nothing said.
+  // THE RASTERS THEMSELVES ARE NOT ENCRYPTED - see lock-site.mjs for why that
+  // would be theatre rather than protection.
+  { as: 'vac', file: 'vac.enc', from: 'vac-index.js', replaces: 'vac-index.js' },
   { as: 'app', file: 'app.enc', from: 'app.js', replaces: 'app.js' },
   { as: 'body', file: 'body.enc', from: 'index.html', replaces: null }
 ];
@@ -161,7 +168,7 @@ export function relinkWorker(sw, assets) {
   if (!RE.test(sw)) throw new Error('sw.js has no SHELL_ASSETS array to relink');
   const out = sw.replace(RE, `const SHELL_ASSETS = [${assets.map((a) => `'${a}'`).join(', ')}];`);
   if (out === sw) throw new Error('the SHELL_ASSETS array was not replaced');
-  if (/'\.\/(app|aip)\.js'/.test(out)) {
+  if (/'\.\/(app|aip|vac-index)\.js'/.test(out)) {
     throw new Error('the worker still precaches a plaintext asset');
   }
   return out;

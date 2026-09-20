@@ -96,9 +96,17 @@ console.log('shell cache          :', shell ? shell.cache + ' holds ' + shell.ur
 
 const fails = [];
 if (!shell) fails.push('SHELL BROKEN: no shell cache - the worker never precached the app');
-else for (const want of ['/index.html', '/app.js', '/aip.js'])
+else for (const want of ['/index.html', '/app.js', '/aip.js', '/vac-index.js'])
   if (!shell.urls.some((u) => u.endsWith(want)))
     fails.push('SHELL BROKEN: the shell cache is missing ' + want + ' - offline would lose it');
+// THE VAC RASTERS MUST NOT BE IN THE SHELL (v16.86). They are megabytes each,
+// so in the shell cache they would grow without bound until the origin's quota
+// filled - and when that happens the browser discards EVERYTHING for the
+// origin, app shell included. That is the v16.26 lesson, and it is why they get
+// their own capped cache. The MANIFEST is shell; the pictures are not.
+if (shell && shell.urls.some((u) => /\/vac\/[^/]+\.webp$/.test(u))) {
+  fails.push('SHELL BROKEN: a VAC raster is in the shell cache - it will fill the quota and evict the app');
+}
 if (unknownCaches.length) fails.push('RULE 1 BROKEN: a tile was cached before the AIRAC edition was known');
 if (!knownCaches.includes('c182-tiles-AIRAC19MAR26')) fails.push('RULE 2 BROKEN: tiles are not cached under the reported cycle');
 if (heldTiles !== 3) fails.push('RULE 2 BROKEN: expected 3 held tiles, got ' + heldTiles);

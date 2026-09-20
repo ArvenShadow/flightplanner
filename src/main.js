@@ -19,6 +19,7 @@ import * as performance from './lib/performance.js';
 import * as format from './lib/format.js';
 import * as legs from './lib/legs.js';
 import * as airspace from './lib/airspace.js';
+import * as vac from './lib/vac.js';
 import * as anchors from './lib/anchors.js';
 import * as daylight from './lib/daylight.js';
 import * as winds from './lib/winds.js';
@@ -32,7 +33,7 @@ import * as corridor from './lib/corridor.js';
 import * as skins from './lib/skins.js';
 
 const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs,
-    ...airspace, ...anchors,
+    ...airspace, ...vac, ...anchors,
               ...daylight, ...winds, ...integrity, ...exchange, ...plotting, ...metar,
               ...ofpform, ...keys, ...corridor, ...skins };
 

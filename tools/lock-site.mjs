@@ -43,7 +43,7 @@
  * behind something guessable - a lock that reports success on "1234" is the
  * plausible wrong answer this project exists to refuse.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync, copyFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { webcrypto as wc } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -190,10 +190,37 @@ writeFileSync(join(OUT, 'sw.js'), sw);
 for (const p of PARTS) writeFileSync(join(OUT, p.file), sealed[p.as]);
 writeFileSync(join(OUT, '.nojekyll'), '');
 
+// ---- THE VAC RASTERS ARE COPIED IN PLAINTEXT, AND THAT IS A DECISION -------
+//
+// ENCRYPTING THEM WOULD BE THEATRE, which is this file's own v16.78 argument
+// pointed at a new asset. The repository is PUBLIC: every one of these WebPs is
+// already served from it, so ciphertext on the Pages copy would protect a file
+// anybody can fetch from the repo one click away. A password prompt over a
+// plaintext app protects nothing, and a locked asset beside a public copy of
+// itself is the same claim wearing a different coat.
+//
+// IT WOULD ALSO COST THE ONE CODE PATH. An <img> cannot take ciphertext, so the
+// overlay would need a decrypt-to-blob route that exists ONLY in the locked
+// build - two ways to draw a chart, one of which nothing routinely runs.
+//
+// The MANIFEST is encrypted (see PARTS), because it is app data like aip.js and
+// because its absence would silently remove the feature rather than the ink.
+const VAC_SRC = join(SITE, 'vac');
+let copied = 0;
+if (existsSync(VAC_SRC)) {
+  mkdirSync(join(OUT, 'vac'), { recursive: true });
+  for (const f of readdirSync(VAC_SRC)) {
+    if (!f.endsWith('.webp')) continue;
+    copyFileSync(join(VAC_SRC, f), join(OUT, 'vac', f));
+    copied++;
+  }
+}
+
 const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 console.log(
   `locked site-locked/  v${version}  gate ${kb(gate.length)} + ` +
   PARTS.map((p) => p.file + ' ' + kb(sealed[p.as].length)).join(' + ') +
+  (copied ? ` + ${copied} VAC chart(s), NOT encrypted (already public in this repo)` : '') +
   `\n  PBKDF2-SHA256 x${ITERATIONS.toLocaleString('en-US')} derived in ${kdfMs} ms here ` +
   '(once per browser, not per load)' +
   '\n  the passphrase is NOT in this output; the repo is public, so the SOURCE is not gated'
