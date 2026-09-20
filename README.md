@@ -100,8 +100,48 @@ no table to read. Those aerodromes still anchor on their ARP but carry **no
 points**, and the coverage is reported rather than quietly implied — nothing is
 taken off a chart image. Every coordinate that does ship is checked against the
 chart's *own* printed lat/long graticule first, and a name that fails to decode
-is refused rather than shipped misspelt. The chart raster is not georeferenced,
-so there is no VAC overlay.
+is refused rather than shipped misspelt.
+
+## Visual Approach Charts on the map
+
+**▦ VAC** draws the aerodrome's own Visual Approach Chart on the map, in place,
+from zoom 10 up. Opacity is on **Settings → Map**. It is drawn *under* the
+corridor, the airspace, the route line and the fix markers and takes no clicks
+at all, so everything you could do on that piece of map before, you can still
+do through the chart.
+
+The sheets are georeferenced at build time by `npm run build:vac-raster` and
+ship as one lossless WebP per chart in `data/vac/`, listed in
+`data/vac-index.js`. **Nothing is fetched from Avinor at runtime.**
+
+**How the fit is made, and what it is held to.** A VAC carries no georeference
+— no GeoPDF markers, no projection note — so the sheet is fitted from its own
+ink. Where the chart prints a reporting-point coordinate table, the drawn
+symbols paired with their published coordinates are the primary control; where
+it does not, the printed lat/long graticule on the neatline is. The model is a
+complex polynomial in longitude + i·(isometric latitude), which is exactly the
+family of conformal projections, so the edges determine the middle. At least
+two control points per chart are **held out of the fit entirely** and used only
+to check it.
+
+**A chart that cannot be placed is not drawn.** Every sheet must pass its own
+holdout (25 m on published points, 50 m on the graticule) *and* a cross-check
+between the two independent control sources, which is the only thing that can
+see a bias both a fit and its holdout share. The measured error travels with
+each chart in the index and is re-checked in the browser before anything is
+painted, so a hand-edited index cannot put ink on the map either. Across the
+49 charts the worst holdout is 22.4 m and the median 1.1 m on published points,
+11.9 m on the graticule.
+
+**The raster is display-only.** No coordinate in this planner is read off a
+chart image: reporting points still come from the printed table, and the
+symbols the build located were used to *fit* the sheet, never to publish a
+position.
+
+`npm run build:aip` re-verifies every prepared chart against the live edition's
+own AD 2.24 chart table on each run and marks any that have been amended, so a
+superseded approach chart stops being drawn rather than quietly staying on the
+map.
 
 ## Airspace data
 

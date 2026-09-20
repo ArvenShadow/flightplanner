@@ -86,9 +86,9 @@ jobs:
       # this greps the artifact for the app's own identifiers and fails.
       - name: Refuse to publish anything readable
         run: |
-          for f in site-locked/index.html site-locked/aip.enc site-locked/app.enc site-locked/body.enc; do
+          for f in site-locked/index.html site-locked/aip.enc site-locked/app.enc site-locked/body.enc site-locked/vac.enc; do
             test -f "$f" || { echo "::error::$f is missing from the locked build"; exit 1; }
-            for needle in computeFlightSchedule C182_AIP APP_VERSION runIntegrityCheck; do
+            for needle in computeFlightSchedule C182_AIP C182_VAC APP_VERSION runIntegrityCheck; do
               if grep -qF "$needle" "$f"; then
                 echo "::error::$f contains the plaintext string $needle - not publishing"
                 exit 1
@@ -96,6 +96,18 @@ jobs:
             done
           done
           test ! -f site-locked/app.js || { echo "::error::a plaintext app.js is in the locked build"; exit 1; }
+          test ! -f site-locked/vac-index.js || { echo "::error::a plaintext vac-index.js is in the locked build"; exit 1; }
+          # The VAC RASTERS are deliberately plaintext - they are already public
+          # in this repo, so ciphertext beside a public copy would protect
+          # nothing (see tools/lock-site.mjs). What must hold is that they are
+          # PICTURES and carry no app: a .webp that greps as JavaScript would
+          # mean something other than a chart was written there.
+          if ls site-locked/vac/*.webp >/dev/null 2>&1; then
+            for f in site-locked/vac/*.webp; do
+              head -c 12 "$f" | grep -q WEBP || { echo "::error::$f is not a WebP"; exit 1; }
+            done
+            echo "$(ls site-locked/vac/*.webp | wc -l) VAC chart(s), all WebP, published unencrypted by design"
+          fi
           echo "locked build carries no readable app"
 
       - uses: actions/configure-pages@v6

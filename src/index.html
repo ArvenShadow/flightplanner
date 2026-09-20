@@ -68,6 +68,7 @@
         <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo or the official ICAO VFR 1:500 000 from Avinor. Both are streamed and need internet. Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
         <button id="airspace-btn" class="map-ctl" title="Show published AIP airspace - CTR, TIZ, TMA, TIA, CTA and the mandatory zones. Hover an airspace for its class, vertical limits, callsign and frequency. Needs zoom 7 or closer. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleAirspace()">⬢ Airspace: Off</button>
         <button id="corridor-btn" class="map-ctl" title="Draw a band of a chosen radius either side of the whole track, so you can see which terrain and airspace actually lies beside your route. It is GEOMETRY ONLY - it shows you where to read the chart's contours and MEF, and never states a safe altitude of its own. Radius is set on the Map page of Settings." onclick="toggleCorridor()">◫ Corridor: Off</button>
+        <button id="vac-btn" class="map-ctl" title="Draw the published Visual Approach Chart over the map for the aerodromes on screen, georeferenced from the chart's own printed graticule and reporting points. Display only - every coordinate the planner uses still comes from the published tables, never from the picture. Needs zoom 10 or closer. Opacity is on Settings - Map. Charts from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleVac()">▦ VAC: Off</button>
         <button id="fixes-btn" class="map-ctl" title="Show published AIP fixes - aerodromes (from zoom 7) and VFR reporting points (from zoom 9). Click one to add it as a waypoint at its PUBLISHED coordinate instead of clicking an approximate spot. Reporting points come from the printed table on each aerodrome's Visual Approach Chart; 29 aerodromes publish theirs graphically only and have none here. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleFixes()">⌖ Fixes: Off</button>
         <button id="fix-search-btn" class="map-ctl" title="Find a published aerodrome or VFR reporting point by name or ICAO and add it as a waypoint at its published coordinate. Norwegian letters are optional - SORKJOSEN finds SØRKJOSEN." onclick="searchFixes()">🔎 Find fix</button>
         <button id="chart-detail-btn" class="map-ctl" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
@@ -858,6 +859,40 @@
           </div>
 
           <div class="setting-section">
+            <h3>Visual Approach Charts</h3>
+            <div class="setting-row">
+              <label>VAC opacity:</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="range" id="map-vac-opacity" min="20" max="100" step="5"
+                       oninput="updateVacOpacity()" onchange="updateVacOpacity()" style="width:150px;">
+                <span id="map-vac-opacity-val" style="font-size:11px; font-weight:700; min-width:40px;"></span>
+              </div>
+            </div>
+            <details class="setting-help">
+              <summary>What the overlay is, and what it is not</summary>
+              <div>
+              The <b>▦ VAC</b> button on the map draws each aerodrome's published
+              <b>Visual Approach Chart</b> over the base chart, georeferenced from the sheet's own
+              printed graticule and reporting points. It is <b>display only</b>: every coordinate the
+              planner uses still comes from the published tables, never from the picture.
+              <br><br>
+              It is drawn <b>under</b> the corridor, the airspace, the route line and the fix markers,
+              so clicking, dragging a leg and hovering an airspace all work exactly as they do with
+              the overlay off — even at 100%.
+              <br><br>
+              Below 20% the chart is not reliably readable, which is the whole point of drawing it.
+              The default is 85%: enough to read the VAC's own small print while the base chart still
+              shows through at the sheet edges. Nothing is drawn below zoom 10 — a whole VAC at that
+              scale is a smear over the ICAO chart rather than an addition to it.
+              <br><br>
+              Charts are prepared at build time from AIP Norge (© Avinor AS, used with permission,
+              <b>non-commercial</b>). A chart whose measured error exceeds its own recorded limit is
+              <b>not drawn</b>, and the label bar at the bottom left says which and why.
+              </div>
+            </details>
+          </div>
+
+          <div class="setting-section">
             <h3>Route track</h3>
             <div class="setting-row">
               <label>Track thickness:</label>
@@ -1048,6 +1083,7 @@
 
   </script>
   <!-- @AIPDATA: build inlines data/aip.js here (window.C182_AIP) -->
+  <!-- @VACDATA: build links data/vac-index.js here (window.C182_VAC); the chart rasters are separate files under vac/ -->
   <!-- @BUNDLE: build inlines src/main.js here as a classic script -->
   <script>
     // =========================================================================
@@ -1069,11 +1105,20 @@
     //   the copyable plotting text  -> src/lib/plotting.js
     //   number & unit formatting    -> src/lib/format.js
     //   popups and toasts           -> src/lib/dialog.js
+    //   published fixes & aerodromes-> src/lib/anchors.js
+    //   the airspace overlay's rules-> src/lib/airspace.js
+    //   the corridor ring geometry  -> src/lib/corridor.js
+    //   METAR / TAF decoding        -> src/lib/metar.js
+    //   the printed OFP form's grid -> src/lib/ofpform.js
+    //   rhumb-line navigation       -> src/lib/rhumb.js
+    //   keyboard bindings           -> src/lib/keys.js
+    //   the skin list               -> src/lib/skins.js
+    //   which VAC chart is drawn    -> src/lib/vac.js
     //
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 132 inline on*= handlers - 102 written
+    // map, markers, undoStack...) plus 135 inline on*= handlers - 105 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1298,7 +1343,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.85';
+    const APP_VERSION = '16.86';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1409,6 +1454,19 @@
     // entry describes, which was found by dragging a real line in Chromium.
     map.createPane('corridorPane');
     map.getPane('corridorPane').style.zIndex = '370';
+    // THE VAC RASTER IS THE BOTTOM OVERLAY (v16.86). It is chart paper: it goes
+    // above the base tiles and below everything the pilot interacts with - the
+    // corridor (370), airspace (380), the route line and its 20 px grab line in
+    // Leaflet's own overlayPane (400), and the fix markers in markerPane (600).
+    // pointer-events is none as well - but MEASURED BY MUTATION, that is the
+    // BACKSTOP and not the mechanism: with this pane set to `auto` every
+    // click-through check still passes, because `interactive: false` on the
+    // overlay leaves the image inert on its own. The pane rule is what holds
+    // for anything a later change adds here without thinking about it.
+    // tools/verify-vac.mjs flips it and re-measures, so this cannot drift.
+    map.createPane('vacPane');
+    map.getPane('vacPane').style.zIndex = '360';
+    map.getPane('vacPane').style.pointerEvents = 'none';
     const baseTiles = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
       maxZoom: 18,
       noWrap: true,
@@ -1665,9 +1723,26 @@
       const btn = document.getElementById('chart-btn');
       if (btn) btn.textContent = '🗺 Chart: ' + (baseChart() === 'vfr' ? 'VFR ICAO' : 'Topo');
       if (!el) return;
-      el.textContent = baseChart() === 'vfr'
+      let text = baseChart() === 'vfr'
         ? 'ICAO VFR 1:500 000 (Avinor' + (vfrEdition ? ' · ' + vfrEdition : '') + ') — Lambert conformal conic 59°40′/69°20′, served reprojected to Web Mercator (EPSG:3857)'
         : 'Kartverket topo — Web Mercator (EPSG:3857) tile cache';
+      // A DRAWN VAC NAMES ITSELF, and a chart the build would not pass says so
+      // rather than being silently absent - a missing overlay with no reason
+      // given reads as a bug, which is the one thing worse than the gap.
+      const drawnVac = [...vacLayers.keys()]
+        .map((icao) => (window.C182_VAC && window.C182_VAC.charts || []).find((c) => c.icao === icao))
+        .filter(Boolean);
+      const vacText = vacLabel(drawnVac, window.C182_VAC || null,
+        (window.C182_AIP && window.C182_AIP.editionLabel) || null);
+      if (vacText) text += '  ▦ ' + vacText;
+      if (vacEnabled() && window.C182_VAC && window.C182_VAC.charts) {
+        const withheld = window.C182_VAC.charts.filter((c) => !vacDrawable(c));
+        if (withheld.length) {
+          text += '  ▦ not shown: ' + withheld
+            .map((c) => c.icao + ' (' + vacRefusal(c) + ')').join(', ');
+        }
+      }
+      el.textContent = text;
     }
 
     function applyBaseChart() {
@@ -4506,6 +4581,78 @@
       if (b) b.textContent = '⌖ Fixes: ' + (fixesEnabled() ? 'On' : 'Off');
     }
 
+    /* ---- 2h. The VAC chart overlay (v16.86) ------------------------------
+       The rules are in src/lib/vac.js and are tested without a browser; what
+       lives here is the Leaflet wiring and the fetching. */
+    const VAC = (typeof window !== 'undefined' && window.C182_VAC) ? window.C182_VAC : null;
+    /** @type {Map<string, any>} icao -> L.imageOverlay currently on the map */
+    const vacLayers = new Map();
+
+    function vacEnabled() { return normaliseVacOn(aircraftProfile.vacOn); }
+    function vacOpacity() { return normaliseVacOpacity(aircraftProfile.vacOpacity); }
+
+    function updateVacBtn() {
+      const btn = document.getElementById('vac-btn');
+      if (!btn) return;
+      if (!VAC || !VAC.charts || !VAC.charts.length) { btn.style.display = 'none'; return; }
+      btn.textContent = '▦ VAC: ' + (vacEnabled() ? 'On' : 'Off');
+    }
+
+    /** Charts on screen, drawn farthest-from-centre first so the aerodrome the
+     *  pilot is looking at ends up on top. Nothing is blended. */
+    function drawVac() {
+      if (!VAC || !VAC.charts) return;
+      const want = new Map();
+      if (vacEnabled() && typeof map.getBounds === 'function') {
+        const b = map.getBounds();
+        const view = { west: b.getWest(), east: b.getEast(), south: b.getSouth(), north: b.getNorth() };
+        const zoom = typeof map.getZoom === 'function' ? map.getZoom() : 0;
+        const centre = typeof map.getCenter === 'function' ? map.getCenter() : { lat: 0, lng: 0 };
+        for (const c of vacDrawOrder(visibleVacCharts(VAC.charts, view, zoom), centre)) want.set(c.icao, c);
+      }
+      // Drop what has left the viewport, so the browser can release the bitmap.
+      for (const [icao, layer] of [...vacLayers]) {
+        if (!want.has(icao)) { map.removeLayer(layer); vacLayers.delete(icao); }
+      }
+      for (const c of want.values()) {
+        let layer = vacLayers.get(c.icao);
+        if (!layer) {
+          layer = L.imageOverlay((VAC.assetDir ? 'vac/' : '') + c.file,
+            [[c.bounds.south, c.bounds.west], [c.bounds.north, c.bounds.east]],
+            { pane: 'vacPane', opacity: vacOpacity(), interactive: false, className: 'vac-image' });
+          vacLayers.set(c.icao, layer);
+          layer.addTo(map);
+        } else {
+          layer.setOpacity(vacOpacity());
+          layer.bringToFront();
+        }
+      }
+      updateChartLabel();
+    }
+
+    function toggleVac() {
+      if (!VAC || !VAC.charts || !VAC.charts.length) return;
+      aircraftProfile.vacOn = !vacEnabled();
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      updateVacBtn();
+      drawVac();
+      if (vacEnabled()) {
+        const z = typeof map.getZoom === 'function' ? map.getZoom() : 0;
+        const refused = VAC.charts.filter((c) => !vacDrawable(c));
+        say(z < VAC_MIN_ZOOM
+          ? 'VAC is on, but nothing is drawn below zoom ' + VAC_MIN_ZOOM +
+            ' - the whole sheet is a smear at that scale. Zoom in to an aerodrome.'
+          : 'VAC on. The chart is drawn UNDER the route, the airspace and the fixes, so ' +
+            'clicking still works everywhere. Opacity is on Settings → Map. Display only - ' +
+            'verify against the current AIP and NOTAM.' +
+            (refused.length ? ' ' + refused.length + ' chart(s) are withheld - see the label bar.' : ''),
+          'info', 7000);
+      }
+    }
+
+    map.on('moveend', drawVac);
+    map.on('zoomend', drawVac);
+
     function toggleFixes() {
       if (!AIP_ANCHORS.length) return;
       aircraftProfile.fixesOn = !fixesEnabled();
@@ -5388,6 +5535,9 @@
       document.getElementById('map-fix-labels').value   = st.labels ? 'yes' : 'no';
       document.getElementById('map-fix-size').value     = String(st.size);
       document.getElementById('map-route-weight').value = String(normaliseRouteWeight(aircraftProfile));
+      document.getElementById('map-vac-opacity').value =
+        String(Math.round(normaliseVacOpacity(aircraftProfile.vacOpacity) * 100));
+      updateVacOpacity();
       document.getElementById('set-auto-plan').value =
         normaliseBool(aircraftProfile.autoPlanAfterStop, true) ? 'yes' : 'no';
       updateRouteWeightPreview();
@@ -5488,6 +5638,20 @@
       host.innerHTML = ROUTE_COLORS.slice(0, 3).map((c) =>
         '<span class="rpv"><span class="rpv-line" style="height:' + w +
         'px; background:' + c + ';"></span></span>').join('');
+    }
+
+    /** The VAC opacity applies live, so the slider IS the preview - the same
+     *  rule as the fix style and the track weight: what the control shows is
+     *  what the map draws, because it is the same value going to the same
+     *  layer rather than a second rendering that can drift. */
+    function updateVacOpacity() {
+      const el = document.getElementById('map-vac-opacity');
+      if (!el) return;
+      const o = normaliseVacOpacity(Number(el.value) / 100);
+      const val = document.getElementById('map-vac-opacity-val');
+      if (val) val.textContent = Math.round(o * 100) + '%';
+      aircraftProfile.vacOpacity = o;
+      for (const layer of vacLayers.values()) layer.setOpacity(o);
     }
 
     async function resetFixStyle() {
@@ -7711,6 +7875,8 @@
     applyZoomDeclutter();   // needs aircraftProfile, so it runs here, not at map setup
     updateAirspaceBtn();    // same: reads the persisted profile
     drawAirspace();
+    updateVacBtn();
+    drawVac();
     updateFixesBtn();
     drawFixes();
     applySkin(aircraftProfile.skin);   // before the first paint, so nothing flashes

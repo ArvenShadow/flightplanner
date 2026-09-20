@@ -37,7 +37,7 @@
  *   node tools/build.mjs [--watch]
  */
 import { build as esbuild } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -68,6 +68,9 @@ const MARKER = /^[ \t]*<!-- @BUNDLE:.*?-->[ \t]*\r?\n/m;
 // no extra shell asset to make the overlay work offline.
 const AIP_MARKER = /^([ \t]*)<!-- @AIPDATA:.*?-->[ \t]*\r?\n/m;
 const AIP_DATA = 'data/aip.js';
+const VAC_MARKER = /^([ \t]*)<!-- @VACDATA:.*?-->[ \t]*\r?\n/m;
+const VAC_INDEX = 'data/vac-index.js';
+const VAC_ASSETS = 'data/vac';
 
 const fail = (msg) => { console.error('BUILD FAILED: ' + msg); process.exit(1); };
 // Service-worker registration for the hosted build. Feature-detected on
@@ -167,6 +170,25 @@ export async function runBuild({ quiet = false } = {}) {
     if (AIP_MARKER.test(srcHtml)) fail('the @AIPDATA marker was not replaced');
   }
 
+  // THE VAC INDEX IS A SIDECAR FOR THE SAME REASONS, and the chart RASTERS are
+  // separate files again: they are megabytes each and are fetched only for the
+  // aerodrome actually on screen. Absent is not fatal - the planner hides the
+  // VAC control - but it is loud, because shipping without it loses a feature
+  // silently.
+  if (!VAC_MARKER.test(srcHtml)) fail('src/index.html has no @VACDATA marker');
+  let vacIndex = '';
+  {
+    const indent = srcHtml.match(VAC_MARKER)[1];
+    try { vacIndex = readFileSync(VAC_INDEX, 'utf8'); }
+    catch {
+      console.warn(`WARNING: ${VAC_INDEX} is missing - the VAC overlay will be unavailable. Run: npm run build:vac-raster`);
+      vacIndex = 'window.C182_VAC = null;\n';
+    }
+    if (!/window\.C182_VAC\s*=/.test(vacIndex)) fail(`${VAC_INDEX} does not assign window.C182_VAC`);
+    srcHtml = srcHtml.replace(VAC_MARKER, indent + '<script src="vac-index.js"></script>\n');
+    if (VAC_MARKER.test(srcHtml)) fail('the @VACDATA marker was not replaced');
+  }
+
 /**
  * A CSS TYPO IS SILENT, WHICH IS WHY THE BUILD HAS TO SEE IT.
  *
@@ -257,6 +279,22 @@ function lintCss(css) {
   writeFileSync(join(SITE_DIR, 'index.html'), lf(siteHtml));
   writeFileSync(join(SITE_DIR, 'app.js'), lf(code));
   writeFileSync(join(SITE_DIR, 'aip.js'), lf(aip));
+  writeFileSync(join(SITE_DIR, 'vac-index.js'), lf(vacIndex));
+  // The chart rasters are copied rather than rewritten: they are megabytes each
+  // and do not change between app releases, so an unchanged file is left alone.
+  let vacCopied = 0, vacBytes = 0;
+  try {
+    mkdirSync(join(SITE_DIR, 'vac'), { recursive: true });
+    for (const name of readdirSync(VAC_ASSETS)) {
+      if (!name.endsWith('.webp')) continue;
+      const from = join(VAC_ASSETS, name), to = join(SITE_DIR, 'vac', name);
+      const src = statSync(from);
+      let same = false;
+      try { same = statSync(to).size === src.size; } catch { same = false; }
+      if (!same) { copyFileSync(from, to); vacCopied++; }
+      vacBytes += src.size;
+    }
+  } catch { /* no rasters prepared yet */ }
   writeFileSync(join(SITE_DIR, 'sw.js'), lf(sw));
   // Pages would otherwise run the upload through Jekyll, which skips files
   // and folders beginning with an underscore.
@@ -265,7 +303,8 @@ function lintCss(css) {
   if (!quiet) {
     console.log(`built site/  v${version}  index.html ${(siteHtml.length / 1024).toFixed(0)} KB ` +
       `+ app.js ${(code.length / 1024).toFixed(1)} KB + aip.js ${(aip.length / 1024).toFixed(0)} KB ` +
-      `+ sw.js - checks passed`);
+      `+ sw.js` + (vacBytes ? ` + ${(vacBytes / 1048576).toFixed(0)} MB of VAC charts` +
+        (vacCopied ? ` (${vacCopied} copied)` : ' (unchanged)') : '') + ` - checks passed`);
   }
   return join(SITE_DIR, 'index.html');
 }

@@ -1,0 +1,307 @@
+{
+ "schema": 1,
+ "editionLabel": "2026-09-03-AIRAC",
+ "preparedFrom": "2026-09-03-AIRAC",
+ "preparationRevision": 1,
+ "verifiedAtUtc": "2026-09-20T12:47:32.489Z",
+ "method": "each manifest entry's AD 2.24 chart reference and graphic id, against the live edition",
+ "charts": 49,
+ "unchanged": 49,
+ "superseded": 0,
+ "results": [
+  {
+   "icao": "ENAL",
+   "chart": "AD 2 ENAL 6 - 1",
+   "graphicId": "623091",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENAN",
+   "chart": "AD 2 ENAN 6 - 1",
+   "graphicId": "623093",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENAT",
+   "chart": "AD 2 ENAT 6 - 1",
+   "graphicId": "623095",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENBL",
+   "chart": "AD 2 ENBL 6 - 1",
+   "graphicId": "623097",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENBN",
+   "chart": "AD 2 ENBN 6 - 1",
+   "graphicId": "643887",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENBO",
+   "chart": "AD 2 ENBO 6 - 1",
+   "graphicId": "623101",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENBR",
+   "chart": "AD 2 ENBR 6 - 2",
+   "graphicId": "623103",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENBR",
+   "chart": "AD 2 ENBR 6 - 3",
+   "graphicId": "623105",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENBS",
+   "chart": "AD 2 ENBS 6 - 1",
+   "graphicId": "623109",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENBV",
+   "chart": "AD 2 ENBV 6 - 1",
+   "graphicId": "623111",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENCN",
+   "chart": "AD 2 ENCN 6 - 1",
+   "graphicId": "623260",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENDU",
+   "chart": "AD 2 ENDU 6 - 1",
+   "graphicId": "623256",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENEV",
+   "chart": "AD 2 ENEV 6 - 1",
+   "graphicId": "623113",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENFL",
+   "chart": "AD 2 ENFL 6 - 1",
+   "graphicId": "623117",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENGK",
+   "chart": "AD 2 ENGK 6 - 1",
+   "graphicId": "623258",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENGM",
+   "chart": "AD 2 ENGM 6 - 1",
+   "graphicId": "623422",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENHD",
+   "chart": "AD 2 ENHD 6 - 1",
+   "graphicId": "623089",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENHF",
+   "chart": "AD 2 ENHF 6 - 1",
+   "graphicId": "638669",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENHK",
+   "chart": "AD 2 ENHK 6 - 1",
+   "graphicId": "623121",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENHV",
+   "chart": "AD 2 ENHV 6 - 1",
+   "graphicId": "623123",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENKB",
+   "chart": "AD 2 ENKB 6 - 1",
+   "graphicId": "623125",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENKR",
+   "chart": "AD 2 ENKR 6 - 1",
+   "graphicId": "623127",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENLK",
+   "chart": "AD 2 ENLK 6 - 1",
+   "graphicId": "623129",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENMH",
+   "chart": "AD 2 ENMH 6 - 1",
+   "graphicId": "623131",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENML",
+   "chart": "AD 2 ENML 6 - 1",
+   "graphicId": "623133",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENMS",
+   "chart": "AD 2 ENMS 6 - 1",
+   "graphicId": "643752",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENNA",
+   "chart": "AD 2 ENNA 6 - 1",
+   "graphicId": "623137",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENNM",
+   "chart": "AD 2 ENNM 6 - 1",
+   "graphicId": "623139",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENNO",
+   "chart": "AD 2 ENNO 6 - 1",
+   "graphicId": "623141",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENOL",
+   "chart": "AD 2 ENOL 6 - 1",
+   "graphicId": "623143",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENOV",
+   "chart": "AD 2 ENOV 6 - 1",
+   "graphicId": "638672",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENRA",
+   "chart": "AD 2 ENRA 6 - 1",
+   "graphicId": "638724",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENRE",
+   "chart": "AD 2 ENRE 6 - 1",
+   "graphicId": "623149",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENRM",
+   "chart": "AD 2 ENRM 6 - 1",
+   "graphicId": "623153",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENRO",
+   "chart": "AD 2 ENRO 6 - 1",
+   "graphicId": "623155",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENRS",
+   "chart": "AD 2 ENRS 6 - 1",
+   "graphicId": "623157",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENSD",
+   "chart": "AD 2 ENSD 6 - 1",
+   "graphicId": "623159",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENSG",
+   "chart": "AD 2 ENSG 6 - 1",
+   "graphicId": "623161",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENSH",
+   "chart": "AD 2 ENSH 6 - 1",
+   "graphicId": "623163",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENSK",
+   "chart": "AD 2 ENSK 6 - 1",
+   "graphicId": "623165",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENSO",
+   "chart": "AD 2 ENSO 6 - 1",
+   "graphicId": "623167",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENSR",
+   "chart": "AD 2 ENSR 6 - 1",
+   "graphicId": "643749",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENSS",
+   "chart": "AD 2 ENSS 6 - 1",
+   "graphicId": "623169",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENST",
+   "chart": "AD 2 ENST 6 - 1",
+   "graphicId": "623171",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENTC",
+   "chart": "AD 2 ENTC 6 - 1",
+   "graphicId": "623173",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENTO",
+   "chart": "AD 2 ENTO 6 - 1",
+   "graphicId": "640881",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENVA",
+   "chart": "AD 2 ENVA 6 - 1",
+   "graphicId": "623181",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENVD",
+   "chart": "AD 2 ENVD 6 - 1",
+   "graphicId": "623185",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENZV",
+   "chart": "AD 2 ENZV 6 - 1",
+   "graphicId": "623189",
+   "verdict": "unchanged"
+  }
+ ]
+}

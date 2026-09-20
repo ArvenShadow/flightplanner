@@ -322,14 +322,19 @@ three cheap disciplines applied every time the page is touched:
   quoted in this file are reproducible on demand instead of aspirational. The
   everyday run uses the smaller sizes; the asserts are absolute lower bounds, so
   a larger multiplier can only make them easier.
-- SIX CHROMIUM VERIFIERS, and each exists for something jsdom cannot see:
+- CHROMIUM VERIFIERS, and each exists for something jsdom cannot see:
   `verify:hosted` (the service worker and the real tile cache), `verify:ofp`
   (whether a value FITS its printed cell), `verify:fixes` (that a marker is
   visible and a click does not bubble), `verify:leg` (that a right-click reaches
   a 20 px invisible hit-line), `verify:hover` (that the card re-resolves across a
-  sector seam) and `verify:layout` (v16.49 - what a 1280x720 laptop can actually
-  SEE without scrolling). They need `npm install --no-save playwright`, or
-  `CHROME_PATH` pointing at a browser already on the machine.
+  sector seam), `verify:layout` (v16.49 - what a 1280x720 laptop can actually
+  SEE without scrolling), `verify:skins`, `verify:visual`, `verify:locked` and
+  `verify:vac` (v16.86 - that the chart raster lands where Leaflet projects it,
+  and that every gesture still reaches THROUGH it). They need
+  `npm install --no-save playwright`, or `CHROME_PATH` pointing at a browser
+  already on the machine. THE COUNT IS DELIBERATELY NOT STATED HERE any more:
+  it was "SIX" for four versions while there were nine, which is the L3 drift
+  this file keeps having to correct.
 - Tests load `site/index.html` via the APP_HTML constant and assemble it with
   `app.js` and `aip.js` into `APP_SRC`, so source-level guard greps keep working
   wherever code currently lives. Grepping the shell alone is not enough - four
@@ -875,7 +880,9 @@ three cheap disciplines applied every time the page is touched:
     printed coordinate table per aerodrome (which is what 1ntray did, for 23
     of them, and 23 more VACs publish their points graphically only) or get
     Avinor's AIXM 5.1 export, which likely carries DesignatedPoints properly.
-    Do NOT read coordinates off a chart image.
+    Do NOT read coordinates off a chart image. STILL TRUE AT v16.86, and it is
+    the reason the VAC overlay may DISPLAY a raster and may never read one: the
+    symbols that build locates FIT the sheet and never publish a position.
 - **National-border resolution (v16.30)**: 22 airspaces whose published
   boundary follows the national border are now DRAWN, from Kartverket's
   official line rather than a straight-line guess. Dataset: 140 -> 228
@@ -1071,9 +1078,13 @@ three cheap disciplines applied every time the page is touched:
     exact ICAO/name, then prefix, then substring, aerodromes ahead of points at
     equal strength, and within a rank NEAREST THE MAP CENTRE first — BREIVIKA
     exists at both Tromsø and Evenes.
-  - THE CHART RASTER IS STILL NOT GEOREFERENCED. The PDFs carry no GeoPDF
-    markers (/Measure, /GPTS, /Viewport all absent), so a VAC overlay remains
-    out of reach. This is the coordinate TABLE only.
+  - THE CHART RASTER CARRIES NO GEOREFERENCE - still true, the PDFs have no
+    GeoPDF markers (/Measure, /GPTS, /Viewport all absent). **THE CONCLUSION
+    DRAWN FROM IT ("so a VAC overlay remains out of reach") WAS SUPERSEDED AT
+    v16.86**: a sheet with no georeference can still be georeferenced from its
+    OWN INK, which is what the conformal fit does. See "THE VAC IS DRAWN ON THE
+    MAP" below. This entry remains the coordinate TABLE only, and that split is
+    the point - the table is DATA, the raster is DISPLAY.
   - `pdfjs-dist` is a devDependency — needed to PREPARE the data, never to run
     the planner. `tools/prepared/vac-points.json` is COMMITTED, same
     arrangement as the border, so `npm run build:aip` reads a snapshot and a
@@ -1350,7 +1361,9 @@ three cheap disciplines applied every time the page is touched:
   - 227 features (was 228): Ørje 2 publishes ONE volume, and the old rule had
     given it two wrong bands. A correctness improvement, not a loss.
 - **Not planned** (verified dead ends): NOTAM (no reliable free API),
-  georeferenced VFR charts (licensing), traffic (needs receivers).
+  georeferenced 1:500 000 ICAO charts (licensing - and note this is a DIFFERENT
+  product from the VAC under different terms; the VAC overlay shipped at v16.86
+  under the permission this project already holds), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
   NO CORS header, so it is genuinely unusable from a browser - MET Norway
   is used instead, and is the authoritative source for Norway anyway.
@@ -2047,6 +2060,240 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 - CLAUDE.md said "ENTC's published 32 ft gives 1000 ft" - the published figure is **32 ft**
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
+
+## THE VAC IS DRAWN ON THE MAP, AND A SHEET THAT CANNOT BE PLACED IS NOT DRAWN (v16.86)
+
+`▦ VAC` puts each aerodrome's own Visual Approach Chart on the map in place, at
+its published position, from zoom 10 up. 49 charts, one lossless WebP each in
+`data/vac/`, listed in `data/vac-index.js`. Nothing is fetched from Avinor at
+runtime.
+
+**THIS SUPERSEDES THREE RECORDED DECISIONS, and each for a different reason:**
+
+- *"THE CHART RASTER IS STILL NOT GEOREFERENCED"* (v16.34) said a VAC overlay
+  was out of reach because the PDFs carry no GeoPDF markers. The premise is
+  still TRUE - `/Measure`, `/GPTS` and `/Viewport` are absent across the
+  edition - and the conclusion was wrong. A sheet with no georeference can
+  still be georeferenced FROM ITS OWN INK, which is what this does.
+- *"georeferenced VFR charts (licensing)"* under Not planned applies to the
+  1:500 000 ICAO tiles, which are a different product under different terms.
+  The VAC is AIP Norge, which is the permission this project already holds.
+- *"Do NOT read coordinates off a chart image"* (v16.34) is UNCHANGED AS A DATA
+  RULE and must stay that way. The raster is DISPLAYED, never read. The 243
+  reporting points still come from the printed coordinate TABLE; the symbols
+  this build locates are used to FIT the sheet and never to publish a position.
+  `src/lib/vac.js` touches no pixel and a test asserts it.
+
+### THE MODEL IS CONFORMAL, AND THAT IS WHY THE EDGES DETERMINE THE MIDDLE
+
+A four-corner image overlay is not close. MEASURED over ENDU: Web Mercator plus
+corner bounds leaves **409 m rms / 790 m worst**, and the best named projection
+with an affine fit still leaves **43 m** - at 69 N that is a quarter of a
+nautical mile of chart ink in the wrong place.
+
+Any conformal projection of the ellipsoid is a HOLOMORPHIC function of
+`longitude + i·(isometric latitude)`, so the inverse page→coordinate map is
+fitted as a complex polynomial: real part longitude, imaginary part isometric
+latitude, **both linear in the coefficients, so it is one least-squares solve**.
+Order 2 reaches **0.069 pt**, and order 3 gains 3% while order 4 gains nothing -
+because 0.069 pt IS the sheet's own drafting precision (tick positions are
+snapped to a 0.24 pt grid whose standard deviation is 0.069 pt). The model has
+hit the chart's own quantisation and no further order can help.
+
+**THE POINT OF CONFORMALITY IS THAT THE GRATICULE ONLY EVER OBSERVES THE
+BOUNDARY.** A polynomial in `x + iy` cannot produce a shape that is not a
+projection, so fitting the edges constrains the interior. A general 2-D
+polynomial would not.
+
+**AND I HAD THE REASON FOR THE FOURTH EDGE WRONG, then measured it.** I wrote
+that all four edges were needed for RANK. They are not: two edges really are
+degenerate and the solver refuses them, but **three edges fit fine and reproduce
+the fourth to 25.9 m** - the Cauchy-Riemann relations tie the imaginary part to
+the real one, so longitude on two lines plus latitude on one nearly determines
+the model. The fourth edge is needed to CHECK, not to solve: it is what lets the
+two edges of each axis be compared, which is the test that catches labels read
+one major out. A chart missing a usable edge is REFUSED, never fitted on three.
+
+### THE ANCHOR IS THE BOUNDING-BOX CENTRE, AND THE PROOF IS THAT THE ERROR SCALES
+
+Published points are the PRIMARY control where the sheet prints a table (the
+addendum's order, and the right one: the table is the AIP's own statement at
+full precision). Each tabled point is also drawn as a filled triangle - so which
+point OF THE TRIANGLE is the published coordinate decides everything, and
+getting it wrong is SILENT: every point moves the same way, so the chart stays
+internally consistent and still lines up with itself.
+
+- It is the **bounding-box centre**, not the centroid. For a triangle the
+  centroid sits h/6 below it, which on these sheets is ~1.3 pt = **~170 m**.
+- MEASURED over 199 matched points at three symbol sizes: the offset from the
+  CENTROID grows with the symbol (1.329 / 1.367 / 1.409 pt at perimeter 25.9 /
+  28.1 / 30.6, tracking the geometric h/6 prediction of 1.246 / 1.350 / 1.473),
+  while the offset from the BOUNDING-BOX CENTRE stays at zero (0.086 / 0.021 /
+  -0.060 pt).
+- **THAT SCALING IS THE WHOLE PROOF.** An error in the fitted MODEL would be a
+  constant distance, independent of how big the symbol happens to be drawn. An
+  error in the ANCHOR is proportional to the symbol. It is proportional.
+
+**A HOLDOUT CANNOT SEE THIS, WHICH IS WHY THERE IS A SECOND GATE.** Fit points
+and held-out points share the anchor convention, so a wrong anchor biases both
+equally and the holdout comes back clean while the sheet is 170 m out. The
+graticule is drawn from completely different ink, so requiring the two
+independently fitted models to AGREE is the one check that sees a shared
+assumption. Measured with the correct anchor: p50 24 m, worst 45 m, against an
+80 m limit; with the centroid it is ~180 m.
+
+### FAIL-CLOSED, AND THE GATE IS IN THE RUNTIME AS WELL AS THE BUILD
+
+Every chart must pass its own holdout - **25 m** on published points, **50 m**
+on the graticule - and the cross-check above. The measured residual and the
+limit it was held to TRAVEL WITH EACH CHART in the index, and `vacRefusal`
+re-checks them in the browser before anything is painted, so a hand-edited or
+half-written index cannot put ink on the map either. Measured over the 49
+charts: worst holdout 22.4 m, p50 1.1 m on published points and 11.9 m on the
+graticule; 17 charts fit from published points and 32 from the graticule.
+
+### THE SEAM CHECK IS A CORROBORATION AND IT SAYS SO - THE POPULATION IS THREE
+
+Where two sheets cover the same ground they must agree about where it is, and
+the only feature locatable on BOTH sheets is a published reporting-point symbol:
+each chart is asked where ITS OWN ink for that point sits, using its own model,
+and the two answers are differenced. Comparing the published COORDINATE would
+measure nothing - it is the same number on both sheets.
+
+**MEASURING IT FIRST IS WHAT SHOWED HOW LITTLE THERE IS TO MEASURE.** Of 18
+pairs whose WGS-84 BOUNDING BOXES overlap, most do not overlap in COVERAGE at
+all: a warped sheet's bbox is the envelope of a ROTATED QUAD, so two sheets that
+merely abut share a bbox corner and no ground. **ENDU/ENTC - the pair that looks
+most obviously adjacent, and the one the brief named - measures 0.0%.** Real
+overlaps exist (ENBR's two sheets 94.7%, ENAL/ENOV 19.4%, ENHD/ENZV 16.6%), but
+where they do the neighbour usually draws no symbol at the point. 13 points fall
+inside both frames and **3 carry a symbol on both: 0.6, 11.4 and 19.5 m.**
+
+So the limit is **derived, not picked**: each sheet is already held to 25 or
+50 m, so two that both pass may legitimately differ by the sum. 60 m is 3x above
+every observation and below that worst case. **It is not what holds the feature
+up** - the per-chart holdout and the cross-check are - and the entry says so
+rather than letting three data points look like a gate.
+
+### THE ASSET IS DECOUPLED FROM THE EDITION; THE CHECK IS NOT
+
+A VAC is amended per AIP AMDT, not per 28-day cycle, so re-preparing 49 rasters
+every cycle would be churn - most are byte-identical. But an amended chart must
+stop being drawn AT ONCE, because a superseded approach chart is exactly the
+quietly-wrong answer this project refuses. So `npm run build:aip` re-verifies
+every prepared chart against the live edition's own AD 2.24 table on every run,
+writes `data/vac-source-verification-<edition>.json`, and stamps `superseded` on
+the shipped index - after which `vacRefusal` will not draw it.
+
+**THE AD 2.24 GRAPHIC ID IS THE TEST AND IT COSTS NOTHING**: those pages are
+fetched for the airspace anyway, and Avinor gives an amended chart a new id.
+The SHA-256 in the manifest stays the stronger statement about the FILE; this is
+the statement about the REFERENCE. `vacGraphics` MOVED into `tools/aip-vac.mjs`
+so both builds ask the same parser which PDF a chart is - two parses would be
+two things that can disagree.
+
+### 600 DPI AND LOSSLESS, BOTH BY MEASUREMENT
+
+The addendum proposed 1200 dpi as a starting point and said to measure. Measured:
+600 dpi is **1:1 at zoom 12**, caps the smallest print at 18.2 px, decodes in
+880 ms and costs 3.7 MB; 1200 dpi costs **2246 ms** of decode and **323 MB** of
+RGBA for detail no zoom reads. That is the v16.23 lesson - decode, not network,
+is what makes a chart feel slow.
+
+Lossy WebP at q92 shifts chart ink by **128 levels** at 600 dpi. png8 and jpg
+are already BANNED here for shifting it 71 and 37, and the small print is the
+entire point of the feature, so lossless it is.
+
+**THE GDAL TRANSFORM WAS ALSO MEASURED, AND IT OVERTURNED THE ADDENDUM'S `-tps`:**
+order 1 reproduces the fitted model to 158 m, order 2 to 1.16 m, **order 3 to
+0.003 m**, and TPS to 7.08 m. `-order 3`. And the warp is not trusted to
+reproduce the model - 49 OFF-GRID probes are pushed through GDAL's own transform
+and compared, and a chart is refused above 1 m.
+
+### Z-ORDER, AND WHICH HALF OF THE CLICK-THROUGH IS LOAD-BEARING
+
+`vacPane` at z-index **360**: below the corridor (370), the airspace (380), the
+route line and its 20 px grab line in `overlayPane` (400) and the fix markers
+(600). It is chart paper - above the base tiles, below everything the pilot
+touches.
+
+**MEASURED BY MUTATION, and the obvious answer was wrong.** Two things keep the
+raster out of the pointer's way, and they are not equal: with the pane set to
+`pointer-events: auto` EVERY click-through check still passes, because Leaflet
+leaves a non-interactive image layer inert on its own. So `interactive: false`
+is the mechanism and **the pane rule is the backstop** for whatever a later
+change adds to that pane. `verify:vac` flips the pane and re-measures, so the
+comment cannot drift from the code. Setting `interactive: true` puts the image
+straight under the cursor and fails by name.
+
+### THE LOCKED DELIVERY NEEDED THE MANIFEST ENCRYPTED AND THE RASTERS NOT
+
+`vac-index.js` is a separate `<script src>`, so until it became a `PART` the
+decrypted page kept a link to a file `site-locked/` does not have: it 404s,
+`window.C182_VAC` is undefined, `updateVacBtn` HIDES the control, and the whole
+overlay is **missing from the deployed copy with nothing on screen saying so**.
+It is app data exactly as `aip.js` is, and it is encrypted as `vac.enc`.
+
+**THE RASTERS ARE COPIED IN PLAINTEXT, AND THAT IS ARGUED RATHER THAN ASSUMED.**
+Encrypting them would be v16.78's own theatre argument pointed at a new asset:
+**the repository is PUBLIC**, so every one of those WebPs is already served from
+it, and ciphertext on the Pages copy would gate a file anybody can fetch from
+the repo one click away. It would also cost the one code path - an `<img>` cannot
+take ciphertext, so the overlay would need a decrypt-to-blob route existing ONLY
+in the locked build. What the CI guard checks instead is that they really are
+PICTURES: every file greps as a WebP, and a `.webp` that read as JavaScript would
+mean something other than a chart was written there.
+
+**WORTH THE AUTHOR'S ATTENTION, NOT MINE TO DECIDE**: committing 110 MB of
+Avinor charts to a PUBLIC repository is a redistribution, and the permission
+held is for non-commercial USE. That is a licence question about the repo's
+visibility rather than about this feature, and it is flagged rather than
+silently settled.
+
+`verify:locked` asks the deployed build directly - manifest decrypted, charts
+passing the gate, and one raster actually fetching 200. Removing the part fails
+it three ways by name.
+
+### jsdom CANNOT ANSWER ANY OF THE QUESTIONS THIS FEATURE RAISES
+
+`tools/verify-vac.mjs` (38 checks, real Chromium, offline) measures the pane
+z-indexes as COMPUTED, clicks a reporting point THROUGH the drawn sheet and
+requires exactly one waypoint on the published coordinate with no dialog, drags
+the route line under it and requires a via with the waypoint count unchanged,
+hovers the airspace through it, and projects 20 published fixes against the
+overlay's own rendered box (within 0.81 px, ~11 m).
+
+**TWO OF ITS OWN CHECKS WERE THE BUG, AND BOTH ARE THIS FILE'S NAMED FAILURES:**
+
+- The airspace hover reported that the chart had swallowed the card. It had
+  not: I took the polygon's BOUNDING-BOX CENTRE as a point to hover, and at
+  zoom 12 the enclosing TMA's bbox centre is **24 000 px off screen**, so
+  `elementFromPoint` returned null and nothing was hovered. It scans the
+  visible map and PROVES an airspace path is under the point before using it.
+- The drag check ran at **ZOOM 9, where the overlay is deliberately not drawn**
+  - `fitBounds` on two reporting points landed wherever they happened to be
+  apart - so it "passed" having proved click-through under nothing at all.
+  Worse, it was written as `zoom >= 10 ? drawn > 0 : true`, a check that
+  excuses itself. Straight M5. The view is SET now, the chart being drawn is
+  REQUIRED, and the grab point is derived by walking the chord until the
+  browser says the route hit-line is on top (the v16.83 rule: a hardcoded
+  coordinate is an unchecked assertion about the layout, and when it is wrong
+  the failure ACCUSES THE FEATURE).
+
+### AND THE NAVIGATION INDEX HAD QUIETLY STOPPED POINTING AT HALF THE MODULES
+
+Adding `vac.js` to `WHERE TO EDIT WHAT` found that the test guarding it carried
+a HARDCODED LIST OF ELEVEN while `src/lib/` holds twenty - so anchors, airspace,
+corridor, metar, ofpform, rhumb, keys, skins and vac had never been in the
+index, the test passed throughout, and this file went on claiming it "asserts
+the index still points at every module that exists". It reads the directory now,
+so that sentence is true.
+
+**AND THE FIRST VERSION OF THE FIX PASSED FOR THE WRONG REASON.** It searched
+the whole PAGE, and nine of those modules are named in comments beside the code
+that uses them - so deleting `vac.js` from the index changed nothing and the
+mutation reported "not caught". It slices the index block and looks only inside
+it; the same deletion now fails by name.
 
 ## THE ACC COLUMNS COUNT THE MISSION; THE TOTAL LINE COUNTS THE SECTOR (v16.85)
 

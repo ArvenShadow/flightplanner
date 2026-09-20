@@ -876,6 +876,141 @@ export function controlSpanFraction(controls, frame) {
  */
 export const MIN_CONTROL_SPAN_FRACTION = 0.4;
 
+/**
+ * How far a chart's fit may be out before it is refused, in metres.
+ *
+ * TWO POPULATIONS, TWO THRESHOLDS, because the two control sources have
+ * different physics and one blanket number would be wrong for both.
+ *
+ *  - PUBLISHED POINTS are placed by the publishing system at full precision,
+ *    so a fit through them is limited only by the anchor and the model.
+ *  - THE GRATICULE is quantised: tick positions are snapped to a 0.24 pt grid,
+ *    which alone is a standard deviation of 0.069 pt. Measured over all 49
+ *    charts in the edition, the max residual is p50 7.8 m, p90 13.5 m and 19.3 m
+ *    at worst, with no outliers - and the six charts that were genuinely
+ *    mis-read sat at 858 m, 3.1 km and 4.3 km before their causes were fixed.
+ *
+ * So 50 m is roughly 2.5x the worst honest chart and 17x below the nearest
+ * failure ever seen: it cannot reject real data and still catches what it
+ * exists for. The published-point gate is tighter because that population is.
+ */
+export const MAX_GRATICULE_RESIDUAL_M = 50;
+export const MAX_PUBLISHED_RESIDUAL_M = 25;
+
+/**
+ * How far the two INDEPENDENT models may disagree, in metres.
+ *
+ * This is the check a holdout cannot make. Fit points and held-out points share
+ * the symbol-anchor convention, so a wrong anchor biases both equally and the
+ * holdout comes back clean while the chart is out by the anchor error. The
+ * graticule is drawn from completely different ink, so requiring the two to
+ * AGREE is what sees it. Measured with the correct anchor: p50 24 m, worst
+ * 45 m across the charts carrying both sources. Taking the centroid instead -
+ * the mistake this exists for - moves it to ~180 m, so 80 m sits between the
+ * two with room on each side.
+ */
+export const MAX_CROSS_CHECK_M = 80;
+
 /** The minimum number of points that may be fitted, and held out. */
 export const MIN_FIT_POINTS = 4;
 export const MIN_VALIDATION_POINTS = 2;
+
+/**
+ * How far two NEIGHBOURING sheets may place the same ground mark apart.
+ *
+ * DERIVED FROM THE GATES ALREADY IN FORCE, not picked to fit: each sheet is
+ * independently held to 25 m against its published points or 50 m against its
+ * graticule, so two sheets that both pass can legitimately differ by the sum.
+ * 60 m sits above every observation by 3x and below that worst-case sum, so it
+ * can only fire on a pair that is worse than its own per-chart limits imply.
+ *
+ * AND THE POPULATION IS THREE, WHICH IS WHY THIS IS A CORROBORATION AND NOT
+ * THE THING HOLDING THE FEATURE UP. Measured over the 2026-09-03 edition:
+ * 0.6, 11.4 and 19.5 m. The reason there are so few is structural rather than
+ * a gap in the check - see seamObservations.
+ */
+export const MAX_SEAM_M = 60;
+
+/**
+ * Where two charts that cover the same ground disagree about where it is.
+ *
+ * THE ONLY FEATURE LOCATABLE ON BOTH SHEETS IS A PUBLISHED REPORTING-POINT
+ * SYMBOL, so that is what is compared: each chart is asked where ITS OWN ink
+ * for that point sits, using its own independently fitted model, and the two
+ * answers are differenced. Comparing the published COORDINATE on each sheet
+ * would measure nothing - it is the same number on both.
+ *
+ * WHY THE POPULATION IS SMALL, measured rather than assumed: of 18 pairs whose
+ * WGS-84 BOUNDING BOXES overlap, most do not overlap in COVERAGE at all - a
+ * warped sheet's bbox is the envelope of a rotated quad, so two sheets that
+ * merely abut share a bbox corner and no ground. ENDU/ENTC, the pair that
+ * looks most obviously adjacent, overlaps by 0.0%. Where the footprints do
+ * overlap, the neighbouring sheet usually draws no symbol at the point,
+ * because it is off in that sheet's margin. 13 points fall inside both frames
+ * and 3 carry a symbol on both.
+ *
+ * @param {{icao: string, chart: string, model: any, frame: any, symbols: {x: number, y: number}[]}} a
+ * @param {typeof a} b
+ * @param {{name: string, lat: number, lng: number}[]} points every published point either sheet tabulates
+ * @returns {{name: string, metres: number, aMetres: number, bMetres: number}[]}
+ */
+export function seamObservations(a, b, points) {
+  const out = [];
+  const seen = new Set();
+  const inside = (/** @type {number[]|null} */ pt, /** @type {any} */ f) =>
+    !!pt && pt[0] >= f.left && pt[0] <= f.right && pt[1] >= f.bottom && pt[1] <= f.top;
+  const nearest = (/** @type {{x: number, y: number}[]} */ symbols, /** @type {number[]} */ at) => {
+    let best = null, bd = SYMBOL_MATCH_RADIUS_PT;
+    for (const s of symbols) {
+      const d = Math.hypot(s.x - at[0], s.y - at[1]);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  };
+  for (const p of points) {
+    const key = p.name + '|' + p.lat + '|' + p.lng;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const pa = project(a.model, p.lat, p.lng, a.frame), pb = project(b.model, p.lat, p.lng, b.frame);
+    if (!inside(pa, a.frame) || !inside(pb, b.frame)) continue;
+    const sa = nearest(a.symbols, /** @type {number[]} */ (pa));
+    const sb = nearest(b.symbols, /** @type {number[]} */ (pb));
+    if (!sa || !sb) continue;
+    const ea = evaluate(a.model, sa.x, sa.y), eb = evaluate(b.model, sb.x, sb.y);
+    const per = metresPerDegree(p.lat);
+    const d = (/** @type {{lat: number, lng: number}} */ u, /** @type {{lat: number, lng: number}} */ v) =>
+      Math.hypot((u.lng - v.lng) * per.perLng, (u.lat - v.lat) * per.perLat);
+    out.push({ name: p.name, metres: d(ea, eb), aMetres: d(ea, p), bMetres: d(eb, p) });
+  }
+  return out;
+}
+
+/**
+ * Whether two sheets' geographic FOOTPRINTS overlap, as opposed to their
+ * bounding boxes. Used to decide which pairs are worth comparing at all.
+ * @param {{model: any, frame: any}} a @param {typeof a} b @returns {number} 0..1 of a inside b
+ */
+export function footprintOverlap(a, b) {
+  const corners = (/** @type {typeof a} */ g) => {
+    const f = g.frame;
+    return [[f.left, f.bottom], [f.right, f.bottom], [f.right, f.top], [f.left, f.top]]
+      .map(([x, y]) => { const e = evaluate(g.model, x, y); return [e.lng, e.lat]; });
+  };
+  const poly = corners(b);
+  const inPoly = (/** @type {number[]} */ pt) => {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+  let hit = 0, total = 0;
+  const f = a.frame;
+  for (let i = 1; i < 20; i++) for (let j = 1; j < 20; j++) {
+    const e = evaluate(a.model, f.left + (f.right - f.left) * i / 20, f.bottom + (f.top - f.bottom) * j / 20);
+    total++;
+    if (inPoly([e.lng, e.lat])) hit++;
+  }
+  return total ? hit / total : 0;
+}

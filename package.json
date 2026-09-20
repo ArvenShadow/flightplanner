@@ -1,6 +1,6 @@
 {
   "name": "c182-flight-planner",
-  "version": "16.85.0",
+  "version": "16.86.0",
   "description": "VFR flight planner for Cessna 182T, built to one self-contained HTML file (ground planning only)",
   "scripts": {
     "serve": "node tools/build.mjs && node tools/serve.mjs",
@@ -11,6 +11,8 @@
     "build:aip": "node tools/build-aip.mjs",
     "build:border": "node tools/build-border.mjs",
     "build:vac": "node tools/build-vac.mjs",
+    "build:vac-raster": "node tools/build-vac-raster.mjs",
+    "verify:hosted": "node tools/verify-hosted.mjs",
     "verify:hover": "node tools/verify-airspace-hover.mjs",
     "verify:fixes": "node tools/verify-fixes.mjs",
     "verify:leg": "node tools/verify-leg-panel.mjs",
@@ -18,6 +20,7 @@
     "verify:layout": "node tools/verify-layout.mjs",
     "verify:visual": "node tools/verify-visual.mjs",
     "verify:skins": "node tools/verify-skins.mjs",
+    "verify:vac": "node tools/verify-vac.mjs",
     "sweep:drag": "node tools/sweep-drag.mjs",
     "lock": "node tools/build.mjs && node tools/lock-site.mjs",
     "verify:locked": "node tools/verify-locked.mjs"

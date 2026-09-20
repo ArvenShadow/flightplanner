@@ -211,6 +211,29 @@ let storageState = null;
     document.querySelectorAll('.table-container tr').length > 1),
     'and the decrypted page script rendered it into the OFP table');
 
+  // THE VAC OVERLAY SURVIVES THE RELAUNCH, AND THIS IS NOT DECORATION. The
+  // manifest is a separate <script src> in the plaintext page, so until it was
+  // added to PARTS the decrypted page kept a link to a file site-locked/ does
+  // not have: it 404s, window.C182_VAC is undefined, updateVacBtn HIDES the
+  // control, and the whole feature is missing from the deployed copy with
+  // nothing on screen to say so. Silent feature loss is the failure this
+  // project refuses, so the deployed build is asked directly.
+  const vac = await page.evaluate(async () => {
+    const set = window.C182_VAC;
+    if (!set) return { set: false };
+    const c = set.charts.find((x) => window.vacDrawable(x));
+    if (!c) return { set: true, charts: set.charts.length, drawable: 0 };
+    // AND THE RASTER MUST REALLY FETCH. The manifest being present says the app
+    // knows about 49 charts; only asking for one says the pictures shipped too.
+    let status = 0;
+    try { status = (await fetch((set.assetDir ? 'vac/' : '') + c.file)).status; } catch (e) { status = -1; }
+    return { set: true, charts: set.charts.length, drawable: set.charts.filter((x) => window.vacDrawable(x)).length,
+             file: c.file, status };
+  });
+  check(vac.set, 'the encrypted VAC manifest decrypted into the page: ' + JSON.stringify(vac));
+  check(vac.drawable > 0, `${vac.drawable} of ${vac.charts} charts pass the gate in the locked build`);
+  check(vac.status === 200, `and the raster itself is served: ${vac.file} -> HTTP ${vac.status}`);
+
   // AN INLINE HANDLER ACTUALLY FIRES. Driving a function would prove the
   // function; clicking is what proves the wiring survived the relaunch (the
   // v16.53 lesson). Last, because it mutates the plan the checks above read.

@@ -24,3 +24,8 @@ vis_*.png
 # and the prepared snapshots in tools/prepared/ ARE committed - the build copies
 # the dataset into site/, and a committed snapshot is what makes it reproducible.
 .aip-cache/
+
+# Intermediate renders and GeoTIFFs from tools/build-vac-raster.mjs. The warped
+# WebP under data/vac/ and the manifest ARE committed; these are the scratch
+# files the warp passes through and they are large.
+.vacwork/

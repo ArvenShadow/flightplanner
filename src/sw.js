@@ -48,7 +48,26 @@ const TILE_PREFIX = 'c182-tiles-';
 // aip.js joined the shell at v16.45, when the dataset stopped being inlined
 // into index.html. It must be precached or the airspace overlay and the fix
 // layer silently vanish offline - which would look like a bug, not a gap.
-const SHELL_ASSETS = ['./', './index.html', './app.js', './aip.js'];
+const SHELL_ASSETS = ['./', './index.html', './app.js', './aip.js', './vac-index.js'];
+
+// THE VAC RASTERS GET THEIR OWN CAPPED CACHE, and NOT the shell's, for two
+// reasons. They are megabytes each, so left in the shell cache they would grow
+// without bound and fill the origin's quota - and when that happens the browser
+// discards EVERYTHING for the origin, app shell included (the v16.26 lesson).
+// And they are not shell: an app release must not throw away a chart the pilot
+// has already downloaded.
+//
+// THERE IS NO EDITION KEY HERE, and that is not an oversight. A tile URL does
+// not say which cycle it is from, which is why the tile cache has to be keyed
+// and retired by edition. A VAC asset path CARRIES ITS OWN IDENTITY - chart
+// date, source-PDF hash prefix and preparation revision are all in the file
+// name - so a changed chart is a DIFFERENT URL and a stale hit is impossible.
+// Superseded files are simply never requested again and fall out of the cap.
+const VAC_CACHE = 'c182-vac';
+// About 3 MB a chart at the shipped 600 dpi, so roughly 36 MB held at most -
+// enough for a day's flying across several aerodromes without approaching the
+// quota that evicting the shell depends on.
+const VAC_LIMIT = 12;
 
 // Chart tiles come only from this host; nothing else is cached at runtime.
 const TILE_HOST = 'avigis.avinor.no';
@@ -131,6 +150,20 @@ async function tileFirst(request) {
   return response;
 }
 
+/** Cache-first and capped. The URL is immutable, so a hit is never stale. */
+/** @param {Request} request */
+async function vacFirst(request) {
+  const cache = await caches.open(VAC_CACHE);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const response = await fetch(request);
+  if (response && response.ok) {
+    await cache.put(request, response.clone());
+    await trim(cache, VAC_LIMIT);
+  }
+  return response;
+}
+
 /** @param {Request} request */
 async function shellFirst(request) {
   try {
@@ -166,6 +199,10 @@ sw.addEventListener('fetch', (/** @type {any} */ event) => {
   // Same-origin app shell. Live data (winds) is cross-origin and is left
   // alone: a cached forecast is a wrong forecast.
   if (url.origin === sw.location.origin) {
+    if (/\/vac\/[^/]+\.webp$/.test(url.pathname)) {
+      event.respondWith(vacFirst(request));
+      return;
+    }
     event.respondWith(shellFirst(request));
   }
 });

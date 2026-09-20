@@ -33,12 +33,15 @@ import { join } from 'node:path';
 import { extractFields, parseDms, verticalLimit, remarkDesignators, remarkNote, designatorTokens,
          borderNameFromRemark } from './aip-fields.mjs';
 import { borderPath, isForeignBorder, SNAP_TOLERANCE_NM } from './aip-border.mjs';
+import { vacGraphics } from './aip-vac.mjs';
 
 const CACHE = '.aip-cache';
 const OUT_DATA = 'data/aip.js';
 const OUT_REPORT = 'data/aip-report.json';
 const BORDER_FILE = 'tools/prepared/norway-border.json';
 const VAC_FILE = 'tools/prepared/vac-points.json';
+const VAC_CHARTS_FILE = 'tools/prepared/vac-charts.json';
+const VAC_INDEX_FILE = 'data/vac-index.js';
 const ROOT = 'https://aim-prod.avinor.no';
 const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning; permission held)';
 
@@ -86,6 +89,99 @@ function editionCandidates() {
     out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}-AIRAC`);
   }
   return out;
+}
+
+/**
+ * Re-verify every prepared VAC raster against the live edition, and mark any
+ * whose source chart has been amended so the planner stops drawing it.
+ *
+ * FAIL-CLOSED, AND THE MARK IS ALL THIS WRITES. `data/vac-index.js` belongs to
+ * tools/build-vac-raster.mjs; this only ever sets `superseded` on an entry, and
+ * a re-run of that build clears it by regenerating the file - which is correct,
+ * because a chart that has been prepared again is not superseded.
+ *
+ * @param {any} edition
+ */
+async function verifyVacSources(edition) {
+  const manifest = await readFile(VAC_CHARTS_FILE, 'utf8').then(JSON.parse).catch(() => null);
+  if (!manifest || !Array.isArray(manifest.data) || !manifest.data.length) {
+    console.log('vac charts: NOT PREPARED - run `npm run build:vac-raster`; no chart overlay will ship');
+    return;
+  }
+  const results = [];
+  for (const c of manifest.data) {
+    let live = null;
+    try { live = vacGraphics(await page(edition, `EN-AD-2.${c.icao}`)); }
+    catch (e) { live = null; }
+    if (!live) {
+      results.push({ icao: c.icao, chart: c.chart, graphicId: c.graphicId,
+        verdict: 'page-unavailable', supersededIn: edition.editionLabel });
+      continue;
+    }
+    const match = live.find((v) => v.ref === c.chart) || live.find((v) => v.id === c.graphicId);
+    if (!match) {
+      results.push({ icao: c.icao, chart: c.chart, graphicId: c.graphicId,
+        verdict: 'chart-no-longer-published', supersededIn: edition.editionLabel });
+    } else if (match.id !== c.graphicId) {
+      results.push({ icao: c.icao, chart: c.chart, graphicId: c.graphicId, liveGraphicId: match.id,
+        verdict: 'amended', supersededIn: edition.editionLabel });
+    } else {
+      results.push({ icao: c.icao, chart: c.chart, graphicId: c.graphicId, verdict: 'unchanged' });
+    }
+  }
+  const stale = results.filter((r) => r.verdict !== 'unchanged');
+  await writeFile(`data/vac-source-verification-${edition.editionLabel}.json`,
+    JSON.stringify({
+      schema: 1,
+      editionLabel: edition.editionLabel,
+      preparedFrom: manifest.editionLabel,
+      preparationRevision: manifest.preparationRevision,
+      verifiedAtUtc: new Date().toISOString(),
+      method: "each manifest entry's AD 2.24 chart reference and graphic id, against the live edition",
+      charts: results.length, unchanged: results.length - stale.length, superseded: stale.length,
+      results
+    }, null, 1) + '\n', 'utf8');
+
+  // Stamp (or clear) `superseded` on the shipped index. Written back only when
+  // something actually changed, so an unchanged edition leaves the file alone
+  // and its diff stays readable.
+  const src = await readFile(VAC_INDEX_FILE, 'utf8').catch(() => null);
+  if (src) {
+    // SPLIT ON THE ASSIGNMENT, DO NOT MATCH THE WHOLE FILE. The first version
+    // was `/^(.*window\.C182_VAC = )([\s\S]*)(;\n)$/`, and `.` does not cross a
+    // newline - so the two generated comment lines above the assignment made it
+    // never match, and the stamp was SKIPPED IN SILENCE. Caught by mutating a
+    // graphic id: the verdict said SUPERSEDED, the shipped index said nothing,
+    // and only the test asserting the two agree found it.
+    const key = 'window.C182_VAC = ';
+    const at = src.indexOf(key);
+    const end = src.lastIndexOf(';');
+    if (at < 0 || end < at) {
+      throw new Error(`${VAC_INDEX_FILE} is not in the expected shape - refusing to ship ` +
+        'charts whose superseded marks could not be written');
+    }
+    const data = JSON.parse(src.slice(at + key.length, end));
+    const by = new Map(stale.map((r) => [r.icao + '|' + r.chart, r]));
+    let changed = 0;
+    for (const c of data.charts) {
+      const hit = by.get(c.icao + '|' + c.chart);
+      const want = hit ? hit.supersededIn : null;
+      if ((c.superseded || null) !== want) { changed++; }
+      if (want) c.superseded = want; else delete c.superseded;
+    }
+    if (changed) {
+      await writeFile(VAC_INDEX_FILE,
+        src.slice(0, at + key.length) + JSON.stringify(data) + src.slice(end), 'utf8');
+    }
+  } else if (manifest.data.length) {
+    throw new Error(`${VAC_INDEX_FILE} is missing while ${VAC_CHARTS_FILE} lists ` +
+      `${manifest.data.length} chart(s) - run \`npm run build:vac-raster\``);
+  }
+  console.log(`vac charts: ${results.length} prepared from ${manifest.editionLabel}, ` +
+    `${results.length - stale.length} still current` +
+    (stale.length ? `, ${stale.length} SUPERSEDED and no longer drawn: ` +
+      stale.map((r) => `${r.icao} (${r.verdict})`).join(', ') +
+      ' - re-run `npm run build:vac-raster`' : ''));
 }
 
 async function page(edition, name) {
@@ -735,6 +831,23 @@ async function main() {
   } else {
     console.log('vac: NOT PREPARED - run `npm run build:vac`; the dataset will carry no aerodrome anchors');
   }
+
+  // ---- IS EACH PREPARED RASTER STILL THE CHART THE AIP PUBLISHES? ---------
+  //
+  // THE ASSET IS DECOUPLED FROM THE EDITION AND THE CHECK IS NOT. A VAC is
+  // amended on its own schedule, not per AIRAC cycle, so re-preparing 49
+  // rasters every 28 days would be churn - most are byte-identical. But a
+  // chart that HAS been amended must stop being drawn immediately, because a
+  // superseded approach chart is exactly the quietly-wrong answer this project
+  // refuses. So the raster is kept and the CLAIM is re-verified here, on every
+  // airspace build, against the live edition's own AD 2.24 table.
+  //
+  // THE AD 2.24 GRAPHIC ID IS THE TEST, and it is free: these pages are
+  // fetched for the airspace anyway. Avinor gives an amended chart a new
+  // graphic id, so an id that still matches is the AIP saying "same chart".
+  // The SHA-256 in the manifest remains the stronger statement about the FILE;
+  // this is the statement about the REFERENCE, and it costs no downloads.
+  await verifyVacSources(edition);
 
   const report = {
     delegations: [],
