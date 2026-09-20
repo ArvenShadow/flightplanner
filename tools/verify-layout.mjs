@@ -507,6 +507,91 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
       `no dead space in a one-panel layout with the divider at ${ratio === null ? 'the default' : ratio}` +
       ` (map ${gaps.map} px, plan ${gaps.plan} px)`);
   }
+  // ---- v16.89: THE GRIP, MEASURED UNDER THE CONDITION THAT LOST IT --------
+  //
+  // The pilot: "if i move the mouse too quickly, it looses the 'grip' and
+  // stops dragging". The drag check earlier in this file moves in 12 steps and
+  // PASSED throughout, because pointer capture holds in Chromium here and the
+  // drag rode entirely on it. Refusing capture is what reproduces the report:
+  // measured before the fix, a 60-step drag landed within 1 px and a one-jump
+  // drag missed by 299.
+  //
+  // So this refuses capture AND drags in one jump - the two together are what
+  // the guard is for, and neither alone would have caught it. It runs LAST
+  // because it moves the divider, and slotting it in the middle broke the
+  // check that measures where the divider was left.
+  await page.evaluate(() => { try { resetSplitter(); } catch (e) {} setLayoutMode('split'); });
+  await page.waitForTimeout(250);
+  await page.evaluate(() => {
+    Element.prototype.setPointerCapture = function () { /* refused */ };
+  });
+  for (const [steps, label] of [[1, 'one jump'], [4, 'four steps']]) {
+    await page.evaluate(() => { try { resetSplitter(); } catch (e) {} });
+    await page.waitForTimeout(250);
+    const b0 = await boxes();
+    const from = Math.round(b0.bar.x + b0.bar.w / 2);
+    const to = from + 240;
+    await page.mouse.move(from, 500);
+    await page.mouse.down();
+    // OFF-AXIS TOO: the cursor leaves the bar's own line entirely, which is
+    // the other half of "anchor the drag to the mouse".
+    await page.mouse.move(to, 760, { steps });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const b1 = await boxes();
+    const got = Math.round(b1.bar.x + b1.bar.w / 2);
+    check(Math.abs(got - to) <= 4,
+      `a ${label} drag keeps its grip with pointer capture refused `
+      + `(asked ${to}, got ${got})`);
+  }
+
+  // A SLIDER KEEPS THE POINTER THAT PRESSED IT - AND THIS CHECK IS A
+  // CORROBORATION, NOT A GATE. Saying so is the point.
+  //
+  // MEASURED, both ways: Chromium's own range input ALREADY takes pointer
+  // capture on the element (`gotpointercapture` fires with the app's handler
+  // and without it), and the value tracks 350 px off the track either way. So
+  // there is no assertion available here that distinguishes the app's grip
+  // from the platform's, and writing one that looked like it did would be the
+  // M5 trap this project keeps naming. What this measures is that the app has
+  // not BROKEN the native drag by taking the capture itself - which is the
+  // real risk of the change, and is worth a check.
+  //
+  // The structural guard that initSliderGrip exists at all is in test.js.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => { try { closeHelpModal(); openSettingsModal(); showSettingsPage('map'); } catch (e) {} });
+  await page.waitForTimeout(400);
+  {
+    const sl = await page.evaluate(() => {
+      const el = document.getElementById('map-route-weight');
+      if (!el) return null;
+      el.value = 2; el.dispatchEvent(new Event('input', { bubbles: true }));
+      window.__got = false;
+      el.addEventListener('gotpointercapture', () => { window.__got = true; });
+      const b = el.getBoundingClientRect();
+      return { x: Math.round(b.x), y: Math.round(b.y + b.height / 2), w: Math.round(b.width) };
+    });
+    check(!!sl && sl.w > 0, 'the route-weight slider is on screen to be dragged');
+    if (sl && sl.w > 0) {
+      await page.mouse.move(sl.x + sl.w * 0.1, sl.y);
+      await page.mouse.down();
+      await page.mouse.move(sl.x + sl.w * 0.95, sl.y + 350, { steps: 6 });
+      const r = await page.evaluate(() => ({
+        got: window.__got,
+        value: document.getElementById('map-route-weight').value
+      }));
+      await page.mouse.up();
+      check(r.got === true,
+        `the pointer is captured to the slider for the drag (${r.got})`);
+      check(Number(r.value) >= 9,
+        `and taking it has not broken the native drag (2 -> ${r.value} of 10, `
+        + `350 px off the track)`);
+    }
+    await page.evaluate(() => { try { closeSettingsModal(); } catch (e) {} });
+    await page.waitForTimeout(200);
+  }
+
   check(!hidden.menu, 'no divider under the Menu skin, whose plan is a hover rail');
   check(hidden.back, 'and it comes back with the default skin');
   await ctx.close();

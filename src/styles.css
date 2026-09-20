@@ -1146,7 +1146,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .btn-secondary { background: #4a5568; color: white; }
     .btn-wind { background: #dd6b20; color: white; }
     .btn-ruler { background: #319795; color: white; }
-    .btn-sera { background: #2b6cb0; color: white; }
     .btn-settings { background: #805ad5; color: white; }
     .btn-done { background: #38a169; color: white; font-weight: 700; }
     .btn-edit-mode { background: #d69e2e; color: white; font-weight: 700; }
@@ -1306,10 +1305,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .wind-input { width: 100%; padding: 4px; border: 1px solid var(--border-color); border-radius: 3px; font-size: 11px; font-weight: bold; text-align: center; background: var(--bg-input); color: var(--text-main); }
     .wind-input:focus { border-color: #dd6b20; background: #fffaf0; outline: none; }
 
-    /* SERA Table */
-    .sera-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 10px; color: var(--text-main); }
-    .sera-table th { background: #2c5282; color: white; padding: 5px; border: 1px solid #2b6cb0; }
-    .sera-table td { padding: 5px; border: 1px solid var(--border-color); text-align: left; background: var(--bg-card); }
 
     /* 3-Min Plotting Ref Box */
     .tick-box { display: flex; gap: 8px; align-items: center; background: var(--highlight-bg); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 10px; color: var(--highlight-text); font-weight: 600; }

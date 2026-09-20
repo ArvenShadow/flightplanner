@@ -223,19 +223,28 @@ T('seeded route renders rows and totals', () => {
 });
 
 console.log('\n=== 2. Previously-undefined handlers ===');
-['openSeraModal','closeSeraModal','openSettingsModal','closeSettingsModal',
+['openSettingsModal','closeSettingsModal',
  'saveSettings','applyBulkDefaultsToActive','clearAllFlights'].forEach(fn => {
   T(fn + ' is defined', () => assert(typeof w[fn] === 'function', 'not a function'));
 });
 
 console.log('\n=== 3. Modal open/close ===');
-T('SERA modal opens', () => {
-  w.openSeraModal();
-  assert(doc.getElementById('sera-modal').style.display === 'flex', 'did not open');
+// THE SERA VMC-MINIMA MODAL WAS REMOVED AT v16.89 at the author's request
+// ("it doesnt add anything other than extra space"): it was a static
+// quick-reference table behind a header button, not a computed thing. The
+// DAYLIGHT card is a different feature and stays - it computes the day-VFR
+// window per SERA Art. 2(97), which is why the two are asserted separately.
+T('the SERA VMC-minima modal stays removed', () => {
+  assert(!doc.getElementById('sera-modal'), 'the modal markup is back');
+  assert(!doc.getElementById('sera-btn'), 'the header button is back');
+  assert(typeof w.openSeraModal !== 'function', 'openSeraModal is back');
+  assert(!/sera-table|btn-sera/.test(APP_SRC), 'the modal CSS is back');
+  assert(!/VMC Minima/i.test(APP_SRC), 'the VMC minima table is back');
 });
-T('SERA modal closes', () => {
-  w.closeSeraModal();
-  assert(doc.getElementById('sera-modal').style.display === 'none', 'did not close');
+T('and the daylight card it is NOT to be confused with still computes', () => {
+  const card = doc.getElementById('daylight-card');
+  assert(card, 'the daylight card is gone');
+  assert(/SERA Art\. 2\(97\)/.test(APP_SRC), 'the day-VFR legal basis went with it');
 });
 T('Settings modal opens', () => {
   w.openSettingsModal();
@@ -248,7 +257,7 @@ T('Wind modal opens and builds matrix', () => {
 });
 T('Escape closes all modals', () => {
   doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  ['sera-modal','wind-modal','settings-modal'].forEach(id =>
+  ['wind-modal','settings-modal'].forEach(id =>
     assert(doc.getElementById(id).style.display === 'none', id + ' still open'));
 });
 
@@ -5350,7 +5359,7 @@ TA('Ctrl+Z is inert while a dialog is open, so no handler acts on a detached fli
 T('every overlay owns the keyboard while it is up', () => {
   const fn = APP_SRC.split('function anyOverlayOpen()')[1].split('\n    document.addEventListener')[0];
   assert(/dialogIsOpen/.test(fn), 'dialog.js state is not consulted');
-  for (const id of ['sera-modal', 'wind-modal', 'settings-modal', 'help-modal', 'leg-modal'])
+  for (const id of ['wind-modal', 'settings-modal', 'help-modal', 'leg-modal'])
     assert(APP_SRC.includes("'" + id + "'"), 'overlay not covered: ' + id);
   // v16.49 moved the mapping into src/lib/keys.js, so the rule is asserted as
   // BEHAVIOUR rather than by grepping for one line of the handler.
@@ -7497,6 +7506,53 @@ T('the divider is a real element between the two panels, and it is not printed',
   // interpolation is where a quote goes wrong.
   const attrs = ev(`[...document.getElementById('splitter').attributes].map((a) => a.name).join(',')`);
   assert(!/\bon[a-z]+/.test(attrs), 'the divider grew an inline handler: ' + attrs);
+});
+
+// v16.89 - THE GRIP. The pilot: "if i move the mouse too quickly, it looses
+// the 'grip' and stops dragging". MEASURED in Chromium with setPointerCapture
+// refused: a 60-step drag landed within 1 px and a one-jump drag missed by
+// 299, because the bar is 2 px wide and a quick cursor outruns it. The drag
+// had exactly ONE mechanism and no fallback, so wherever capture does not hold
+// the grip becomes speed-dependent.
+T('the divider drag is bound to the DOCUMENT, not to the 2 px bar', () => {
+  const init = APP_SRC.split('function initSplitter()')[1].split('\n    }')[0];
+  for (const ev2 of ['pointermove', 'pointerup', 'pointercancel', 'lostpointercapture'])
+    assert(!init.includes("bar.addEventListener('" + ev2 + "'"),
+      'the bar listens for ' + ev2 + ' again - a fast cursor outruns a 2 px target');
+  assert(init.includes("bar.addEventListener('pointerdown'"), 'nothing starts the drag');
+  const add = APP_SRC.split('function addSplitterTracking()')[1].split('\n    }')[0];
+  for (const ev2 of ['pointermove', 'pointerup', 'pointercancel'])
+    assert(add.includes("document.addEventListener('" + ev2 + "'"),
+      'the drag does not track ' + ev2 + ' on the document');
+  // AND AN EXIT THAT IS NOT A POINTERUP, or alt-tab mid-drag leaves the map
+  // stuck - the v16.46 lesson, which lostpointercapture used to cover.
+  assert(add.includes("window.addEventListener('blur'"),
+    'a drag interrupted by leaving the window never ends');
+});
+
+T('losing pointer capture does not end the drag', () => {
+  // LOSING CAPTURE WITH THE BUTTON STILL DOWN IS NOT A RELEASE. Ending there
+  // made any transient loss permanent, which is the other half of the report.
+  assert(!/lostpointercapture/.test(APP_SRC),
+    'lostpointercapture ends the drag again');
+  const down = APP_SRC.split('function onSplitterDown(')[1].split('\n    }')[0];
+  assert(down.includes('bar.setPointerCapture('), 'capture is not taken at all any more');
+  assert(down.indexOf('addSplitterTracking();') < down.indexOf('bar.setPointerCapture('),
+    'tracking must be installed BEFORE capture, so a refused capture still drags');
+});
+
+T('every range slider keeps the pointer that pressed it', () => {
+  const fn = APP_SRC.split('function initSliderGrip()')[1].split('\n    }')[0];
+  assert(/setPointerCapture/.test(fn), 'a slider does not take the pointer');
+  assert(/type !== 'range'/.test(fn), 'it is not scoped to range inputs');
+  // ONE DELEGATED LISTENER, NOT ONE PER SLIDER - so a slider added later is
+  // covered without a rule of its own (the v16.24 map-control lesson).
+  assert(/document\.addEventListener\('pointerdown'/.test(fn),
+    'the grip is not delegated, so a new slider would not get it');
+  assert(APP_SRC.includes('initSliderGrip();'), 'it is never called at boot');
+  // ...and it really does cover every slider the app ships.
+  const n = (APP_SRC.match(/type="range"/g) || []).length;
+  assert(n >= 5, 'the sliders went missing: ' + n);
 });
 
 T('an untouched app writes no pane variables, so the shipped design is untouched', () => {

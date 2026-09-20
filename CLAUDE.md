@@ -2061,6 +2061,126 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## THE DRAG IS ANCHORED TO THE MOUSE, NOT TO THE THING UNDER IT (v16.89)
+
+The pilot: *"when i try to click and drag the split between map and plan... if i
+move the mouse too quickly, it looses the 'grip' and stops dragging. Please make
+sure the drag is forcibly held for as long as the mouse button is held. Same
+goes for all the sliders."*
+
+### NEITHER SYMPTOM REPRODUCED, SO THE CONDITION HAD TO BE FOUND FIRST
+
+Driven in Chromium the divider held at every speed and both sliders tracked
+300 px off-axis. That is the v16.71 lesson pointing at me: a fix shipped against
+a symptom never reproduced is a fix measured on the wrong machine. So the
+question became *what has to be true for the report to happen*.
+
+**IT IS THAT THE DRAG HAD EXACTLY ONE MECHANISM.** `pointermove` and `pointerup`
+were bound to the BAR, and the drag rode entirely on `setPointerCapture`
+retargeting them there. Refuse that one call - which is what a browser or a
+pointing device that does not honour it does - and the behaviour splits by
+SPEED, because the bar is 2 px wide:
+
+| drag | with capture | capture refused |
+|---|---|---|
+| 60 steps | within 1 px | within 1 px |
+| 4 steps | within 1 px | **299 px off** |
+| one jump | within 1 px | **299 px off** |
+
+A slow cursor stays on the bar the bar is chasing; a quick one outruns it and
+the events go to whatever is underneath. That IS the pilot's sentence, and it
+needed no browser of theirs to find - only the discipline of asking which single
+thing the feature depends on.
+
+### THE FIX IS TWO DELETIONS AND ONE ADDITION
+
+- `pointermove` / `pointerup` / `pointercancel` are bound to the **document**
+  for the length of the drag. With capture they arrive retargeted to the bar and
+  bubble there anyway; without it they arrive from under the cursor. Both paths
+  end at the same listener, so the grip cannot depend on which one the browser
+  gives.
+- **THE BAR'S OWN MOVE AND UP LISTENERS ARE GONE**, not kept as a second path
+  (v16.61: prefer the deletion to the second mechanism).
+- **LOSING CAPTURE NO LONGER ENDS THE DRAG.** `lostpointercapture` was wired to
+  the end-of-drag handler, so any transient loss - with the button still down -
+  was permanent. `window blur` replaces it as the exit that is not a pointerup,
+  which is the v16.46 rule about a drag needing a way out that does not depend
+  on one event arriving.
+- Capture is still TAKEN, and still first-class: it is what stops the gesture
+  becoming a map gesture the moment it crosses into the chart. It is simply no
+  longer what the drag rests on. A test asserts the tracking is installed BEFORE
+  the capture call, so a refused capture still drags.
+
+### THE SLIDERS: WHAT WAS SHIPPED, AND WHAT IT IS NOT PROVEN TO DO
+
+`initSliderGrip` is ONE delegated `pointerdown` listener that captures the
+pointer to any `input[type=range]` - one listener rather than one per slider, so
+a slider added later is covered without a rule of its own (the v16.24 lesson).
+
+**AND IT IS A NO-OP IN CHROMIUM, MEASURED.** A native range ALREADY takes
+pointer capture on itself: `gotpointercapture` fires on the input with the
+handler and without it, and the value tracks 350 px off the track either way. So
+there is no assertion available that distinguishes the app's grip from the
+platform's, and the browser check says so in those words rather than looking
+like a gate. What it does assert is the real risk of the change - that taking
+the capture has not BROKEN the native drag.
+
+- **THE OBVIOUS CHECK PASSED WITH THE FIX REMOVED**, and that was caught by
+  running the mutation rather than by reading it: "drag 350 px off the track and
+  the value still moves" is a statement about Chromium, not about this app.
+  Straight M5.
+- **SO THIS HALF IS NOT CLAIMED AS FIXED.** It is the mechanism that would
+  address the report on a browser whose native capture does not hold, it costs
+  six lines, and it is measured not to break anything. Which browser the pilot
+  is on is the missing measurement, and it is asked for rather than guessed at -
+  the v16.71 rule again.
+- **ONE SHARP EDGE WAS FOUND AND DELIBERATELY NOT CHANGED**:
+  `syncVacOpacityControls` writes the value back into the slider being dragged.
+  It does not break the drag in Chromium, so changing it would be a second
+  unprovable fix in the same sitting. Recorded, not shipped.
+
+### THE SERA VMC-MINIMA MODAL IS GONE (the author: "it doesnt add anything other than extra space")
+
+A header button opening a static quick-reference table of SERA.5001 visibility
+and distance-from-cloud minima. It computed nothing and restated what the AIP
+states, so it was header space and an overlay id for a table.
+
+**THE DAYLIGHT CARD IS A DIFFERENT FEATURE AND STAYS**, and the two are asserted
+separately so the removal cannot be read as taking the day-VFR work with it: the
+card COMPUTES the legal day-VFR window per SERA Art. 2(97), which is the v16.3
+feature, and `daylight.js` is untouched. A test guards that the modal stays
+removed AND that the card still computes - discipline rule 3, both directions.
+
+The removal took three inline handlers with it, so the page's own stated handler
+count went 136 -> 133; the L3 test re-measures it, which is how that was caught
+rather than left to drift.
+
+### TWO COMMENTS TRIPPED THEIR OWN GUARDS
+
+- Writing `lostpointercapture` in the comment EXPLAINING its removal failed the
+  test that greps for it. The v16.46 note says it exactly: a comment can trip a
+  source-level guard, and the answer is to reword rather than weaken the guard.
+- A new test compared `indexOf('addSplitterTracking()')` against
+  `indexOf('setPointerCapture')` and failed CORRECT code, because the comment
+  above the call names the function too. It anchors on `bar.setPointerCapture(`
+  now. An anchor that prose can match is not an anchor - the v16.82 lesson in a
+  smaller shape.
+
+### AND THE NEW BROWSER CHECK BROKE THE ONE AFTER IT
+
+Dropped into the middle of the splitter sequence, the grip checks moved the
+divider that the next check measures ("the divider is where it was left after a
+reload"), which then failed on correct code. They run LAST now. A check that
+mutates shared state is not free to sit anywhere.
+
+### THREE MUTATIONS
+
+Bar-only listeners restored (1 test + 2 browser checks, the browser ones
+reporting `asked 838, got 838` -> `got 598`: the divider does not move at all,
+which is the pilot's symptom); the capture-lost end-of-drag restored (1 test);
+and the slider grip removed - **not caught, by construction**, for the reason
+above. None died only in `tsc`.
+
 ## A CACHED GATE LOCKED THE PILOT OUT OF THEIR OWN SITE (v16.88)
 
 The pilot, the morning after v16.87 deployed: *"im not allowed into the
