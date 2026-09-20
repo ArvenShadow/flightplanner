@@ -29,13 +29,20 @@ await page.waitForTimeout(900);
 // A WORST CASE, not a happy path: 19 legs (so it spills to a second sheet),
 // the longest published reporting-point names, strong winds and a westerly
 // track so VAR, WCA and the three-digit fields are all at full width.
+//
+// THE LEGS ARE LONG ON PURPOSE. The ACC columns accumulate over the whole
+// MISSION, so the accumulated distance is the one figure with no bound short
+// of the flight itself, and a three-digit fixture would never have measured
+// the cell that now has to hold four. The longitude zigzag is what does it:
+// about 64 NM a leg at this latitude, so the sheet carries ACC Dist past
+// 1000 NM. A check below fails if it ever stops reaching four digits.
 await page.evaluate(() => {
   const names = ['ENDU', 'KVALØYSLETTA', 'FINNSNES', 'SØRKJOSEN', 'BARDUFOSS', 'MALANGEN',
     'LYNGSEIDET', 'SKIBOTN', 'OTEREN', 'NORDKJOSBOTN', 'TAMOKDALEN', 'ØVERGÅRD',
     'SETERMOEN', 'SALANGEN', 'GRATANGEN', 'BJERKVIK', 'NARVIK', 'BALLANGEN',
     'EVENESMARKA', 'ENEV'];
   const wps = names.map((n, i) => ({
-    lat: 68.5 + i * 0.09, lng: 17.0 + (i % 2 ? 0.5 : -0.4), name: n,
+    lat: 68.5 + i * 0.09, lng: 17.0 + (i % 2 ? 1.5 : -1.5), name: n,
     alt: i === 0 ? 254 : 500 + i * 450, oat: -12, wdir: 285, wspd: 45, var: -11.6
   }));
   flights = [{ id: 1, title: 'Worst case', depElev: 254, waypoints: wps }];
@@ -78,6 +85,20 @@ check(grid.cols === 25, 'the grid has the form\'s 25 columns: ' + grid.cols);
 check(grid.bodyRows === 16, 'the form\'s 16 numbered lines are drawn: ' + grid.bodyRows);
 check(JSON.stringify(grid.labels) === JSON.stringify(['From', 'TAS', 'TT', 'VAR', 'MT']),
   'the columns are in form order: ' + JSON.stringify(grid.labels));
+
+// The fixture has to REACH the widths it claims to test, or the cell check
+// below passes for the wrong reason.
+const widest = await page.evaluate(() => {
+  let acc = 0;
+  for (const tr of document.querySelectorAll('#ofp-print .ofp-grid tbody tr')) {
+    const td = tr.children[7];               // ACC Dist
+    const v = td ? Number(td.textContent.trim()) : NaN;
+    if (Number.isFinite(v)) acc = Math.max(acc, v);
+  }
+  return acc;
+});
+check(widest >= 1000,
+  'the worst case drives ACC Dist to four digits: ' + widest.toFixed(1) + ' NM');
 
 // ---- DOES THE TEXT FIT? ---------------------------------------------------
 // scrollWidth > clientWidth means the value is being clipped by the cell.

@@ -5733,6 +5733,88 @@ T('ONE SECTOR PER OFP: two flights never share a sheet', () => {
   assert(over.every((s) => s.dep === 'ENDU' && s.dest === 'ENEV'),
     'a continuation sheet changed aerodromes');
 });
+TA('the ACC columns all measure the same thing: the mission so far', async () => {
+  // The form groups Dist and Time under one heading, ACC, and prints Fuel Acc
+  // beside them. Accumulated across WHAT is the question, and the three
+  // columns have to answer it the same way or the sheet contradicts itself.
+  ev(`flights = [
+    { id: 1, title: 'A', depElev: 254, waypoints: [
+      { lat: 68.5, lng: 18.5, name: 'ENDU', alt: 254, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.2, lng: 18.5, name: 'MID',  alt: 3500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 }] },
+    { id: 2, title: 'B', depElev: 31, waypoints: [
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.2, lng: 18.5, name: 'SKJ',  alt: 4500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.6, lng: 18.5, name: 'ENSR', alt: 10,  oat: 0, wdir: 250, wspd: 20, var: -11 }] }];
+    activeFlightIndex = 0; renderAllFlightTables();`);
+  const sheets = [...doc.querySelectorAll('#ofp-print .ofp-sheet')];
+  assert(sheets.length === 2, 'expected two sheets, got ' + sheets.length);
+  const filled = (s) => [...s.querySelectorAll('.ofp-grid tbody tr')]
+    .map((r) => [...r.children].map((c) => c.textContent.trim()))
+    .filter((c) => c[0].replace(/^\d+/, '').trim());
+  // Column order is OFP_COLUMNS: 7 = ACC Dist, 8 = ACC Time, 11 = Fuel Acc.
+  const one = filled(sheets[0]), two = filled(sheets[1]);
+  const lastOne = one[one.length - 1], firstTwo = two[0];
+  const mins = (hhmm) => { const m = /^(\d+):(\d+)/.exec(hhmm); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
+  // Time and fuel already carry across the sector boundary...
+  assert(mins(firstTwo[8]) > mins(lastOne[8]),
+    'ACC Time restarted on the next sector: ' + lastOne[8] + ' then ' + firstTwo[8]);
+  assert(Number(firstTwo[11]) > Number(lastOne[11]),
+    'Fuel Acc restarted on the next sector: ' + lastOne[11] + ' then ' + firstTwo[11]);
+  // ...so the distance beside them must too, or one column counts the mission
+  // and its neighbour counts the sector while both are headed ACC.
+  assert(Number(firstTwo[7]) > Number(lastOne[7]),
+    'ACC Dist restarted on the next sector: ' + lastOne[7] + ' then ' + firstTwo[7] +
+    ' - while ACC Time went ' + lastOne[8] + ' -> ' + firstTwo[8]);
+  // ...and it carries over by exactly this leg's own distance (column 17 is
+  // the Intermediate Dist), not by some other amount that merely grows.
+  const carried = Number(firstTwo[7]) - Number(lastOne[7]);
+  assert(Math.abs(carried - Number(firstTwo[17])) < 0.11,
+    'the first leg of sector 2 added ' + carried.toFixed(1) +
+    ' NM to the accumulated distance but is ' + firstTwo[17] + ' NM long');
+});
+
+TA('the Total line is this sector, all three figures alike', async () => {
+  // The sheet carries ONE departure and ONE arrival, so "Total" under it means
+  // what THIS sector cost. Distance and time already said that; fuel was
+  // quietly reporting the whole mission, which is invisible on a one-sector
+  // flight because the two are then the same number.
+  ev(`flights = [
+    { id: 1, title: 'A', depElev: 254, waypoints: [
+      { lat: 68.5, lng: 18.5, name: 'ENDU', alt: 254, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.2, lng: 18.5, name: 'MID',  alt: 3500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 }] },
+    { id: 2, title: 'B', depElev: 31, waypoints: [
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.2, lng: 18.5, name: 'SKJ',  alt: 4500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.6, lng: 18.5, name: 'ENSR', alt: 10,  oat: 0, wdir: 250, wspd: 20, var: -11 }] }];
+    activeFlightIndex = 0; renderAllFlightTables();`);
+  const sheets = [...doc.querySelectorAll('#ofp-print .ofp-sheet')];
+  assert(sheets.length === 2, 'expected two sheets, got ' + sheets.length);
+  const rowsOf = (sh) => [...sh.querySelectorAll('.ofp-grid tbody tr')]
+    .map((r) => [...r.children].map((c) => c.textContent.trim()))
+    .filter((c) => c[0].replace(/^\d+/, '').trim());
+  const totalOf = (sh) => {
+    const el = sh.querySelector('.ofp-total');
+    assert(el, 'the sheet has no Total line');
+    return [...el.children].map((c) => c.textContent.trim());
+  };
+  const endOne = rowsOf(sheets[0]).slice(-1)[0], endTwo = rowsOf(sheets[1]).slice(-1)[0];
+  const totTwo = totalOf(sheets[1]);
+  // The ACC columns run across the mission, so what sector 2 cost is the
+  // DIFFERENCE between the two sheets' final accumulated values.
+  const sectorDist = Number(endTwo[7]) - Number(endOne[7]);
+  const sectorBurn = Number(endTwo[11]) - Number(endOne[11]);
+  assert(Math.abs(Number(totTwo[7]) - sectorDist) < 0.11,
+    'the Total distance is ' + totTwo[7] + ' but this sector flew ' + sectorDist.toFixed(1));
+  assert(Math.abs(Number(totTwo[11]) - sectorBurn) < 0.11,
+    'the Total fuel is ' + totTwo[11] + ' but this sector burned ' + sectorBurn.toFixed(1) +
+    ' - the Total line is mixing sector figures with mission ones');
+  // Fuel REMAINING is a state at the end of the sector, not a sum over it, so
+  // it stays the running figure and must match the last row's EST.
+  assert(totTwo[22] === endTwo[22],
+    'the Total line fuel remaining (' + totTwo[22] + ') is not the sector\'s end state (' + endTwo[22] + ')');
+});
 TA('the page prints one OFP per flight plan, each with its own DEP and DEST', async () => {
   // Built end to end: three sectors, the third long enough to need two sheets.
   ev(`flights = [
