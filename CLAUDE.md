@@ -2179,6 +2179,14 @@ The removal took three inline handlers with it, so the page's own stated handler
 count went 136 -> 133; the L3 test re-measures it, which is how that was caught
 rather than left to drift.
 
+**VERIFIED BY PIXELS, which is the standing rule for a CSS change (v16.19).**
+Against v16.88 in real Chromium: 7 669 pixels differ and EVERY ONE of them is
+in the header band - bbox x 300-959, y 19-62, 23 rows - which is the button and
+the shift of the ones beside it. Nothing in the map, the sidebar, the table or
+the cards moved, the figure is identical in light and dark, and computed styles
+are identical. A COUNT ALONE COULD NOT HAVE SAID THAT: it takes the bounding
+box to tell a removed button from a layout that shifted.
+
 ### TWO COMMENTS TRIPPED THEIR OWN GUARDS
 
 - Writing `lostpointercapture` in the comment EXPLAINING its removal failed the
