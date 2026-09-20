@@ -5733,6 +5733,88 @@ T('ONE SECTOR PER OFP: two flights never share a sheet', () => {
   assert(over.every((s) => s.dep === 'ENDU' && s.dest === 'ENEV'),
     'a continuation sheet changed aerodromes');
 });
+TA('the ACC columns all measure the same thing: the mission so far', async () => {
+  // The form groups Dist and Time under one heading, ACC, and prints Fuel Acc
+  // beside them. Accumulated across WHAT is the question, and the three
+  // columns have to answer it the same way or the sheet contradicts itself.
+  ev(`flights = [
+    { id: 1, title: 'A', depElev: 254, waypoints: [
+      { lat: 68.5, lng: 18.5, name: 'ENDU', alt: 254, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.2, lng: 18.5, name: 'MID',  alt: 3500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 }] },
+    { id: 2, title: 'B', depElev: 31, waypoints: [
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.2, lng: 18.5, name: 'SKJ',  alt: 4500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.6, lng: 18.5, name: 'ENSR', alt: 10,  oat: 0, wdir: 250, wspd: 20, var: -11 }] }];
+    activeFlightIndex = 0; renderAllFlightTables();`);
+  const sheets = [...doc.querySelectorAll('#ofp-print .ofp-sheet')];
+  assert(sheets.length === 2, 'expected two sheets, got ' + sheets.length);
+  const filled = (s) => [...s.querySelectorAll('.ofp-grid tbody tr')]
+    .map((r) => [...r.children].map((c) => c.textContent.trim()))
+    .filter((c) => c[0].replace(/^\d+/, '').trim());
+  // Column order is OFP_COLUMNS: 7 = ACC Dist, 8 = ACC Time, 11 = Fuel Acc.
+  const one = filled(sheets[0]), two = filled(sheets[1]);
+  const lastOne = one[one.length - 1], firstTwo = two[0];
+  const mins = (hhmm) => { const m = /^(\d+):(\d+)/.exec(hhmm); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
+  // Time and fuel already carry across the sector boundary...
+  assert(mins(firstTwo[8]) > mins(lastOne[8]),
+    'ACC Time restarted on the next sector: ' + lastOne[8] + ' then ' + firstTwo[8]);
+  assert(Number(firstTwo[11]) > Number(lastOne[11]),
+    'Fuel Acc restarted on the next sector: ' + lastOne[11] + ' then ' + firstTwo[11]);
+  // ...so the distance beside them must too, or one column counts the mission
+  // and its neighbour counts the sector while both are headed ACC.
+  assert(Number(firstTwo[7]) > Number(lastOne[7]),
+    'ACC Dist restarted on the next sector: ' + lastOne[7] + ' then ' + firstTwo[7] +
+    ' - while ACC Time went ' + lastOne[8] + ' -> ' + firstTwo[8]);
+  // ...and it carries over by exactly this leg's own distance (column 17 is
+  // the Intermediate Dist), not by some other amount that merely grows.
+  const carried = Number(firstTwo[7]) - Number(lastOne[7]);
+  assert(Math.abs(carried - Number(firstTwo[17])) < 0.11,
+    'the first leg of sector 2 added ' + carried.toFixed(1) +
+    ' NM to the accumulated distance but is ' + firstTwo[17] + ' NM long');
+});
+
+TA('the Total line is this sector, all three figures alike', async () => {
+  // The sheet carries ONE departure and ONE arrival, so "Total" under it means
+  // what THIS sector cost. Distance and time already said that; fuel was
+  // quietly reporting the whole mission, which is invisible on a one-sector
+  // flight because the two are then the same number.
+  ev(`flights = [
+    { id: 1, title: 'A', depElev: 254, waypoints: [
+      { lat: 68.5, lng: 18.5, name: 'ENDU', alt: 254, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.2, lng: 18.5, name: 'MID',  alt: 3500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 }] },
+    { id: 2, title: 'B', depElev: 31, waypoints: [
+      { lat: 69.7, lng: 18.5, name: 'ENTC', alt: 31,  oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.2, lng: 18.5, name: 'SKJ',  alt: 4500, oat: 0, wdir: 250, wspd: 20, var: -11 },
+      { lat: 70.6, lng: 18.5, name: 'ENSR', alt: 10,  oat: 0, wdir: 250, wspd: 20, var: -11 }] }];
+    activeFlightIndex = 0; renderAllFlightTables();`);
+  const sheets = [...doc.querySelectorAll('#ofp-print .ofp-sheet')];
+  assert(sheets.length === 2, 'expected two sheets, got ' + sheets.length);
+  const rowsOf = (sh) => [...sh.querySelectorAll('.ofp-grid tbody tr')]
+    .map((r) => [...r.children].map((c) => c.textContent.trim()))
+    .filter((c) => c[0].replace(/^\d+/, '').trim());
+  const totalOf = (sh) => {
+    const el = sh.querySelector('.ofp-total');
+    assert(el, 'the sheet has no Total line');
+    return [...el.children].map((c) => c.textContent.trim());
+  };
+  const endOne = rowsOf(sheets[0]).slice(-1)[0], endTwo = rowsOf(sheets[1]).slice(-1)[0];
+  const totTwo = totalOf(sheets[1]);
+  // The ACC columns run across the mission, so what sector 2 cost is the
+  // DIFFERENCE between the two sheets' final accumulated values.
+  const sectorDist = Number(endTwo[7]) - Number(endOne[7]);
+  const sectorBurn = Number(endTwo[11]) - Number(endOne[11]);
+  assert(Math.abs(Number(totTwo[7]) - sectorDist) < 0.11,
+    'the Total distance is ' + totTwo[7] + ' but this sector flew ' + sectorDist.toFixed(1));
+  assert(Math.abs(Number(totTwo[11]) - sectorBurn) < 0.11,
+    'the Total fuel is ' + totTwo[11] + ' but this sector burned ' + sectorBurn.toFixed(1) +
+    ' - the Total line is mixing sector figures with mission ones');
+  // Fuel REMAINING is a state at the end of the sector, not a sum over it, so
+  // it stays the running figure and must match the last row's EST.
+  assert(totTwo[22] === endTwo[22],
+    'the Total line fuel remaining (' + totTwo[22] + ') is not the sector\'s end state (' + endTwo[22] + ')');
+});
 TA('the page prints one OFP per flight plan, each with its own DEP and DEST', async () => {
   // Built end to end: three sectors, the third long enough to need two sheets.
   ev(`flights = [
@@ -9753,6 +9835,206 @@ T('the deploy locks the build, and never falls back to publishing it plain', () 
   assert(nv && Number(nv[1]) >= 22,
     'CI runs Node ' + (nv ? nv[1] : '?') + '; require(esm) needs 20.19+/22.12+, ' +
     'so pin a major that cannot resolve below that');
+});
+
+
+console.log('\n=== 62a000n. Georeferencing a VAC (v16.85) ===');
+
+const VG = require('./tools/vac-geo.mjs');
+const VAC_FIXTURE = JSON.parse(require('fs').readFileSync('./test-fixtures/endu-vac-geometry.json', 'utf8'));
+
+/** The whole pure pipeline, run once on the committed ENDU geometry. */
+function enduGeoreference() {
+  const frame = VG.chartFrame(VAC_FIXTURE.segments);
+  const read = VG.graticuleObservations(VAC_FIXTURE.segments, VAC_FIXTURE.textItems, frame);
+  if ('refused' in read) throw new Error('the fixture refused: ' + JSON.stringify(read.refused));
+  const model = VG.fitConformal(read.fit, frame);
+  return { frame, read, model };
+}
+
+T('the isometric-latitude round trip is exact', () => {
+  // Newton on isometric latitude DIVIDES by d(psi)/d(phi). Multiplying by it
+  // overshoots ~2.8x at these latitudes, walks phi past the pole, and the next
+  // log() of a negative tangent returns NaN - which surfaces as a residual of
+  // NaN rather than as a visible divergence.
+  for (const lat of [0, 12.5, -33.9, 59.5, 69.2, 71.0, 78.2]) {
+    const back = VG.geodeticLatitude(VG.isometricLatitude(lat));
+    assert(Number.isFinite(back), 'geodeticLatitude returned ' + back + ' for ' + lat);
+    assert(Math.abs(back - lat) < 1e-9, 'round trip lost ' + Math.abs(back - lat) + ' degrees at ' + lat);
+  }
+});
+
+T('a chart georeferences from its own printed graticule', () => {
+  const { frame, read, model } = enduGeoreference();
+  assert(frame && Math.abs(frame.left - 63.9) < 1 && Math.abs(frame.top - 711.5) < 1,
+    'the map neatline was not found: ' + JSON.stringify(frame));
+  assert(read.fit.length >= 20, 'only ' + read.fit.length + ' labelled ticks were read');
+  assert(model, 'the conformal fit came back singular');
+  const res = VG.observationResiduals(model, read.fit);
+  assert(res.maxMetres < 50, 'the fit is ' + res.maxMetres.toFixed(1) + ' m out at worst');
+  // All four edges must contribute, or the fit is rank-deficient in one axis.
+  for (const edge of ['bottom', 'top', 'left', 'right']) {
+    assert(read.edges[edge] && read.edges[edge].fit >= 2, edge + ' contributed no observations');
+  }
+});
+
+T('the minute ticks are never fitted, and the model predicts them anyway', () => {
+  const { read, model } = enduGeoreference();
+  assert(read.holdout.length > 100, 'only ' + read.holdout.length + ' held-out ticks');
+  assert(read.holdout.every((o) => !o.major), 'a fitted tick leaked into the holdout');
+  assert(read.fit.every((o) => o.major), 'a held-out tick leaked into the fit');
+  const held = VG.observationResiduals(model, read.holdout);
+  assert(held.maxMetres < 60,
+    'the held-out minute ticks are ' + held.maxMetres.toFixed(1) + ' m out - the fit does not generalise');
+});
+
+T('THE PUBLISHED COORDINATE IS THE SYMBOL BOUNDING-BOX CENTRE, NOT ITS CENTROID', () => {
+  // This is the whole primary control path, and getting it wrong is SILENT:
+  // every point moves the same way, so the chart stays internally consistent
+  // and a held-out point cannot see it either, because fit and holdout share
+  // the anchor. Measured over 199 points on three symbol sizes, the offset
+  // from the CENTROID scales with the symbol (h/6) while the offset from the
+  // BOUNDING-BOX CENTRE stays at zero. A model error would be a constant
+  // distance; this one is proportional, so it is the anchor, not the model.
+  const { frame, model } = enduGeoreference();
+  const published = JSON.parse(require('fs').readFileSync('./tools/prepared/vac-points.json', 'utf8'))
+    .data.find((a) => a.icao === 'ENDU').points.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng }));
+  const triangles = VG.chartTriangles(VAC_FIXTURE.segments, frame);
+  assert(triangles.length >= 15, 'only ' + triangles.length + ' reporting-point symbols were found');
+  const matched = VG.matchPublishedPoints(triangles, published,
+    (lat, lng) => VG.project(model, lat, lng, frame));
+  assert(matched.controls.length >= 15,
+    'only ' + matched.controls.length + ' published points paired with a drawn symbol');
+  let boxSum = 0, centroidSum = 0, n = 0;
+  for (const c of matched.controls) {
+    const at = VG.project(model, c.lat, c.lng, frame);
+    const t = triangles.find((q) => Math.abs(q.x - c.x) < 1e-9 && Math.abs(q.y - c.y) < 1e-9);
+    const centroid = t.vertices.reduce((s, v) => [s[0] + v[0] / 3, s[1] + v[1] / 3], [0, 0]);
+    boxSum += at[1] - c.y;
+    centroidSum += at[1] - centroid[1];
+    n++;
+  }
+  const box = boxSum / n, centroid = centroidSum / n;
+  const metres = VG.groundScale(model, (frame.left + frame.right) / 2, (frame.bottom + frame.top) / 2);
+  assert(Math.abs(box) < 0.2,
+    'the published coordinate is ' + box.toFixed(3) + ' pt from the bounding-box centre');
+  assert(centroid > 1.0,
+    'the centroid offset is only ' + centroid.toFixed(3) + ' pt - the anchor test has stopped discriminating');
+  assert(centroid * metres > 100,
+    'using the centroid would cost ' + (centroid * metres).toFixed(0) + ' m, so this guard proves nothing');
+});
+
+T('the graticule and the published points agree - the check a holdout cannot make', () => {
+  // Fit and holdout share the anchor convention, so a wrong anchor biases both
+  // equally and the holdout residual comes back near zero while the chart is
+  // out by the anchor error. The graticule is drawn from completely different
+  // ink, so requiring the two models to AGREE is what sees such a bias.
+  const { frame, model } = enduGeoreference();
+  const published = JSON.parse(require('fs').readFileSync('./tools/prepared/vac-points.json', 'utf8'))
+    .data.find((a) => a.icao === 'ENDU').points.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng }));
+  const triangles = VG.chartTriangles(VAC_FIXTURE.segments, frame);
+  const matched = VG.matchPublishedPoints(triangles, published,
+    (lat, lng) => VG.project(model, lat, lng, frame));
+  const obs = [];
+  for (const c of matched.controls) {
+    obs.push({ kind: 'lng', x: c.x, y: c.y, value: c.lng, major: true });
+    obs.push({ kind: 'lat', x: c.x, y: c.y, value: c.lat, major: true });
+  }
+  const pointModel = VG.fitConformal(obs, frame);
+  assert(pointModel, 'the published-point fit came back singular');
+  let worst = 0;
+  for (const c of matched.controls) {
+    const a = VG.evaluate(model, c.x, c.y), b = VG.evaluate(pointModel, c.x, c.y);
+    const per = VG.metresPerDegree(a.lat);
+    worst = Math.max(worst, Math.hypot((a.lng - b.lng) * per.perLng, (a.lat - b.lat) * per.perLat));
+  }
+  assert(worst < 80, 'the two control sources disagree by ' + worst.toFixed(1) + ' m');
+});
+
+T('a graticule that does not verify is refused, not fitted', () => {
+  const { frame } = enduGeoreference();
+  const labels = VG.graticuleLabels(VAC_FIXTURE.textItems);
+  const ticks = VG.edgeTicks(VAC_FIXTURE.segments, frame);
+  // An edge with almost no ticks cannot be read.
+  const thin = VG.labelEdgeTicks('bottom', ticks.bottom.slice(0, 2), labels, frame);
+  assert('reason' in thin && thin.reason === 'few-ticks', 'a two-tick edge was accepted: ' + JSON.stringify(thin));
+  // Printed values that do not step uniformly mean a label was mis-assigned.
+  // The perturbed label has to be one this edge actually reads, or the check
+  // never sees it - which is how the first version of this test passed while
+  // asserting nothing.
+  const onBottom = labels.filter((l) => l.kind === 'lng' && l.y < frame.bottom);
+  assert(onBottom.length >= 3, 'the fixture carries no bottom-edge labels to perturb');
+  const victim = onBottom[Math.floor(onBottom.length / 2)];
+  const bent = VG.labelEdgeTicks('bottom', ticks.bottom, labels.map(
+    (l) => (l === victim ? { ...l, value: l.value + 1 / 60 } : l)), frame);
+  assert('reason' in bent && bent.reason === 'uneven-label-values',
+    'a broken label sequence was accepted: ' + JSON.stringify(bent).slice(0, 140));
+  // Both edges of an axis carry the same interval; disagreement is a misread.
+  // Shifting every top label by the same amount would NOT test this - the step
+  // stays 10' and only the offset moves - so the top edge is relabelled at a
+  // 20' interval instead, which is what a one-major-out misread looks like.
+  const topLabels = VAC_FIXTURE.textItems
+    .filter((t) => /^\d{1,3}°\d{2}'?E$/.test(t.str) && t.y > frame.top)
+    .sort((a, b) => a.x - b.x);
+  assert(topLabels.length >= 3, 'the fixture carries no top-edge labels to relabel');
+  const firstTop = topLabels[0];
+  const base = Number(/^(\d{1,3})°/.exec(firstTop.str)[1]) +
+    Number(/°(\d{2})/.exec(firstTop.str)[1]) / 60;
+  const relabelled = new Map();
+  topLabels.forEach((t, k) => {
+    const v = base + k * (20 / 60);
+    const deg = Math.floor(v + 1e-9), min = Math.round((v - deg) * 60);
+    relabelled.set(t, `${String(deg).padStart(3, '0')}°${String(min).padStart(2, '0')}'E`);
+  });
+  const mixed = VG.graticuleObservations(VAC_FIXTURE.segments,
+    VAC_FIXTURE.textItems.map((t) => (relabelled.has(t) ? { ...t, str: relabelled.get(t) } : t)), frame);
+  assert('refused' in mixed, 'edges disagreeing on the graticule interval were accepted');
+});
+
+T('all four edges are required, and a missing one is refused not fitted', () => {
+  const { frame, read } = enduGeoreference();
+  // TWO edges are genuinely degenerate and the solver says so rather than
+  // returning a model that has run away. THREE would fit - conformality ties
+  // the imaginary part to the real one - so the fourth edge is not needed to
+  // SOLVE the fit, it is needed to CHECK it, which is why a refused edge
+  // refuses the chart rather than falling back to the other three.
+  const onEdge = (o) => o.kind === 'lng'
+    ? (Math.abs(o.y - frame.bottom) < 0.01 ? 'bottom' : 'top')
+    : (Math.abs(o.x - frame.left) < 0.01 ? 'left' : 'right');
+  for (const pair of [['bottom', 'top'], ['bottom', 'left']]) {
+    const two = read.fit.filter((o) => pair.includes(onEdge(o)));
+    assert(VG.fitConformal(two, frame) === null,
+      pair.join('+') + ' alone produced a model instead of refusing as degenerate');
+  }
+  // And the reader refuses rather than handing such a model back at all.
+  const near = (v, t) => Math.abs(v - t) < 0.6;
+  const withoutRightTicks = VAC_FIXTURE.segments.filter((s2) => {
+    const len = Math.hypot(s2.b[0] - s2.a[0], s2.b[1] - s2.a[1]);
+    if (len < 2 || len > 8) return true;
+    return !(near(Math.max(s2.a[0], s2.b[0]), frame.right) &&
+      Math.min(s2.a[1], s2.b[1]) > frame.bottom && Math.max(s2.a[1], s2.b[1]) < frame.top);
+  });
+  const got = VG.graticuleObservations(withoutRightTicks, VAC_FIXTURE.textItems, frame);
+  assert('refused' in got, 'a chart missing one edge of its graticule was accepted');
+  assert(got.refused.some((r) => r.edge === 'right'),
+    'the refusal does not name the edge that is missing: ' + JSON.stringify(got.refused));
+});
+
+T('four points in one corner is not a fit', () => {
+  const frame = { left: 0, right: 100, bottom: 0, top: 100 };
+  const corner = [{ x: 1, y: 1 }, { x: 5, y: 2 }, { x: 3, y: 6 }, { x: 7, y: 7 }];
+  const span = VG.controlSpanFraction(corner, frame);
+  assert(span.x < VG.MIN_CONTROL_SPAN_FRACTION && span.y < VG.MIN_CONTROL_SPAN_FRACTION,
+    'a cluster in one corner passed the distribution guard');
+  const spread = VG.controlSpanFraction([{ x: 5, y: 5 }, { x: 90, y: 88 }], frame);
+  assert(spread.x >= VG.MIN_CONTROL_SPAN_FRACTION && spread.y >= VG.MIN_CONTROL_SPAN_FRACTION,
+    'a well-spread pair was rejected');
+});
+
+T('the dataset carries its attribution and the non-commercial condition', () => {
+  const f = require('fs').readFileSync('./test-fixtures/endu-vac-geometry.json', 'utf8');
+  assert(/Avinor/.test(f) && /NON-COMMERCIAL/i.test(f),
+    'the VAC fixture does not carry the Avinor attribution and the non-commercial condition');
 });
 
 runAsyncTests().then(() => {

@@ -2048,6 +2048,60 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## THE ACC COLUMNS COUNT THE MISSION; THE TOTAL LINE COUNTS THE SECTOR (v16.85)
+
+The pilot: *"make sure the accumulated distance carries over to the next OFP on
+the printOFP page."*
+
+**MEASURED on a two-sector mission before touching anything**: the second
+sheet's ACC Dist restarted at **30.1 NM** while the ACC Time beside it read
+**00:49**. Two columns printed under the same `ACC` heading, one counting the
+sector and one counting the mission.
+
+The cause was one declaration in the wrong scope. `runningAccTime` and
+`runningAccBurn` are declared outside the flights loop, so they carry; the
+distance was a `sectorAccDist` declared *inside* it and reset every sector. It
+was also a duplicate - it incremented by exactly the same `dist` as
+`sectorDist` on the line above - so this is a replacement, not an addition, and
+v16.61's rule applies: prefer the deletion to the second mechanism.
+
+Now `72.3 -> 126.5` across the boundary, beside ACC Time `00:34 -> 01:00` and
+Fuel Acc `6.9 -> 12.3`.
+
+### AND MEASURING IT FOUND A WRONG NUMBER ON THE PAPERWORK
+
+The Total line at the foot of a sheet was `dist: sectorDist`, `time:
+sectorTime`, **`burn: runningAccBurn`** - two sector figures and one mission
+figure on the same line. On a one-sector flight those are the same number,
+which is exactly why it had never shown. Measured on the two-sector fixture,
+sheet 2's Total line read **54.2 NM / 00:26 / 12.3 gal** where that sector had
+burned **5.4**.
+
+**THE SHEET CARRIES ONE DEP AND ONE DEST, SO "TOTAL" MEANS THAT SECTOR.** All
+three figures are the sector's now. `rem` deliberately stays the running
+figure: fuel remaining is a STATE at the end of the sector, not a sum over it,
+and a test asserts it still matches the last row's EST.
+
+So the two rows answer different questions on purpose, and the guide now says
+so: the ACC columns run to the end of the mission, the Total line is this
+sector.
+
+### THE WORST CASE WAS NOT WORST ANY MORE
+
+Accumulating over the mission makes ACC Dist the one figure on the form with no
+bound short of the flight itself, and `verify:ofp` existed to prove a value
+FITS its printed cell. Its 19-leg fixture only reached three digits, so the
+cell that now has to hold four was never measured. The longitude zigzag is
+widened to about 64 NM a leg: the sheet reaches **1215.8 NM**, and **0 of 394
+filled cells overflow**. A check fails if the fixture ever stops reaching four
+digits - the M5 trap, where a fixture quietly stops exercising what it claims.
+
+**TWO MUTATIONS, BOTH CAUGHT BY NAME, NEITHER ONLY IN `tsc`**: resetting the
+accumulator per sector reports the pilot's own symptom (`72.3 then 30.1 - while
+ACC Time went 00:34 -> 00:49`) and fails a second test with a NEGATIVE sector
+distance; restoring the mission burn on the Total line reports `12.3 but this
+sector burned 5.4`.
+
 ## A CIRCUIT IS TIME AND FUEL, NEVER A PLACE (v16.84) - THIS REVERSES v16.83
 
 The pilot, three days after v16.83 shipped: *"pattern should NOT be a point

@@ -385,6 +385,7 @@
             <li><b>Print OFP</b> prints the <b>company "Operational flightplan" form</b> (page 1 of C182OFPMBv4.2), filled in from your plan — one sheet per sector, and a second sheet when a flight has more than the form's 16 lines. It is landscape A4.
               <ul>
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
+                <li><b>The ACC columns count the whole mission</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the mission total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
                 <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>Reg, CREW, PASSENGERS and PIC</b> — the planner does not hold crew names or a tail number, and it never will.</li>
                 <li>The <b>Mass &amp; Balance</b> side of the form is not reproduced yet.</li>
               </ul>
@@ -1297,7 +1298,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.84';
+    const APP_VERSION = '16.85';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -5632,6 +5633,13 @@
 
       let runningAccTime = 0;
       let runningAccBurn = 0;
+      // THE ACC COLUMNS ALL MEASURE THE SAME THING: the mission so far. The
+      // form groups Dist and Time under one heading, ACC, and prints Fuel Acc
+      // beside them, so a sheet whose Dist counts the sector while its Time
+      // counts the mission contradicts itself - measured on a two-sector
+      // mission, ACC Dist restarted at 30.1 NM while ACC Time read 00:49.
+      // Declared out here with the other two for exactly that reason.
+      let runningAccDist = 0;
       legStartTimes = {};
       // An empty "Initial Fuel" box yielded NaN, which then propagated into
       // every Rem cell and the mission summary as "NaN".
@@ -5758,8 +5766,7 @@
         const tbody = table.querySelector(`#tbody-flight-${fIdx}`);
         // The sector opens with whatever the stop before it cost, so the
         // figures the pilot reads for THIS plan already contain the delay.
-        let sectorDist = 0, sectorTime = sectorPrefixMin, sectorBurn = sectorPrefixBurn,
-            sectorAccDist = 0;
+        let sectorDist = 0, sectorTime = sectorPrefixMin, sectorBurn = sectorPrefixBurn;
         const printRows = [];
         const sched = computeFlightSchedule(fl);   // climbs/descents may span legs
 
@@ -5794,7 +5801,7 @@
             sectorBurn += patternBurn;
 
             printRows.push({ pattern: true, from: placeName, to: to.name, laps: patternLaps,
-              accDist: sectorAccDist ? sectorAccDist.toFixed(1) : '', pl: to.alt,
+              accDist: runningAccDist ? runningAccDist.toFixed(1) : '', pl: to.alt,
               accTime: formatTimeHHMM(runningAccTime), accBurn: runningAccBurn,
               ff: patternFFUnit, legBurn: patternBurn, time: formatTimeHHMM(patternMinutes),
               eto: computeETO(runningAccTime) || '', rem: runningFuelRemaining });
@@ -5902,14 +5909,14 @@
           runningAccBurn = Number((runningAccBurn + legBurn).toFixed(1));
           runningFuelRemaining = Number((runningFuelRemaining - legBurn).toFixed(1));
           sectorDist += dist; sectorTime += legTime; sectorBurn += legBurn;
+          runningAccDist += dist;
 
           tbody.appendChild(createRowHTML(from.name, to.name, res.profileTag, altLabel, to.oat, res.dispTas, tt, to.var, varIndicator, mt, to.wdir, to.wspd, res.rowWCA, mh, res.effGS, dist, threeMinNM, legTime, runningAccTime, effFF, legBurn, runningAccBurn, runningFuelRemaining, fIdx, i, true));
 
           // THE PRINTED FORM READS THESE, not a second computation (v16.41).
-          sectorAccDist += dist;
           printRows.push({ from: from.name, to: to.name, tas: res.dispTas, tt,
             var: Number(to.var), mt: mtNum, wdir: Number(to.wdir), wspd: Number(to.wspd),
-            wca: res.rowWCA, accDist: sectorAccDist, accTime: formatTimeHHMM(runningAccTime),
+            wca: res.rowWCA, accDist: runningAccDist, accTime: formatTimeHHMM(runningAccTime),
             ff: effFF, legBurn, accBurn: runningAccBurn, alt: to.alt,
             mh: mtNum === null ? null : Math.round((mtNum + res.rowWCA + 360) % 360),
             gs: res.effGS, dist, time: formatTimeHHMM(legTime),
@@ -5948,8 +5955,17 @@
             reg: '',
             fuelDep: (Number((document.getElementById('fuel-dep') || {}).value) || 0).toFixed(1),
             fuelRem: runningFuelRemaining.toFixed(1),
+            // THE TOTAL LINE IS THIS SECTOR'S, all three figures alike. The
+            // sheet carries one DEP and one DEST, so "Total" under it means
+            // what this sector cost - and dist and time already said that
+            // while burn was quietly reporting the whole mission. Invisible
+            // on a one-sector flight, where they are the same number;
+            // measured on two sectors, the Total line read 54.2 NM / 00:26 /
+            // 12.3 gal where the sector had actually burned 5.4.
+            // `rem` stays the running figure on purpose: fuel remaining is a
+            // STATE at the end of the sector, not a sum over it.
             totals: { dist: sectorDist.toFixed(1), time: formatTimeHHMM(sectorTime),
-                      burn: runningAccBurn.toFixed(1), rem: runningFuelRemaining.toFixed(1) }
+                      burn: sectorBurn.toFixed(1), rem: runningFuelRemaining.toFixed(1) }
           },
           rows: printRows
         });
