@@ -2111,33 +2111,57 @@ thing the feature depends on.
   longer what the drag rests on. A test asserts the tracking is installed BEFORE
   the capture call, so a refused capture still drags.
 
-### THE SLIDERS: WHAT WAS SHIPPED, AND WHAT IT IS NOT PROVEN TO DO
+### THE SLIDERS: ONE MEASURED CAUSE, AND ONE STILL UNFOUND
 
-`initSliderGrip` is ONE delegated `pointerdown` listener that captures the
-pointer to any `input[type=range]` - one listener rather than one per slider, so
-a slider added later is covered without a rule of its own (the v16.24 lesson).
+The author answered the missing question - **Chrome and Brave**, which are the
+same engine the mouse probe had already declared healthy. That is what forced
+the right question: if the ENGINE is not the difference, the INPUT is.
 
-**AND IT IS A NO-OP IN CHROMIUM, MEASURED.** A native range ALREADY takes
-pointer capture on itself: `gotpointercapture` fires on the input with the
-handler and without it, and the value tracks 350 px off the track either way. So
-there is no assertion available that distinguishes the app's grip from the
-platform's, and the browser check says so in those words rather than looking
-like a gate. What it does assert is the real risk of the change - that taking
-the capture has not BROKEN the native drag.
+**IT IS, AND AN A/B ISOLATES IT.** One gesture, one element, `touch-action`
+forced each way and nothing else changed:
 
-- **THE OBVIOUS CHECK PASSED WITH THE FIX REMOVED**, and that was caught by
-  running the mutation rather than by reading it: "drag 350 px off the track and
-  the value still moves" is a statement about Chromium, not about this app.
-  Straight M5.
-- **SO THIS HALF IS NOT CLAIMED AS FIXED.** It is the mechanism that would
-  address the report on a browser whose native capture does not hold, it costs
-  six lines, and it is measured not to break anything. Which browser the pilot
-  is on is the missing measurement, and it is asked for rather than guessed at -
-  the v16.71 rule again.
+| touch-action | steep drag off the track | outcome |
+|---|---|---|
+| `auto` | **pointercancel x3** | the browser calls it a page scroll and TAKES THE DRAG AWAY |
+| `none` | **pointercancel x0** | the drag survives |
+
+So `input[type="range"] { touch-action: none; }` ships, and it is the same
+decision `#splitter` already made for the same reason. The cost is stated in the
+rule: you can no longer scroll the page by starting the gesture ON a slider,
+which is the right trade for a control whose whole purpose is being dragged.
+
+- **THE HONEST LIMIT, AND IT MATTERS**: `touch-action` governs TOUCH and PEN
+  only. A MOUSE drag on Chromium was measured to hold at every speed and 350 px
+  off the track. So if the report is from a mouse rather than a touchscreen,
+  **this is not its cause and the cause is still unfound** - which is why the
+  next step is a console read-out from the author's own browser naming the
+  event that ends their drag: the v16.71 play that settled a four-round chase
+  in one round.
+- **MY FIRST TOUCH "REPRODUCTION" WAS THE PROBE, NOT THE APP.** It drove the
+  touch points 250-400 px BELOW a slider sitting at y=647 in an 800 px
+  viewport - off screen - and read the resulting dead drag as the bug. Worse,
+  the fix then appeared not to work for the same reason, which nearly got a
+  correct rule thrown away. Dragging UPWARDS, entirely on screen, is what
+  produced the real comparison. The fixture is the bug, again, and the browser
+  check now asserts its own probe stays inside the viewport.
+- **VALUE-TRACKING PROVES NOTHING HERE, so it is not what is asserted.**
+  Chromium's own slider stops following a steep touch gesture whether or not it
+  was cancelled, so the check measures the CANCELLATION. Forcing `auto` back in
+  the same run reproduces it (x2), which is what makes the rule load-bearing
+  rather than merely present.
+
+`initSliderGrip` - one delegated `pointerdown` listener capturing the pointer
+to any range input, one listener rather than one per slider (the v16.24 lesson)
+- **stays, and is still a no-op in Chromium for a mouse**: a native range
+already takes capture on itself, and `gotpointercapture` fires with the handler
+and without it. It is kept because it is the mechanism for a browser whose
+native capture does not hold, it is six lines, and it is measured not to break
+the native drag. Nothing asserts that it fixes anything.
+
 - **ONE SHARP EDGE WAS FOUND AND DELIBERATELY NOT CHANGED**:
   `syncVacOpacityControls` writes the value back into the slider being dragged.
-  It does not break the drag in Chromium, so changing it would be a second
-  unprovable fix in the same sitting. Recorded, not shipped.
+  It does not break the drag in Chromium, so changing it would be an unprovable
+  fix in the same sitting. Recorded, not shipped.
 
 ### THE SERA VMC-MINIMA MODAL IS GONE (the author: "it doesnt add anything other than extra space")
 
@@ -2173,13 +2197,14 @@ divider that the next check measures ("the divider is where it was left after a
 reload"), which then failed on correct code. They run LAST now. A check that
 mutates shared state is not free to sit anywhere.
 
-### THREE MUTATIONS
+### FOUR MUTATIONS
 
 Bar-only listeners restored (1 test + 2 browser checks, the browser ones
 reporting `asked 838, got 838` -> `got 598`: the divider does not move at all,
 which is the pilot's symptom); the capture-lost end-of-drag restored (1 test);
-and the slider grip removed - **not caught, by construction**, for the reason
-above. None died only in `tsc`.
+the `touch-action` rule deleted (1 test + 2 browser checks, reporting
+`touch-action: auto` and `pointercancel x1`); and the slider grip removed -
+**not caught, by construction**, for the reason above. None died only in `tsc`.
 
 ## A CACHED GATE LOCKED THE PILOT OUT OF THEIR OWN SITE (v16.88)
 

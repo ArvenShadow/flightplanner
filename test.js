@@ -7541,6 +7541,17 @@ T('losing pointer capture does not end the drag', () => {
     'tracking must be installed BEFORE capture, so a refused capture still drags');
 });
 
+T('a slider declares the drag gesture its own', () => {
+  // MEASURED BY A/B IN CHROMIUM (touch input, one gesture, this the only
+  // variable): with touch-action AUTO a steep drag fires pointercancel and the
+  // browser takes the drag away as a page scroll; with NONE it fires none and
+  // the drag survives. That is the "it stops dragging" mechanism, for touch
+  // and pen. The browser check in verify-layout.mjs proves it load-bearing;
+  // this only guards that the rule cannot be deleted silently.
+  assert(/input\[type="range"\]\s*\{[^}]*touch-action:\s*none/.test(APP_SRC),
+    'a range input no longer declares touch-action: none');
+});
+
 T('every range slider keeps the pointer that pressed it', () => {
   const fn = APP_SRC.split('function initSliderGrip()')[1].split('\n    }')[0];
   assert(/setPointerCapture/.test(fn), 'a slider does not take the pointer');

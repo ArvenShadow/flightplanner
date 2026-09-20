@@ -592,6 +592,70 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
     await page.waitForTimeout(200);
   }
 
+  // A STEEP TOUCH DRAG DOES NOT HAVE THE SLIDER TAKEN OFF IT (v16.89).
+  //
+  // This is the one slider assertion that DISCRIMINATES, and it took an A/B on
+  // a single gesture to find: with touch-action AUTO the browser decides a
+  // steep drag is a page scroll and fires pointercancel (x3 measured); with
+  // NONE the same gesture fires none and the drag survives. Value-tracking
+  // proves nothing here - Chromium's own slider stops tracking a steep touch
+  // gesture either way - so what is measured is the CANCELLATION.
+  //
+  // It needs a touch-capable context, so it runs in one of its own.
+  {
+    const tctx = await b.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+    const tp = await tctx.newPage();
+    tp.on('pageerror', (e) => errs.push('slider-touch: ' + e));
+    await tp.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
+    await tp.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
+    await tp.waitForFunction(() => {
+      try { return typeof computeFlightSchedule === 'function'; } catch (e) { return false; }
+    }, null, { timeout: 20000 });
+    await tp.keyboard.press('Escape');
+    await tp.waitForTimeout(300);
+    const cdp = await tctx.newCDPSession(tp);
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent',
+      { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+
+    const steep = async (forceAuto) => {
+      await tp.evaluate(() => { try { closeSettingsModal(); openSettingsModal(); showSettingsPage('map'); } catch (e) {} });
+      await tp.waitForTimeout(400);
+      const i = await tp.evaluate((auto) => {
+        const el = document.getElementById('map-route-weight');
+        if (auto) el.style.touchAction = 'auto';
+        window.__cancel = 0;
+        el.addEventListener('pointercancel', () => { window.__cancel++; });
+        const b = el.getBoundingClientRect();
+        return { x: Math.round(b.x), y: Math.round(b.y + b.height / 2),
+                 w: Math.round(b.width), ta: getComputedStyle(el).touchAction, vh: window.innerHeight };
+      }, forceAuto);
+      // UPWARDS, so every point stays ON SCREEN. A probe that drove the touch
+      // off the bottom of the viewport read a dead drag as the bug once.
+      const endY = i.y - 220;
+      if (endY < 0) return { ta: i.ta, cancels: -1, offScreen: true };
+      await touch('touchStart', i.x + i.w * 0.1, i.y);
+      for (let k = 1; k <= 8; k++) await touch('touchMove', i.x + i.w * (0.1 + 0.11 * k), i.y - 27.5 * k);
+      const c = await tp.evaluate(() => window.__cancel);
+      await touch('touchEnd', 0, 0);
+      return { ta: i.ta, cancels: c, offScreen: false };
+    };
+
+    const shipped = await steep(false);
+    check(!shipped.offScreen, 'the touch probe stays inside the viewport');
+    check(shipped.ta === 'none',
+      `a slider declares the drag gesture its own (touch-action: ${shipped.ta})`);
+    check(shipped.cancels === 0,
+      `a steep touch drag is not taken off the slider (pointercancel x${shipped.cancels})`);
+    // AND THE A/B THAT MAKES THAT MEAN SOMETHING: force the old value back and
+    // the browser cancels, so the rule above is proved load-bearing here
+    // rather than merely asserted.
+    const forced = await steep(true);
+    check(forced.cancels > 0,
+      `...and with touch-action forced back to auto it IS taken away `
+      + `(pointercancel x${forced.cancels}) - so the rule is what prevents it`);
+    await tctx.close();
+  }
+
   check(!hidden.menu, 'no divider under the Menu skin, whose plan is a hover rail');
   check(hidden.back, 'and it comes back with the default skin');
   await ctx.close();
