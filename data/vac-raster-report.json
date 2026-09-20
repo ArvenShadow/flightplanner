@@ -1,0 +1,125 @@
+{
+  "edition": "2026-09-03-AIRAC",
+  "prepared": 49,
+  "refused": [],
+  "seamLimitM": 60,
+  "seams": [
+    {
+      "a": "ENAL AD 2 ENAL 6 - 1",
+      "b": "ENOV AD 2 ENOV 6 - 1",
+      "footprintOverlap": 0.194,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    },
+    {
+      "a": "ENBL AD 2 ENBL 6 - 1",
+      "b": "ENFL AD 2 ENFL 6 - 1",
+      "footprintOverlap": 0.025,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    },
+    {
+      "a": "ENBR AD 2 ENBR 6 - 2",
+      "b": "ENBR AD 2 ENBR 6 - 3",
+      "footprintOverlap": 0.947,
+      "points": 1,
+      "worstM": 11.4,
+      "observations": [
+        {
+          "name": "SUNOS",
+          "metres": 11.4,
+          "aMetres": 21.2,
+          "bMetres": 9.8
+        }
+      ]
+    },
+    {
+      "a": "ENBS AD 2 ENBS 6 - 1",
+      "b": "ENBV AD 2 ENBV 6 - 1",
+      "footprintOverlap": 0.025,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    },
+    {
+      "a": "ENCN AD 2 ENCN 6 - 1",
+      "b": "ENGK AD 2 ENGK 6 - 1",
+      "footprintOverlap": 0.089,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    },
+    {
+      "a": "ENHD AD 2 ENHD 6 - 1",
+      "b": "ENSO AD 2 ENSO 6 - 1",
+      "footprintOverlap": 0.033,
+      "points": 1,
+      "worstM": 0.6,
+      "observations": [
+        {
+          "name": "SVEIO",
+          "metres": 0.6,
+          "aMetres": 0.8,
+          "bMetres": 0.5
+        }
+      ]
+    },
+    {
+      "a": "ENHD AD 2 ENHD 6 - 1",
+      "b": "ENZV AD 2 ENZV 6 - 1",
+      "footprintOverlap": 0.166,
+      "points": 1,
+      "worstM": 19.5,
+      "observations": [
+        {
+          "name": "KVITSØY",
+          "metres": 19.5,
+          "aMetres": 0.4,
+          "bMetres": 19.7
+        }
+      ]
+    },
+    {
+      "a": "ENKB AD 2 ENKB 6 - 1",
+      "b": "ENML AD 2 ENML 6 - 1",
+      "footprintOverlap": 0.069,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    },
+    {
+      "a": "ENKR AD 2 ENKR 6 - 1",
+      "b": "ENVD AD 2 ENVD 6 - 1",
+      "footprintOverlap": 0.155,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    },
+    {
+      "a": "ENOV AD 2 ENOV 6 - 1",
+      "b": "ENSD AD 2 ENSD 6 - 1",
+      "footprintOverlap": 0.094,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    },
+    {
+      "a": "ENSH AD 2 ENSH 6 - 1",
+      "b": "ENSK AD 2 ENSK 6 - 1",
+      "footprintOverlap": 0.025,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    },
+    {
+      "a": "ENSS AD 2 ENSS 6 - 1",
+      "b": "ENVD AD 2 ENVD 6 - 1",
+      "footprintOverlap": 0.006,
+      "points": 0,
+      "worstM": null,
+      "observations": []
+    }
+  ]
+}

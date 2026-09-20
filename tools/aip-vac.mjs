@@ -248,3 +248,22 @@ export function roughNM(a, b) {
  * independent of the table parse.
  */
 export const MAX_ARP_NM = 60;
+
+/**
+ * The VAC graphic ids on an AD 2 page.
+ *
+ * SHARED ON PURPOSE. tools/build-vac-raster.mjs uses it to find the chart to
+ * prepare, and tools/build-aip.mjs uses it to ask whether the chart a prepared
+ * raster was pinned to is STILL what the live edition publishes. Two parses
+ * would be two things that can disagree about which PDF a chart is.
+ */
+/** The VAC graphic ids on an AD 2 page, read from the AD 2.24 chart table's own
+ *  row titles - an AD 2 page links 4 to 103 charts and only the row TITLED
+ *  "Visual Approach Chart" is the VAC. */
+export function vacGraphics(html) {
+  return [...html.matchAll(
+    /<p[^>]*>([^<]{3,80})<\/p>\s*<\/td>\s*<td[^>]*>\s*<a href="\.\.\/\.\.\/graphics\/(\d+)\.pdf">([^<]*)<\/a>/g)]
+    .filter((m) => /Visual Approach Chart/i.test(m[1]))
+    .map((m) => ({ id: m[2], ref: m[3].replace(/ /g, ' ').trim() }));
+}
+

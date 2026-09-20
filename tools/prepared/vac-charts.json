@@ -1,0 +1,3621 @@
+{
+ "schema": 1,
+ "provider": "Avinor AS",
+ "source": "AIP Norge eAIP, AD 2 <ICAO> 6-1 Visual Approach Chart - ICAO",
+ "attribution": "Visual Approach Charts: AIP Norge (c) Avinor AS, used with permission for NON-COMMERCIAL use. Display only - not for navigation. Verify against the current AIP and NOTAM.",
+ "editionLabel": "2026-09-03-AIRAC",
+ "preparationRevision": 1,
+ "renderDpi": 600,
+ "preparedAtUtc": "2026-09-20T12:44:38.010Z",
+ "charts": 49,
+ "data": [
+  {
+   "icao": "ENAL",
+   "chart": "AD 2 ENAL 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "4141c4e7cb14858ad943c3caf15c1efd5eb7a5305f65d98b47a15cf7562bcacc",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623091.pdf",
+   "graphicId": "623091",
+   "preparationRevision": 1,
+   "file": "enal-2026-05-14-4141c4e7-r1.webp",
+   "bytes": 2991718,
+   "pixelWidth": 4519,
+   "pixelHeight": 5116,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 5.4465121,
+    "east": 6.6344893,
+    "south": 62.2417433,
+    "north": 62.8616559
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.2,
+    "bottom": 157.4,
+    "top": 711.1
+   },
+   "graticule": {
+    "fitTicks": 19,
+    "holdoutTicks": 135,
+    "fitResidualM": 14.88,
+    "holdoutResidualM": 15.22
+   },
+   "publishedPoints": {
+    "matched": 14,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "ASPØY",
+      "lat": 62.475833,
+      "lng": 6.141111,
+      "pageX": 331.97,
+      "pageY": 353.111
+     },
+     {
+      "name": "AUSTNES",
+      "lat": 62.631944,
+      "lng": 6.262222,
+      "pageX": 407.828,
+      "pageY": 498.802
+     },
+     {
+      "name": "DRYNA",
+      "lat": 62.641944,
+      "lng": 6.519444,
+      "pageX": 525.15,
+      "pageY": 492.91
+     },
+     {
+      "name": "FJØRTOFT",
+      "lat": 62.688611,
+      "lng": 6.391667,
+      "pageX": 473.709,
+      "pageY": 546.401
+     },
+     {
+      "name": "FLØ",
+      "lat": 62.391667,
+      "lng": 5.822222,
+      "pageX": 175.583,
+      "pageY": 291.278
+     },
+     {
+      "name": "GODØY",
+      "lat": 62.466389,
+      "lng": 6.031111,
+      "pageX": 280.859,
+      "pageY": 350.838
+     },
+     {
+      "name": "GRYTA",
+      "lat": 62.531111,
+      "lng": 6.330833,
+      "pageX": 425.381,
+      "pageY": 395.711
+     },
+     {
+      "name": "INNHOLMEN",
+      "lat": 62.627222,
+      "lng": 6.118056,
+      "pageX": 342.133,
+      "pageY": 503.028
+     },
+     {
+      "name": "RUNDE",
+      "lat": 62.416389,
+      "lng": 5.581667,
+      "pageX": 69.813,
+      "pageY": 331.093
+     },
+     {
+      "name": "RØRVIK",
+      "lat": 62.569722,
+      "lng": 6.083611,
+      "pageX": 318.789,
+      "pageY": 448.952
+     },
+     {
+      "name": "SYKKYLVEN",
+      "lat": 62.396944,
+      "lng": 6.59,
+      "pageX": 525.51,
+      "pageY": 248.339
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "BRANDAL",
+      "lat": 62.405833,
+      "lng": 6.008333,
+      "pageX": 262.132,
+      "pageY": 292.907
+     },
+     {
+      "name": "GJØSUND",
+      "lat": 62.536389,
+      "lng": 6.114722,
+      "pageX": 328.322,
+      "pageY": 414.165
+     },
+     {
+      "name": "KJÆRSTAD",
+      "lat": 62.606944,
+      "lng": 6.216667,
+      "pageX": 383.888,
+      "pageY": 477.138
+     }
+    ],
+    "spanFraction": {
+     "x": 0.969,
+     "y": 0.538
+    },
+    "fitResidualM": 16.35,
+    "holdoutResidualM": 13.5,
+    "holdoutRmsM": 12.05
+   },
+   "crossCheckM": 31.23,
+   "warpReproductionM": 0.0014,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENAN",
+   "chart": "AD 2 ENAN 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "af0181940560c1a6e91a6b7d7bd6f17c5a7cc6156dbec5efb913c2af90202bc8",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623093.pdf",
+   "graphicId": "623093",
+   "preparationRevision": 1,
+   "file": "enan-2026-05-14-af018194-r1.webp",
+   "bytes": 2808156,
+   "pixelWidth": 4014,
+   "pixelHeight": 4694,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 15.6580336,
+    "east": 16.836992,
+    "south": 68.9382579,
+    "north": 69.4281927
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 62.8,
+    "right": 533.5,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 20,
+    "holdoutTicks": 135,
+    "fitResidualM": 6.77,
+    "holdoutResidualM": 11.05
+   },
+   "publishedPoints": {
+    "matched": 9,
+    "unmatched": [],
+    "symbolPerimeterPt": 30.6,
+    "fitPoints": [
+     {
+      "name": "BLEIK",
+      "lat": 69.270833,
+      "lng": 15.960833,
+      "pageX": 182.09,
+      "pageY": 532.232
+     },
+     {
+      "name": "DVERBERG",
+      "lat": 69.116667,
+      "lng": 15.978889,
+      "pageX": 192.269,
+      "pageY": 355.19
+     },
+     {
+      "name": "MELØYVÆR",
+      "lat": 69.066111,
+      "lng": 16.559444,
+      "pageX": 431.741,
+      "pageY": 302.031
+     },
+     {
+      "name": "NORDMJELE",
+      "lat": 69.133333,
+      "lng": 15.681667,
+      "pageX": 70.199,
+      "pageY": 372.693
+     },
+     {
+      "name": "STORVATNET",
+      "lat": 69.275,
+      "lng": 16.055278,
+      "pageX": 220.454,
+      "pageY": 537.653
+     },
+     {
+      "name": "ØRJA",
+      "lat": 69.266667,
+      "lng": 16.798333,
+      "pageX": 523.124,
+      "pageY": 535.124
+     },
+     {
+      "name": "ÅSE",
+      "lat": 69.044444,
+      "lng": 15.839167,
+      "pageX": 136.122,
+      "pageY": 271.345
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "GRØTAVÆR",
+      "lat": 68.958333,
+      "lng": 16.267778,
+      "pageX": 314.463,
+      "pageY": 175.428
+     },
+     {
+      "name": "VIKAN",
+      "lat": 69.301667,
+      "lng": 16.166667,
+      "pageX": 265.206,
+      "pageY": 569.118
+     }
+    ],
+    "spanFraction": {
+     "x": 0.962,
+     "y": 0.481
+    },
+    "fitResidualM": 0.72,
+    "holdoutResidualM": 1.09,
+    "holdoutRmsM": 0.83
+   },
+   "crossCheckM": 13.11,
+   "warpReproductionM": 0.0014,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENAT",
+   "chart": "AD 2 ENAT 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "bf8bd26f94087c2b384d9d26603523aeaf2d494468f0d2f6ec3ddfd7a42d1e03",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623095.pdf",
+   "graphicId": "623095",
+   "preparationRevision": 1,
+   "file": "enat-2026-05-14-bf8bd26f-r1.webp",
+   "bytes": 2620452,
+   "pixelWidth": 4513,
+   "pixelHeight": 5111,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 22.5380965,
+    "east": 24.1660399,
+    "south": 69.7147545,
+    "north": 70.3443767
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 23,
+    "holdoutTicks": 171,
+    "fitResidualM": 19.27,
+    "holdoutResidualM": 20.06
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0023,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENBL",
+   "chart": "AD 2 ENBL 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "6d5098eb19b237790cd89ca2c35df3e383f37620f096381a00bab11b966e56be",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623097.pdf",
+   "graphicId": "623097",
+   "preparationRevision": 1,
+   "file": "enbl-2026-05-14-6d5098eb-r1.webp",
+   "bytes": 2839168,
+   "pixelWidth": 4532,
+   "pixelHeight": 5128,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 5.3916086,
+    "east": 6.1079058,
+    "south": 61.1803766,
+    "north": 61.5686655
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.2,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 12,
+    "holdoutTicks": 63,
+    "fitResidualM": 10.66,
+    "holdoutResidualM": 10.33
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENBN",
+   "chart": "AD 2 ENBN 6 - 1",
+   "chartDate": "2026-09-03",
+   "sourcePdfSha256": "b70a0d8d631ef96aef7fdb8713d7981a492b623987d92a96601368506d26e81d",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643887.pdf",
+   "graphicId": "643887",
+   "preparationRevision": 1,
+   "file": "enbn-2026-09-03-b70a0d8d-r1.webp",
+   "bytes": 1533630,
+   "pixelWidth": 4121,
+   "pixelHeight": 4787,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 11.8226414,
+    "east": 12.5761537,
+    "south": 65.2845858,
+    "north": 65.6480238
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.5,
+    "right": 534.1,
+    "bottom": 157.4,
+    "top": 711.2
+   },
+   "graticule": {
+    "fitTicks": 13,
+    "holdoutTicks": 81,
+    "fitResidualM": 2.36,
+    "holdoutResidualM": 3.2
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENBO",
+   "chart": "AD 2 ENBO 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "88082c8a6a956fb35f2bbbdb2b5a3c01321c1aef736875ae5a615ac0ba0db471",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623101.pdf",
+   "graphicId": "623101",
+   "preparationRevision": 1,
+   "file": "enbo-2026-05-14-88082c8a-r1.webp",
+   "bytes": 2802814,
+   "pixelWidth": 3966,
+   "pixelHeight": 4655,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 13.7433418,
+    "east": 15.0114401,
+    "south": 67.0151533,
+    "north": 67.589451
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.9,
+    "right": 534.5,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 22,
+    "holdoutTicks": 153,
+    "fitResidualM": 10.68,
+    "holdoutResidualM": 15.13
+   },
+   "publishedPoints": {
+    "matched": 11,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "BJØRNØY LIGHT",
+      "lat": 67.419167,
+      "lng": 14.427778,
+      "pageX": 316.43,
+      "pageY": 546.934
+     },
+     {
+      "name": "CUTTY",
+      "lat": 67.252778,
+      "lng": 14.931944,
+      "pageX": 504.656,
+      "pageY": 384.194
+     },
+     {
+      "name": "KVALNES",
+      "lat": 67.2375,
+      "lng": 14.826944,
+      "pageX": 465.104,
+      "pageY": 369.417
+     },
+     {
+      "name": "LANDEGO WEST",
+      "lat": 67.389167,
+      "lng": 14.208889,
+      "pageX": 234.264,
+      "pageY": 518.669
+     },
+     {
+      "name": "MÅRNES",
+      "lat": 67.15,
+      "lng": 14.083333,
+      "pageX": 183.858,
+      "pageY": 286.812
+     },
+     {
+      "name": "SEINES",
+      "lat": 67.215833,
+      "lng": 14.380556,
+      "pageX": 296.814,
+      "pageY": 349.427
+     },
+     {
+      "name": "SKÅNLAND",
+      "lat": 67.172778,
+      "lng": 14.335556,
+      "pageX": 279.405,
+      "pageY": 307.742
+     },
+     {
+      "name": "TWINS",
+      "lat": 67.15,
+      "lng": 13.954167,
+      "pageX": 135.049,
+      "pageY": 287.582
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "HJARTØY",
+      "lat": 67.287222,
+      "lng": 14.291667,
+      "pageX": 264.103,
+      "pageY": 419.185
+     },
+     {
+      "name": "SALTSTRAUMEN",
+      "lat": 67.233333,
+      "lng": 14.636111,
+      "pageX": 393.224,
+      "pageY": 365.676
+     },
+     {
+      "name": "VOKKY",
+      "lat": 67.436111,
+      "lng": 13.974167,
+      "pageX": 147.199,
+      "pageY": 565.591
+     }
+    ],
+    "spanFraction": {
+     "x": 0.785,
+     "y": 0.47
+    },
+    "fitResidualM": 0.39,
+    "holdoutResidualM": 1.1,
+    "holdoutRmsM": 0.66
+   },
+   "crossCheckM": 14.47,
+   "warpReproductionM": 0.0019,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENBR",
+   "chart": "AD 2 ENBR 6 - 2",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "13a5f8c1c707bdc8abe75eeac29a21db33ad0a5a3a9220c09d6fe528e7ba943a",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623103.pdf",
+   "graphicId": "623103",
+   "preparationRevision": 1,
+   "file": "enbr-2026-05-14-13a5f8c1-r1.webp",
+   "bytes": 3198716,
+   "pixelWidth": 4561,
+   "pixelHeight": 5151,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 4.6941844,
+    "east": 5.651899,
+    "south": 60.0140632,
+    "north": 60.5502312
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.2,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 72,
+    "fitResidualM": 12.29,
+    "holdoutResidualM": 14.43
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.001,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENBR",
+   "chart": "AD 2 ENBR 6 - 3",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "f28c2d11b971b17501f49b2f282f66814a0ac949e0aa3b73aee35604a95e839d",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623105.pdf",
+   "graphicId": "623105",
+   "preparationRevision": 1,
+   "file": "enbr-2026-05-14-f28c2d11-r1.webp",
+   "bytes": 3251838,
+   "pixelWidth": 4564,
+   "pixelHeight": 5154,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 4.6608629,
+    "east": 5.6203829,
+    "south": 60.0568261,
+    "north": 60.5932596
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.5,
+    "right": 534.1,
+    "bottom": 159.7,
+    "top": 713.5
+   },
+   "graticule": {
+    "fitTicks": 16,
+    "holdoutTicks": 90,
+    "fitResidualM": 9.54,
+    "holdoutResidualM": 16.74
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0009,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENBS",
+   "chart": "AD 2 ENBS 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "45b78840982d772647d1f88ecf0a84d0017533521b2e1cc29bf13f09bd1249f3",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623109.pdf",
+   "graphicId": "623109",
+   "preparationRevision": 1,
+   "file": "enbs-2026-05-14-45b78840-r1.webp",
+   "bytes": 1475708,
+   "pixelWidth": 4915,
+   "pixelHeight": 5427,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 29.1627611,
+    "east": 30.2819023,
+    "south": 70.3981375,
+    "north": 70.808514
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.4,
+    "right": 534.1,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 15,
+    "holdoutTicks": 90,
+    "fitResidualM": 5.59,
+    "holdoutResidualM": 9.91
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENBV",
+   "chart": "AD 2 ENBV 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "dae00067a1df598045fabdb950bb3645e00f7166821974885d3f35a61cb20313",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623111.pdf",
+   "graphicId": "623111",
+   "preparationRevision": 1,
+   "file": "enbv-2026-05-14-dae00067-r1.webp",
+   "bytes": 750480,
+   "pixelWidth": 4876,
+   "pixelHeight": 5397,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 28.5037039,
+    "east": 29.6284007,
+    "south": 70.6443329,
+    "north": 71.0527182
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 10.8,
+    "holdoutResidualM": 11.19
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENCN",
+   "chart": "AD 2 ENCN 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "21c337f8493ab65c6f1ac27301625b61fd31d4d2eb0817f5e0eb8d34e19bdefe",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623260.pdf",
+   "graphicId": "623260",
+   "preparationRevision": 1,
+   "file": "encn-2026-05-14-21c337f8-r1.webp",
+   "bytes": 2617148,
+   "pixelWidth": 4369,
+   "pixelHeight": 4997,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 7.6501285,
+    "east": 8.5147249,
+    "south": 57.9430535,
+    "north": 58.4640827
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.1,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 16,
+    "holdoutTicks": 108,
+    "fitResidualM": 5.33,
+    "holdoutResidualM": 5.9
+   },
+   "publishedPoints": {
+    "matched": 10,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "GREIPSTAD",
+      "lat": 58.146111,
+      "lng": 7.839167,
+      "pageX": 143.43,
+      "pageY": 384.034
+     },
+     {
+      "name": "GRØNNINGEN",
+      "lat": 58.079167,
+      "lng": 8.088889,
+      "pageX": 286.535,
+      "pageY": 291.635
+     },
+     {
+      "name": "NYLAND",
+      "lat": 58.222778,
+      "lng": 8.296389,
+      "pageX": 428.657,
+      "pageY": 443.183
+     },
+     {
+      "name": "RAMSELIA",
+      "lat": 58.346667,
+      "lng": 8.126389,
+      "pageX": 340.601,
+      "pageY": 595.269
+     },
+     {
+      "name": "RCF E",
+      "lat": 58.194444,
+      "lng": 8.110833,
+      "pageX": 313.358,
+      "pageY": 422.123
+     },
+     {
+      "name": "STEMMANE",
+      "lat": 58.173889,
+      "lng": 8.130833,
+      "pageX": 323.029,
+      "pageY": 397.372
+     },
+     {
+      "name": "VENNESLA",
+      "lat": 58.266667,
+      "lng": 7.966667,
+      "pageX": 234.968,
+      "pageY": 513.751
+     },
+     {
+      "name": "ÅLEFJÆR",
+      "lat": 58.232778,
+      "lng": 8.027778,
+      "pageX": 267.763,
+      "pageY": 471.145
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "HØVÅG",
+      "lat": 58.168889,
+      "lng": 8.234722,
+      "pageX": 385.229,
+      "pageY": 385.276
+     },
+     {
+      "name": "RCF W",
+      "lat": 58.213611,
+      "lng": 8.059167,
+      "pageX": 284.427,
+      "pageY": 447.259
+     }
+    ],
+    "spanFraction": {
+     "x": 0.606,
+     "y": 0.548
+    },
+    "fitResidualM": 0.9,
+    "holdoutResidualM": 0.66,
+    "holdoutRmsM": 0.47
+   },
+   "crossCheckM": 24.03,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENDU",
+   "chart": "AD 2 ENDU 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "f93dd046804a5e00cf2b8a5baa76d5e5a4083a077fa6ff2429e2e88930e9b966",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+   "graphicId": "623256",
+   "preparationRevision": 1,
+   "file": "endu-2026-05-14-f93dd046-r1.webp",
+   "bytes": 3884210,
+   "pixelWidth": 4173,
+   "pixelHeight": 4833,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 17.6627981,
+    "east": 19.2597687,
+    "south": 68.7630258,
+    "north": 69.4229866
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 26,
+    "holdoutTicks": 189,
+    "fitResidualM": 18.57,
+    "holdoutResidualM": 21.67
+   },
+   "publishedPoints": {
+    "matched": 19,
+    "unmatched": [
+     "ESPENES"
+    ],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "ELLA",
+      "lat": 69.033333,
+      "lng": 18.638889,
+      "pageX": 361.137,
+      "pageY": 384.256
+     },
+     {
+      "name": "FINNFJORD",
+      "lat": 69.225556,
+      "lng": 18.083333,
+      "pageX": 178.136,
+      "pageY": 543.334
+     },
+     {
+      "name": "GOMPEN",
+      "lat": 69.051944,
+      "lng": 17.941667,
+      "pageX": 141.327,
+      "pageY": 388.827
+     },
+     {
+      "name": "NORA",
+      "lat": 69.100556,
+      "lng": 18.611667,
+      "pageX": 349.113,
+      "pageY": 442.705
+     },
+     {
+      "name": "REINELV",
+      "lat": 69.2075,
+      "lng": 18.243611,
+      "pageX": 228.889,
+      "pageY": 530.074
+     },
+     {
+      "name": "ROSSVOLL",
+      "lat": 69.178333,
+      "lng": 18.5,
+      "pageX": 310.25,
+      "pageY": 508.894
+     },
+     {
+      "name": "RUNDHAUG",
+      "lat": 69.019444,
+      "lng": 18.898611,
+      "pageX": 443.472,
+      "pageY": 377.096
+     },
+     {
+      "name": "SAFT",
+      "lat": 68.964167,
+      "lng": 18.68,
+      "pageX": 377.691,
+      "pageY": 324.371
+     },
+     {
+      "name": "SODA",
+      "lat": 68.9325,
+      "lng": 18.95,
+      "pageX": 464.53,
+      "pageY": 301.9
+     },
+     {
+      "name": "STEINVANN",
+      "lat": 69.116667,
+      "lng": 18.416667,
+      "pageX": 287.265,
+      "pageY": 453.333
+     },
+     {
+      "name": "SØRREISA",
+      "lat": 69.126389,
+      "lng": 18.195833,
+      "pageX": 217.711,
+      "pageY": 458.133
+     },
+     {
+      "name": "TILLERMO",
+      "lat": 68.995556,
+      "lng": 19.161944,
+      "pageX": 527.621,
+      "pageY": 361.597
+     },
+     {
+      "name": "TUNE",
+      "lat": 68.93,
+      "lng": 18.478333,
+      "pageX": 315.852,
+      "pageY": 290.692
+     },
+     {
+      "name": "WERA",
+      "lat": 69.0625,
+      "lng": 18.402778,
+      "pageX": 285.557,
+      "pageY": 405.58
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "FINNSNES",
+      "lat": 69.240278,
+      "lng": 17.965,
+      "pageX": 140.655,
+      "pageY": 554.434
+     },
+     {
+      "name": "ROGNMO",
+      "lat": 69.096667,
+      "lng": 18.7225,
+      "pageX": 384.021,
+      "pageY": 441.373
+     },
+     {
+      "name": "SARA",
+      "lat": 69.006944,
+      "lng": 18.518056,
+      "pageX": 324.516,
+      "pageY": 358.895
+     },
+     {
+      "name": "TAKVATN",
+      "lat": 69.109722,
+      "lng": 19.038889,
+      "pageX": 482.323,
+      "pageY": 459.097
+     },
+     {
+      "name": "ÅSEN",
+      "lat": 69.033056,
+      "lng": 18.536667,
+      "pageX": 329.046,
+      "pageY": 382.132
+     }
+    ],
+    "spanFraction": {
+     "x": 0.821,
+     "y": 0.456
+    },
+    "fitResidualM": 0.97,
+    "holdoutResidualM": 1.87,
+    "holdoutRmsM": 1.17
+   },
+   "crossCheckM": 24.07,
+   "warpReproductionM": 0.0028,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENEV",
+   "chart": "AD 2 ENEV 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "eb3ac203d7c341a92625115c50e185fa0e90b8a35c136252e16f74b9980f9a8b",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623113.pdf",
+   "graphicId": "623113",
+   "preparationRevision": 1,
+   "file": "enev-2026-05-14-eb3ac203-r1.webp",
+   "bytes": 2867252,
+   "pixelWidth": 4040,
+   "pixelHeight": 4721,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 16.0475526,
+    "east": 17.1985287,
+    "south": 68.269998,
+    "north": 68.7625617
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 19,
+    "holdoutTicks": 135,
+    "fitResidualM": 11.21,
+    "holdoutResidualM": 16.84
+   },
+   "publishedPoints": {
+    "matched": 12,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "BERGET",
+      "lat": 68.399444,
+      "lng": 16.839444,
+      "pageX": 396.661,
+      "pageY": 301.777
+     },
+     {
+      "name": "BREIVIKA",
+      "lat": 68.7475,
+      "lng": 16.563611,
+      "pageX": 269.69,
+      "pageY": 698.608
+     },
+     {
+      "name": "FJELLDAL",
+      "lat": 68.561111,
+      "lng": 16.531944,
+      "pageX": 261.823,
+      "pageY": 484.034
+     },
+     {
+      "name": "FORRA",
+      "lat": 68.455556,
+      "lng": 17.0125,
+      "pageX": 467.83,
+      "pageY": 368.548
+     },
+     {
+      "name": "KILBOTN",
+      "lat": 68.716667,
+      "lng": 16.538889,
+      "pageX": 260.27,
+      "pageY": 662.907
+     },
+     {
+      "name": "OSVATNET",
+      "lat": 68.497222,
+      "lng": 16.833333,
+      "pageX": 390.728,
+      "pageY": 414.072
+     },
+     {
+      "name": "SKARSTAD",
+      "lat": 68.372222,
+      "lng": 16.275,
+      "pageX": 158.274,
+      "pageY": 264.442
+     },
+     {
+      "name": "SKOGØY",
+      "lat": 68.495,
+      "lng": 16.973333,
+      "pageX": 449.834,
+      "pageY": 413.344
+     },
+     {
+      "name": "ØYVATNET",
+      "lat": 68.614167,
+      "lng": 16.761389,
+      "pageX": 356.548,
+      "pageY": 547.594
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "FINNVIK",
+      "lat": 68.382222,
+      "lng": 16.403889,
+      "pageX": 212.664,
+      "pageY": 277.124
+     },
+     {
+      "name": "KONGSVIKA",
+      "lat": 68.563611,
+      "lng": 16.248333,
+      "pageX": 142.507,
+      "pageY": 484.215
+     },
+     {
+      "name": "TOVIK",
+      "lat": 68.680556,
+      "lng": 16.868056,
+      "pageX": 398.97,
+      "pageY": 625.215
+     }
+    ],
+    "spanFraction": {
+     "x": 0.658,
+     "y": 0.784
+    },
+    "fitResidualM": 0.74,
+    "holdoutResidualM": 1.72,
+    "holdoutRmsM": 1.16
+   },
+   "crossCheckM": 10.76,
+   "warpReproductionM": 0.0011,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENFL",
+   "chart": "AD 2 ENFL 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "fa20b19620eb11d6d6778172547ebff67bdb7f79ffdee56acf2bf2f8429fbb58",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623117.pdf",
+   "graphicId": "623117",
+   "preparationRevision": 1,
+   "file": "enfl-2026-05-14-fa20b196-r1.webp",
+   "bytes": 2501504,
+   "pixelWidth": 4578,
+   "pixelHeight": 5167,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 4.5841379,
+    "east": 5.4935498,
+    "south": 61.3130225,
+    "north": 61.8018695
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 7.51,
+    "holdoutResidualM": 14.62
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENGK",
+   "chart": "AD 2 ENGK 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "e783876161242b59eab343d9e1e5419f498230719525248ef38217bb785cf717",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623258.pdf",
+   "graphicId": "623258",
+   "preparationRevision": 1,
+   "file": "engk-2026-05-14-e7838761-r1.webp",
+   "bytes": 3295864,
+   "pixelWidth": 4335,
+   "pixelHeight": 4969,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 8.1833779,
+    "east": 9.1282368,
+    "south": 58.2446756,
+    "north": 58.8101094
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 64.1,
+    "right": 534.6,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 16,
+    "holdoutTicks": 108,
+    "fitResidualM": 6.34,
+    "holdoutResidualM": 6.74
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0009,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENGM",
+   "chart": "AD 2 ENGM 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "5f046c6bfbaa09e79d251be493e21bcdd902d81684ebc78ffc87f02c8a5da71d",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623422.pdf",
+   "graphicId": "623422",
+   "preparationRevision": 1,
+   "file": "engm-2026-05-14-5f046c6b-r1.webp",
+   "bytes": 3464924,
+   "pixelWidth": 4184,
+   "pixelHeight": 4841,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 10.6272809,
+    "east": 11.5858203,
+    "south": 59.9024637,
+    "north": 60.4539861
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 62,
+    "right": 532.6,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 17,
+    "holdoutTicks": 117,
+    "fitResidualM": 8.78,
+    "holdoutResidualM": 12.43
+   },
+   "publishedPoints": {
+    "matched": 8,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "COZIP",
+      "lat": 60.287778,
+      "lng": 11.2425,
+      "pageX": 373.377,
+      "pageY": 544.986
+     },
+     {
+      "name": "EXLOF",
+      "lat": 60.070556,
+      "lng": 11.116667,
+      "pageX": 294.258,
+      "pageY": 320.594
+     },
+     {
+      "name": "NANNESTAD",
+      "lat": 60.2175,
+      "lng": 10.970833,
+      "pageX": 227.144,
+      "pageY": 479.462
+     },
+     {
+      "name": "NORDKISA",
+      "lat": 60.184722,
+      "lng": 11.263889,
+      "pageX": 378.431,
+      "pageY": 435.985
+     },
+     {
+      "name": "RÅSJØEN",
+      "lat": 60.208333,
+      "lng": 10.802778,
+      "pageX": 138.667,
+      "pageY": 475.316
+     },
+     {
+      "name": "YOMME",
+      "lat": 60.321111,
+      "lng": 11.082778,
+      "pageX": 292.149,
+      "pageY": 584.848
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "MIDWO",
+      "lat": 60.098333,
+      "lng": 10.954722,
+      "pageX": 210.979,
+      "pageY": 354.643
+     },
+     {
+      "name": "VORMSUND",
+      "lat": 60.155,
+      "lng": 11.418056,
+      "pageX": 457.44,
+      "pageY": 400.264
+     }
+    ],
+    "spanFraction": {
+     "x": 0.509,
+     "y": 0.477
+    },
+    "fitResidualM": 5.04,
+    "holdoutResidualM": 22.35,
+    "holdoutRmsM": 16.97
+   },
+   "crossCheckM": 27.63,
+   "warpReproductionM": 0.001,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENHD",
+   "chart": "AD 2 ENHD 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "afdcc303e03963b5446b5d353c8b9d454c9ed646efa51154ce617c336fd2af55",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623089.pdf",
+   "graphicId": "623089",
+   "preparationRevision": 1,
+   "file": "enhd-2026-05-14-afdcc303-r1.webp",
+   "bytes": 2703030,
+   "pixelWidth": 4548,
+   "pixelHeight": 5141,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 4.7693639,
+    "east": 5.7802071,
+    "south": 58.9927985,
+    "north": 59.5764144
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.2,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 17,
+    "holdoutTicks": 117,
+    "fitResidualM": 10.47,
+    "holdoutResidualM": 17.23
+   },
+   "publishedPoints": {
+    "matched": 13,
+    "unmatched": [
+     "FLATHOLMEN",
+     "TUNGENES"
+    ],
+    "symbolPerimeterPt": 28.1,
+    "fitPoints": [
+     {
+      "name": "BOKN VEST",
+      "lat": 59.166667,
+      "lng": 5.383333,
+      "pageX": 337.189,
+      "pageY": 302.77
+     },
+     {
+      "name": "BOKN ØST",
+      "lat": 59.2575,
+      "lng": 5.449167,
+      "pageX": 386.232,
+      "pageY": 392.57
+     },
+     {
+      "name": "GRINDE",
+      "lat": 59.430556,
+      "lng": 5.459444,
+      "pageX": 417.878,
+      "pageY": 572.617
+     },
+     {
+      "name": "HAUGESUND",
+      "lat": 59.403889,
+      "lng": 5.234167,
+      "pageX": 293.838,
+      "pageY": 562.322
+     },
+     {
+      "name": "KVITSØY",
+      "lat": 59.063333,
+      "lng": 5.4,
+      "pageX": 330.457,
+      "pageY": 193.493
+     },
+     {
+      "name": "RØKSUND",
+      "lat": 59.332778,
+      "lng": 5.361667,
+      "pageX": 350.896,
+      "pageY": 478.029
+     },
+     {
+      "name": "SKJOLD",
+      "lat": 59.428611,
+      "lng": 5.621944,
+      "pageX": 504.109,
+      "pageY": 558.173
+     },
+     {
+      "name": "SKUDE",
+      "lat": 59.149444,
+      "lng": 5.204167,
+      "pageX": 238.409,
+      "pageY": 298.896
+     },
+     {
+      "name": "UTSIRA",
+      "lat": 59.306667,
+      "lng": 4.888056,
+      "pageX": 93.962,
+      "pageY": 488.612
+     },
+     {
+      "name": "VEA",
+      "lat": 59.296667,
+      "lng": 5.198333,
+      "pageX": 258.107,
+      "pageY": 453.152
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "BRIDGE",
+      "lat": 59.374444,
+      "lng": 5.290833,
+      "pageX": 319.491,
+      "pageY": 527.104
+     },
+     {
+      "name": "RYVARDEN",
+      "lat": 59.527222,
+      "lng": 5.225278,
+      "pageX": 308.22,
+      "pageY": 691.858
+     },
+     {
+      "name": "SVEIO",
+      "lat": 59.553056,
+      "lng": 5.401111,
+      "pageX": 405.474,
+      "pageY": 705.12
+     }
+    ],
+    "spanFraction": {
+     "x": 0.872,
+     "y": 0.685
+    },
+    "fitResidualM": 0.39,
+    "holdoutResidualM": 0.83,
+    "holdoutRmsM": 0.58
+   },
+   "crossCheckM": 26.7,
+   "warpReproductionM": 0.0011,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENHF",
+   "chart": "AD 2 ENHF 6 - 1",
+   "chartDate": "2026-06-11",
+   "sourcePdfSha256": "08783606e26332d10c9149410fd32610d2de768ecaec2f03dca6ac54b49b5351",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/638669.pdf",
+   "graphicId": "638669",
+   "preparationRevision": 1,
+   "file": "enhf-2026-06-11-08783606-r1.webp",
+   "bytes": 1302594,
+   "pixelWidth": 4540,
+   "pixelHeight": 5132,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 23.1103206,
+    "east": 24.4120703,
+    "south": 70.4521272,
+    "north": 70.9385644
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.3,
+    "right": 533.7,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 19,
+    "holdoutTicks": 135,
+    "fitResidualM": 4.66,
+    "holdoutResidualM": 4.45
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0012,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENHK",
+   "chart": "AD 2 ENHK 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "8cd5bd2fb96976b97db87ec83922fcac828ea29ebec36599ce7d9c474fb82c3b",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623121.pdf",
+   "graphicId": "623121",
+   "preparationRevision": 1,
+   "file": "enhk-2026-05-14-8cd5bd2f-r1.webp",
+   "bytes": 1134270,
+   "pixelWidth": 4435,
+   "pixelHeight": 5048,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 21.5929131,
+    "east": 22.7254025,
+    "south": 70.2666051,
+    "north": 70.6972551
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 17,
+    "holdoutTicks": 117,
+    "fitResidualM": 9.04,
+    "holdoutResidualM": 16.32
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0008,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENHV",
+   "chart": "AD 2 ENHV 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "182c442b88e2484c89822779d4ef80bf2590bcb8584198ec39e739a693c75b3d",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623123.pdf",
+   "graphicId": "623123",
+   "preparationRevision": 1,
+   "file": "enhv-2026-05-14-182c442b-r1.webp",
+   "bytes": 1155676,
+   "pixelWidth": 4685,
+   "pixelHeight": 5244,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 25.400355,
+    "east": 26.49122,
+    "south": 70.8115356,
+    "north": 71.2088425
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.4,
+    "right": 534,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 81,
+    "fitResidualM": 5.79,
+    "holdoutResidualM": 7.24
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0009,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENKB",
+   "chart": "AD 2 ENKB 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "efe5d5d06eb2ffa8c92a07043ac7b2ee60cdde582ae61f7d8c7ca425b465cfcf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623125.pdf",
+   "graphicId": "623125",
+   "preparationRevision": 1,
+   "file": "enkb-2026-05-14-efe5d5d0-r1.webp",
+   "bytes": 2510696,
+   "pixelWidth": 4416,
+   "pixelHeight": 5032,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 7.1020407,
+    "east": 8.3045975,
+    "south": 62.7904145,
+    "north": 63.4103532
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.1,
+    "right": 533.6,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 20,
+    "holdoutTicks": 144,
+    "fitResidualM": 10.67,
+    "holdoutResidualM": 15.1
+   },
+   "publishedPoints": {
+    "matched": 8,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "EDØY",
+      "lat": 63.285833,
+      "lng": 8.131667,
+      "pageX": 502.985,
+      "pageY": 592.914
+     },
+     {
+      "name": "HALSA",
+      "lat": 63.067778,
+      "lng": 8.228611,
+      "pageX": 522.852,
+      "pageY": 377.4
+     },
+     {
+      "name": "KVALVÅG",
+      "lat": 63.070556,
+      "lng": 7.891389,
+      "pageX": 375.177,
+      "pageY": 396.144
+     },
+     {
+      "name": "KVERNES",
+      "lat": 63.005278,
+      "lng": 7.717778,
+      "pageX": 291.839,
+      "pageY": 341.591
+     },
+     {
+      "name": "KVITHOLM",
+      "lat": 63.023333,
+      "lng": 7.234444,
+      "pageX": 81.578,
+      "pageY": 384.033
+     },
+     {
+      "name": "STAVNES",
+      "lat": 63.114722,
+      "lng": 7.662222,
+      "pageX": 279.569,
+      "pageY": 450.209
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "HESTESKJÆR",
+      "lat": 63.084722,
+      "lng": 7.491389,
+      "pageX": 201.367,
+      "pageY": 429.898
+     },
+     {
+      "name": "MOY",
+      "lat": 63.171944,
+      "lng": 7.859444,
+      "pageX": 372.122,
+      "pageY": 495.771
+     }
+    ],
+    "spanFraction": {
+     "x": 0.938,
+     "y": 0.454
+    },
+    "fitResidualM": 0.38,
+    "holdoutResidualM": 0.28,
+    "holdoutRmsM": 0.28
+   },
+   "crossCheckM": 29.88,
+   "warpReproductionM": 0.0015,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENKR",
+   "chart": "AD 2 ENKR 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "33379264c12ce603def6b1d56e403382869ce06db84c6560a7f830092f802566",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623127.pdf",
+   "graphicId": "623127",
+   "preparationRevision": 1,
+   "file": "enkr-2026-05-14-33379264-r1.webp",
+   "bytes": 2595746,
+   "pixelWidth": 4913,
+   "pixelHeight": 5423,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 29.004478,
+    "east": 30.6121567,
+    "south": 69.4096052,
+    "north": 70.0247205
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.1,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 20,
+    "holdoutTicks": 144,
+    "fitResidualM": 11.96,
+    "holdoutResidualM": 16.79
+   },
+   "publishedPoints": {
+    "matched": 9,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "BUGØYFJORD",
+      "lat": 69.858889,
+      "lng": 29.382222,
+      "pageX": 114.78,
+      "pageY": 543.447
+     },
+     {
+      "name": "BØKFJORD FYR",
+      "lat": 69.8775,
+      "lng": 30.176111,
+      "pageX": 390.787,
+      "pageY": 632.095
+     },
+     {
+      "name": "JERESTAN",
+      "lat": 69.799444,
+      "lng": 29.532778,
+      "pageX": 182.968,
+      "pageY": 495.273
+     },
+     {
+      "name": "KJØFJORDEN",
+      "lat": 69.838889,
+      "lng": 29.786111,
+      "pageX": 262.857,
+      "pageY": 557.845
+     },
+     {
+      "name": "LANGFJORDEN",
+      "lat": 69.623611,
+      "lng": 29.935278,
+      "pageX": 370.942,
+      "pageY": 350.09
+     },
+     {
+      "name": "STRØMMEN",
+      "lat": 69.693056,
+      "lng": 29.916944,
+      "pageX": 346.585,
+      "pageY": 419.721
+     },
+     {
+      "name": "ØVRE NEIDEN",
+      "lat": 69.676389,
+      "lng": 29.145278,
+      "pageX": 75.207,
+      "pageY": 335.615
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "JARFJORDBOTN",
+      "lat": 69.668611,
+      "lng": 30.308611,
+      "pageX": 492.525,
+      "pageY": 430.004
+     },
+     {
+      "name": "STEINSKJERET",
+      "lat": 69.751389,
+      "lng": 29.827778,
+      "pageX": 299.927,
+      "pageY": 471.686
+     }
+    ],
+    "spanFraction": {
+     "x": 0.671,
+     "y": 0.535
+    },
+    "fitResidualM": 0.59,
+    "holdoutResidualM": 1.29,
+    "holdoutRmsM": 0.91
+   },
+   "crossCheckM": 40.59,
+   "warpReproductionM": 0.0024,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENLK",
+   "chart": "AD 2 ENLK 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "51b8b05ee9a77b37423bba0699ea7255029554c8e50b6df31f5ee338c2661b5e",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623129.pdf",
+   "graphicId": "623129",
+   "preparationRevision": 1,
+   "file": "enlk-2026-05-14-51b8b05e-r1.webp",
+   "bytes": 1479474,
+   "pixelWidth": 4022,
+   "pixelHeight": 4706,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 13.2109356,
+    "east": 14.0311815,
+    "south": 67.9695413,
+    "north": 68.3267567
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.3,
+    "right": 533.9,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 7.79,
+    "holdoutResidualM": 12.84
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENMH",
+   "chart": "AD 2 ENMH 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "82939c23e8322bc81f1e65674ed5ef86b5d71d8b957a9a2877b8d8b6f0c533e3",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623131.pdf",
+   "graphicId": "623131",
+   "preparationRevision": 1,
+   "file": "enmh-2026-05-14-82939c23-r1.webp",
+   "bytes": 1364936,
+   "pixelWidth": 4801,
+   "pixelHeight": 5337,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 27.2764695,
+    "east": 28.3947514,
+    "south": 70.8271312,
+    "north": 71.2312411
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.1,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 16,
+    "holdoutTicks": 108,
+    "fitResidualM": 6.93,
+    "holdoutResidualM": 5.3
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENML",
+   "chart": "AD 2 ENML 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "70d89cec39153984ff41aa311483bd31d6113dae834b8f8c6a375aec6b1f3c11",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623133.pdf",
+   "graphicId": "623133",
+   "preparationRevision": 1,
+   "file": "enml-2026-05-14-70d89cec-r1.webp",
+   "bytes": 1993204,
+   "pixelWidth": 4447,
+   "pixelHeight": 5057,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 6.8415241,
+    "east": 7.577786,
+    "south": 62.5638308,
+    "north": 62.9471112
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.2,
+    "right": 533.8,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 11,
+    "holdoutTicks": 63,
+    "fitResidualM": 6.09,
+    "holdoutResidualM": 7.76
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENMS",
+   "chart": "AD 2 ENMS 6 - 1",
+   "chartDate": "2026-09-03",
+   "sourcePdfSha256": "5f288934e4e16ebf6d487cf1e99927380914d2c9b9a03d7812e1da1caf2e6e27",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643752.pdf",
+   "graphicId": "643752",
+   "preparationRevision": 1,
+   "file": "enms-2026-09-03-5f288934-r1.webp",
+   "bytes": 2010342,
+   "pixelWidth": 4040,
+   "pixelHeight": 4721,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 12.900176,
+    "east": 13.7218594,
+    "south": 65.5525749,
+    "north": 65.9469382
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.1,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 3.09,
+    "holdoutResidualM": 4.58
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENNA",
+   "chart": "AD 2 ENNA 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "b09d9d15c14af5e33fe9e85ae529e1cf3b096d07db1fe6b841c4b60325612e12",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623137.pdf",
+   "graphicId": "623137",
+   "preparationRevision": 1,
+   "file": "enna-2026-05-14-b09d9d15-r1.webp",
+   "bytes": 2599758,
+   "pixelWidth": 4619,
+   "pixelHeight": 5193,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 24.1510319,
+    "east": 25.8211103,
+    "south": 69.7650517,
+    "north": 70.4045686
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.5,
+    "right": 534.1,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 23,
+    "holdoutTicks": 171,
+    "fitResidualM": 13.05,
+    "holdoutResidualM": 18.08
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0029,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENNM",
+   "chart": "AD 2 ENNM 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "91281a0825af0326c093fd4508f41e8c299bc0148bb2ae70a43ff4a71fb49309",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623139.pdf",
+   "graphicId": "623139",
+   "preparationRevision": 1,
+   "file": "ennm-2026-05-14-91281a08-r1.webp",
+   "bytes": 1972452,
+   "pixelWidth": 4162,
+   "pixelHeight": 4822,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 11.1591617,
+    "east": 11.9838366,
+    "south": 64.2597187,
+    "north": 64.6715589
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.2,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 7.75,
+    "holdoutResidualM": 11.94
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENNO",
+   "chart": "AD 2 ENNO 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "ea4f38e93c0f6437f112f8ef35749d6a1b5ee27d3ad70efdefd4d4e54ef5d7e6",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623141.pdf",
+   "graphicId": "623141",
+   "preparationRevision": 1,
+   "file": "enno-2026-05-14-ea4f38e9-r1.webp",
+   "bytes": 3648752,
+   "pixelWidth": 4310,
+   "pixelHeight": 4949,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 8.7653775,
+    "east": 9.5724195,
+    "south": 59.3498564,
+    "north": 59.8190031
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 62.5,
+    "right": 533.2,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 13,
+    "holdoutTicks": 81,
+    "fitResidualM": 7.63,
+    "holdoutResidualM": 16.32
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENOL",
+   "chart": "AD 2 ENOL 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "2dc45a3d39722e51ea5ff60eaea6e815d225e81d01ec342f83cd30b500394f6f",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623143.pdf",
+   "graphicId": "623143",
+   "preparationRevision": 1,
+   "file": "enol-2026-05-14-2dc45a3d-r1.webp",
+   "bytes": 3119808,
+   "pixelWidth": 4288,
+   "pixelHeight": 4927,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 9.0374905,
+    "east": 10.3229098,
+    "south": 63.3796238,
+    "north": 64.0338398
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.2,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 21,
+    "holdoutTicks": 144,
+    "fitResidualM": 11.39,
+    "holdoutResidualM": 21.12
+   },
+   "publishedPoints": {
+    "matched": 15,
+    "unmatched": [
+     "TJELDBERGODDEN"
+    ],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "AUSTRÅTT",
+      "lat": 63.703889,
+      "lng": 9.743611,
+      "pageX": 321.428,
+      "pageY": 429.389
+     },
+     {
+      "name": "EKSET",
+      "lat": 63.783611,
+      "lng": 9.866111,
+      "pageX": 376.122,
+      "pageY": 497.165
+     },
+     {
+      "name": "GARTEN",
+      "lat": 63.645,
+      "lng": 9.520278,
+      "pageX": 227.715,
+      "pageY": 383.909
+     },
+     {
+      "name": "HASSELVIKA",
+      "lat": 63.633056,
+      "lng": 9.826667,
+      "pageX": 349.416,
+      "pageY": 362.917
+     },
+     {
+      "name": "LEKSAN",
+      "lat": 63.586111,
+      "lng": 9.374444,
+      "pageX": 164.711,
+      "pageY": 336.006
+     },
+     {
+      "name": "NES",
+      "lat": 63.768056,
+      "lng": 9.558611,
+      "pageX": 252.505,
+      "pageY": 493.329
+     },
+     {
+      "name": "SELVA",
+      "lat": 63.615,
+      "lng": 9.718889,
+      "pageX": 304.931,
+      "pageY": 350.202
+     },
+     {
+      "name": "STADSBYGD",
+      "lat": 63.521667,
+      "lng": 9.921667,
+      "pageX": 379.467,
+      "pageY": 259.588
+     },
+     {
+      "name": "STORFOSNA",
+      "lat": 63.691389,
+      "lng": 9.415,
+      "pageX": 189.264,
+      "pageY": 429.301
+     },
+     {
+      "name": "STORVATN",
+      "lat": 63.621667,
+      "lng": 10.229444,
+      "pageX": 509.906,
+      "pageY": 340.092
+     },
+     {
+      "name": "TARVA",
+      "lat": 63.825278,
+      "lng": 9.425556,
+      "pageX": 204.025,
+      "pageY": 549.4
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "FJELLVÆRØY",
+      "lat": 63.649722,
+      "lng": 9.142222,
+      "pageX": 76.913,
+      "pageY": 401.604
+     },
+     {
+      "name": "LENSVIK",
+      "lat": 63.503611,
+      "lng": 9.826667,
+      "pageX": 339.971,
+      "pageY": 246.402
+     },
+     {
+      "name": "STORA",
+      "lat": 63.555833,
+      "lng": 9.231944,
+      "pageX": 105.142,
+      "pageY": 313.871
+     },
+     {
+      "name": "VALSØY",
+      "lat": 63.858056,
+      "lng": 9.712222,
+      "pageX": 320.418,
+      "pageY": 569.178
+     }
+    ],
+    "spanFraction": {
+     "x": 0.734,
+     "y": 0.523
+    },
+    "fitResidualM": 0.43,
+    "holdoutResidualM": 0.87,
+    "holdoutRmsM": 0.68
+   },
+   "crossCheckM": 16,
+   "warpReproductionM": 0.0018,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENOV",
+   "chart": "AD 2 ENOV 6 - 1",
+   "chartDate": "2026-06-11",
+   "sourcePdfSha256": "8344ca91229cd822b3df3139e0f5ccc1b61428e658dc1145ded84e7abf7a906a",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/638672.pdf",
+   "graphicId": "638672",
+   "preparationRevision": 1,
+   "file": "enov-2026-06-11-8344ca91-r1.webp",
+   "bytes": 3452316,
+   "pixelWidth": 4522,
+   "pixelHeight": 5120,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 5.5020359,
+    "east": 6.4197123,
+    "south": 61.9451822,
+    "north": 62.4299605
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.1,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 15,
+    "holdoutTicks": 99,
+    "fitResidualM": 5.56,
+    "holdoutResidualM": 5.48
+   },
+   "publishedPoints": {
+    "matched": 7,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "BONDALSEIDET",
+      "lat": 62.160278,
+      "lng": 6.299722,
+      "pageX": 491.112,
+      "pageY": 372.773
+     },
+     {
+      "name": "DIMNA",
+      "lat": 62.317778,
+      "lng": 5.819167,
+      "pageX": 237.491,
+      "pageY": 609.455
+     },
+     {
+      "name": "KILE",
+      "lat": 62.061944,
+      "lng": 6.065,
+      "pageX": 336.278,
+      "pageY": 268.324
+     },
+     {
+      "name": "LARSNES",
+      "lat": 62.200556,
+      "lng": 5.590278,
+      "pageX": 82.477,
+      "pageY": 481.889
+     },
+     {
+      "name": "LØVIK",
+      "lat": 62.098611,
+      "lng": 5.948056,
+      "pageX": 273.939,
+      "pageY": 323.929
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "HØYDAL",
+      "lat": 62.0725,
+      "lng": 6.213333,
+      "pageX": 425.383,
+      "pageY": 269.543
+     },
+     {
+      "name": "RJÅNES",
+      "lat": 62.248056,
+      "lng": 5.968611,
+      "pageX": 312.358,
+      "pageY": 509.646
+     }
+    ],
+    "spanFraction": {
+     "x": 0.869,
+     "y": 0.616
+    },
+    "fitResidualM": 0.89,
+    "holdoutResidualM": 0.81,
+    "holdoutRmsM": 0.8
+   },
+   "crossCheckM": 33.08,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENRA",
+   "chart": "AD 2 ENRA 6 - 1",
+   "chartDate": "2026-06-11",
+   "sourcePdfSha256": "5bde437fb064755551d8ef3b07f714a48b512bb679bc5dd046a452c36dd4f78e",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/638724.pdf",
+   "graphicId": "638724",
+   "preparationRevision": 1,
+   "file": "enra-2026-06-11-5bde437f-r1.webp",
+   "bytes": 2179702,
+   "pixelWidth": 3971,
+   "pixelHeight": 4661,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 13.905992,
+    "east": 14.6579948,
+    "south": 66.1877601,
+    "north": 66.5416283
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.2,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 12,
+    "holdoutTicks": 72,
+    "fitResidualM": 5.07,
+    "holdoutResidualM": 11.92
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENRE",
+   "chart": "AD 2 ENRE 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "7f57fb8972ef8d3168865d07ca3cc2f86d3bfc17bd6493bbe99f85330c5eb2a6",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623149.pdf",
+   "graphicId": "623149",
+   "preparationRevision": 1,
+   "file": "enre-2026-05-14-7f57fb89-r1.webp",
+   "bytes": 2172048,
+   "pixelWidth": 4168,
+   "pixelHeight": 4831,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 10.9697154,
+    "east": 11.7893625,
+    "south": 60.9283873,
+    "north": 61.3866743
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 15,
+    "holdoutTicks": 99,
+    "fitResidualM": 10.67,
+    "holdoutResidualM": 15.55
+   },
+   "publishedPoints": {
+    "matched": 10,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "DEISJØEN",
+      "lat": 61.233056,
+      "lng": 11.566389,
+      "pageX": 416.205,
+      "pageY": 523.144
+     },
+     {
+      "name": "DESE",
+      "lat": 61.300833,
+      "lng": 11.457778,
+      "pageX": 354.746,
+      "pageY": 612.171
+     },
+     {
+      "name": "OPPHUS",
+      "lat": 61.330556,
+      "lng": 11.258889,
+      "pageX": 236.179,
+      "pageY": 656.421
+     },
+     {
+      "name": "RYSSJØEN",
+      "lat": 61.079444,
+      "lng": 11.581111,
+      "pageX": 414.984,
+      "pageY": 328.732
+     },
+     {
+      "name": "SKRAMSTADSETRA",
+      "lat": 61.137778,
+      "lng": 11.1925,
+      "pageX": 181.735,
+      "pageY": 415.476
+     },
+     {
+      "name": "ØKSNA",
+      "lat": 60.984167,
+      "lng": 11.458333,
+      "pageX": 333.42,
+      "pageY": 212.476
+     },
+     {
+      "name": "ØSTERSJØEN",
+      "lat": 61.114722,
+      "lng": 11.4525,
+      "pageX": 338.78,
+      "pageY": 377.446
+     },
+     {
+      "name": "ÅSTA",
+      "lat": 61.076667,
+      "lng": 11.346389,
+      "pageX": 271.306,
+      "pageY": 332.989
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "KLETTEN",
+      "lat": 61.2175,
+      "lng": 11.313611,
+      "pageX": 261.3,
+      "pageY": 511.849
+     },
+     {
+      "name": "STEINVIKA",
+      "lat": 61.259167,
+      "lng": 11.32,
+      "pageX": 268.153,
+      "pageY": 564.216
+     }
+    ],
+    "spanFraction": {
+     "x": 0.498,
+     "y": 0.801
+    },
+    "fitResidualM": 3.41,
+    "holdoutResidualM": 0.66,
+    "holdoutRmsM": 0.61
+   },
+   "crossCheckM": 17.44,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENRM",
+   "chart": "AD 2 ENRM 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "d50c4c5200b2fcbe33e64040c42f3a28dceb86d9d3631d910be296cfe9f56c93",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623153.pdf",
+   "graphicId": "623153",
+   "preparationRevision": 1,
+   "file": "enrm-2026-05-14-d50c4c52-r1.webp",
+   "bytes": 1269736,
+   "pixelWidth": 4192,
+   "pixelHeight": 4847,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 10.764783,
+    "east": 11.5130442,
+    "south": 64.6531764,
+    "north": 65.0210374
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.2,
+    "bottom": 157.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 7.25,
+    "holdoutResidualM": 9.27
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENRO",
+   "chart": "AD 2 ENRO 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "9b8e51ac274781ebbed15ff5e3563d97f40efc1eb6b53b7f2ca86bd43089533d",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623155.pdf",
+   "graphicId": "623155",
+   "preparationRevision": 1,
+   "file": "enro-2026-05-14-9b8e51ac-r1.webp",
+   "bytes": 3545328,
+   "pixelWidth": 4173,
+   "pixelHeight": 4833,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 10.7855942,
+    "east": 11.9040183,
+    "south": 62.2898582,
+    "north": 62.886179
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 66.3,
+    "right": 536.8,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 21,
+    "holdoutTicks": 144,
+    "fitResidualM": 3.63,
+    "holdoutResidualM": 7.75
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0013,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENRS",
+   "chart": "AD 2 ENRS 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "0b3808721d83ef97bf2d6b9dcfa712b9303f797d5d9e80bea0c8a88beb35004a",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623157.pdf",
+   "graphicId": "623157",
+   "preparationRevision": 1,
+   "file": "enrs-2026-05-14-0b380872-r1.webp",
+   "bytes": 646236,
+   "pixelWidth": 4133,
+   "pixelHeight": 4798,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 11.6458847,
+    "east": 12.4661695,
+    "south": 67.3296692,
+    "north": 67.693898
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.1,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 2.31,
+    "holdoutResidualM": 3.86
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0005,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENSD",
+   "chart": "AD 2 ENSD 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "29158607c8f89b40b742fd8656964716f8a5f1423067f1ff4ae7fdd49d0e0873",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623159.pdf",
+   "graphicId": "623159",
+   "preparationRevision": 1,
+   "file": "ensd-2026-05-14-29158607-r1.webp",
+   "bytes": 3159634,
+   "pixelWidth": 4510,
+   "pixelHeight": 5111,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 5.7067294,
+    "east": 6.520936,
+    "south": 61.6099844,
+    "north": 62.0456076
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 66.3,
+    "right": 536.8,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 7.83,
+    "holdoutResidualM": 7.27
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENSG",
+   "chart": "AD 2 ENSG 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "467698fc8df8b2457476b8a9201c3b4c2431bf89f1cd9ba7b9b161dd30011025",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623161.pdf",
+   "graphicId": "623161",
+   "preparationRevision": 1,
+   "file": "ensg-2026-05-14-467698fc-r1.webp",
+   "bytes": 2375176,
+   "pixelWidth": 4443,
+   "pixelHeight": 5057,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 6.8117836,
+    "east": 7.5094786,
+    "south": 60.9589279,
+    "north": 61.3420902
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.5,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 12,
+    "holdoutTicks": 72,
+    "fitResidualM": 3.91,
+    "holdoutResidualM": 9.54
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENSH",
+   "chart": "AD 2 ENSH 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "441a2af0a4b7c65e8e08e526338f1d14df39ddb8a4a720d15aaf789d90868922",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623163.pdf",
+   "graphicId": "623163",
+   "preparationRevision": 1,
+   "file": "ensh-2026-05-14-441a2af0-r1.webp",
+   "bytes": 1362260,
+   "pixelWidth": 3950,
+   "pixelHeight": 4640,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 14.255201,
+    "east": 15.0635386,
+    "south": 68.0539967,
+    "north": 68.4061553
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.9,
+    "right": 534.5,
+    "bottom": 157,
+    "top": 711
+   },
+   "graticule": {
+    "fitTicks": 14,
+    "holdoutTicks": 90,
+    "fitResidualM": 6.09,
+    "holdoutResidualM": 13.92
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0007,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENSK",
+   "chart": "AD 2 ENSK 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "9ae0a6564e75ffed1c958410daabb29ccd91d2ee19b3df3e1522e6d2683423a8",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623165.pdf",
+   "graphicId": "623165",
+   "preparationRevision": 1,
+   "file": "ensk-2026-05-14-9ae0a656-r1.webp",
+   "bytes": 1947300,
+   "pixelWidth": 3948,
+   "pixelHeight": 4626,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 14.6794564,
+    "east": 15.4991058,
+    "south": 68.3729104,
+    "north": 68.7241372
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.3,
+    "right": 533.7,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 12,
+    "holdoutTicks": 72,
+    "fitResidualM": 0.68,
+    "holdoutResidualM": 3.91
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENSO",
+   "chart": "AD 2 ENSO 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "6bb2792cf209be5a388883f0ffd9849d8551aaee192e66d37fe3d2053db77aa4",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623167.pdf",
+   "graphicId": "623167",
+   "preparationRevision": 1,
+   "file": "enso-2026-05-14-6bb2792c-r1.webp",
+   "bytes": 3190612,
+   "pixelWidth": 4544,
+   "pixelHeight": 5141,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 4.9379582,
+    "east": 5.8942001,
+    "south": 59.5053454,
+    "north": 60.0499011
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 64.1,
+    "right": 534.8,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 15,
+    "holdoutTicks": 99,
+    "fitResidualM": 13.53,
+    "holdoutResidualM": 21.03
+   },
+   "publishedPoints": {
+    "matched": 8,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "BUANES",
+      "lat": 59.6,
+      "lng": 5.316667,
+      "pageX": 212.21,
+      "pageY": 243.574
+     },
+     {
+      "name": "HISKJO",
+      "lat": 59.725,
+      "lng": 5.133333,
+      "pageX": 129.167,
+      "pageY": 398.978
+     },
+     {
+      "name": "ROMSA",
+      "lat": 59.683333,
+      "lng": 5.75,
+      "pageX": 471.379,
+      "pageY": 301.564
+     },
+     {
+      "name": "SANDVIKVÅG",
+      "lat": 59.983333,
+      "lng": 5.316667,
+      "pageX": 275.506,
+      "pageY": 672.827
+     },
+     {
+      "name": "SELBJØRN",
+      "lat": 59.966667,
+      "lng": 5.1,
+      "pageX": 151.145,
+      "pageY": 672.335
+     },
+     {
+      "name": "VIKEBYGD",
+      "lat": 59.591667,
+      "lng": 5.55,
+      "pageX": 343.337,
+      "pageY": 214.982
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "HUGLO",
+      "lat": 59.866667,
+      "lng": 5.55,
+      "pageX": 387.617,
+      "pageY": 523.036
+     },
+     {
+      "name": "SVEIO",
+      "lat": 59.553056,
+      "lng": 5.401111,
+      "pageX": 252.479,
+      "pageY": 183.972
+     }
+    ],
+    "spanFraction": {
+     "x": 0.727,
+     "y": 0.826
+    },
+    "fitResidualM": 0.73,
+    "holdoutResidualM": 1.64,
+    "holdoutRmsM": 1.21
+   },
+   "crossCheckM": 45.04,
+   "warpReproductionM": 0.0008,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENSR",
+   "chart": "AD 2 ENSR 6 - 1",
+   "chartDate": "2026-09-03",
+   "sourcePdfSha256": "fa9c94b074a03a5b49465b2a86601067cde480460c5441ffe47a5061a54d4668",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+   "graphicId": "643749",
+   "preparationRevision": 1,
+   "file": "ensr-2026-09-03-fa9c94b0-r1.webp",
+   "bytes": 2230616,
+   "pixelWidth": 4354,
+   "pixelHeight": 4981,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 20.553955,
+    "east": 21.5142858,
+    "south": 69.6917595,
+    "north": 70.0696487
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.9,
+    "right": 534.3,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 15,
+    "holdoutTicks": 99,
+    "fitResidualM": 6.84,
+    "holdoutResidualM": 7.21
+   },
+   "publishedPoints": {
+    "matched": 8,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "MAURSUNDET",
+      "lat": 69.9125,
+      "lng": 20.833333,
+      "pageX": 187.55,
+      "pageY": 473.611
+     },
+     {
+      "name": "NORDKJOSEN",
+      "lat": 69.794167,
+      "lng": 21.051944,
+      "pageX": 324.33,
+      "pageY": 298.964
+     },
+     {
+      "name": "REISAFJORDEN",
+      "lat": 69.970833,
+      "lng": 21.133333,
+      "pageX": 340.549,
+      "pageY": 581.369
+     },
+     {
+      "name": "ROTSUNDET",
+      "lat": 69.825,
+      "lng": 20.766667,
+      "pageX": 164.541,
+      "pageY": 332.427
+     },
+     {
+      "name": "STORSLETT",
+      "lat": 69.758333,
+      "lng": 21.01,
+      "pageX": 307.086,
+      "pageY": 240.311
+     },
+     {
+      "name": "STRAUMFJORDEN",
+      "lat": 69.845833,
+      "lng": 21.19,
+      "pageX": 391.134,
+      "pageY": 387.808
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "OKSFJORDHAMN",
+      "lat": 69.9125,
+      "lng": 21.183333,
+      "pageX": 376.849,
+      "pageY": 492.326
+     },
+     {
+      "name": "STORTIND",
+      "lat": 69.823611,
+      "lng": 20.884167,
+      "pageX": 228.585,
+      "pageY": 336.353
+     }
+    ],
+    "spanFraction": {
+     "x": 0.482,
+     "y": 0.616
+    },
+    "fitResidualM": 0.72,
+    "holdoutResidualM": 0.61,
+    "holdoutRmsM": 0.51
+   },
+   "crossCheckM": 16.4,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENSS",
+   "chart": "AD 2 ENSS 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "e74e79e2b609307d8516c71bce91bb67c9fbcb31e9dc94f9784c09f535c7ff3a",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623169.pdf",
+   "graphicId": "623169",
+   "preparationRevision": 1,
+   "file": "enss-2026-05-14-e74e79e2-r1.webp",
+   "bytes": 1934424,
+   "pixelWidth": 4989,
+   "pixelHeight": 5483,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 30.3273114,
+    "east": 31.7280492,
+    "south": 70.0765466,
+    "north": 70.5945544
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 18,
+    "holdoutTicks": 126,
+    "fitResidualM": 8.62,
+    "holdoutResidualM": 17.67
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0012,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENST",
+   "chart": "AD 2 ENST 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "da24c0f2aec4743743650b99fcbe71b5fab730a646e1bea4539a1a98e6fcfe07",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623171.pdf",
+   "graphicId": "623171",
+   "preparationRevision": 1,
+   "file": "enst-2026-05-14-da24c0f2-r1.webp",
+   "bytes": 2023316,
+   "pixelWidth": 4109,
+   "pixelHeight": 4779,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 11.9121599,
+    "east": 12.7742356,
+    "south": 65.7693525,
+    "north": 66.1775786
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.1,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 15,
+    "holdoutTicks": 99,
+    "fitResidualM": 3.98,
+    "holdoutResidualM": 5.46
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENTC",
+   "chart": "AD 2 ENTC 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "864c552dba14af7f1fefbef08344728a1b7f3f45ea1a84d6ad2275ca8a45be64",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+   "graphicId": "623173",
+   "preparationRevision": 1,
+   "file": "entc-2026-05-14-864c552d-r1.webp",
+   "bytes": 3117906,
+   "pixelWidth": 4209,
+   "pixelHeight": 4861,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 18.1766822,
+    "east": 19.6709476,
+    "south": 69.3821721,
+    "north": 69.981364
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 62.9,
+    "right": 533.6,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 23,
+    "holdoutTicks": 162,
+    "fitResidualM": 11.67,
+    "holdoutResidualM": 25.51
+   },
+   "publishedPoints": {
+    "matched": 13,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.9,
+    "fitPoints": [
+     {
+      "name": "ANSNES",
+      "lat": 69.501667,
+      "lng": 18.427778,
+      "pageX": 143.941,
+      "pageY": 248.451
+     },
+     {
+      "name": "BERG",
+      "lat": 69.571667,
+      "lng": 18.9425,
+      "pageX": 314.78,
+      "pageY": 327.007
+     },
+     {
+      "name": "ERSFJORD",
+      "lat": 69.704167,
+      "lng": 18.421944,
+      "pageX": 130.929,
+      "pageY": 445.098
+     },
+     {
+      "name": "HÅKØYA",
+      "lat": 69.666667,
+      "lng": 18.823611,
+      "pageX": 268.664,
+      "pageY": 416.718
+     },
+     {
+      "name": "MOVIKVANN",
+      "lat": 69.715278,
+      "lng": 19.1525,
+      "pageX": 376.521,
+      "pageY": 471.181
+     },
+     {
+      "name": "NIPØYA",
+      "lat": 69.822222,
+      "lng": 19.484167,
+      "pageX": 480.6,
+      "pageY": 582.908
+     },
+     {
+      "name": "RAKNES",
+      "lat": 69.830556,
+      "lng": 18.962222,
+      "pageX": 305.139,
+      "pageY": 578.875
+     },
+     {
+      "name": "REMMAN",
+      "lat": 69.7675,
+      "lng": 19.050556,
+      "pageX": 338.808,
+      "pageY": 519.585
+     },
+     {
+      "name": "SELNES",
+      "lat": 69.44,
+      "lng": 18.998611,
+      "pageX": 342.186,
+      "pageY": 200.375
+     },
+     {
+      "name": "TØNSNES",
+      "lat": 69.731944,
+      "lng": 19.093056,
+      "pageX": 355.409,
+      "pageY": 486.013
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "BREIVIKA",
+      "lat": 69.675,
+      "lng": 18.981944,
+      "pageX": 321.613,
+      "pageY": 428.233
+     },
+     {
+      "name": "MUSVÆR",
+      "lat": 69.885,
+      "lng": 18.578333,
+      "pageX": 173.364,
+      "pageY": 623.811
+     },
+     {
+      "name": "RYA",
+      "lat": 69.558333,
+      "lng": 18.715278,
+      "pageX": 238.478,
+      "pageY": 309.219
+     }
+    ],
+    "spanFraction": {
+     "x": 0.743,
+     "y": 0.69
+    },
+    "fitResidualM": 1.69,
+    "holdoutResidualM": 3.25,
+    "holdoutRmsM": 1.89
+   },
+   "crossCheckM": 25.16,
+   "warpReproductionM": 0.0021,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENTO",
+   "chart": "AD 2 ENTO 6 - 1",
+   "chartDate": "2026-06-11",
+   "sourcePdfSha256": "ed79431557d10970c68eee709866db0cf4de8e869cf2534460ba3f866ab1ad98",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/640881.pdf",
+   "graphicId": "640881",
+   "preparationRevision": 1,
+   "file": "ento-2026-06-11-ed794315-r1.webp",
+   "bytes": 2538004,
+   "pixelWidth": 4215,
+   "pixelHeight": 4612,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 9.8222136,
+    "east": 10.69708,
+    "south": 58.9569965,
+    "north": 59.4471192
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 63.7,
+    "right": 534.1,
+    "bottom": 191.4,
+    "top": 712.3
+   },
+   "graticule": {
+    "fitTicks": 16,
+    "holdoutTicks": 108,
+    "fitResidualM": 3.78,
+    "holdoutResidualM": 5.5
+   },
+   "publishedPoints": {
+    "matched": 10,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.4,
+    "fitPoints": [
+     {
+      "name": "ALBY",
+      "lat": 59.428611,
+      "lng": 10.579167,
+      "pageX": 498.667,
+      "pageY": 693.724
+     },
+     {
+      "name": "BOMMESTAD",
+      "lat": 59.1,
+      "lng": 10.1,
+      "pageX": 196.699,
+      "pageY": 343.244
+     },
+     {
+      "name": "MALMØYA",
+      "lat": 59.004167,
+      "lng": 10.1,
+      "pageX": 188.772,
+      "pageY": 235.409
+     },
+     {
+      "name": "RAVNØYA",
+      "lat": 59.188333,
+      "lng": 10.340556,
+      "pageX": 342.901,
+      "pageY": 432.663
+     },
+     {
+      "name": "TØNSBERG",
+      "lat": 59.257778,
+      "lng": 10.416667,
+      "pageX": 392.233,
+      "pageY": 507.769
+     },
+     {
+      "name": "VIDARÅSEN",
+      "lat": 59.266667,
+      "lng": 10.1,
+      "pageX": 210.506,
+      "pageY": 530.782
+     },
+     {
+      "name": "ÅRØYSUND",
+      "lat": 59.189167,
+      "lng": 10.416667,
+      "pageX": 386.915,
+      "pageY": 430.55
+     },
+     {
+      "name": "ÅSRUM",
+      "lat": 59.188889,
+      "lng": 10.1,
+      "pageX": 204.06,
+      "pageY": 443.264
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "FOKSERØD",
+      "lat": 59.186944,
+      "lng": 10.194444,
+      "pageX": 258.427,
+      "pageY": 437.1
+     },
+     {
+      "name": "VASSER",
+      "lat": 59.107778,
+      "lng": 10.416667,
+      "pageX": 380.61,
+      "pageY": 338.948
+     }
+    ],
+    "spanFraction": {
+     "x": 0.659,
+     "y": 0.88
+    },
+    "fitResidualM": 1.25,
+    "holdoutResidualM": 1.77,
+    "holdoutRmsM": 1.26
+   },
+   "crossCheckM": 17.23,
+   "warpReproductionM": 0.0006,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENVA",
+   "chart": "AD 2 ENVA 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "35acefe5ed4a3f7cfec86cd260b7a23c87ee23be332b58768ed97ee606c1f9cd",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623181.pdf",
+   "graphicId": "623181",
+   "preparationRevision": 1,
+   "file": "enva-2026-05-14-35acefe5-r1.webp",
+   "bytes": 2317544,
+   "pixelWidth": 4198,
+   "pixelHeight": 4655,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 10.2914795,
+    "east": 11.3607421,
+    "south": 63.1764687,
+    "north": 63.7065751
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.4,
+    "right": 534,
+    "bottom": 182.8,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 18,
+    "holdoutTicks": 126,
+    "fitResidualM": 10.5,
+    "holdoutResidualM": 15.11
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0011,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENVD",
+   "chart": "AD 2 ENVD 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "e09eeaa0b5302d3fb1352b9f5eafbbfa27f70c5abb649b59c44585668adc9b61",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623185.pdf",
+   "graphicId": "623185",
+   "preparationRevision": 1,
+   "file": "envd-2026-05-14-e09eeaa0-r1.webp",
+   "bytes": 1218596,
+   "pixelWidth": 4916,
+   "pixelHeight": 5427,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 29.2362362,
+    "east": 30.4630532,
+    "south": 69.8337355,
+    "north": 70.2954914
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 66.5,
+    "right": 536.9,
+    "bottom": 157.7,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 15,
+    "holdoutTicks": 99,
+    "fitResidualM": 4.78,
+    "holdoutResidualM": 6.2
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0009,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
+   "icao": "ENZV",
+   "chart": "AD 2 ENZV 6 - 1",
+   "chartDate": "2026-05-14",
+   "sourcePdfSha256": "a8f3a51b5d2913e6e562eee105d0b1533922381339036003794cbe69f9ce3b87",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623189.pdf",
+   "graphicId": "623189",
+   "preparationRevision": 1,
+   "file": "enzv-2026-05-14-a8f3a51b-r1.webp",
+   "bytes": 2668832,
+   "pixelWidth": 4525,
+   "pixelHeight": 5126,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 5.0758675,
+    "east": 6.1528019,
+    "south": 58.5714012,
+    "north": 59.2017804
+   },
+   "controlSource": "graticule",
+   "framePdfPoints": {
+    "left": 63.6,
+    "right": 534.3,
+    "bottom": 157.4,
+    "top": 711.5
+   },
+   "graticule": {
+    "fitTicks": 18,
+    "holdoutTicks": 117,
+    "fitResidualM": 13.52,
+    "holdoutResidualM": 23.28
+   },
+   "publishedPoints": null,
+   "crossCheckM": null,
+   "warpReproductionM": 0.0011,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  }
+ ]
+}
