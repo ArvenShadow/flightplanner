@@ -9755,6 +9755,206 @@ T('the deploy locks the build, and never falls back to publishing it plain', () 
     'so pin a major that cannot resolve below that');
 });
 
+
+console.log('\n=== 62a000n. Georeferencing a VAC (v16.85) ===');
+
+const VG = require('./tools/vac-geo.mjs');
+const VAC_FIXTURE = JSON.parse(require('fs').readFileSync('./test-fixtures/endu-vac-geometry.json', 'utf8'));
+
+/** The whole pure pipeline, run once on the committed ENDU geometry. */
+function enduGeoreference() {
+  const frame = VG.chartFrame(VAC_FIXTURE.segments);
+  const read = VG.graticuleObservations(VAC_FIXTURE.segments, VAC_FIXTURE.textItems, frame);
+  if ('refused' in read) throw new Error('the fixture refused: ' + JSON.stringify(read.refused));
+  const model = VG.fitConformal(read.fit, frame);
+  return { frame, read, model };
+}
+
+T('the isometric-latitude round trip is exact', () => {
+  // Newton on isometric latitude DIVIDES by d(psi)/d(phi). Multiplying by it
+  // overshoots ~2.8x at these latitudes, walks phi past the pole, and the next
+  // log() of a negative tangent returns NaN - which surfaces as a residual of
+  // NaN rather than as a visible divergence.
+  for (const lat of [0, 12.5, -33.9, 59.5, 69.2, 71.0, 78.2]) {
+    const back = VG.geodeticLatitude(VG.isometricLatitude(lat));
+    assert(Number.isFinite(back), 'geodeticLatitude returned ' + back + ' for ' + lat);
+    assert(Math.abs(back - lat) < 1e-9, 'round trip lost ' + Math.abs(back - lat) + ' degrees at ' + lat);
+  }
+});
+
+T('a chart georeferences from its own printed graticule', () => {
+  const { frame, read, model } = enduGeoreference();
+  assert(frame && Math.abs(frame.left - 63.9) < 1 && Math.abs(frame.top - 711.5) < 1,
+    'the map neatline was not found: ' + JSON.stringify(frame));
+  assert(read.fit.length >= 20, 'only ' + read.fit.length + ' labelled ticks were read');
+  assert(model, 'the conformal fit came back singular');
+  const res = VG.observationResiduals(model, read.fit);
+  assert(res.maxMetres < 50, 'the fit is ' + res.maxMetres.toFixed(1) + ' m out at worst');
+  // All four edges must contribute, or the fit is rank-deficient in one axis.
+  for (const edge of ['bottom', 'top', 'left', 'right']) {
+    assert(read.edges[edge] && read.edges[edge].fit >= 2, edge + ' contributed no observations');
+  }
+});
+
+T('the minute ticks are never fitted, and the model predicts them anyway', () => {
+  const { read, model } = enduGeoreference();
+  assert(read.holdout.length > 100, 'only ' + read.holdout.length + ' held-out ticks');
+  assert(read.holdout.every((o) => !o.major), 'a fitted tick leaked into the holdout');
+  assert(read.fit.every((o) => o.major), 'a held-out tick leaked into the fit');
+  const held = VG.observationResiduals(model, read.holdout);
+  assert(held.maxMetres < 60,
+    'the held-out minute ticks are ' + held.maxMetres.toFixed(1) + ' m out - the fit does not generalise');
+});
+
+T('THE PUBLISHED COORDINATE IS THE SYMBOL BOUNDING-BOX CENTRE, NOT ITS CENTROID', () => {
+  // This is the whole primary control path, and getting it wrong is SILENT:
+  // every point moves the same way, so the chart stays internally consistent
+  // and a held-out point cannot see it either, because fit and holdout share
+  // the anchor. Measured over 199 points on three symbol sizes, the offset
+  // from the CENTROID scales with the symbol (h/6) while the offset from the
+  // BOUNDING-BOX CENTRE stays at zero. A model error would be a constant
+  // distance; this one is proportional, so it is the anchor, not the model.
+  const { frame, model } = enduGeoreference();
+  const published = JSON.parse(require('fs').readFileSync('./tools/prepared/vac-points.json', 'utf8'))
+    .data.find((a) => a.icao === 'ENDU').points.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng }));
+  const triangles = VG.chartTriangles(VAC_FIXTURE.segments, frame);
+  assert(triangles.length >= 15, 'only ' + triangles.length + ' reporting-point symbols were found');
+  const matched = VG.matchPublishedPoints(triangles, published,
+    (lat, lng) => VG.project(model, lat, lng, frame));
+  assert(matched.controls.length >= 15,
+    'only ' + matched.controls.length + ' published points paired with a drawn symbol');
+  let boxSum = 0, centroidSum = 0, n = 0;
+  for (const c of matched.controls) {
+    const at = VG.project(model, c.lat, c.lng, frame);
+    const t = triangles.find((q) => Math.abs(q.x - c.x) < 1e-9 && Math.abs(q.y - c.y) < 1e-9);
+    const centroid = t.vertices.reduce((s, v) => [s[0] + v[0] / 3, s[1] + v[1] / 3], [0, 0]);
+    boxSum += at[1] - c.y;
+    centroidSum += at[1] - centroid[1];
+    n++;
+  }
+  const box = boxSum / n, centroid = centroidSum / n;
+  const metres = VG.groundScale(model, (frame.left + frame.right) / 2, (frame.bottom + frame.top) / 2);
+  assert(Math.abs(box) < 0.2,
+    'the published coordinate is ' + box.toFixed(3) + ' pt from the bounding-box centre');
+  assert(centroid > 1.0,
+    'the centroid offset is only ' + centroid.toFixed(3) + ' pt - the anchor test has stopped discriminating');
+  assert(centroid * metres > 100,
+    'using the centroid would cost ' + (centroid * metres).toFixed(0) + ' m, so this guard proves nothing');
+});
+
+T('the graticule and the published points agree - the check a holdout cannot make', () => {
+  // Fit and holdout share the anchor convention, so a wrong anchor biases both
+  // equally and the holdout residual comes back near zero while the chart is
+  // out by the anchor error. The graticule is drawn from completely different
+  // ink, so requiring the two models to AGREE is what sees such a bias.
+  const { frame, model } = enduGeoreference();
+  const published = JSON.parse(require('fs').readFileSync('./tools/prepared/vac-points.json', 'utf8'))
+    .data.find((a) => a.icao === 'ENDU').points.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng }));
+  const triangles = VG.chartTriangles(VAC_FIXTURE.segments, frame);
+  const matched = VG.matchPublishedPoints(triangles, published,
+    (lat, lng) => VG.project(model, lat, lng, frame));
+  const obs = [];
+  for (const c of matched.controls) {
+    obs.push({ kind: 'lng', x: c.x, y: c.y, value: c.lng, major: true });
+    obs.push({ kind: 'lat', x: c.x, y: c.y, value: c.lat, major: true });
+  }
+  const pointModel = VG.fitConformal(obs, frame);
+  assert(pointModel, 'the published-point fit came back singular');
+  let worst = 0;
+  for (const c of matched.controls) {
+    const a = VG.evaluate(model, c.x, c.y), b = VG.evaluate(pointModel, c.x, c.y);
+    const per = VG.metresPerDegree(a.lat);
+    worst = Math.max(worst, Math.hypot((a.lng - b.lng) * per.perLng, (a.lat - b.lat) * per.perLat));
+  }
+  assert(worst < 80, 'the two control sources disagree by ' + worst.toFixed(1) + ' m');
+});
+
+T('a graticule that does not verify is refused, not fitted', () => {
+  const { frame } = enduGeoreference();
+  const labels = VG.graticuleLabels(VAC_FIXTURE.textItems);
+  const ticks = VG.edgeTicks(VAC_FIXTURE.segments, frame);
+  // An edge with almost no ticks cannot be read.
+  const thin = VG.labelEdgeTicks('bottom', ticks.bottom.slice(0, 2), labels, frame);
+  assert('reason' in thin && thin.reason === 'few-ticks', 'a two-tick edge was accepted: ' + JSON.stringify(thin));
+  // Printed values that do not step uniformly mean a label was mis-assigned.
+  // The perturbed label has to be one this edge actually reads, or the check
+  // never sees it - which is how the first version of this test passed while
+  // asserting nothing.
+  const onBottom = labels.filter((l) => l.kind === 'lng' && l.y < frame.bottom);
+  assert(onBottom.length >= 3, 'the fixture carries no bottom-edge labels to perturb');
+  const victim = onBottom[Math.floor(onBottom.length / 2)];
+  const bent = VG.labelEdgeTicks('bottom', ticks.bottom, labels.map(
+    (l) => (l === victim ? { ...l, value: l.value + 1 / 60 } : l)), frame);
+  assert('reason' in bent && bent.reason === 'uneven-label-values',
+    'a broken label sequence was accepted: ' + JSON.stringify(bent).slice(0, 140));
+  // Both edges of an axis carry the same interval; disagreement is a misread.
+  // Shifting every top label by the same amount would NOT test this - the step
+  // stays 10' and only the offset moves - so the top edge is relabelled at a
+  // 20' interval instead, which is what a one-major-out misread looks like.
+  const topLabels = VAC_FIXTURE.textItems
+    .filter((t) => /^\d{1,3}°\d{2}'?E$/.test(t.str) && t.y > frame.top)
+    .sort((a, b) => a.x - b.x);
+  assert(topLabels.length >= 3, 'the fixture carries no top-edge labels to relabel');
+  const firstTop = topLabels[0];
+  const base = Number(/^(\d{1,3})°/.exec(firstTop.str)[1]) +
+    Number(/°(\d{2})/.exec(firstTop.str)[1]) / 60;
+  const relabelled = new Map();
+  topLabels.forEach((t, k) => {
+    const v = base + k * (20 / 60);
+    const deg = Math.floor(v + 1e-9), min = Math.round((v - deg) * 60);
+    relabelled.set(t, `${String(deg).padStart(3, '0')}°${String(min).padStart(2, '0')}'E`);
+  });
+  const mixed = VG.graticuleObservations(VAC_FIXTURE.segments,
+    VAC_FIXTURE.textItems.map((t) => (relabelled.has(t) ? { ...t, str: relabelled.get(t) } : t)), frame);
+  assert('refused' in mixed, 'edges disagreeing on the graticule interval were accepted');
+});
+
+T('all four edges are required, and a missing one is refused not fitted', () => {
+  const { frame, read } = enduGeoreference();
+  // TWO edges are genuinely degenerate and the solver says so rather than
+  // returning a model that has run away. THREE would fit - conformality ties
+  // the imaginary part to the real one - so the fourth edge is not needed to
+  // SOLVE the fit, it is needed to CHECK it, which is why a refused edge
+  // refuses the chart rather than falling back to the other three.
+  const onEdge = (o) => o.kind === 'lng'
+    ? (Math.abs(o.y - frame.bottom) < 0.01 ? 'bottom' : 'top')
+    : (Math.abs(o.x - frame.left) < 0.01 ? 'left' : 'right');
+  for (const pair of [['bottom', 'top'], ['bottom', 'left']]) {
+    const two = read.fit.filter((o) => pair.includes(onEdge(o)));
+    assert(VG.fitConformal(two, frame) === null,
+      pair.join('+') + ' alone produced a model instead of refusing as degenerate');
+  }
+  // And the reader refuses rather than handing such a model back at all.
+  const near = (v, t) => Math.abs(v - t) < 0.6;
+  const withoutRightTicks = VAC_FIXTURE.segments.filter((s2) => {
+    const len = Math.hypot(s2.b[0] - s2.a[0], s2.b[1] - s2.a[1]);
+    if (len < 2 || len > 8) return true;
+    return !(near(Math.max(s2.a[0], s2.b[0]), frame.right) &&
+      Math.min(s2.a[1], s2.b[1]) > frame.bottom && Math.max(s2.a[1], s2.b[1]) < frame.top);
+  });
+  const got = VG.graticuleObservations(withoutRightTicks, VAC_FIXTURE.textItems, frame);
+  assert('refused' in got, 'a chart missing one edge of its graticule was accepted');
+  assert(got.refused.some((r) => r.edge === 'right'),
+    'the refusal does not name the edge that is missing: ' + JSON.stringify(got.refused));
+});
+
+T('four points in one corner is not a fit', () => {
+  const frame = { left: 0, right: 100, bottom: 0, top: 100 };
+  const corner = [{ x: 1, y: 1 }, { x: 5, y: 2 }, { x: 3, y: 6 }, { x: 7, y: 7 }];
+  const span = VG.controlSpanFraction(corner, frame);
+  assert(span.x < VG.MIN_CONTROL_SPAN_FRACTION && span.y < VG.MIN_CONTROL_SPAN_FRACTION,
+    'a cluster in one corner passed the distribution guard');
+  const spread = VG.controlSpanFraction([{ x: 5, y: 5 }, { x: 90, y: 88 }], frame);
+  assert(spread.x >= VG.MIN_CONTROL_SPAN_FRACTION && spread.y >= VG.MIN_CONTROL_SPAN_FRACTION,
+    'a well-spread pair was rejected');
+});
+
+T('the dataset carries its attribution and the non-commercial condition', () => {
+  const f = require('fs').readFileSync('./test-fixtures/endu-vac-geometry.json', 'utf8');
+  assert(/Avinor/.test(f) && /NON-COMMERCIAL/i.test(f),
+    'the VAC fixture does not carry the Avinor attribution and the non-commercial condition');
+});
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');
