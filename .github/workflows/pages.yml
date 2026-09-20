@@ -86,7 +86,13 @@ jobs:
       # this greps the artifact for the app's own identifiers and fails.
       - name: Refuse to publish anything readable
         run: |
-          for f in site-locked/index.html site-locked/aip.enc site-locked/app.enc site-locked/body.enc site-locked/vac.enc; do
+          # THE PAYLOAD NAMES CARRY THE BUILD ID since v16.88, so they cannot be
+          # listed here - they change every run, which is the entire point (a
+          # cached gate can never meet another build's ciphertext). Count them
+          # instead: one per part, and the gate page must name exactly those.
+          n=$(ls site-locked/*.enc 2>/dev/null | wc -l)
+          test "$n" -eq 4 || { echo "::error::expected 4 .enc payloads, found $n"; exit 1; }
+          for f in site-locked/index.html site-locked/*.enc; do
             test -f "$f" || { echo "::error::$f is missing from the locked build"; exit 1; }
             for needle in computeFlightSchedule C182_AIP C182_VAC APP_VERSION runIntegrityCheck; do
               if grep -qF "$needle" "$f"; then
@@ -97,6 +103,12 @@ jobs:
           done
           test ! -f site-locked/app.js || { echo "::error::a plaintext app.js is in the locked build"; exit 1; }
           test ! -f site-locked/vac-index.js || { echo "::error::a plaintext vac-index.js is in the locked build"; exit 1; }
+          # EVERY PAYLOAD THE GATE ASKS FOR MUST EXIST, and nothing else should.
+          # A gate naming a file that was not written is the stale-page lockout
+          # arriving from the other direction, and it would ship green.
+          for f in $(grep -o '[a-z]*-[0-9a-f]\{8\}\.enc' site-locked/index.html | sort -u); do
+            test -f "site-locked/$f" || { echo "::error::the gate asks for $f, which was not written"; exit 1; }
+          done
           # The VAC RASTERS are deliberately plaintext - they are already public
           # in this repo, so ciphertext beside a public copy would protect
           # nothing (see tools/lock-site.mjs). What must hold is that they are

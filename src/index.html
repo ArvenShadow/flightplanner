@@ -438,6 +438,7 @@
             <li><b>Its strength is the passphrase, not the encryption.</b> Whoever holds the ciphertext can guess offline as fast as their hardware allows, so a few ordinary words beat a short mangled one — the key stretching (PBKDF2-SHA256, two million rounds, measured at about a third of a second here) raises the cost of each guess but cannot rescue a guessable phrase.</li>
             <li><b>It needs https or localhost.</b> Browsers only expose the decryption API in a secure context, so serving the locked build over plain http on a LAN address cannot unlock — the same rule that stops the offline chart cache working there. The gate page says so instead of reporting a wrong passphrase. Serve the <i>unlocked</i> build (<code>npm run serve</code>) on the wifi or a hotspot; the published https URL is the locked one.</li>
             <li><b>Nothing you type leaves the page</b>, and the passphrase itself is never stored — what is remembered is the key derived from it, which cannot be turned back into the phrase. Losing it means re-deploying under a new one; there is no recovery, by design.</li>
+            <li><b>A correct passphrase is never reported as wrong (v16.88).</b> GitHub Pages lets a browser keep a file for ten minutes, so just after a deploy you could be holding yesterday&rsquo;s gate page while the site serves today&rsquo;s encrypted files — and the key from the old page cannot open the new ones. Each build&rsquo;s files now carry that build&rsquo;s own name, so an out-of-date page asks for something that is not there, says so, and refreshes itself once instead of blaming what you typed.</li>
           </ul>
         </div>
 
@@ -1367,7 +1368,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.87';
+    const APP_VERSION = '16.88';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 

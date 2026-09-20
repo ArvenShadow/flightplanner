@@ -101,7 +101,17 @@ const LEAKS = ['computeFlightSchedule', 'C182_AIP', 'Operational flightplan', 'A
 const leaked = LEAKS.filter((n) => gateHtml.includes(n));
 check(leaked.length === 0, 'the gate page contains none of the app: ' + JSON.stringify(leaked));
 check(!gateHtml.includes(PASS), 'the gate page does not contain the passphrase');
-for (const f of ['aip.enc', 'app.enc', 'body.enc']) {
+// THE PAYLOAD NAMES ARE READ OUT OF THE GATE'S OWN METADATA, not listed here.
+// Since v16.88 they carry the build id, so a fixed list would have to be
+// edited every release - and, worse, a gate naming a file that was never
+// written is exactly the failure this check exists to catch. Asking the gate
+// what it will fetch is what makes that visible.
+const META = JSON.parse(gateHtml.match(/var META = (\{.*?\});/)[1]);
+const payloads = META.parts.map((p) => p.file);
+check(payloads.length === 4 && payloads.every((f) => /^[a-z]+-[0-9a-f]{8}\.enc$/.test(f)),
+  'the gate names four content-addressed payloads: ' + JSON.stringify(payloads));
+for (const f of payloads) {
+  check(existsSync(join(LOCKED, f)), `the gate asks for ${f}, and it was written`);
   const bytes = readFileSync(join(LOCKED, f)).toString('latin1');
   const found = LEAKS.filter((n) => bytes.includes(n));
   check(found.length === 0, `${f} is ciphertext, not text: ` + JSON.stringify(found));
@@ -112,8 +122,7 @@ check(!existsSync(join(LOCKED, 'app.js')) && !existsSync(join(LOCKED, 'aip.js'))
 // The worker must precache what actually exists - addAll is atomic, so one
 // 404 caches nothing and the app silently stops working offline (v16.45).
 const swText = readFileSync(join(LOCKED, 'sw.js'), 'utf8');
-check(/'\.\/body\.enc'/.test(swText) && /'\.\/app\.enc'/.test(swText)
-      && /'\.\/aip\.enc'/.test(swText) && !/'\.\/app\.js'/.test(swText),
+check(payloads.every((f) => swText.includes("'./" + f + "'")) && !/'\.\/app\.js'/.test(swText),
   'the service worker precaches the locked payloads and not the plaintext ones');
 
 // ---- 2. A VISITOR WITHOUT THE PASSPHRASE GETS NOTHING --------------------
@@ -280,10 +289,10 @@ console.log('\n--- remembered per browser ---');
 // Rebuilding under a new passphrase changes the salt, so yesterday's cached
 // key must read as "ask me again" rather than as a corrupt install.
 console.log('\n--- a stale remembered key ---');
-// THE REAL SALT, read out of the artifact: the tamper case needs a key whose
-// SALT MATCHES so the failure happens in decrypt() rather than in the cheap
-// salt comparison. Guessing a salt would only re-test the rebuild case.
-const META = JSON.parse(gateHtml.match(/var META = (\{.*?\});/)[1]);
+// THE REAL SALT comes from META, read out of the artifact above: the tamper
+// case needs a key whose SALT MATCHES so the failure happens in decrypt()
+// rather than in the cheap salt comparison. Guessing a salt would only
+// re-test the rebuild case.
 for (const [why, bad] of [
   ['a key from another build (a rebuild under a new passphrase)',
    { salt: 'AAAAAAAAAAAAAAAAAAAAAA==', key: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }],
@@ -303,6 +312,67 @@ for (const [why, bad] of [
   check(await page.evaluate(() => !localStorage.getItem('c182_unlock_v1')),
     '...and is cleared rather than left to fail on every load');
   check(errs.length === 0, '...with no page errors: ' + errs.join(' | '));
+  await ctx.close();
+}
+
+// ---- 6. A CACHED GATE FROM AN OLDER BUILD HEALS ITSELF ------------------
+// THIS IS THE ONE THAT WOULD HAVE CAUGHT THE v16.87 LOCKOUT, and it is
+// measured rather than reasoned about because the platform's own caching is
+// half of the mechanism. GitHub Pages sends `cache-control: max-age=600` on
+// every file, so for ten minutes after a deploy a browser can hold the OLD
+// index.html while fetching NEW payloads - and before v16.88 both builds
+// called their payloads the same thing, so the stale gate derived a key from
+// the old salt, met fresh ciphertext, and told the pilot their CORRECT
+// passphrase was wrong.
+//
+// The fixture serves the payload names the CURRENT gate does not know, which
+// is the same thing from the browser's point of view: the gate asks for a file
+// that is not there. What must happen is a self-heal, never a false accusation
+// against the passphrase.
+console.log('\n--- a gate older than the site it is talking to ---');
+{
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(String(e)));
+  let navs = 0;
+  page.on('framenavigated', (f) => { if (f === page.mainFrame()) navs++; });
+  // Everything is served as normal EXCEPT the payloads, which 404 the way
+  // another build's would. The gate itself is untouched, so this measures the
+  // gate's behaviour and not a doctored page.
+  await ctx.route('**/*', (r) => {
+    const u = r.request().url();
+    if (!u.startsWith(URL_)) return r.abort();
+    if (/-[0-9a-f]{8}\.enc$/.test(u)) return r.fulfill({ status: 404, body: 'gone' });
+    return r.continue();
+  });
+  await page.goto(URL_, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#pw', { timeout: 10000 });
+  await page.fill('#pw', PASS);
+  await page.click('#go');
+  await page.waitForTimeout(2500);
+  const msg = await page.innerText('#msg').catch(() => '');
+  check(!/does not unlock/i.test(msg),
+    'a missing payload is NOT reported as a wrong passphrase: ' + JSON.stringify(msg));
+  check(navs >= 2, 'the gate refreshed itself rather than waiting to be told: '
+    + navs + ' navigation(s)');
+  // AND IT MUST NOT LOOP. If the payloads really are absent - a half-finished
+  // deploy - reloading for ever is worse than saying so. The second time round
+  // it says what is wrong and stops.
+  await page.waitForTimeout(1500);
+  if (await page.$('#pw')) {
+    await page.fill('#pw', PASS);
+    await page.click('#go');
+    await page.waitForTimeout(2000);
+  }
+  const msg2 = await page.innerText('#msg').catch(() => '');
+  check(/out of date/i.test(msg2) && !/does not unlock/i.test(msg2),
+    'a second failure says the page is out of date and stops: ' + JSON.stringify(msg2));
+  // EXACTLY TWO: the first load and the one self-heal. `<= 3` was written here
+  // first and PASSED with the once-per-session guard removed - the assert was
+  // looser than the promise it was checking, which is the M5 trap by name.
+  check(navs === 2, 'it reloaded once and only once: ' + navs + ' navigation(s)');
+  check(errs.length === 0, 'no page errors while healing: ' + errs.join(' | '));
   await ctx.close();
 }
 
