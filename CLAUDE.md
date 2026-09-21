@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 41 shared mutable
+    decision, not unfinished work: it is one web of 42 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -2060,6 +2060,95 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 - CLAUDE.md said "ENTC's published 32 ft gives 1000 ft" - the published figure is **32 ft**
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
+
+## THE CONTROL STOPS AT ITS OWN EDGE, SO THE APP CARRIES THE DRAG (v16.90)
+
+The pilot on the deployed v16.89: *"the divider works fine now and is properly
+anchored, but the sliders are still losing track when the mouse moves away from
+the slider"* - and earlier, the gesture itself: *"my mouse moved downwards while
+dragging and at the moment the mouse stopped touching the slider, it stopped."*
+
+### v16.89's ANSWER WAS WRONG, AND THREE MEASUREMENTS SAY WHY
+
+Pointer capture cannot fix this:
+
+1. **IT IS GRANTED AND NOT HONOURED.** `gotpointercapture` fires on the input,
+   and `hasPointerCapture` then reads **false on every subsequent move**.
+2. **THAT IS NOT THE DRIVER.** `pointerId` is 1 on the pointerdown and 1 on
+   every move, so the reading means what it says - checked precisely because
+   this session had already built on three probe artifacts.
+3. **THE EVENTS ARRIVE ANYWAY AND THE VALUE STILL FREEZES.** `e.target` is the
+   input even 120 px below it, so they ARE being routed there. **Chrome's native
+   range updates its value only while the pointer is inside its own bounds**,
+   and no capture changes that.
+
+So the app has to move the value itself.
+
+### THE SCALE IS LEARNED FROM THE CONTROL, NEVER INVENTED
+
+The one thing a replacement must not do is disagree with the control while the
+control is still driving. **MEASURED: native does not map the full box** - it
+saturates well inside both ends, so an x-across-the-rect formula is out by a
+whole step in places (measured 1 step at three of nine probe positions).
+
+Deriving the true track from that meant arithmetic on arithmetic - the
+saturation points include half a step of rounding - and that constant chain is
+exactly what had already gone wrong four times here. So no mapping is derived
+at all:
+
+- while the pointer is **inside** the box the control owns the value and the app
+  only WATCHES, recording how many units it moved per pixel;
+- when the pointer **leaves**, the drag continues from that anchor at that
+  scale. No jump at the handover, and no second mapping to drift.
+- A drag that leaves before anything could be learned falls back to the box
+  width - and that fallback is the only place an invented number survives.
+- The write is guarded on `v === live`, so a browser whose native drag DOES
+  keep going cannot be double-applied.
+
+**AND THE SYNTHETIC `change` CAME BACK OUT.** The first version dispatched one
+on release; measured, the control fires its own even for a value the app wrote,
+so every handler ran **twice**. v16.61's rule - prefer the deletion to the
+second mechanism.
+
+### I NEVER REPRODUCED THE PILOT'S FAILURE, AND TWO PROBES SAID I HAD
+
+This is the fourth probe artifact in one sitting and the most embarrassing,
+because it was written into CLAUDE.md as a reproduction:
+
+- **BOTH "REPRODUCTIONS" HELD x CONSTANT WHILE MOVING DOWN**
+  (`mouse.move(x + w*0.6, y + 40*i)`). A range's value is a function of x, so it
+  could not change whether the drag was alive or dead. The frozen value proved
+  nothing.
+- The v16.89 probe before them had the same shape in reverse: it drove the value
+  to its **maximum** before leaving the track, so again there was nothing left to
+  observe.
+- **THE MUTATION IS WHAT EXPOSED IT.** Disabling the continuation entirely left
+  the browser check green - 5 -> 9 off-track - which can only mean Chromium's own
+  control tracks off-element here. A check that passes with the feature removed
+  is not a check, and this one had been written to sound like proof.
+
+**SO THE GUARD IS IN jsdom, WHERE THERE IS NO NATIVE SLIDER DRAG TO STAND IN.**
+Synthetic pointerdown on the element, a move inside the box, then a move
+outside: only the app's own code can move the value there. Removing the
+continuation fails it by name with the pilot's symptom (`2 -> 2`) and 0
+`error TS` lines. It also asserts the clamp, that a release really ends the
+drag, and - on a second slider - that the app writes NOTHING while the pointer
+is inside the control.
+
+The Chromium check is kept and **says in its own comment that it does not
+discriminate**. What it proves is that the app has not broken the native control
+and that the gesture commits exactly once.
+
+### WHAT IS STILL NOT PROVEN HERE
+
+There is no browser on this machine where a slider drag dies at the control's
+edge, so nothing here demonstrates the fix against the pilot's actual failure -
+only that it implements the behaviour they described and cannot interfere where
+native already works. The divider is the encouraging precedent: the same
+document-level approach, and they report it fixed.
+
+`sliderDrag` is a new top-level global, so the page's stated count went 41 -> 42
+- and the L3 test caught that on the first run rather than letting it drift.
 
 ## THE DRAG IS ANCHORED TO THE MOUSE, NOT TO THE THING UNDER IT (v16.89)
 

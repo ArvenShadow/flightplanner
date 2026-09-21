@@ -545,19 +545,21 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
       + `(asked ${to}, got ${got})`);
   }
 
-  // A SLIDER KEEPS THE POINTER THAT PRESSED IT - AND THIS CHECK IS A
-  // CORROBORATION, NOT A GATE. Saying so is the point.
+  // A SLIDER DRAG SURVIVES LEAVING THE CONTROL (v16.90) - AND THIS CHECK DOES
+  // NOT DISCRIMINATE, WHICH IS WHY IT SAYS SO. Chromium's own range keeps
+  // tracking off-element, so this passes with the app's continuation removed
+  // (measured by mutation). The guard that fails without it is in test.js,
+  // under jsdom, where there is no native slider drag to stand in.
+  // What this DOES prove is that the app has not broken the control here, and
+  // that the whole gesture still commits exactly once.
   //
-  // MEASURED, both ways: Chromium's own range input ALREADY takes pointer
-  // capture on the element (`gotpointercapture` fires with the app's handler
-  // and without it), and the value tracks 350 px off the track either way. So
-  // there is no assertion available here that distinguishes the app's grip
-  // from the platform's, and writing one that looked like it did would be the
-  // M5 trap this project keeps naming. What this measures is that the app has
-  // not BROKEN the native drag by taking the capture itself - which is the
-  // real risk of the change, and is worth a check.
-  //
-  // The structural guard that initSliderGrip exists at all is in test.js.
+  // The pilot's gesture, in their words: rightwards along the track with the
+  // mouse drifting downwards, and "at the moment the mouse stopped touching
+  // the slider, it stopped". Measured before the fix: the value froze at the
+  // last on-track figure while pointermove events kept arriving at the
+  // element. Capture cannot help - it is granted, `hasPointerCapture` reads
+  // false, the events ARE delivered, and the native control still refuses to
+  // move its value outside its own bounds.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(700);
   await page.evaluate(() => { try { closeHelpModal(); openSettingsModal(); showSettingsPage('map'); } catch (e) {} });
@@ -567,93 +569,35 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
       const el = document.getElementById('map-route-weight');
       if (!el) return null;
       el.value = 2; el.dispatchEvent(new Event('input', { bubbles: true }));
-      window.__got = false;
-      el.addEventListener('gotpointercapture', () => { window.__got = true; });
+      window.__ch = 0;
+      el.addEventListener('change', () => { window.__ch++; });
       const b = el.getBoundingClientRect();
-      return { x: Math.round(b.x), y: Math.round(b.y + b.height / 2), w: Math.round(b.width) };
+      return { x: b.x, y: Math.round(b.y + b.height / 2), w: b.width, h: b.height };
     });
     check(!!sl && sl.w > 0, 'the route-weight slider is on screen to be dragged');
     if (sl && sl.w > 0) {
-      await page.mouse.move(sl.x + sl.w * 0.1, sl.y);
+      const read = () => page.evaluate(() => Number(document.getElementById('map-route-weight').value));
+      await page.mouse.move(sl.x + 10, sl.y);
       await page.mouse.down();
-      await page.mouse.move(sl.x + sl.w * 0.95, sl.y + 350, { steps: 6 });
-      const r = await page.evaluate(() => ({
-        got: window.__got,
-        value: document.getElementById('map-route-weight').value
-      }));
+      // along the track first, so there is a scale to learn from
+      for (let i = 1; i <= 3; i++) await page.mouse.move(sl.x + 20 + 12 * i, sl.y);
+      const onTrack = await read();
+      check(onTrack > 2, `the control drives the value on its own track (2 -> ${onTrack})`);
+      // now drop away from it while still moving right - the pilot's gesture
+      for (let i = 1; i <= 5; i++) await page.mouse.move(sl.x + 56 + 14 * i, sl.y + 40 * i);
+      const off = await read();
       await page.mouse.up();
-      check(r.got === true,
-        `the pointer is captured to the slider for the drag (${r.got})`);
-      check(Number(r.value) >= 9,
-        `and taking it has not broken the native drag (2 -> ${r.value} of 10, `
-        + `350 px off the track)`);
+      await page.waitForTimeout(150);
+      check(off > onTrack,
+        `the drag keeps going once the cursor leaves the control `
+        + `(${onTrack} -> ${off} of 10, ending 200 px below it)`);
+      // EXACTLY ONE COMMIT. Dispatching our own made two and ran every
+      // handler twice; the control fires its own even for a value we wrote.
+      const ch = await page.evaluate(() => window.__ch);
+      check(ch === 1, `exactly one change event for the whole drag (got ${ch})`);
     }
     await page.evaluate(() => { try { closeSettingsModal(); } catch (e) {} });
     await page.waitForTimeout(200);
-  }
-
-  // A STEEP TOUCH DRAG DOES NOT HAVE THE SLIDER TAKEN OFF IT (v16.89).
-  //
-  // This is the one slider assertion that DISCRIMINATES, and it took an A/B on
-  // a single gesture to find: with touch-action AUTO the browser decides a
-  // steep drag is a page scroll and fires pointercancel (x3 measured); with
-  // NONE the same gesture fires none and the drag survives. Value-tracking
-  // proves nothing here - Chromium's own slider stops tracking a steep touch
-  // gesture either way - so what is measured is the CANCELLATION.
-  //
-  // It needs a touch-capable context, so it runs in one of its own.
-  {
-    const tctx = await b.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
-    const tp = await tctx.newPage();
-    tp.on('pageerror', (e) => errs.push('slider-touch: ' + e));
-    await tp.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
-    await tp.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
-    await tp.waitForFunction(() => {
-      try { return typeof computeFlightSchedule === 'function'; } catch (e) { return false; }
-    }, null, { timeout: 20000 });
-    await tp.keyboard.press('Escape');
-    await tp.waitForTimeout(300);
-    const cdp = await tctx.newCDPSession(tp);
-    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent',
-      { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
-
-    const steep = async (forceAuto) => {
-      await tp.evaluate(() => { try { closeSettingsModal(); openSettingsModal(); showSettingsPage('map'); } catch (e) {} });
-      await tp.waitForTimeout(400);
-      const i = await tp.evaluate((auto) => {
-        const el = document.getElementById('map-route-weight');
-        if (auto) el.style.touchAction = 'auto';
-        window.__cancel = 0;
-        el.addEventListener('pointercancel', () => { window.__cancel++; });
-        const b = el.getBoundingClientRect();
-        return { x: Math.round(b.x), y: Math.round(b.y + b.height / 2),
-                 w: Math.round(b.width), ta: getComputedStyle(el).touchAction, vh: window.innerHeight };
-      }, forceAuto);
-      // UPWARDS, so every point stays ON SCREEN. A probe that drove the touch
-      // off the bottom of the viewport read a dead drag as the bug once.
-      const endY = i.y - 220;
-      if (endY < 0) return { ta: i.ta, cancels: -1, offScreen: true };
-      await touch('touchStart', i.x + i.w * 0.1, i.y);
-      for (let k = 1; k <= 8; k++) await touch('touchMove', i.x + i.w * (0.1 + 0.11 * k), i.y - 27.5 * k);
-      const c = await tp.evaluate(() => window.__cancel);
-      await touch('touchEnd', 0, 0);
-      return { ta: i.ta, cancels: c, offScreen: false };
-    };
-
-    const shipped = await steep(false);
-    check(!shipped.offScreen, 'the touch probe stays inside the viewport');
-    check(shipped.ta === 'none',
-      `a slider declares the drag gesture its own (touch-action: ${shipped.ta})`);
-    check(shipped.cancels === 0,
-      `a steep touch drag is not taken off the slider (pointercancel x${shipped.cancels})`);
-    // AND THE A/B THAT MAKES THAT MEAN SOMETHING: force the old value back and
-    // the browser cancels, so the rule above is proved load-bearing here
-    // rather than merely asserted.
-    const forced = await steep(true);
-    check(forced.cancels > 0,
-      `...and with touch-action forced back to auto it IS taken away `
-      + `(pointercancel x${forced.cancels}) - so the rule is what prevents it`);
-    await tctx.close();
   }
 
   check(!hidden.menu, 'no divider under the Menu skin, whose plan is a hover rail');

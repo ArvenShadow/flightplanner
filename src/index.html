@@ -353,7 +353,7 @@
         <div class="setting-section">
           <h3>🖥 Layout &amp; Display</h3>
           <ul style="margin-left:16px;">
-            <li>The <b>view selector</b> offers Split, Stacked, Plan-only and Map-only — Stacked/Plan give the OFP the full window width on laptops. In <b>Split</b> and <b>Stacked</b> the <b>divider between the two panels can be dragged</b> to give more of the window to the map or to the plan; <b>double-click</b> it to put it back, and with it focused the <b>arrow keys</b> nudge it and <b>Home</b> resets it. The drag is held for as long as the button is down &mdash; move as fast as you like and the divider stays under the cursor, and the same goes for every slider in the app: each one <b>keeps the pointer that pressed it</b>, so a slider drag no longer stops the moment the cursor wanders off the track. On a <b>touchscreen or pen</b> a slider also claims the gesture outright, so dragging one off its track cannot turn into a page scroll &mdash; the trade there is that you cannot scroll the page by starting the swipe <i>on</i> a slider. Each of the two layouts remembers its own position, and both travel in your exported settings. The editable number cells (Alt, OAT, VAR) have <b>no stepper arrows</b> — they took about 18&nbsp;px out of every cell, which is the whole cell once the plan panel is narrow. Type the value, or use <b>↑</b>/<b>↓</b>, which step by the same amount the arrows did (500&nbsp;ft on an altitude, 100&nbsp;ft on a circuit altitude, 1&nbsp;°C on an OAT). When the panel gets too narrow for the table, the table <b>scrolls sideways</b> rather than squeezing the numbers away.</li>
+            <li>The <b>view selector</b> offers Split, Stacked, Plan-only and Map-only — Stacked/Plan give the OFP the full window width on laptops. In <b>Split</b> and <b>Stacked</b> the <b>divider between the two panels can be dragged</b> to give more of the window to the map or to the plan; <b>double-click</b> it to put it back, and with it focused the <b>arrow keys</b> nudge it and <b>Home</b> resets it. The drag is held for as long as the button is down &mdash; move as fast as you like and the divider stays under the cursor, and the same goes for every slider in the app: if your cursor wanders off a slider mid-drag, the app <b>carries the drag on itself</b> at the speed the control was already moving, so it keeps following you sideways until you let go. On a <b>touchscreen or pen</b> a slider also claims the gesture outright, so dragging one off its track cannot turn into a page scroll &mdash; the trade there is that you cannot scroll the page by starting the swipe <i>on</i> a slider. Each of the two layouts remembers its own position, and both travel in your exported settings. The editable number cells (Alt, OAT, VAR) have <b>no stepper arrows</b> — they took about 18&nbsp;px out of every cell, which is the whole cell once the plan panel is narrow. Type the value, or use <b>↑</b>/<b>↓</b>, which step by the same amount the arrows did (500&nbsp;ft on an altitude, 100&nbsp;ft on a circuit altitude, 1&nbsp;°C on an OAT). When the panel gets too narrow for the table, the table <b>scrolls sideways</b> rather than squeezing the numbers away.</li>
             <li><b>▤ Compact</b> hides secondary columns, leaving the flying essentials. Both choices are remembered per browser.</li>
           </ul>
         </div>
@@ -1308,7 +1308,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.89';
+    const APP_VERSION = '16.90';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2215,31 +2215,119 @@
       bar.addEventListener('keydown', onSplitterKey);
     }
 
-    /** EVERY RANGE SLIDER KEEPS THE POINTER THAT PRESSED IT (v16.89, the
-     *  pilot's report: "if the mouse moves off the slider while still holding
-     *  the mouse button, it stops dragging").
+    /** A SLIDER DRAG IS CONTINUED BY THE APP ONCE THE CONTROL STOPS (v16.90).
      *
-     *  A native <input type="range"> is SUPPOSED to hold the drag itself, and
-     *  in Chromium here it does - measured, 400 px below the track and still
-     *  tracking. But that is the browser's own internal capture, and it is
-     *  exactly the kind of thing that differs by browser and by pointing
-     *  device, which is what the pilot is hitting. Taking the capture
-     *  EXPLICITLY makes the guarantee the app's rather than the platform's.
+     *  THE PILOT'S REPORT, THIRD ROUND: "my mouse moved downwards while
+     *  dragging and at the moment the mouse stopped touching the slider, it
+     *  stopped." v16.89 answered it with pointer capture and that was WRONG,
+     *  measured three ways:
+     *    - `gotpointercapture` fires, and `hasPointerCapture` then reads FALSE
+     *      on every subsequent move. The capture is granted and not honoured.
+     *    - it is NOT a driver artifact: pointerId is 1 on the pointerdown and 1
+     *      on every move, so the reading means what it says.
+     *    - the events ARE reaching the control - `e.target` is the input even
+     *      120 px below it - and the VALUE FREEZES anyway. So Chrome's native
+     *      range updates only while the pointer is inside its own bounds, and
+     *      NO amount of capture can change that.
+     *  It also reproduces here, which v16.89 denied: the earlier probe had
+     *  driven the value to its MAXIMUM before leaving the track, so there was
+     *  nothing left to observe.
      *
-     *  IT IS ONE DELEGATED LISTENER, NOT ONE PER SLIDER - the v16.24 rule that
-     *  a control added later must work without a rule of its own. It is also
-     *  measured to leave the native drag intact: 2 -> 4 -> 6 -> 9 -> 10 across
-     *  the track with capture taken, and still 6 when the cursor is 400 px off
-     *  it. Capture on the input is where the browser wants the events anyway,
-     *  so this reinforces the native behaviour rather than replacing it - the
-     *  value still comes from the browser, never from arithmetic of ours. */
+     *  SO THE APP HAS TO MOVE THE VALUE ITSELF - and the one thing it must not
+     *  do is invent a mapping that disagrees with the control. Measured: native
+     *  does NOT map the full box; it saturates well inside both ends, so an
+     *  x-across-the-rect formula is out by a whole step in places.
+     *
+     *  THE SCALE IS THEREFORE LEARNED FROM THE CONTROL, NOT PICKED. While the
+     *  pointer is inside the box NATIVE OWNS THE VALUE and this only watches,
+     *  recording how many units it moved per pixel. When the pointer leaves,
+     *  the drag continues from THAT anchor at THAT scale, so there is no jump
+     *  at the handover and no second mapping to drift. A drag that leaves
+     *  immediately has nothing to learn from and falls back to the box width.
+     *
+     *  ONE DELEGATED LISTENER, NOT ONE PER SLIDER (the v16.24 rule), and the
+     *  write is guarded so that a browser whose native drag DOES keep going
+     *  cannot be double-applied - the value is only set when it differs. */
+    let sliderDrag = null;
+
     function initSliderGrip() {
       document.addEventListener('pointerdown', (e) => {
         const el = e.target;
-        if (!el || el.tagName !== 'INPUT' || el.type !== 'range') return;
-        if (e.pointerId === undefined || !el.setPointerCapture) return;
-        try { el.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+        if (!el || el.tagName !== 'INPUT' || el.type !== 'range' || el.disabled) return;
+        const v = Number(el.value);
+        sliderDrag = {
+          el,
+          pointerId: (e.pointerId === undefined) ? null : e.pointerId,
+          anchorX: e.clientX, anchorV: v,
+          lastX: e.clientX, lastV: v,
+          startV: v, ours: false,
+          perPx: null
+        };
+        // Capture is still taken: it is what keeps the gesture off the map
+        // underneath. It is simply not what holds the drag any more.
+        if (sliderDrag.pointerId !== null && el.setPointerCapture) {
+          try { el.setPointerCapture(sliderDrag.pointerId); } catch (err) { /* not fatal */ }
+        }
+        addSliderTracking();
       }, true);
+    }
+
+    function addSliderTracking() {
+      document.addEventListener('pointermove', onSliderMove, true);
+      document.addEventListener('pointerup', onSliderUp, true);
+      document.addEventListener('pointercancel', onSliderUp, true);
+      window.addEventListener('blur', onSliderUp);
+    }
+
+    function removeSliderTracking() {
+      document.removeEventListener('pointermove', onSliderMove, true);
+      document.removeEventListener('pointerup', onSliderUp, true);
+      document.removeEventListener('pointercancel', onSliderUp, true);
+      window.removeEventListener('blur', onSliderUp);
+    }
+
+    function onSliderMove(e) {
+      const d = sliderDrag;
+      if (!d) return;
+      if (d.pointerId !== null && e.pointerId !== undefined && e.pointerId !== d.pointerId) return;
+      const r = d.el.getBoundingClientRect();
+      const live = Number(d.el.value);
+      if (e.clientY >= r.top && e.clientY <= r.bottom) {
+        // INSIDE: the control is driving. Learn its scale and keep the anchor
+        // where it last put the value, so a handover cannot jump.
+        const dx = e.clientX - d.lastX;
+        if (Math.abs(dx) >= 4 && live !== d.lastV) d.perPx = (live - d.lastV) / dx;
+        d.lastX = e.clientX; d.lastV = live;
+        d.anchorX = e.clientX; d.anchorV = live;
+        return;
+      }
+      const min = Number(d.el.min), max = Number(d.el.max);
+      const step = Number(d.el.step) || 1;
+      if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return;
+      const perPx = (d.perPx !== null && Number.isFinite(d.perPx))
+        ? d.perPx : (max - min) / Math.max(1, r.width);
+      let v = d.anchorV + (e.clientX - d.anchorX) * perPx;
+      v = min + Math.round((v - min) / step) * step;
+      v = Math.min(max, Math.max(min, v));
+      if (!Number.isFinite(v) || v === live) return;
+      d.el.value = String(v);
+      d.ours = true;
+      d.el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function onSliderUp(e) {
+      const d = sliderDrag;
+      if (!d) return;
+      if (e && e.pointerId !== undefined && d.pointerId !== null
+          && e.pointerId !== d.pointerId) return;
+      sliderDrag = null;
+      removeSliderTracking();
+      // NO SYNTHETIC `change` HERE, and that is measured rather than assumed:
+      // the control fires its own on release even for a value the app wrote, so
+      // dispatching one made TWO and ran every handler twice. v16.61's rule -
+      // prefer the deletion to the second mechanism. `ours` and `startV` are
+      // kept because the browser check asserts exactly one change arrives.
+      void d.ours; void d.startV;
     }
 
     // "View Mode" = locked, read-only, tap-to-highlight (in-flight use).
