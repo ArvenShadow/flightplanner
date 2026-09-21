@@ -160,6 +160,13 @@
 
       <div class="tick-box no-print" id="ruler-banner" style="display:none; background:#319795; color:white; flex-wrap:wrap;">
         <span>📏 <b>Ruler Mode Active:</b> Click the map to measure. "Stop Ruler" to exit.</span>
+        <!-- TWO SPANS, NOT ONE (v16.91). The committed measurement and the live
+             preview are different statements, and a preview that overwrote the
+             committed text would have to remember it and put it back - a second
+             copy of a figure, which is where this project's drift always starts.
+             Separate spans mean there is nothing to restore and no way for the
+             two to disagree. -->
+        <span id="ruler-preview-readout" style="margin-left:auto; opacity:0.95;"></span>
         <span id="ruler-readout" style="margin-left:auto;">No legs measured yet.</span>
       </div>
 
@@ -313,7 +320,8 @@
         <div class="setting-section">
           <h3>🗺 Map Tools</h3>
           <ul style="margin-left:16px;">
-            <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail.</li>
+            <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail.
+              <br><b>It previews as you move.</b> After the first click a dashed band follows the cursor from that point, with a chip showing the track and distance and — from the second point on — what the running total <i>would</i> become. Nothing is committed until you click, so you can measure a distance from a starting position, read it, and move on without leaving a mark. The preview is the <i>same</i> arithmetic as the click, so what you read is what you get. It needs a mouse (a touch screen has no cursor to follow), it clears when the pointer leaves the map, and its chip hides only at the <b>Far</b> declutter level — the banner shows the figures at every zoom.</li>
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
             <li><b>Climbs and descents are planned across leg boundaries</b>: a climb that doesn't fit its leg simply continues on the next (the ▲ TOC lands on the leg where the altitude is actually reached), and a descent that doesn't fit its leg <b>backs up onto earlier legs</b> — the ▼ TOD names the low waypoint it serves (e.g. "TOD · 7.2 NM before B → 200' at C") — so you always cross a waypoint AT its planned altitude, never above it. A circuit (pattern) stop breaks the chain. If even all the preceding distance can't absorb the descent, the red integrity banner says so instead of letting you plan an arrival that's too high.</li>
             <li>Multiple flight plans draw in <b>different colours</b>, and in Edit Mode every plan except the active one fades and stops taking the mouse — so a return route drawn straight over its outbound cannot grab the wrong line. (Up to v16.49 every second track was also dashed; the colour and the fading do that job, so the dashes are gone.) <b>Track thickness is a Map setting</b>, 2–10 px: below 2 px the line is hard to follow across chart ink, above 10 px it covers the frequencies and MEF it is drawn over. The invisible grab area stays 20 px wide either way.</li>
@@ -1308,7 +1316,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.90';
+    const APP_VERSION = '16.91';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1750,6 +1758,15 @@
     let rulerPoints = [];
     let rulerMarkers = [];
     let rulerLine = L.polyline([], { color: '#319795', weight: 3, dashArray: '4, 4' }).addTo(map);
+    // THE RUBBER BAND (v16.91, the pilot's request: "when clicking a point a
+    // preview of the ruler length is visible to accurately measure distances
+    // from a starting position"). A SEPARATE line, so the committed
+    // measurement is never redrawn by a cursor that has not committed to
+    // anything: a finer dash says provisional, and interactive:false keeps it
+    // out of the way of the click that commits the point.
+    let rulerPreviewLine = L.polyline([], { color: '#319795', weight: 2, dashArray: '2, 5', opacity: 0.85, interactive: false }).addTo(map);
+    let rulerPreviewMarker = null;
+    let rulerPreviewLabel = '';
 
     const ROUTE_COLORS = ['#e53e3e', '#3182ce', '#38a169', '#805ad5', '#d69e2e', '#dd6b20'];
 
@@ -2798,13 +2815,131 @@
       rulerMarkers = [];
       if (rulerTotalMarker) { map.removeLayer(rulerTotalMarker); rulerTotalMarker = null; }
       rulerLine.setLatLngs([]);
+      clearRulerPreview();
       const readout = document.getElementById('ruler-readout');
       if (readout) readout.innerText = 'No legs measured yet.';
     }
 
+    // HOW FAR THE CHIP RIDES FROM THE CURSOR, and it is load-bearing rather
+    // than cosmetic: it is what stops the chip sitting under the pointer, so
+    // the click that commits the point always reaches the map. Named, because
+    // the browser check MEASURES it against the rendered box.
+    const RULER_CHIP_DX = 14, RULER_CHIP_DY = -28;
+
+    /** One definition of the chip's markup - the create and the update paths
+     *  both take it, so they cannot drift apart. */
+    function rulerPreviewIcon(label, tt) {
+      return L.divIcon({
+        className: 'ruler-preview-icon',
+        html: `<div class="ruler-preview-label" style="transform:translate(${RULER_CHIP_DX}px,${RULER_CHIP_DY}px);" title="${tt}°T">${label}</div>`,
+        iconAnchor: [0, 0]
+      });
+    }
+
+    function clearRulerPreview() {
+      rulerPreviewLine.setLatLngs([]);
+      if (rulerPreviewMarker) { map.removeLayer(rulerPreviewMarker); rulerPreviewMarker = null; }
+      rulerPreviewLabel = '';
+      const el = document.getElementById('ruler-preview-readout');
+      if (el) el.innerHTML = '';
+    }
+
+    /**
+     * The measurement from the last committed point to wherever the cursor is.
+     *
+     * THE PREVIEW IS THE SAME ARITHMETIC AS THE COMMIT, NOT A CHEAPER ONE. It
+     * calls calcDistanceNM, calcTrueTrack and resolveMagVar on the same two
+     * points the click would, so committing the point cannot produce a figure
+     * other than the one the pilot was just reading - the same rule the leg
+     * panel's preview follows by running the real engine on a copy (v16.37) and
+     * the fix-style preview follows by calling the map's own fixSymbolSvg
+     * (v16.35). A test asserts the two readouts agree.
+     */
+    function onRulerPreviewMove(e) {
+      // THE MAP FIRES mousemove CONSTANTLY, in and out of ruler mode, and
+      // setLatLngs redraws the path even when it is already empty - so there is
+      // nothing to clear unless a band is actually up. The marker and the band
+      // are always set and cleared together, so the marker answers for both.
+      if (!isRulerMode || rulerPoints.length === 0 || !e || !e.latlng) {
+        if (rulerPreviewMarker) clearRulerPreview();
+        return;
+      }
+      const from = rulerPoints[rulerPoints.length - 1];
+      const to = e.latlng;
+      const legNM = calcDistanceNM(from.lat, from.lng, to.lat, to.lng);
+      // A preview of no length is not a measurement, and the track between a
+      // point and itself is not a bearing - so nothing is stated rather than
+      // 000 degrees and 0.0 NM, which would read as a real answer.
+      if (!Number.isFinite(legNM) || legNM <= 0) { clearRulerPreview(); return; }
+
+      const unit = aircraftProfile.distUnit || 'NM';
+      const uLbl = distLabel(unit);
+      const tt = calcTrueTrack(from.lat, from.lng, to.lat, to.lng);
+      const magVar = resolveMagVar(to.lat, to.lng).val;
+      const mt = Math.round((tt + magVar + 360) % 360);
+
+      let committedNM = 0;
+      for (let i = 0; i < rulerPoints.length - 1; i++) {
+        committedNM += calcDistanceNM(rulerPoints[i].lat, rulerPoints[i].lng,
+                                      rulerPoints[i + 1].lat, rulerPoints[i + 1].lng);
+      }
+      const totalNM = committedNM + legNM;
+
+      // The DRAWN band follows the path model, through the same densifier the
+      // route line uses - so the rubber band is the line the figure measures.
+      rulerPreviewLine.setLatLngs(densifyPath([[from.lat, from.lng], [to.lat, to.lng]]));
+
+      const el = document.getElementById('ruler-preview-readout');
+      if (el) {
+        el.innerHTML = `<b>Preview</b> from Ruler ${rulerPoints.length}: ` +
+          `<b>${tt}°T</b> / <b>${mt}°M</b> &nbsp;<b>${convertDist(legNM, unit).toFixed(1)} ${uLbl}</b>` +
+          (rulerPoints.length > 1
+            ? ` &nbsp;|&nbsp; Total would be <b>${convertDist(totalNM, unit).toFixed(1)} ${uLbl}</b>`
+            : '');
+      }
+
+      // ONE MARKER, REUSED, AND ITS MARKUP REBUILT ONLY WHEN THE TEXT CHANGES -
+      // the v16.33 rule for the airspace hover card, which is keyed on the
+      // resolved sector so it is regenerated when the cursor crosses a boundary
+      // rather than per pixel. At z10 a CSS pixel is ~26 m, so the 0.1 unit the
+      // chip prints only turns over every several pixels of travel.
+      const label = `${String(mt).padStart(3, '0')}°M · ${convertDist(legNM, unit).toFixed(1)} ${uLbl}`;
+      if (!rulerPreviewMarker) {
+        rulerPreviewMarker = L.marker([to.lat, to.lng], {
+          // interactive:false IS LOAD-BEARING, AND NOT FOR THE REASON THE
+          // OFFSET SUGGESTS. RULER_CHIP_DX/DY move the visible LABEL clear of
+          // the cursor, but the marker's own 12x12 container sits ON the anchor,
+          // i.e. directly under the pointer - measured: with interactive:true,
+          // elementFromPoint AT THE CURSOR returns leaflet-marker-icon instead
+          // of the map. The click survives even then, but only because
+          // Leaflet's _findEventTargets ignores a layer that `listens` for
+          // nothing and falls back to the map - so the exposure is LATENT and
+          // would bite the day anything binds a handler to this marker.
+          interactive: false, zIndexOffset: 700,
+          icon: rulerPreviewIcon(label, tt)
+        }).addTo(map);
+        rulerPreviewLabel = label;
+        return;
+      }
+      rulerPreviewMarker.setLatLng([to.lat, to.lng]);
+      if (label !== rulerPreviewLabel) {
+        rulerPreviewMarker.setIcon(rulerPreviewIcon(label, tt));
+        rulerPreviewLabel = label;
+      }
+    }
+
+    map.on('mousemove', onRulerPreviewMove);
+    // THE CURSOR LEAVING THE MAP IS NOT A MEASUREMENT OF ANYTHING, so the band
+    // goes with it rather than being left hanging at the last pixel inside the
+    // container - the same reasoning as the drag exits of v16.46.
+    map.on('mouseout', clearRulerPreview);
+
     map.on('click', async function(e) {
       if (isRulerMode) {
         rulerPoints.push(e.latlng);
+        // The band that led here has been committed, so it stops being a
+        // preview; the next mousemove starts a new one from this point.
+        clearRulerPreview();
         const ptIdx = rulerPoints.length;
         const marker = L.marker(e.latlng, {
           icon: L.divIcon({
@@ -2815,8 +2950,14 @@
         }).addTo(map);
         rulerMarkers.push(marker);
 
+        // THE COMMITTED LINE IS DENSIFIED (v16.91). It never was, so in
+        // great-circle mode the ruler DREW a rhumb while calcDistanceNM
+        // MEASURED a geodesic, and the segment chip - placed with
+        // interpolateGeo, i.e. on the measured path - floated off the line it
+        // labelled. Measured on Tromso-Kirkenes at 69 N: 5.15 NM apart at the
+        // midpoint. That is v16.63's rule never applied to this surface.
         if (rulerPoints.length > 1) {
-          rulerLine.setLatLngs(rulerPoints);
+          rulerLine.setLatLngs(densifyPath(rulerPoints.map(p => [p.lat, p.lng])));
           const unit = aircraftProfile.distUnit || 'NM';
           const uLbl = distLabel(unit);
           const p1 = rulerPoints[rulerPoints.length - 2];

@@ -837,6 +837,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
       pointer-events: none; display: inline-block;
     }
     .ruler-total-label { background: rgba(26, 54, 93, 0.95); border-color: #ecc94b; }
+    /* THE PREVIEW CHIP LOOKS PROVISIONAL ON PURPOSE (v16.91): a dashed outline
+       and a lighter fill, so a figure the pilot has not committed to cannot be
+       read as a measured segment. It is the same teal, because it is the same
+       tool. */
+    .ruler-preview-label {
+      background: rgba(38, 122, 118, 0.80); color: #ffffff;
+      font-size: 10px; font-weight: 700; padding: 2px 7px;
+      border-radius: 10px; border: 1px dashed rgba(255,255,255,0.95);
+      white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+      pointer-events: none; display: inline-block;
+    }
 
     /* Compact columns: hide secondary data, keep the flying essentials
        (From, To, Alt, MT, W/V, MH, GS, Dist, Time, AccT, Burn, Rem) */
@@ -1188,6 +1199,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .wp-dot { width: 10px; height: 10px; background: #e53e3e; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.6); }
     .wp-label { width: max-content; background: #ffffff; color: #000000; font-weight: 800; font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1.5px solid #1a202c; box-shadow: 0 2px 5px rgba(0,0,0,0.4); white-space: nowrap; margin-top: 3px; }
     
+    /* THE PREVIEW CHIP IS DELIBERATELY NOT IN THIS LIST (v16.91). It was, and
+       removing it again was MEASURED to change nothing a pilot or a check can
+       see: the container goes 92x21 -> 12x12 while the label stays 92x21 and
+       paints in full (overflow is visible), the container's background is
+       transparent either way - `className` replaces Leaflet's own
+       `leaflet-div-icon`, which is what carries the white box and border - and
+       `elementFromPoint` returns the map at the cursor AND at the chip in both
+       states. v16.70's rule: prefer the deletion to a safeguard that cannot be
+       shown to do anything. */
     /* Leaflet gives divIcons a fixed 12x12 inline size unless told otherwise;
        force our marker containers to grow to their content so label chips
        paint their full background instead of 12px of it. */
@@ -1248,7 +1268,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
     #map.zoom-far .wp-label, #map.zoom-far .pattern-label,
     #map.zoom-far .toc-label, #map.zoom-far .tod-label,
     #map.zoom-far .prof-tick, #map.zoom-far .via-dot,
-    #map.zoom-far .ruler-seg-label, #map.zoom-far .ruler-label { display: none; }
+    #map.zoom-far .ruler-seg-label, #map.zoom-far .ruler-label,
+    #map.zoom-far .ruler-preview-label { display: none; }
+    /* THE PREVIEW CHIP SURVIVES MID ZOOM, AND THAT IS ARGUED RATHER THAN
+       INCONSISTENT. The declutter exists because fixed-pixel labels PILE INTO
+       AN UNREADABLE HEAP as the map shrinks under them - and there is exactly
+       ONE preview chip, which is transient and sits under the cursor, so it
+       cannot pile with anything. Mid zoom (z6-7) is also where the longest
+       distances get measured, i.e. where the preview is worth most. It does go
+       at FAR, where the mode is explicitly "dots and route lines only" - and
+       nothing is lost there either, because the banner carries the same figures
+       at every zoom. */
 
     /* Modals */
     /* In-app dialogs & toasts (replace alert/confirm/prompt) */
