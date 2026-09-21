@@ -181,22 +181,30 @@ export function flightLineCoords(fl) {
 export const DRAW_STEP_NM = 25;
 
 /**
- * The route line as DRAWN, following whichever path model is in force.
+ * Any polyline as DRAWN, following whichever path model is in force.
  *
  * ONE CODE PATH FOR BOTH MODES, deliberately: `interpolateGeo` already follows
  * the setting, so in great-circle mode the extra points curve the line and in
  * rhumb mode they land on the straight Mercator segment and change nothing. A
  * mode branch here would be a second place for the two to disagree.
  *
+ * AND ONE CODE PATH FOR EVERY DRAWN LINE, which is what the extraction is for
+ * (v16.91). The route line has been densified since v16.63; the RULER never
+ * was, so it drew a rhumb while `calcDistanceNM` measured a geodesic and the
+ * segment chip - placed with `interpolateGeo` - floated off the line it
+ * labelled. Measured on Tromso-Kirkenes at 69 N: the drawn midpoint and the
+ * measured midpoint lie 5.15 NM apart. That is v16.63's own rule never applied
+ * to the ruler surface, so the fix is to share the densifier rather than to
+ * write a second one.
+ *
  * The LOGICAL path is untouched - hit-testing, `alongLegNM`, `legMidpoint` and
  * the leg indices all still work on waypoint-to-waypoint segments. This is for
  * drawing only.
  *
- * @param {Flight} fl
+ * @param {[number, number][]} pts
  * @returns {[number, number][]}
  */
-export function drawnLineCoords(fl) {
-  const pts = flightLineCoords(fl);
+export function densifyPath(pts) {
   if (pts.length < 2) return pts;
   /** @type {[number, number][]} */
   const out = [pts[0]];
@@ -208,6 +216,16 @@ export function drawnLineCoords(fl) {
     out.push(b);
   }
   return out;
+}
+
+/**
+ * The route line as DRAWN.
+ *
+ * @param {Flight} fl
+ * @returns {[number, number][]}
+ */
+export function drawnLineCoords(fl) {
+  return densifyPath(flightLineCoords(fl));
 }
 
 

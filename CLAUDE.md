@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 42 shared mutable
+    decision, not unfinished work: it is one web of 45 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -2060,6 +2060,184 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
 - CLAUDE.md said "ENTC's published 32 ft gives 1000 ft" - the published figure is **32 ft**
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
+
+## THE RULER PREVIEWS, AND MEASURING IT FOUND THE RULER DRAWING THE WRONG LINE (v16.91)
+
+The pilot: *"Make the ruler function as a preview, when clicking a point a
+preview of the ruler length is visible to accurately measure distances from a
+starting position"* - and, about the sliders of v16.90, *"works somewhat but
+still buggy so whatever"*, which is where that thread stops.
+
+### THE FEATURE: A BAND FROM THE LAST POINT TO THE CURSOR
+
+After the first click a dashed band follows the mouse, with a chip carrying the
+magnetic track and the distance and - from the second point on - what the
+running total WOULD become. Nothing is committed until the click, so a distance
+can be read off and abandoned without leaving a mark on the chart.
+
+- **THE PREVIEW IS THE SAME ARITHMETIC AS THE COMMIT, NOT A CHEAPER ONE.** It
+  calls `calcDistanceNM`, `calcTrueTrack` and `resolveMagVar` on the same two
+  points the click would, which is the rule the leg panel's preview follows by
+  running the real engine on a copy (v16.37) and the fix-style preview follows
+  by calling the map's own `fixSymbolSvg` (v16.35). A test drives the mouse,
+  reads the chip, clicks, and requires the committed chip to carry the same
+  text; `verify:fixes` does it again in Chromium. A mutation that takes the
+  variation at the START of the leg instead of the end fails it by name.
+- **TWO READOUTS IN THE BANNER, NOT ONE.** A preview that overwrote the
+  committed text would have to remember it and put it back - a second copy of a
+  figure, which is where this project's drift always starts. Separate spans mean
+  there is nothing to restore and no way for the two to disagree, and a test
+  asserts the committed text is byte-identical across a preview appearing and
+  going away.
+- **ONE MARKER, REUSED, ITS MARKUP REBUILT ONLY WHEN THE TEXT CHANGES** - the
+  v16.33 rule for the airspace hover card, which is keyed on the resolved sector
+  so it regenerates when the cursor crosses a boundary rather than per pixel. At
+  z10 a CSS pixel is ~26 m, so the 0.1 NM the chip prints turns over every
+  several pixels of travel.
+- **A PREVIEW OF NO LENGTH STATES NOTHING.** The cursor sitting on the point it
+  measures from would otherwise print `000°M · 0.0 NM`, which reads as an
+  answer. So does the cursor leaving the map: the band goes with it rather than
+  hanging at the last pixel inside the container, which is the v16.46 rule about
+  a gesture needing an exit that does not depend on one event arriving.
+- **THE CHIP CHECK IS THE PROJECTION, NOT THE MARKUP.** `verify:fixes` turns the
+  cursor's own container point into a coordinate with Leaflet's
+  `containerPointToLatLng` and requires the chip to state the distance to THAT -
+  because "accurately measure distances from a starting position" is a claim
+  about where the pointer is, and jsdom has neither a projection nor a cursor.
+- **THE PREVIEW CHIP SURVIVES MID DECLUTTER AND GOES AT FAR**, argued rather
+  than copied from the other ruler chips: the declutter exists because
+  fixed-pixel labels PILE INTO A HEAP as the map shrinks, and there is exactly
+  ONE preview chip, transient, under the cursor. Mid zoom (z6-7) is also where
+  the longest distances get measured. FAR is explicitly "dots and route lines
+  only", and nothing is lost there either - the banner carries the figures at
+  every zoom.
+- **IT NEEDS A MOUSE, and the guide says so.** `mousemove` does not fire for a
+  tap, so on a touch screen there is no cursor to follow and the committed
+  measurement is unchanged. Stated rather than left to be discovered.
+- **THE MAP FIRES `mousemove` CONSTANTLY, IN AND OUT OF RULER MODE**, and
+  `setLatLngs` redraws a path even when it is already empty - so the handler
+  clears nothing unless a band is actually up. The marker and the band are set
+  and cleared together, so the marker answers for both.
+
+### TWO BROWSER MUTATIONS ESCAPED, AND ONE OF THEM CORRECTED ME TWICE
+
+- **`interactive: true` ON THE PREVIEW MARKER CHANGED NOTHING** the first time,
+  and my explanation for that was wrong. I wrote that the chip rides
+  `RULER_CHIP_DX/DY` = +14, -28 px clear of the pointer, so the pointer can
+  never be inside it - which is true of the **visible label** and false of the
+  **marker**. The marker's own 12x12 container sits ON the anchor,
+  i.e. directly under the cursor, and only the label is transformed away.
+  - **MEASURED, once the check hit-tested AT THE CURSOR**: with
+    `interactive: true`, `elementFromPoint` at the pointer returns
+    `leaflet-marker-icon` instead of the map. It fails by name now, so the flag
+    is load-bearing and not the decoration the first account made it.
+  - **WHY THE CLICK SURVIVED ANYWAY, read out of the bundled Leaflet rather
+    than assumed**: `_findEventTargets` only accepts a layer that
+    `listens(type, true)`, and falls back to `[map]` when none does. Nothing
+    binds `click` to this marker, so the map still gets it. **The exposure is
+    LATENT, not harmless** - it bites the day anything binds a handler there,
+    which is exactly the sort of thing a later change does.
+  - So the first version of the check - "the click still committed a point" -
+    could not see it, and the check that does is the one that asks the browser
+    what is under the pointer. `verify:fixes` now asserts that, plus that not
+    one pixel of the drawn chip takes the mouse (hit-tested at the chip's
+    centre, which no mouse gesture can reach because the chip is repositioned by
+    the very move that would approach it).
+  - The jsdom test's title said "the preview is non-interactive, so it cannot
+    eat the click that commits it" - the right flag, the wrong cause. Rewritten.
+  - **THE SHAPE IS v16.55 AND v16.89 AGAIN**: a statement that was true of the
+    one thing I looked at (the label's box) and false of the thing that mattered
+    (the container's). Measure the object the platform hit-tests, not the one
+    you can see.
+- **ADDING `.ruler-preview-icon` TO THE `max-content` OVERRIDE DID NOTHING, SO IT
+  CAME OUT.** Measured both ways in Chromium: the container goes 92x21 -> 12x12
+  while **the label stays 92x21 and paints in full** (overflow is visible), the
+  container's background is transparent either way - `className` REPLACES
+  Leaflet's own `leaflet-div-icon`, which is the class that carries the white box
+  and border - and `elementFromPoint` returns the map at the cursor and at the
+  chip in both states. v16.70's rule: prefer the deletion to a safeguard that
+  cannot be shown to do anything.
+  - And putting that comment INSIDE the selector list (it spans two lines) broke
+    a test that slices 200 characters from `.toc-custom-icon` to the opening
+    brace. Valid CSS, wrong place; it sits above the block now.
+- The markup had been written TWICE - once to create the marker, once to update
+  it - which is two places for the offset to drift apart. `rulerPreviewIcon()`
+  is the one definition, and a test counts the occurrences.
+
+**VERIFIED BY PIXELS, because a CSS change is (v16.19).** Against v16.90 in real
+Chromium: **57 pixels differ and every one of them is in an 8x8 box at
+x 300-307, y 19-26** - the version badge, identical in light and dark, with
+computed styles identical. That is deferred nit 13 and nothing else; no chip
+this feature adds is drawn until the ruler is running.
+
+### AND THE RULER HAD BEEN DRAWING A DIFFERENT LINE FROM THE ONE IT MEASURED
+
+Measuring the preview's own band against the path model is what exposed it, and
+it is this file's first named failure shape exactly: **AN OLD RULE NOT APPLIED
+TO A NEW SURFACE**, except the surface was older than the rule.
+
+- `rulerLine.setLatLngs(rulerPoints)` hands Leaflet the clicked points raw, and
+  Leaflet joins points with straight lines in Web Mercator - which IS a rhumb.
+  Meanwhile `calcDistanceNM` and `calcTrueTrack` follow the v16.63 path setting,
+  so in the default great-circle mode the ruler **drew a rhumb and measured a
+  geodesic**.
+- **MEASURED on Tromso-Kirkenes at 69 N: 5.15 NM apart at the midpoint** - the
+  same figure v16.63 measured for the route line, which is no coincidence, it is
+  the same leg and the same two models.
+- The half a pilot actually SEES is the chip: it is placed with
+  `interpolateGeo`, i.e. on the MEASURED path, so on a long ruler leg the
+  segment chip floated 5.15 NM off the line it labelled.
+- **THE FIX IS TO SHARE THE DENSIFIER, NOT TO WRITE A SECOND ONE.**
+  `drawnLineCoords` was `flightLineCoords` plus a densification loop; the loop is
+  now `densifyPath(pts)` and `drawnLineCoords` is one line. The committed ruler
+  line, the preview band and the route line all go through it, so there is no
+  second place for the drawn line and the measured line to diverge. v16.63's
+  entry says "ONE DENSIFIER FOR BOTH MODES"; it is now also one densifier for
+  every drawn line.
+- The test walks the drawn polyline AND the midpoint of every drawn segment
+  against the measured path, because **every vertex of a chord-only line is on
+  the path by construction** - it is the straight line between them that sags.
+  That is the v16.62 lesson, and testing the vertices alone would have passed the
+  broken build.
+
+### THE TEST FILE'S OWN CASCADE, worth recording because it lied about four other features
+
+A failed `assert` skips whatever follows it - so a ruler test that turns the mode
+off on its LAST line leaves it ON when it fails. `isRulerMode` gates the
+keybindings, so one broken ruler assertion produced six failures in the undo,
+Cmd+Z, number-field and toast tests, none of which had anything to do with the
+ruler. The block sets the mode at the START of each test now
+(`startRuler()`/`stopRuler()`) instead of assuming what the previous one left.
+
+**AND ONE NEW CHECK FAILED A WORKING BUILD.** "The band follows the cursor" was
+written as a distance moving by more than 1 NM, and reported `72.3 NM -> 71.5`.
+The two probe points share an x, the leg is nearly east-west, and how much 113 px
+of vertical travel is worth is decided by the LAYOUT rather than by the feature -
+the track had moved 10 degrees, which was the real signal. Re-deriving the
+expected distance at the new pointer position needs no threshold at all. Straight
+M5: assert the thing that justified the check.
+
+### EIGHT jsdom MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+The preview emptied (8 tests), the clear dropped from the committing click (1),
+the `mouseout` exit removed (1, reporting the band left hanging), the
+zero-length guard removed (1, reporting `180°T / 170°M  0.0 NM`), the committed
+line un-densified (1) and the band un-densified (1) - plus two that escaped on
+the first run and are the interesting ones:
+
+- **THE INVARIANT'S FIXTURE COULD NOT SEE THE ANSWER.** Taking the variation at
+  the START of the leg instead of the end changed nothing, because the test
+  measured ENDU -> ENTC and `resolveMagVar` returns **-11 at both ends**. Tromso
+  (-11) to Kirkenes (-17) differs by 6 degrees, and the fixture now ASSERTS the
+  two ends disagree so it cannot quietly stop discriminating. M5 again.
+- **THE LABEL KEY WAS NOT OBSERVABLE, ONLY ITS VALUE.** Removing the key
+  (`if (true)`) reassigns `rulerPreviewLabel` to the SAME string, so comparing
+  that field passed. `setIcon` takes a FRESH `divIcon` every call, so the icon
+  object's IDENTITY is what says whether the markup was rebuilt.
+
+`rulerPreviewLine`, `rulerPreviewMarker` and `rulerPreviewLabel` are new
+top-level globals, so the page's stated count went 42 -> 45 - and the L3 test
+caught that on the first run, again.
 
 ## THE CONTROL STOPS AT ITS OWN EDGE, SO THE APP CARRIES THE DRAG (v16.90)
 

@@ -603,6 +603,175 @@ check(!hostile.pwned, 'a hostile colour did not execute');
 check(/#dd6b20/.test(hostile.html), 'a malformed colour fell back to the default orange');
 check(hostile.w === 18, 'an absurd size clamped to the 18 px maximum (got ' + hostile.w + ')');
 
+// =====================================================================
+// THE RULER PREVIEWS (v16.91). jsdom has no projection and no cursor, so it
+// cannot answer the only question that matters here: does the figure beside the
+// pointer describe where the pointer actually IS on the chart? That needs the
+// real map, a real mouse and Leaflet's own containerPointToLatLng.
+// =====================================================================
+await page.evaluate(async () => {
+  aircraftProfile.fixesOn = false; updateFixesBtn(); drawFixes();
+  map.setView([69.4, 19.0], 8, { animate: false });
+  await new Promise((r) => setTimeout(r, 300));
+  if (!isRulerMode) toggleRulerMode();
+});
+await page.waitForTimeout(300);
+
+// TWO POINTS ON BARE MAP, derived rather than written down - the v16.83 lesson:
+// a hardcoded coordinate is an unchecked assertion about the layout, and when
+// it is wrong the failure accuses the feature.
+const rulerPts = await page.evaluate(() => {
+  const mr = document.getElementById('map').getBoundingClientRect();
+  const isBare = (el) => !!el && !!el.closest('#map') && !el.closest('#splitter') &&
+    !el.closest('#map-controls') && !el.closest('.leaflet-marker-icon') &&
+    !el.closest('.leaflet-overlay-pane');
+  const find = (fxs, fys) => {
+    for (const fy of fys) for (const fx of fxs) {
+      const x = mr.left + mr.width * fx, y = mr.top + mr.height * fy;
+      if (isBare(document.elementFromPoint(x, y))) return { x, y };
+    }
+    return null;
+  };
+  return { a: find([0.28, 0.24, 0.32], [0.4, 0.35, 0.45]),
+           b: find([0.72, 0.76, 0.68], [0.6, 0.65, 0.55]),
+           c: find([0.72, 0.76, 0.68], [0.3, 0.25, 0.35]),
+           mr: { w: Math.round(mr.width), h: Math.round(mr.height) } };
+});
+check(!!(rulerPts.a && rulerPts.b && rulerPts.c),
+  `three bare-map points found for the ruler (map ${rulerPts.mr.w}x${rulerPts.mr.h})`);
+
+if (rulerPts.a && rulerPts.b && rulerPts.c) {
+  // NOTHING BEFORE THE FIRST CLICK: there is no starting position to measure
+  // from, so a band at the cursor would be measuring from nowhere.
+  await page.mouse.move(rulerPts.b.x, rulerPts.b.y);
+  await page.waitForTimeout(150);
+  check(await page.evaluate(() => document.querySelectorAll('.ruler-preview-label').length) === 0,
+    'no band before a starting point is set');
+
+  await page.mouse.click(rulerPts.a.x, rulerPts.a.y);
+  await page.waitForTimeout(200);
+  await page.mouse.move(rulerPts.b.x, rulerPts.b.y, { steps: 8 });
+  await page.waitForTimeout(200);
+
+  // THE CHIP IS PAINTED, INSIDE THE MAP, AND IT IS THE ONLY ONE. This is the
+  // v16.22 lesson: markup that looks right is not a control on screen.
+  const chip = await page.evaluate(() => {
+    const els = [...document.querySelectorAll('.ruler-preview-label')];
+    if (els.length !== 1) return { n: els.length };
+    const r = els[0].getBoundingClientRect();
+    const mr = document.getElementById('map').getBoundingClientRect();
+    return { n: 1, text: els[0].textContent.trim(),
+             w: Math.round(r.width), h: Math.round(r.height),
+             inside: r.left >= mr.left && r.right <= mr.right && r.top >= mr.top && r.bottom <= mr.bottom,
+             vis: getComputedStyle(els[0]).display !== 'none' && getComputedStyle(els[0]).visibility !== 'hidden',
+             bandPts: rulerPreviewLine.getLatLngs().length };
+  });
+  check(chip.n === 1, 'exactly one preview chip is on the map (got ' + chip.n + ')');
+  check(chip.w > 20 && chip.h > 8 && chip.inside && chip.vis,
+    `the chip is painted inside the map: ${chip.w}x${chip.h} "${chip.text}"`);
+  check(!/NaN/.test(chip.text || ''), 'no NaN in the chip: ' + chip.text);
+  check(chip.bandPts >= 2, 'the rubber band has a path (' + chip.bandPts + ' points)');
+
+  // WHAT PROTECTS THE CLICK, MEASURED - and it is NOT the interactive:false
+  // flags, which was settled by mutation: setting interactive:true on the
+  // marker left every click-through check here passing. The chip is drawn up
+  // and to the RIGHT of the pointer, so the pointer is never inside it. That is
+  // the v16.86 shape, where the VAC pane rule turned out to be the backstop.
+  const clear = await page.evaluate(({ b }) => {
+    const el = document.querySelector('.ruler-preview-label');
+    const r = el.getBoundingClientRect();
+    const hitAtChip = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return {
+      cursorInChip: b.x >= r.left && b.x <= r.right && b.y >= r.top && b.y <= r.bottom,
+      atCursor: (document.elementFromPoint(b.x, b.y) || {}).className || '',
+      atChip: (hitAtChip && hitAtChip.className) || '',
+      chipIsHittable: !!(hitAtChip && hitAtChip.closest && hitAtChip.closest('.ruler-preview-icon'))
+    };
+  }, { b: rulerPts.b });
+  check(!clear.cursorInChip && /leaflet-container/.test(clear.atCursor),
+    'the pointer is on bare map, not inside its own chip (' + clear.atCursor.split(' ')[0] + ')');
+  // ...and the flags ARE what makes the chip itself unhittable, which is the
+  // half a mouse gesture cannot reach on its own: the chip runs away from the
+  // cursor, so only a hit-test straight at its pixels can ask this.
+  check(!clear.chipIsHittable, 'not one pixel of the drawn chip takes the mouse (hit ' +
+    String(clear.atChip).split(' ')[0] + ')');
+
+  // THE FIGURE DESCRIBES WHERE THE POINTER IS. Leaflet's own projection turns
+  // the cursor's container point into a coordinate; the app's own
+  // calcDistanceNM then says how far that is from the clicked point. The chip
+  // must agree, or "accurately measure distances from a starting position" is
+  // not what the pilot is reading.
+  const acc = await page.evaluate(({ b }) => {
+    const mr = document.getElementById('map').getBoundingClientRect();
+    const ll = map.containerPointToLatLng(L.point(b.x - mr.left, b.y - mr.top));
+    const from = rulerPoints[rulerPoints.length - 1];
+    const want = calcDistanceNM(from.lat, from.lng, ll.lat, ll.lng);
+    const shown = Number((document.querySelector('.ruler-preview-label').textContent.match(/([\d.]+)\s*NM/) || [])[1]);
+    return { want, shown };
+  }, { b: rulerPts.b });
+  check(Math.abs(acc.shown - acc.want) <= 0.1,
+    `the chip states the distance to the pointer's own position: ${acc.shown} NM vs ${acc.want} NM`);
+
+  // ...and it FOLLOWS the mouse rather than being drawn once.
+  //
+  // THE ASSERT IS THE SAME PROJECTION CHECK AT THE NEW POSITION, not a chosen
+  // number of miles. The first version required the distance to move by >1 NM
+  // and FAILED a working build at 72.3 -> 71.5: the two probe points share an
+  // x, the leg is nearly east-west, and how much 113 px of vertical travel is
+  // worth is decided by the layout rather than by the feature. The track had
+  // moved 10 degrees, which is the real signal. Re-deriving the expectation
+  // needs no threshold at all - the M5 lesson, assert what justified the check.
+  await page.mouse.move(rulerPts.c.x, rulerPts.c.y, { steps: 8 });
+  await page.waitForTimeout(200);
+  const moved = await page.evaluate(({ c }) => {
+    const mr = document.getElementById('map').getBoundingClientRect();
+    const ll = map.containerPointToLatLng(L.point(c.x - mr.left, c.y - mr.top));
+    const from = rulerPoints[rulerPoints.length - 1];
+    const el = document.querySelector('.ruler-preview-label');
+    return { want: calcDistanceNM(from.lat, from.lng, ll.lat, ll.lng), text: el.textContent.trim(),
+             shown: Number((el.textContent.match(/([\d.]+)\s*NM/) || [])[1]) };
+  }, { c: rulerPts.c });
+  check(moved.text !== chip.text, `the band followed the cursor: "${chip.text}" -> "${moved.text}"`);
+  check(Math.abs(moved.shown - moved.want) <= 0.1,
+    `and still states the distance to where the pointer now is: ${moved.shown} NM vs ${moved.want} NM`);
+
+  // THE PREVIEW DOES NOT EAT THE CLICK THAT COMMITS IT, and the committed
+  // segment carries the figure the pilot was reading. The invariant, in the
+  // browser this time.
+  const pvText = await page.evaluate(() => document.querySelector('.ruler-preview-label').textContent.trim());
+  const nBefore = await page.evaluate(() => rulerPoints.length);
+  await page.mouse.click(rulerPts.c.x, rulerPts.c.y);
+  await page.waitForTimeout(250);
+  const after = await page.evaluate(() => ({
+    pts: rulerPoints.length,
+    previews: document.querySelectorAll('.ruler-preview-label').length,
+    seg: [...document.querySelectorAll('.ruler-seg-label')].map((x) => x.textContent.trim())
+  }));
+  check(after.pts === nBefore + 1, `the click still committed a point (${nBefore} -> ${after.pts})`);
+  check(after.previews === 0, 'the committed band stopped being a preview');
+  check(after.seg.includes(pvText),
+    `the segment chip carries what the preview promised ("${pvText}" in ${JSON.stringify(after.seg)})`);
+
+  // THE POINTER LEAVING THE MAP TAKES THE BAND WITH IT. Only a real browser
+  // fires mouseout on the container.
+  await page.mouse.move(rulerPts.b.x, rulerPts.b.y, { steps: 6 });
+  await page.waitForTimeout(150);
+  const hadBand = await page.evaluate(() => document.querySelectorAll('.ruler-preview-label').length);
+  await page.mouse.move(2, 2, { steps: 4 });          // the header, outside #map
+  await page.waitForTimeout(200);
+  const gone = await page.evaluate(() => ({
+    previews: document.querySelectorAll('.ruler-preview-label').length,
+    band: rulerPreviewLine.getLatLngs().length,
+    readout: document.getElementById('ruler-preview-readout').textContent.trim(),
+    committed: document.getElementById('ruler-readout').textContent.trim()
+  }));
+  check(hadBand === 1 && gone.previews === 0 && gone.band === 0 && gone.readout === '',
+    `the band goes when the pointer leaves the map (had ${hadBand}, left ${gone.previews})`);
+  check(/Total/.test(gone.committed), 'the committed measurement survived: ' + gone.committed);
+}
+await page.evaluate(() => { if (isRulerMode) toggleRulerMode(); });
+await page.waitForTimeout(150);
+
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
 await b.close();
 if (fails.length) { console.error('\n' + fails.length + ' check(s) FAILED'); process.exit(1); }

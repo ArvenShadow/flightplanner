@@ -55,6 +55,10 @@ const leafletStub = `
   Layer.prototype.setLatLng = function(ll){ this._latlng = ll; return this; };
   Layer.prototype.bindTooltip = function(html, o){ this._tip = html; this._tipOpts = o || {}; return this; };
   Layer.prototype.setStyle = function(o){ this._opts = Object.assign({}, this._opts, o); return this; };
+  // The ruler preview reuses ONE marker and swaps its icon only when the
+  // label text changes, so the stub has to honour setIcon for the test to be
+  // able to read what the chip says.
+  Layer.prototype.setIcon = function(i){ this._opts = Object.assign({}, this._opts, { icon: i }); return this; };
   window.L = {
     map: function(){ return {
       setView: function(){ return this; },
@@ -460,6 +464,266 @@ T('zero-length ruler click adds no segment chip', () => {
   assert(ev('rulerMarkers.length') === 2, 'degenerate segment got a chip: ' + ev('rulerMarkers.length'));
   w.toggleRulerMode();
 });
+
+// -- 13a. THE RULER PREVIEWS (v16.91, the pilot's request) --------------------
+// "when clicking a point a preview of the ruler length is visible to accurately
+// measure distances from a starting position".
+// A FAILED ASSERT SKIPS WHATEVER FOLLOWS IT, so a test that turns the ruler off
+// on its last line leaves it ON when it fails - and isRulerMode gates the
+// keybindings, which made four unrelated tests further down the file report
+// failures that had nothing to do with their subject. Each test below sets the
+// mode rather than assuming it.
+const startRuler = () => { ev('if (isRulerMode) toggleRulerMode();'); w.toggleRulerMode(); };
+const stopRuler = () => { ev('if (isRulerMode) toggleRulerMode();'); };
+const previewTxt = () => (doc.getElementById('ruler-preview-readout').textContent || '').trim();
+const committedTxt = () => (doc.getElementById('ruler-readout').textContent || '').trim();
+const previewChip = () => {
+  const m = ev('rulerPreviewMarker');
+  return m ? String(ev('rulerPreviewMarker._opts.icon.html')) : '';
+};
+// The figures a readout states, so the preview and the commit can be compared
+// as NUMBERS rather than as two sentences that merely look similar.
+const figs = (t) => (t.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+
+T('one click, then the cursor: the band and its figure follow the mouse', () => {
+  startRuler();
+  // NOTHING BEFORE THE FIRST CLICK. There is no starting position to measure
+  // from, so a chip at the cursor would be measuring from nowhere.
+  w.__fireMap('mousemove', { latlng: { lat: 69.4, lng: 18.4 } });
+  assert(ev('rulerPreviewMarker') === null && ev('rulerPreviewLine._ll.length') === 0,
+    'a preview appeared before any point was set');
+  assert(previewTxt() === '', 'the preview readout spoke before there was anything to measure from');
+
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__fireMap('mousemove', { latlng: { lat: 69.5, lng: 18.5 } });
+  assert(ev('rulerPreviewMarker') !== null, 'no preview chip after the first click');
+  assert(ev('rulerPreviewLine._ll.length') >= 2, 'no rubber band: ' + ev('rulerPreviewLine._ll.length'));
+  const t1 = previewTxt();
+  assert(/Preview/.test(t1) && /Ruler 1/.test(t1), 'the preview does not say where it measures from: ' + t1);
+  assert(!/NaN/.test(t1) && !/NaN/.test(previewChip()), 'NaN in the preview: ' + t1 + ' | ' + previewChip());
+  // ONE POINT MEANS NO TOTAL. A running total of one leg IS that leg, and
+  // printing it twice invites the pilot to add them together.
+  assert(!/Total/.test(t1), 'a one-point preview claimed a total: ' + t1);
+  // ...and it FOLLOWS: a different cursor position is a different figure.
+  const d1 = figs(t1).slice(-1)[0];
+  w.__fireMap('mousemove', { latlng: { lat: 69.9, lng: 18.5 } });
+  const d2 = figs(previewTxt()).slice(-1)[0];
+  assert(d2 > d1 + 10, 'the preview did not follow the cursor: ' + d1 + ' then ' + d2);
+  stopRuler();
+});
+
+T('THE INVARIANT: committing the point produces the figures the preview showed', () => {
+  // The leg-panel preview runs the real engine on a copy (v16.37) and the
+  // fix-style preview calls the map's own fixSymbolSvg (v16.35), both so that
+  // what is shown cannot differ from what applying it does. Same rule here.
+  //
+  // THE FIXTURE HAS TO BE ABLE TO SEE THE ANSWER, and the first one could not.
+  // It measured ENDU -> ENTC, where resolveMagVar returns -11 at BOTH ends - so
+  // a mutation taking the variation at the START of the leg instead of the end
+  // produced the identical magnetic track and the test passed. Tromso (-11) to
+  // Kirkenes (-17) differs by 6 degrees, and the fixture ASSERTS that below so
+  // it cannot quietly stop discriminating. Straight M5.
+  startRuler();
+  const A7 = { lat: 69.6833, lng: 18.9189 };    // Tromso, var -11
+  const cursor = { lat: 69.7258, lng: 29.8913 };  // Kirkenes, var -17
+  assert(Math.round(ev(`resolveMagVar(${A7.lat}, ${A7.lng}).val`)) !==
+         Math.round(ev(`resolveMagVar(${cursor.lat}, ${cursor.lng}).val`)),
+    'the fixture has stopped being able to tell the two ends of the leg apart');
+  w.__mapHandlers.click({ latlng: A7 });
+  w.__fireMap('mousemove', { latlng: cursor });
+  const pv = figs(previewTxt());              // [TT, MT, dist]
+  const pvChip = previewChip();
+  w.__mapHandlers.click({ latlng: cursor });
+  const cm = figs(committedTxt());            // [legNo, TT, MT, dist, total]
+  // Both readouts open by naming the point/leg, then state TT, MT and distance;
+  // the committed one adds the running total.
+  assert(pv.length === 4 && cm.length === 5, 'readout shapes changed: ' + JSON.stringify([pv, cm]));
+  assert(pv.slice(1).join() === cm.slice(1, 4).join(),
+    'the preview promised ' + JSON.stringify(pv.slice(1)) + ' and the commit gave ' + JSON.stringify(cm.slice(1, 4)));
+  // and the chip the pilot was reading is the chip the segment now carries
+  const segChip = String(ev('rulerMarkers[rulerMarkers.length - 1]._opts.icon.html'));
+  // The TEXT, not the markup: the two chips sit at different offsets on purpose
+  // (the preview rides beside the cursor, the segment chip beside its midpoint),
+  // so comparing the raw html would compare pixel offsets as well as figures.
+  const chipText = (h) => h.replace(/<[^>]*>/g, '').trim();
+  assert(chipText(pvChip) === chipText(segChip),
+    'the preview chip said "' + chipText(pvChip) + '" and the committed chip says "' + chipText(segChip) + '"');
+  stopRuler();
+});
+
+T('the second leg previews what the total WOULD become, and then does', () => {
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__mapHandlers.click({ latlng: { lat: 69.4, lng: 18.0 } });
+  const cursor = { lat: 69.4, lng: 19.0 };
+  w.__fireMap('mousemove', { latlng: cursor });
+  const t = previewTxt();
+  assert(/Ruler 2/.test(t) && /Total would be/.test(t), 'no provisional total on the second leg: ' + t);
+  const pv = figs(t);                          // [fromPt, TT, MT, dist, total]
+  w.__mapHandlers.click({ latlng: cursor });
+  const cm = figs(committedTxt());             // [legNo, TT, MT, dist, total]
+  assert(pv.slice(1) .join() === cm.slice(1).join(),
+    'the provisional total was not what committing gave: ' + JSON.stringify([pv, cm]));
+  stopRuler();
+});
+
+T('the cursor leaving the map takes the band with it, and nothing else', () => {
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__mapHandlers.click({ latlng: { lat: 69.5, lng: 18.5 } });
+  const before = committedTxt();
+  w.__fireMap('mousemove', { latlng: { lat: 69.9, lng: 19.9 } });
+  assert(ev('rulerPreviewMarker') !== null, 'no preview to lose');
+  w.__fireMap('mouseout', {});
+  assert(ev('rulerPreviewMarker') === null && ev('rulerPreviewLine._ll.length') === 0,
+    'the band was left hanging at the last pixel inside the map');
+  assert(previewTxt() === '', 'the preview readout survived the pointer leaving');
+  // THE COMMITTED MEASUREMENT IS UNTOUCHED - which is the whole reason the two
+  // readouts are separate spans rather than one that has to be restored.
+  assert(committedTxt() === before, 'the committed readout changed: ' + before + ' -> ' + committedTxt());
+  assert(ev('rulerMarkers.length') === 3, 'a committed chip went with the preview');
+  stopRuler();
+});
+
+T('a preview of no length states nothing rather than 000 and 0.0', () => {
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__fireMap('mousemove', { latlng: { lat: 69.0, lng: 18.0 } });
+  assert(ev('rulerPreviewMarker') === null && previewTxt() === '',
+    'the cursor sitting on the point produced a bearing: ' + previewTxt());
+  stopRuler();
+});
+
+T('committing retires the band it came from, and stopping the ruler clears it', () => {
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__fireMap('mousemove', { latlng: { lat: 69.5, lng: 18.5 } });
+  w.__mapHandlers.click({ latlng: { lat: 69.5, lng: 18.5 } });
+  assert(ev('rulerPreviewMarker') === null && ev('rulerPreviewLine._ll.length') === 0,
+    'the preview outlived the click that committed it');
+  w.__fireMap('mousemove', { latlng: { lat: 69.9, lng: 18.9 } });
+  assert(ev('rulerPreviewMarker') !== null, 'a new band did not start from the new point');
+  stopRuler();
+  assert(ev('rulerPreviewMarker') === null && ev('rulerPreviewLine._ll.length') === 0,
+    'stopping the ruler left the band on the map');
+});
+
+T('one marker, reused - its markup is rebuilt only when the text changes', () => {
+  // The v16.33 rule for the airspace hover card: regenerate the markup when the
+  // reading changes, not per pixel. At z10 a CSS pixel is ~26 m, so the 0.1 NM
+  // the chip prints only turns over every several pixels of travel.
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__fireMap('mousemove', { latlng: { lat: 69.5, lng: 18.5 } });
+  const first = ev('rulerPreviewMarker');
+  const label = ev('rulerPreviewLabel');
+  // THE ICON OBJECT IS THE OBSERVABLE, NOT THE LABEL STRING. The first version
+  // of this test compared rulerPreviewLabel across the move - and removing the
+  // key entirely (`if (true)`) reassigns that field to the SAME value, so the
+  // comparison passed and the mutation reported "not caught". setIcon takes a
+  // FRESH divIcon every time it is called, so identity is what says whether the
+  // markup was rebuilt.
+  const icon = ev('rulerPreviewMarker._opts.icon');
+  // A move too small to change the printed figure must not touch the markup.
+  w.__fireMap('mousemove', { latlng: { lat: 69.500001, lng: 18.500001 } });
+  assert(ev('rulerPreviewMarker') === first, 'the marker was replaced instead of moved');
+  assert(ev('rulerPreviewMarker._opts.icon') === icon, 'the markup was rebuilt for an unchanged figure');
+  assert(ev('rulerPreviewLabel') === label, 'the remembered figure changed without the figure changing');
+  w.__fireMap('mousemove', { latlng: { lat: 69.9, lng: 18.9 } });
+  assert(ev('rulerPreviewMarker') === first, 'the marker was replaced on a real move');
+  assert(ev('rulerPreviewMarker._opts.icon') !== icon, 'the markup was NOT rebuilt for a changed figure');
+  assert(ev('rulerPreviewLabel') !== label, 'the remembered figure was not updated');
+  stopRuler();
+});
+
+T('the ruler DRAWS the line it MEASURES - one densifier, shared with the route', () => {
+  // THIS WAS WRONG SINCE THE RULER EXISTED, and it is v16.63's rule never
+  // applied to this surface: rulerLine.setLatLngs(rulerPoints) draws straight
+  // Mercator segments - a RHUMB - while calcDistanceNM measures a geodesic, and
+  // the segment chip is placed with interpolateGeo, i.e. on the measured path.
+  // Measured on Tromso-Kirkenes at 69 N: 5.15 NM apart at the midpoint.
+  const G = w;   // main.js puts every module export on window
+  const A = { lat: 69.6833, lng: 18.9189 };   // Tromso
+  const B = { lat: 69.7258, lng: 29.8913 };   // Kirkenes
+  startRuler();
+  w.__mapHandlers.click({ latlng: A });
+  w.__mapHandlers.click({ latlng: B });
+  const drawn = ev('rulerLine._ll');
+  assert(drawn.length > 5, 'the ruler line was not densified: ' + drawn.length + ' points');
+  // Every drawn point, AND the midpoint of every drawn segment, lies on the
+  // measured path - the vertex-only check passes a chord-only line (v16.62).
+  const L = G.distanceNMExact(A.lat, A.lng, B.lat, B.lng);
+  const onPath = (p) => {
+    let best = Infinity;
+    for (let k = 0; k <= 400; k++) {
+      const q = G.interpolateGeo(A.lat, A.lng, B.lat, B.lng, (L * k) / 400, L);
+      best = Math.min(best, G.distanceNMExact(p[0], p[1], q[0], q[1]));
+    }
+    return best;
+  };
+  let worst = 0;
+  for (let i = 0; i < drawn.length; i++) {
+    const a = drawn[i], b = drawn[Math.min(i + 1, drawn.length - 1)];
+    worst = Math.max(worst, onPath(a), onPath([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]));
+  }
+  assert(worst <= 0.1, 'the drawn ruler line leaves the measured path by ' + worst.toFixed(3) +
+    ' NM - it is drawing the chord, not the path model');
+  // The chip labels a point ON that line, which is the half of the defect a
+  // pilot actually sees.
+  const chip = ev('rulerMarkers[rulerMarkers.length - 1]._latlng');
+  assert(onPath(chip) <= 0.1, 'the segment chip floats ' + onPath(chip).toFixed(3) +
+    ' NM off the drawn line');
+  // ONE DENSIFIER, not a second copy: the route line goes through the same one.
+  assert(/densifyPath\(/.test(APP_SRC), 'the shared densifier is gone');
+  assert(/return densifyPath\(flightLineCoords\(fl\)\);/.test(APP_SRC),
+    'drawnLineCoords no longer goes through the shared densifier');
+  stopRuler();
+});
+
+T('the preview band follows the path model too, through that same densifier', () => {
+  const G = w;   // main.js puts every module export on window
+  const A = { lat: 69.6833, lng: 18.9189 };
+  const B = { lat: 69.7258, lng: 29.8913 };
+  startRuler();
+  w.__mapHandlers.click({ latlng: A });
+  w.__fireMap('mousemove', { latlng: B });
+  const band = ev('rulerPreviewLine._ll');
+  assert(band.length > 5, 'the rubber band was not densified: ' + band.length + ' points');
+  const L = G.distanceNMExact(A.lat, A.lng, B.lat, B.lng);
+  const mid = G.interpolateGeo(A.lat, A.lng, B.lat, B.lng, L / 2, L);
+  let best = Infinity;
+  band.forEach((p) => { best = Math.min(best, G.distanceNMExact(p[0], p[1], mid[0], mid[1])); });
+  assert(best <= 0.1, 'the band misses the measured midpoint by ' + best.toFixed(3) + ' NM');
+  stopRuler();
+});
+
+T('the chip rides clear of the cursor, and the marker still takes no mouse', () => {
+  // TWO THINGS, AND ONLY MEASURING THEM SEPARATELY TOLD THEM APART. The offset
+  // moves the visible LABEL clear of the pointer - but the marker's own 12x12
+  // container sits ON the anchor, under the pointer, so `interactive: false` is
+  // what keeps the pointer hit-testing to the map. Proved by mutation:
+  // interactive:true makes elementFromPoint at the cursor return
+  // leaflet-marker-icon (verify:fixes fails by name). The click survives even
+  // then, because Leaflet's _findEventTargets ignores a layer that listens for
+  // nothing - so that exposure is LATENT, not harmless.
+  assert(ev('RULER_CHIP_DX') > 0 && ev('RULER_CHIP_DY') < 0,
+    'the chip no longer rides clear of the cursor: ' + ev('RULER_CHIP_DX') + ',' + ev('RULER_CHIP_DY'));
+  assert(ev('rulerPreviewLine._opts.interactive') === false, 'the rubber band takes the mouse');
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__fireMap('mousemove', { latlng: { lat: 69.5, lng: 18.5 } });
+  assert(ev('rulerPreviewMarker._opts.interactive') === false, 'the preview chip takes the mouse');
+  // ONE DEFINITION OF THE MARKUP. The create and the update paths had a copy
+  // each, which is two places for the offset to drift apart.
+  assert((APP_SRC.match(/class="ruler-preview-label"/g) || []).length === 1,
+    'the preview chip markup is written in more than one place');
+  stopRuler();
+});
+// ...and whatever the block above left behind, the ruler is OFF from here. The
+// LAST test's own cleanup is skipped when it fails, and isRulerMode gates the
+// keybindings - which is how one broken ruler assertion produced six failures
+// in the undo, Cmd+Z and toast tests.
+stopRuler();
 
 console.log('\n=== 14. Save / export round trip ===');
 TA('save mission + export produce valid JSON', async () => {
