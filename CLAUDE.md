@@ -2150,13 +2150,56 @@ which is the right trade for a control whose whole purpose is being dragged.
   the same run reproduces it (x2), which is what makes the rule load-bearing
   rather than merely present.
 
+### AND THEN THE READ-OUT ARRIVED AND CORRECTED ME (v16.89, same sitting)
+
+The console line from the author's own Chrome, with the reproduction in their
+words - *"my mouse moved downwards while dragging and at the moment the mouse
+stopped touching the slider, it stopped"*:
+
+    id=vac-opacity | pointerType=mouse | touch-action=auto
+    captured at press=false | value 80 -> 90 | pointermove count=37 | ms=1311
+    events: pointerup:mouse
+
+**IT IS A MOUSE, SO THE `touch-action` RULE ABOVE IS NOT THEIR CAUSE** - which
+the entry had already said would be the case, and here it is.
+
+**AND THE MECHANISM IS THE ONE I HAD JUST DISMISSED.** The 37 `pointermove`
+events were counted ON THE ELEMENT. They stop when the cursor leaves it, and the
+event list carries NO `pointercancel` and NO `lostpointercapture` - so nothing
+took the drag away. **It simply stopped being delivered, which is what happens
+when there is no pointer capture.** Their Chrome does not give the native range
+one; the Chromium I measure in does, which is exactly why a mouse drag survived
+350 px off-track here and dies the moment it leaves the track there.
+
 `initSliderGrip` - one delegated `pointerdown` listener capturing the pointer
 to any range input, one listener rather than one per slider (the v16.24 lesson)
-- **stays, and is still a no-op in Chromium for a mouse**: a native range
-already takes capture on itself, and `gotpointercapture` fires with the handler
-and without it. It is kept because it is the mechanism for a browser whose
-native capture does not hold, it is six lines, and it is measured not to break
-the native drag. Nothing asserts that it fixes anything.
+- **IS THEREFORE THE FIX FOR THE REPORT, not the belt-and-braces this entry
+called it two hours earlier.** The sentence it replaces read *"still a no-op in
+Chromium for a mouse ... nothing asserts that it fixes anything"*, and both
+halves were TRUE OF THE BROWSER I MEASURE IN and FALSE OF THEIRS.
+
+- **THAT IS THE v16.55 SHAPE EXACTLY**: "no single field gives every colloquial
+  name" was true of the two fields I looked at and false of the dataset. Here,
+  "a native range already captures the pointer" was true of Chromium 1194 and
+  false of the author's Chrome. **ONE BROWSER IS NOT THE PLATFORM**, and
+  "measured" has to name WHERE.
+- **WHAT SAVED IT WAS SHIPPING IT ANYWAY AND SAYING IT WAS UNPROVEN.** The
+  v16.70 precedent (do not ship a safeguard that cannot be shown to do
+  anything) would have deleted it. The line it turns on is whether the
+  candidate ADDRESSES A REPRODUCED MECHANISM or merely sounds prudent: v16.70's
+  `size` attribute was measured against the actual failure and did not fix it;
+  this one could not be measured here at all, which is a different state and
+  deserves shipping-with-a-caveat rather than deletion.
+- **THE VERSION THAT MATTERS IS WHAT IS DEPLOYED.** `touch-action=auto` in the
+  read-out is how we know they were on v16.88 - the fix was written but not
+  merged. A report against a build that does not contain the fix is not a report
+  that the fix failed, and reading the version out of the diagnostic is what
+  distinguished the two.
+- STILL NOT CLAIMED AS PROVEN HERE, and that has not changed: there is no
+  browser on this machine where the capture demonstrably changes the outcome, so
+  no check asserts that it does. What IS asserted is that the app takes the
+  capture and has not broken the native drag. The proof is the author's own
+  next drag on the deployed build.
 
 - **ONE SHARP EDGE WAS FOUND AND DELIBERATELY NOT CHANGED**:
   `syncVacOpacityControls` writes the value back into the slider being dragged.
