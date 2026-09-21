@@ -7552,18 +7552,110 @@ T('a slider declares the drag gesture its own', () => {
     'a range input no longer declares touch-action: none');
 });
 
-T('every range slider keeps the pointer that pressed it', () => {
+T('a slider drag is continued by the app once the control stops', () => {
   const fn = APP_SRC.split('function initSliderGrip()')[1].split('\n    }')[0];
-  assert(/setPointerCapture/.test(fn), 'a slider does not take the pointer');
   assert(/type !== 'range'/.test(fn), 'it is not scoped to range inputs');
   // ONE DELEGATED LISTENER, NOT ONE PER SLIDER - so a slider added later is
   // covered without a rule of its own (the v16.24 map-control lesson).
   assert(/document\.addEventListener\('pointerdown'/.test(fn),
     'the grip is not delegated, so a new slider would not get it');
+  assert(/addSliderTracking\(\)/.test(fn),
+    'the drag is not tracked on the document, so it dies with the control');
   assert(APP_SRC.includes('initSliderGrip();'), 'it is never called at boot');
+  const add = APP_SRC.split('function addSliderTracking()')[1].split('\n    }')[0];
+  for (const ev of ['pointermove', 'pointerup', 'pointercancel'])
+    assert(add.includes("document.addEventListener('" + ev + "'"),
+      'the slider drag does not track ' + ev + ' on the document');
+  assert(add.includes("window.addEventListener('blur'"),
+    'a slider drag interrupted by leaving the window never ends');
   // ...and it really does cover every slider the app ships.
   const n = (APP_SRC.match(/type="range"/g) || []).length;
   assert(n >= 5, 'the sliders went missing: ' + n);
+});
+
+T('the scale is LEARNED from the control, never a mapping of our own', () => {
+  // MEASURED: native does not map the full box - it saturates well inside both
+  // ends - so an x-across-the-rect formula disagrees with the control by a
+  // whole step. The app therefore watches native while the pointer is INSIDE
+  // and only continues, at that scale, once it leaves.
+  const mv = APP_SRC.split('function onSliderMove(')[1].split('\n    }')[0];
+  assert(/clientY >= r\.top && e\.clientY <= r\.bottom/.test(mv),
+    'it does not distinguish inside the control from outside');
+  const inside = mv.split('clientY >= r.top')[1].split('return;')[0];
+  assert(!/\.value = /.test(inside),
+    'the app writes the value while the control is still driving it');
+  assert(/perPx = \(live - d\.lastV\) \/ dx/.test(mv),
+    'the scale is no longer learned from the control');
+  assert(/d\.perPx !== null[\s\S]{0,80}\(max - min\) \/ Math\.max\(1, r\.width\)/.test(mv),
+    'there is no fallback for a drag that leaves before anything was learned');
+  // AND THE WRITE IS GUARDED, so a browser whose native drag DOES keep going
+  // cannot be double-applied.
+  assert(/v === live\) return;/.test(mv), 'the write is not guarded against agreeing');
+});
+
+// THE DISCRIMINATING TEST FOR THE CONTINUATION, AND IT HAS TO BE jsdom.
+//
+// In Chromium the NATIVE range keeps tracking off-element, so a browser check
+// there passes with the app's continuation removed - measured by mutation, and
+// it is M5 in its purest form. jsdom has no native slider drag at all, so the
+// only thing that can move the value here is the app's own code. That is what
+// makes this the guard.
+//
+// (My two "reproductions" of the pilot's failure in Chromium were artifacts:
+// both moved the cursor DOWN while holding x CONSTANT, so the value could not
+// change whether or not the drag was alive.)
+T('a slider drag continues once the pointer leaves the control', () => {
+  const el = doc.getElementById('map-route-weight');
+  assert(el, 'the route-weight slider is gone');
+  // jsdom has no layout, so the element is given a real box to reason about.
+  const box = { left: 100, right: 250, top: 50, bottom: 74, width: 150, height: 24,
+                x: 100, y: 50 };
+  el.getBoundingClientRect = () => box;
+  el.value = '2';
+  const at = (type, x, y, target) => {
+    const ev = new w.MouseEvent(type, { bubbles: true, clientX: x, clientY: y });
+    (target || doc).dispatchEvent(ev);
+  };
+  at('pointerdown', 110, 62, el);
+  at('pointermove', 140, 62);          // INSIDE the box - the control's job
+  const inside = Number(el.value);
+  at('pointermove', 200, 200);         // OUTSIDE - the app continues
+  const outside = Number(el.value);
+  assert(outside > inside,
+    'the drag died when the pointer left the control: ' + inside + ' -> ' + outside);
+  // ...and it clamps rather than running past the end.
+  at('pointermove', 100000, 400);
+  assert(Number(el.value) === Number(el.max),
+    'a long drag did not clamp to the maximum: ' + el.value);
+  // RELEASE ENDS IT. A move after the button is up must not still steer.
+  at('pointerup', 100000, 400);
+  const settled = Number(el.value);
+  at('pointermove', 100, 400);
+  assert(Number(el.value) === settled,
+    'the slider still tracked after the pointer was released');
+});
+
+T('and it never writes while the pointer is inside the control', () => {
+  const el = doc.getElementById('map-corridor-fill');
+  assert(el, 'the corridor-fill slider is gone');
+  el.getBoundingClientRect = () => ({ left: 0, right: 150, top: 0, bottom: 24,
+                                      width: 150, height: 24, x: 0, y: 0 });
+  el.value = '30';
+  const at = (type, x, y, target) => (target || doc).dispatchEvent(
+    new w.MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
+  at('pointerdown', 10, 12, el);
+  for (const x of [30, 60, 90, 120]) at('pointermove', x, 12);   // all INSIDE
+  assert(el.value === '30',
+    'the app moved the value while the control was still driving it: ' + el.value);
+  at('pointerup', 120, 12);
+});
+
+T('no synthetic change event - the control fires its own', () => {
+  // MEASURED: dispatching one on release made TWO and ran every handler twice.
+  const up = APP_SRC.split('function onSliderUp(')[1].split('\n    }')[0];
+  assert(!/dispatchEvent\(new Event\('change'/.test(up),
+    'a second change event is dispatched again');
+  assert(/removeSliderTracking\(\)/.test(up), 'the listeners are never released');
 });
 
 T('an untouched app writes no pane variables, so the shipped design is untouched', () => {
