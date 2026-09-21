@@ -39,7 +39,6 @@
       <button id="done-mode-btn" class="btn btn-done btn-sm" onclick="toggleDoneMode()" title="View Mode locks all editing for in-flight use — tapping a map waypoint then highlights its OFP row. Click again to return to Edit Mode.">👁 View Mode</button>
       <button id="ruler-btn" class="btn btn-ruler btn-sm" onclick="toggleRulerMode()">📏 Draw Ruler</button>
       <button id="guide-btn" class="btn btn-outline btn-sm" style="color:white; border-color:#718096;" onclick="openHelpModal()">❓ Help</button>
-      <button id="sera-btn" class="btn btn-sera btn-sm" onclick="openSeraModal()">🇪🇺 SERA Rules</button>
       <button id="wind-btn" class="btn btn-wind btn-sm" onclick="openWindModal()">💨 Input Wind</button>
       <button id="settings-btn" class="btn btn-settings btn-sm" onclick="openSettingsModal()">⚙ Settings & Units</button>
       <button id="undo-btn" class="btn btn-secondary btn-sm" onclick="undoLast()">Undo</button>
@@ -206,66 +205,7 @@
     </div>
   </div>
 
-  <!-- SERA RULES MODAL -->
-  <div id="sera-modal" class="modal-backdrop">
-    <div class="modal" style="width: 580px;">
-      <div class="modal-header">
-        <h2>🇪🇺 Standardised European Rules of the Air (SERA.5001 VMC Minima)</h2>
-        <button class="btn btn-outline btn-sm" onclick="closeSeraModal()">×</button>
-      </div>
-      <div class="modal-body">
-        <p style="color:var(--text-muted); margin-bottom:6px;">
-          Summary of VMC visibility and distance from cloud requirements for VFR flights:
-        </p>
-        <table class="sera-table">
-          <thead>
-            <tr>
-              <th>Altitude Band</th>
-              <th>Airspace Class</th>
-              <th>Flight Visibility</th>
-              <th>Distance from Cloud</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><b>At & above 10,000 ft AMSL</b> <span style="color:var(--text-muted);">(FL 100 if TA is lower)</span></td>
-              <td>A**, B, C, D, E, F, G</td>
-              <td><b>8 km</b></td>
-              <td>1,500 m horizontal<br>300 m (1,000 ft) vertical</td>
-            </tr>
-            <tr>
-              <td><b>Below 10,000 ft AMSL &amp; above 3,000 ft AMSL</b><br><span style="color:var(--text-muted);">or 1,000 ft above terrain, whichever is higher</span></td>
-              <td>A**, B, C, D, E, F, G</td>
-              <td><b>5 km</b></td>
-              <td>1,500 m horizontal<br>300 m (1,000 ft) vertical</td>
-            </tr>
-            <tr>
-              <td><b>At &amp; below 3,000 ft AMSL</b><br><span style="color:var(--text-muted);">or 1,000 ft above terrain, whichever is higher</span></td>
-              <td>A**, B, C, D, E</td>
-              <td><b>5 km</b></td>
-              <td>1,500 m horizontal<br>300 m (1,000 ft) vertical</td>
-            </tr>
-            <tr>
-              <td><b>At &amp; below 3,000 ft AMSL</b><br><span style="color:var(--text-muted);">or 1,000 ft above terrain, whichever is higher</span></td>
-              <td>F, G (Uncontrolled)</td>
-              <td><b>5 km *</b></td>
-              <td><b>Clear of cloud</b> and with the surface in sight</td>
-            </tr>
-          </tbody>
-        </table>
-        <p style="font-size:10px; color:var(--text-muted); margin-top:6px; line-height:1.5;">
-          <b>*</b> Only <i>when so prescribed by the competent authority</i>, flight visibility may be reduced to not less than 1,500 m for flights at 140 kt IAS or less giving adequate opportunity to see traffic and obstacles in time to avoid collision, or where the probability of encountering other traffic is normally low. Helicopters may be permitted below 1,500 m but not less than 800 m.<br>
-          <b>**</b> Class A minima are listed for guidance only &mdash; they do not imply that VFR flight is accepted in Class A airspace.<br>
-          <b>⚠</b> Quick-reference summary only. Always check the current SERA text and the national AIP (ENR 1.2) for the states you are flying in.
-        </p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary btn-sm" onclick="closeSeraModal()">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- HELP / FEATURE GUIDE MODAL -->
+<!-- HELP / FEATURE GUIDE MODAL -->
   <div id="help-modal" class="modal-backdrop">
     <div class="modal" style="width: 660px;">
       <div class="modal-header">
@@ -413,7 +353,7 @@
         <div class="setting-section">
           <h3>🖥 Layout &amp; Display</h3>
           <ul style="margin-left:16px;">
-            <li>The <b>view selector</b> offers Split, Stacked, Plan-only and Map-only — Stacked/Plan give the OFP the full window width on laptops. In <b>Split</b> and <b>Stacked</b> the <b>divider between the two panels can be dragged</b> to give more of the window to the map or to the plan; <b>double-click</b> it to put it back, and with it focused the <b>arrow keys</b> nudge it and <b>Home</b> resets it. Each of the two layouts remembers its own position, and both travel in your exported settings. The editable number cells (Alt, OAT, VAR) have <b>no stepper arrows</b> — they took about 18&nbsp;px out of every cell, which is the whole cell once the plan panel is narrow. Type the value, or use <b>↑</b>/<b>↓</b>, which step by the same amount the arrows did (500&nbsp;ft on an altitude, 100&nbsp;ft on a circuit altitude, 1&nbsp;°C on an OAT). When the panel gets too narrow for the table, the table <b>scrolls sideways</b> rather than squeezing the numbers away.</li>
+            <li>The <b>view selector</b> offers Split, Stacked, Plan-only and Map-only — Stacked/Plan give the OFP the full window width on laptops. In <b>Split</b> and <b>Stacked</b> the <b>divider between the two panels can be dragged</b> to give more of the window to the map or to the plan; <b>double-click</b> it to put it back, and with it focused the <b>arrow keys</b> nudge it and <b>Home</b> resets it. The drag is held for as long as the button is down &mdash; move as fast as you like and the divider stays under the cursor, and the same goes for every slider in the app: each one <b>keeps the pointer that pressed it</b>, so a slider drag no longer stops the moment the cursor wanders off the track. On a <b>touchscreen or pen</b> a slider also claims the gesture outright, so dragging one off its track cannot turn into a page scroll &mdash; the trade there is that you cannot scroll the page by starting the swipe <i>on</i> a slider. Each of the two layouts remembers its own position, and both travel in your exported settings. The editable number cells (Alt, OAT, VAR) have <b>no stepper arrows</b> — they took about 18&nbsp;px out of every cell, which is the whole cell once the plan panel is narrow. Type the value, or use <b>↑</b>/<b>↓</b>, which step by the same amount the arrows did (500&nbsp;ft on an altitude, 100&nbsp;ft on a circuit altitude, 1&nbsp;°C on an OAT). When the panel gets too narrow for the table, the table <b>scrolls sideways</b> rather than squeezing the numbers away.</li>
             <li><b>▤ Compact</b> hides secondary columns, leaving the flying essentials. Both choices are remembered per browser.</li>
           </ul>
         </div>
@@ -1143,7 +1083,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 136 inline on*= handlers - 106 written
+    // map, markers, undoStack...) plus 133 inline on*= handlers - 103 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1152,7 +1092,7 @@
     // Sections below, in order:
     //   1   helpers                    6b  wind fetch (Open-Meteo)
     //   1b  version badge & update     7   the OFP tables
-    //   2   map setup & ruler          7b  settings / SERA modals
+    //   2   map setup & ruler          7b  settings modal
     //   2b  base chart (topo <-> VFR)  7b2 integrity banner (thin wrapper)
     //   4   map interactions, undo     7c  plotting list UI
     //   6   wind entry modal           8   saved routes & localStorage
@@ -1368,7 +1308,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.88';
+    const APP_VERSION = '16.89';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2037,6 +1977,7 @@
       applyCompactCols(localStorage.getItem('c182_compact') === '1');
       applyStoredPaneRatios();
       initSplitter();
+      initSliderGrip();
     }
 
     // ---- The panel divider (v16.67) ----
@@ -2139,19 +2080,49 @@
         bar: (vertical ? barRect.height : barRect.width) || 6,
         ratio: null
       };
+      paneDrag.pointerId = (e.pointerId === undefined) ? null : e.pointerId;
       document.body.classList.add('splitter-dragging');
-      // THE POINTER IS CAPTURED FOR THE LENGTH OF THE DRAG, which is what stops
-      // it turning into a map gesture the moment it crosses into the chart -
-      // the v16.46 lesson from the line drag, bought cheaply this time because
-      // pointer capture is the platform's own answer to it.
-      if (e.pointerId !== undefined && bar.setPointerCapture) {
-        try { bar.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+      // THE DRAG IS ANCHORED TO THE MOUSE BY THE DOCUMENT, NOT BY THE BAR, and
+      // v16.89 made that the mechanism rather than the backup. Pointer capture
+      // is still taken - it is what stops the gesture turning into a map
+      // gesture the moment it crosses into the chart - but the drag NO LONGER
+      // DEPENDS ON IT. Measured: with setPointerCapture refused, a slow drag
+      // worked to within 1 px and a fast one missed by 299, because the bar is
+      // 2 px wide and a quick cursor outruns it. That is exactly the pilot's
+      // report, and one mechanism with no fallback is why it could happen.
+      addSplitterTracking();
+      if (paneDrag.pointerId !== null && bar.setPointerCapture) {
+        try { bar.setPointerCapture(paneDrag.pointerId); } catch (err) { /* not fatal */ }
       }
       e.preventDefault();
     }
 
+    /** Every pointer event for the length of the drag, wherever the cursor
+     *  goes. With capture these arrive retargeted to the bar and bubble here
+     *  anyway; without it they arrive from whatever is under the cursor. Both
+     *  paths end at the same listener, so the grip cannot depend on which one
+     *  the browser gives us. */
+    function addSplitterTracking() {
+      document.addEventListener('pointermove', onSplitterMove);
+      document.addEventListener('pointerup', onSplitterUp);
+      document.addEventListener('pointercancel', onSplitterUp);
+      window.addEventListener('blur', onSplitterUp);
+    }
+
+    function removeSplitterTracking() {
+      document.removeEventListener('pointermove', onSplitterMove);
+      document.removeEventListener('pointerup', onSplitterUp);
+      document.removeEventListener('pointercancel', onSplitterUp);
+      window.removeEventListener('blur', onSplitterUp);
+    }
+
     function onSplitterMove(e) {
       if (!paneDrag) return;
+      // A SECOND POINTER MUST NOT STEER THIS ONE. Listening on the document
+      // means every pointer on the page arrives here, not just the one that
+      // pressed the bar.
+      if (paneDrag.pointerId !== null && e.pointerId !== undefined
+          && e.pointerId !== paneDrag.pointerId) return;
       const r = paneRatioForDrag(paneDrag, e.clientX, e.clientY);
       if (r === null) return;
       paneDrag.ratio = r;
@@ -2164,10 +2135,13 @@
       e.preventDefault();
     }
 
-    function onSplitterUp() {
+    function onSplitterUp(e) {
       if (!paneDrag) return;
+      if (e && e.pointerId !== undefined && paneDrag.pointerId !== null
+          && e.pointerId !== paneDrag.pointerId) return;
       const d = paneDrag;
       paneDrag = null;
+      removeSplitterTracking();
       document.body.classList.remove('splitter-dragging');
       if (d.ratio !== null) {
         if (d.vertical) aircraftProfile.stackRatio = d.ratio;
@@ -2229,12 +2203,43 @@
       const bar = document.getElementById('splitter');
       if (!bar) return;
       bar.addEventListener('pointerdown', onSplitterDown);
-      bar.addEventListener('pointermove', onSplitterMove);
-      bar.addEventListener('pointerup', onSplitterUp);
-      bar.addEventListener('pointercancel', onSplitterUp);
-      bar.addEventListener('lostpointercapture', onSplitterUp);
+      // NOTHING ELSE IS BOUND TO THE BAR, and the deletions are the fix.
+      // pointermove/up on the BAR only fire while the cursor is still over
+      // 2 px of it, which is what made a fast drag let go; and
+      // and the capture-lost event ENDED the drag, so any transient loss of
+      // capture - with the button still down - was permanent. Both are
+      // replaced by the
+      // document tracking added on pointerdown (v16.61: prefer the deletion to
+      // the second mechanism).
       bar.addEventListener('dblclick', resetSplitter);
       bar.addEventListener('keydown', onSplitterKey);
+    }
+
+    /** EVERY RANGE SLIDER KEEPS THE POINTER THAT PRESSED IT (v16.89, the
+     *  pilot's report: "if the mouse moves off the slider while still holding
+     *  the mouse button, it stops dragging").
+     *
+     *  A native <input type="range"> is SUPPOSED to hold the drag itself, and
+     *  in Chromium here it does - measured, 400 px below the track and still
+     *  tracking. But that is the browser's own internal capture, and it is
+     *  exactly the kind of thing that differs by browser and by pointing
+     *  device, which is what the pilot is hitting. Taking the capture
+     *  EXPLICITLY makes the guarantee the app's rather than the platform's.
+     *
+     *  IT IS ONE DELEGATED LISTENER, NOT ONE PER SLIDER - the v16.24 rule that
+     *  a control added later must work without a rule of its own. It is also
+     *  measured to leave the native drag intact: 2 -> 4 -> 6 -> 9 -> 10 across
+     *  the track with capture taken, and still 6 when the cursor is 400 px off
+     *  it. Capture on the input is where the browser wants the events anyway,
+     *  so this reinforces the native behaviour rather than replacing it - the
+     *  value still comes from the browser, never from arithmetic of ours. */
+    function initSliderGrip() {
+      document.addEventListener('pointerdown', (e) => {
+        const el = e.target;
+        if (!el || el.tagName !== 'INPUT' || el.type !== 'range') return;
+        if (e.pointerId === undefined || !el.setPointerCapture) return;
+        try { el.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+      }, true);
     }
 
     // "View Mode" = locked, read-only, tap-to-highlight (in-flight use).
@@ -6335,10 +6340,10 @@
     }
 
     // =========================================================================
-    // 7b. MODAL CONTROLLERS (SERA / SETTINGS) + BULK ACTIONS
+    // 7b. MODAL CONTROLLERS (SETTINGS) + BULK ACTIONS
     //     These were referenced by buttons in the header but never defined,
-    //     so "SERA Rules", "Settings & Units", "Apply Bulk" and "Clear All"
-    //     all threw ReferenceError and did nothing.
+    //     so "Settings & Units", "Apply Bulk" and "Clear All" all threw
+    //     ReferenceError and did nothing.
     // =========================================================================
     function openModal(id) {
       const el = document.getElementById(id);
@@ -6350,8 +6355,6 @@
       if (el) el.style.display = 'none';
     }
 
-    function openSeraModal()   { openModal('sera-modal'); }
-    function closeSeraModal()  { closeModal('sera-modal'); }
 
     function openHelpModal()   { openModal('help-modal'); }
     function closeHelpModal()  { closeModal('help-modal'); }
@@ -6554,7 +6557,7 @@
     /** Every overlay that owns the keyboard while it is up. `dialogIsOpen()`
      *  covers everything dialog.js puts on screen; the rest are the page's own
      *  modals and the leg panel. */
-    const OVERLAY_IDS = ['sera-modal', 'wind-modal', 'settings-modal', 'help-modal', 'leg-modal'];
+    const OVERLAY_IDS = ['wind-modal', 'settings-modal', 'help-modal', 'leg-modal'];
     function anyOverlayOpen() {
       if (typeof dialogIsOpen === 'function' && dialogIsOpen()) return true;
       return OVERLAY_IDS.some((id) => {

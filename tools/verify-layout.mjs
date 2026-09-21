@@ -507,6 +507,155 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
       `no dead space in a one-panel layout with the divider at ${ratio === null ? 'the default' : ratio}` +
       ` (map ${gaps.map} px, plan ${gaps.plan} px)`);
   }
+  // ---- v16.89: THE GRIP, MEASURED UNDER THE CONDITION THAT LOST IT --------
+  //
+  // The pilot: "if i move the mouse too quickly, it looses the 'grip' and
+  // stops dragging". The drag check earlier in this file moves in 12 steps and
+  // PASSED throughout, because pointer capture holds in Chromium here and the
+  // drag rode entirely on it. Refusing capture is what reproduces the report:
+  // measured before the fix, a 60-step drag landed within 1 px and a one-jump
+  // drag missed by 299.
+  //
+  // So this refuses capture AND drags in one jump - the two together are what
+  // the guard is for, and neither alone would have caught it. It runs LAST
+  // because it moves the divider, and slotting it in the middle broke the
+  // check that measures where the divider was left.
+  await page.evaluate(() => { try { resetSplitter(); } catch (e) {} setLayoutMode('split'); });
+  await page.waitForTimeout(250);
+  await page.evaluate(() => {
+    Element.prototype.setPointerCapture = function () { /* refused */ };
+  });
+  for (const [steps, label] of [[1, 'one jump'], [4, 'four steps']]) {
+    await page.evaluate(() => { try { resetSplitter(); } catch (e) {} });
+    await page.waitForTimeout(250);
+    const b0 = await boxes();
+    const from = Math.round(b0.bar.x + b0.bar.w / 2);
+    const to = from + 240;
+    await page.mouse.move(from, 500);
+    await page.mouse.down();
+    // OFF-AXIS TOO: the cursor leaves the bar's own line entirely, which is
+    // the other half of "anchor the drag to the mouse".
+    await page.mouse.move(to, 760, { steps });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const b1 = await boxes();
+    const got = Math.round(b1.bar.x + b1.bar.w / 2);
+    check(Math.abs(got - to) <= 4,
+      `a ${label} drag keeps its grip with pointer capture refused `
+      + `(asked ${to}, got ${got})`);
+  }
+
+  // A SLIDER KEEPS THE POINTER THAT PRESSED IT - AND THIS CHECK IS A
+  // CORROBORATION, NOT A GATE. Saying so is the point.
+  //
+  // MEASURED, both ways: Chromium's own range input ALREADY takes pointer
+  // capture on the element (`gotpointercapture` fires with the app's handler
+  // and without it), and the value tracks 350 px off the track either way. So
+  // there is no assertion available here that distinguishes the app's grip
+  // from the platform's, and writing one that looked like it did would be the
+  // M5 trap this project keeps naming. What this measures is that the app has
+  // not BROKEN the native drag by taking the capture itself - which is the
+  // real risk of the change, and is worth a check.
+  //
+  // The structural guard that initSliderGrip exists at all is in test.js.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => { try { closeHelpModal(); openSettingsModal(); showSettingsPage('map'); } catch (e) {} });
+  await page.waitForTimeout(400);
+  {
+    const sl = await page.evaluate(() => {
+      const el = document.getElementById('map-route-weight');
+      if (!el) return null;
+      el.value = 2; el.dispatchEvent(new Event('input', { bubbles: true }));
+      window.__got = false;
+      el.addEventListener('gotpointercapture', () => { window.__got = true; });
+      const b = el.getBoundingClientRect();
+      return { x: Math.round(b.x), y: Math.round(b.y + b.height / 2), w: Math.round(b.width) };
+    });
+    check(!!sl && sl.w > 0, 'the route-weight slider is on screen to be dragged');
+    if (sl && sl.w > 0) {
+      await page.mouse.move(sl.x + sl.w * 0.1, sl.y);
+      await page.mouse.down();
+      await page.mouse.move(sl.x + sl.w * 0.95, sl.y + 350, { steps: 6 });
+      const r = await page.evaluate(() => ({
+        got: window.__got,
+        value: document.getElementById('map-route-weight').value
+      }));
+      await page.mouse.up();
+      check(r.got === true,
+        `the pointer is captured to the slider for the drag (${r.got})`);
+      check(Number(r.value) >= 9,
+        `and taking it has not broken the native drag (2 -> ${r.value} of 10, `
+        + `350 px off the track)`);
+    }
+    await page.evaluate(() => { try { closeSettingsModal(); } catch (e) {} });
+    await page.waitForTimeout(200);
+  }
+
+  // A STEEP TOUCH DRAG DOES NOT HAVE THE SLIDER TAKEN OFF IT (v16.89).
+  //
+  // This is the one slider assertion that DISCRIMINATES, and it took an A/B on
+  // a single gesture to find: with touch-action AUTO the browser decides a
+  // steep drag is a page scroll and fires pointercancel (x3 measured); with
+  // NONE the same gesture fires none and the drag survives. Value-tracking
+  // proves nothing here - Chromium's own slider stops tracking a steep touch
+  // gesture either way - so what is measured is the CANCELLATION.
+  //
+  // It needs a touch-capable context, so it runs in one of its own.
+  {
+    const tctx = await b.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+    const tp = await tctx.newPage();
+    tp.on('pageerror', (e) => errs.push('slider-touch: ' + e));
+    await tp.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
+    await tp.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
+    await tp.waitForFunction(() => {
+      try { return typeof computeFlightSchedule === 'function'; } catch (e) { return false; }
+    }, null, { timeout: 20000 });
+    await tp.keyboard.press('Escape');
+    await tp.waitForTimeout(300);
+    const cdp = await tctx.newCDPSession(tp);
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent',
+      { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+
+    const steep = async (forceAuto) => {
+      await tp.evaluate(() => { try { closeSettingsModal(); openSettingsModal(); showSettingsPage('map'); } catch (e) {} });
+      await tp.waitForTimeout(400);
+      const i = await tp.evaluate((auto) => {
+        const el = document.getElementById('map-route-weight');
+        if (auto) el.style.touchAction = 'auto';
+        window.__cancel = 0;
+        el.addEventListener('pointercancel', () => { window.__cancel++; });
+        const b = el.getBoundingClientRect();
+        return { x: Math.round(b.x), y: Math.round(b.y + b.height / 2),
+                 w: Math.round(b.width), ta: getComputedStyle(el).touchAction, vh: window.innerHeight };
+      }, forceAuto);
+      // UPWARDS, so every point stays ON SCREEN. A probe that drove the touch
+      // off the bottom of the viewport read a dead drag as the bug once.
+      const endY = i.y - 220;
+      if (endY < 0) return { ta: i.ta, cancels: -1, offScreen: true };
+      await touch('touchStart', i.x + i.w * 0.1, i.y);
+      for (let k = 1; k <= 8; k++) await touch('touchMove', i.x + i.w * (0.1 + 0.11 * k), i.y - 27.5 * k);
+      const c = await tp.evaluate(() => window.__cancel);
+      await touch('touchEnd', 0, 0);
+      return { ta: i.ta, cancels: c, offScreen: false };
+    };
+
+    const shipped = await steep(false);
+    check(!shipped.offScreen, 'the touch probe stays inside the viewport');
+    check(shipped.ta === 'none',
+      `a slider declares the drag gesture its own (touch-action: ${shipped.ta})`);
+    check(shipped.cancels === 0,
+      `a steep touch drag is not taken off the slider (pointercancel x${shipped.cancels})`);
+    // AND THE A/B THAT MAKES THAT MEAN SOMETHING: force the old value back and
+    // the browser cancels, so the rule above is proved load-bearing here
+    // rather than merely asserted.
+    const forced = await steep(true);
+    check(forced.cancels > 0,
+      `...and with touch-action forced back to auto it IS taken away `
+      + `(pointercancel x${forced.cancels}) - so the rule is what prevents it`);
+    await tctx.close();
+  }
+
   check(!hidden.menu, 'no divider under the Menu skin, whose plan is a hover rail');
   check(hidden.back, 'and it comes back with the default skin');
   await ctx.close();

@@ -865,6 +865,27 @@ svg.leaflet-image-layer.leaflet-interactive path {
        (only the thumb is draggable) and the row lays out horizontally. */
     .map-ctl-range { display: flex; align-items: center; gap: 6px; cursor: default; }
     .map-ctl-range input[type="range"] { width: 96px; margin: 0; cursor: pointer; }
+
+    /* A SLIDER IS A CONTROL YOU DRAG, SO THE GESTURE IS ITS OWN (v16.89).
+       MEASURED by A/B on one gesture in Chromium, touch input, the only
+       variable being this line: with touch-action AUTO a drag that leaves the
+       track steeply fires **pointercancel three times** - the browser decides
+       the gesture is a page scroll and TAKES THE DRAG AWAY, which is the
+       pilot's "it stops dragging" exactly. With NONE the same gesture fires
+       pointercancel zero times and the drag survives.
+       WHAT IT DOES NOT COVER, and the honest limit: touch-action governs TOUCH
+       and pen input only. A mouse drag on Chromium was measured to hold at
+       every speed and 350 px off the track, so if the report is from a mouse
+       this is not its cause and the cause is still unfound.
+       AND THE FIRST MEASUREMENT OF THIS WAS WRONG: a probe drove the touch
+       points 250-400 px BELOW a slider sitting at y=647 in an 800 px viewport,
+       i.e. off screen, and read the resulting dead drag as the bug. The
+       on-screen A/B above is what actually isolates it.
+       THE COST IS STATED: you can no longer scroll the page by starting the
+       gesture ON a slider. That is the right trade for a control whose whole
+       purpose is being dragged, and it is the same decision #splitter already
+       makes for the same reason. */
+    input[type="range"] { touch-action: none; }
     /* The readout is fixed-width so the stack does not jump between 20% and
        100% - a control that resizes as you drag it is hard to aim. */
     .map-ctl-range span { min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -1146,7 +1167,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .btn-secondary { background: #4a5568; color: white; }
     .btn-wind { background: #dd6b20; color: white; }
     .btn-ruler { background: #319795; color: white; }
-    .btn-sera { background: #2b6cb0; color: white; }
     .btn-settings { background: #805ad5; color: white; }
     .btn-done { background: #38a169; color: white; font-weight: 700; }
     .btn-edit-mode { background: #d69e2e; color: white; font-weight: 700; }
@@ -1306,10 +1326,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .wind-input { width: 100%; padding: 4px; border: 1px solid var(--border-color); border-radius: 3px; font-size: 11px; font-weight: bold; text-align: center; background: var(--bg-input); color: var(--text-main); }
     .wind-input:focus { border-color: #dd6b20; background: #fffaf0; outline: none; }
 
-    /* SERA Table */
-    .sera-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 10px; color: var(--text-main); }
-    .sera-table th { background: #2c5282; color: white; padding: 5px; border: 1px solid #2b6cb0; }
-    .sera-table td { padding: 5px; border: 1px solid var(--border-color); text-align: left; background: var(--bg-card); }
 
     /* 3-Min Plotting Ref Box */
     .tick-box { display: flex; gap: 8px; align-items: center; background: var(--highlight-bg); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 10px; color: var(--highlight-text); font-weight: 600; }
