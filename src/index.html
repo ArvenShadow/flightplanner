@@ -254,7 +254,7 @@
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
             <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only.
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
-              <br><b>Four rules apply to every binding.</b> <b>Ctrl</b> means Ctrl <i>or</i> ⌘, so one binding works on either keyboard. While a dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing fires behind it. Inside a text field the keys keep their normal text-editing meaning (<b>Ctrl+S</b> is the deliberate exception: the browser's own Ctrl+S saves the web page, which is never what you want here). And <b>Escape cannot be rebound</b> — it is the way out of a dialog and out of a half-finished line drag, so moving it could leave you with no way back.
+              <br><b>Four rules apply to every binding.</b> <b>Ctrl</b> means Ctrl <i>or</i> ⌘, so one binding works on either keyboard. While a dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing fires behind it. Inside a text field the keys keep their normal text-editing meaning (<b>Ctrl+S</b> is the deliberate exception: the browser's own Ctrl+S saves the web page, which is never what you want here). And <b>Escape cannot be rebound</b> — it is the way out of a dialog, out of a half-finished line drag and out of the ruler, so moving it could leave you with no way back. (Whatever you bind <b>undo</b> to follows the ruler too: while the ruler is running that key removes the last ruler point.)
               <br>Two things the menu will refuse, and it says why: a chord the <b>browser owns</b> (Ctrl+W, Ctrl+T, F5 …), because <i>preventDefault</i> cannot stop those and the binding would look like it worked and then not; and a chord <b>already used by another action</b>, because whichever came second would silently never fire. Your bindings are saved with your settings and <b>travel in the exported JSON</b>.</li>
             <li><b>Undo now covers the whole plan, not just the route</b>: ETD, initial fuel, reserve, departure elevation and the flight date are snapshotted too, so changing an ETD — which moves every ETO and the daylight verdict — can be taken back like any other edit.</li>
             <li>Flight plans <b>name themselves after their route</b> — first and last waypoint, e.g. <b>ENDU-ENEV</b> — and the name follows the route as you edit. A plan with fewer than two waypoints shows "Flight Plan N" until the route exists.</li>
@@ -321,7 +321,8 @@
           <h3>🗺 Map Tools</h3>
           <ul style="margin-left:16px;">
             <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail.
-              <br><b>It previews as you move.</b> After the first click a dashed band follows the cursor from that point, with a chip showing the track and distance and — from the second point on — what the running total <i>would</i> become. Nothing is committed until you click, so you can measure a distance from a starting position, read it, and move on without leaving a mark. The preview is the <i>same</i> arithmetic as the click, so what you read is what you get. It needs a mouse (a touch screen has no cursor to follow), it clears when the pointer leaves the map, and its chip hides only at the <b>Far</b> declutter level — the banner shows the figures at every zoom.</li>
+              <br><b>It previews as you move.</b> After the first click a dashed band follows the cursor from that point, with a chip showing the track and distance and — from the second point on — what the running total <i>would</i> become. Nothing is committed until you click, so you can measure a distance from a starting position, read it, and move on without leaving a mark. The preview is the <i>same</i> arithmetic as the click, so what you read is what you get. It needs a mouse (a touch screen has no cursor to follow), it clears when the pointer leaves the map, and its chip hides only at the <b>Far</b> declutter level — the banner shows the figures at every zoom.
+              <br><b>Escape and Ctrl+Z belong to the ruler while it is running.</b> <b>Ctrl+Z</b> takes back the last point you placed (to put one back, just click the map again — the ruler has no separate redo because it does not need one). <b>Escape</b> clears the whole measurement, and pressing it again on an empty ruler <i>stops</i> the ruler — it backs out one level at a time, the way Escape does everywhere else here. Neither touches your plan's undo history: the ruler measures, it never edits the route. With the ruler running, Ctrl+Z will say so rather than quietly undoing a plan edit; stop the ruler and it is ordinary undo again.</li>
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
             <li><b>Climbs and descents are planned across leg boundaries</b>: a climb that doesn't fit its leg simply continues on the next (the ▲ TOC lands on the leg where the altitude is actually reached), and a descent that doesn't fit its leg <b>backs up onto earlier legs</b> — the ▼ TOD names the low waypoint it serves (e.g. "TOD · 7.2 NM before B → 200' at C") — so you always cross a waypoint AT its planned altitude, never above it. A circuit (pattern) stop breaks the chain. If even all the preceding distance can't absorb the descent, the red integrity banner says so instead of letting you plan an arrival that's too high.</li>
             <li>Multiple flight plans draw in <b>different colours</b>, and in Edit Mode every plan except the active one fades and stops taking the mouse — so a return route drawn straight over its outbound cannot grab the wrong line. (Up to v16.49 every second track was also dashed; the colour and the fading do that job, so the dashes are gone.) <b>Track thickness is a Map setting</b>, 2–10 px: below 2 px the line is hard to follow across chart ink, above 10 px it covers the frequencies and MEF it is drawn over. The invisible grab area stays 20 px wide either way.</li>
@@ -1316,7 +1317,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.91';
+    const APP_VERSION = '16.92';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2836,6 +2837,132 @@
       });
     }
 
+    /**
+     * EVERYTHING THE RULER DRAWS, REBUILT FROM `rulerPoints` (v16.92).
+     *
+     * IT IS A REBUILD RATHER THAN AN APPEND, AND THAT IS THE WHOLE POINT. The
+     * click path used to draw the newest dot and the newest chip incrementally,
+     * which is fine while a ruler only ever grows - and Ctrl+Z makes it shrink.
+     * An undo that removed markers with its own copy of this drawing logic
+     * would be a SECOND MECHANISM that can drift from the first, which is the
+     * v16.27 `flightLineCoords` rule (one function, one answer). So both the
+     * click and the undo end here, and a test asserts that undoing a point
+     * leaves exactly the state the pilot had one click ago.
+     *
+     * The marker ORDER is the one the incremental version produced - dot, then
+     * that segment's chip - so nothing downstream sees a different array.
+     */
+    function redrawRuler() {
+      rulerMarkers.forEach((m) => map.removeLayer(m));
+      rulerMarkers = [];
+      if (rulerTotalMarker) { map.removeLayer(rulerTotalMarker); rulerTotalMarker = null; }
+
+      const readout = document.getElementById('ruler-readout');
+      if (!rulerPoints.length) {
+        rulerLine.setLatLngs([]);
+        if (readout) readout.innerText = 'No legs measured yet.';
+        return;
+      }
+      // A single point draws no line: Leaflet would keep the previous one.
+      rulerLine.setLatLngs(rulerPoints.length > 1
+        ? densifyPath(rulerPoints.map((p) => [p.lat, p.lng])) : []);
+
+      const unit = aircraftProfile.distUnit || 'NM';
+      const uLbl = distLabel(unit);
+      let totalNM = 0, lastTT = 0, lastMT = 0, lastLegNM = 0;
+
+      for (let i = 0; i < rulerPoints.length; i++) {
+        const pt = rulerPoints[i];
+        rulerMarkers.push(L.marker(pt, {
+          icon: L.divIcon({
+            className: 'ruler-icon',
+            html: `<div class="ruler-label">Ruler ${i + 1}</div>`,
+            iconAnchor: [15, 10]
+          })
+        }).addTo(map));
+        if (i === 0) continue;
+
+        const p1 = rulerPoints[i - 1], p2 = pt;
+        const legNM = calcDistanceNM(p1.lat, p1.lng, p2.lat, p2.lng);
+        const tt = calcTrueTrack(p1.lat, p1.lng, p2.lat, p2.lng);
+        const mt = Math.round((tt + resolveMagVar(p2.lat, p2.lng).val + 360) % 360);
+        totalNM += legNM;
+        lastTT = tt; lastMT = mt; lastLegNM = legNM;
+
+        // The same figures ON the map: a chip at each segment's midpoint
+        // (track + distance), offset perpendicular-right of the segment so it
+        // sits beside the line, not on it.
+        if (legNM > 0.02) {
+          const [mLat, mLng] = interpolateGeo(p1.lat, p1.lng, p2.lat, p2.lng, legNM / 2, legNM);
+          const theta = toRad(tt);
+          const dx = Math.round(16 * Math.cos(theta));
+          const dy = Math.round(16 * Math.sin(theta));
+          rulerMarkers.push(L.marker([mLat, mLng], {
+            interactive: false,
+            icon: L.divIcon({
+              className: 'ruler-seg-icon',
+              html: `<div class="ruler-seg-label" style="transform:translate(${dx}px,${dy}px);" title="${tt}°T">${String(mt).padStart(3, '0')}°M · ${convertDist(legNM, unit).toFixed(1)} ${uLbl}</div>`,
+              iconAnchor: [0, 8]
+            })
+          }).addTo(map));
+        }
+      }
+
+      if (readout) {
+        readout.innerHTML = rulerPoints.length > 1
+          ? `Leg ${rulerPoints.length - 1}: <b>${lastTT}°T</b> / <b>${lastMT}°M</b> &nbsp;` +
+            `<b>${convertDist(lastLegNM, unit).toFixed(1)} ${uLbl}</b> &nbsp;|&nbsp; ` +
+            `Total: <b>${convertDist(totalNM, unit).toFixed(1)} ${uLbl}</b>`
+          : 'No legs measured yet.';
+      }
+
+      // The running total rides at the newest point, from 2 segments up - below
+      // that it is the same number as the last leg, printed twice.
+      if (rulerPoints.length > 2) {
+        const last = rulerPoints[rulerPoints.length - 1];
+        rulerTotalMarker = L.marker([last.lat, last.lng], {
+          interactive: false,
+          icon: L.divIcon({
+            className: 'ruler-total-icon',
+            html: `<div class="ruler-total-label" style="transform:translate(10px,-24px);">Σ ${convertDist(totalNM, unit).toFixed(1)} ${uLbl}</div>`,
+            iconAnchor: [0, 0]
+          })
+        }).addTo(map);
+      }
+    }
+
+    /**
+     * Ctrl+Z, while the ruler is running, takes back the last point.
+     *
+     * THE PLAN'S UNDO STACK IS NOT TOUCHED, and that is deliberate rather than
+     * an omission: the ruler writes nothing to `flights`, so pushing a state
+     * for it would put an entry on the stack that undoes nothing - and would
+     * make the pilot press Ctrl+Z twice to get back to a real edit.
+     *
+     * WITH NO POINTS IT SAYS SO rather than falling through to the plan's undo.
+     * One mode, one meaning: a Ctrl+Z that quietly removed a waypoint because
+     * the ruler happened to be empty is exactly the surprise this project
+     * refuses. There is nothing new to undo while the ruler owns the map's
+     * clicks anyway, and stopping the ruler is one keystroke away.
+     *
+     * THERE IS NO RULER REDO, and it needs none: the ruler is click-to-place,
+     * so putting a point back is one click on the map. A second stack for a
+     * transient measuring tool is the second mechanism v16.61 says to prefer
+     * the deletion of.
+     */
+    function rulerUndoPoint() {
+      if (!rulerPoints.length) {
+        say('No ruler points to remove. Stop the ruler to undo plan edits.', 'info', 3000);
+        return;
+      }
+      rulerPoints.pop();
+      clearRulerPreview();
+      redrawRuler();
+      say(rulerPoints.length
+        ? 'Ruler point removed. ' + rulerPoints.length + ' left.'
+        : 'Ruler point removed. The ruler is empty.', 'info', 2500);
+    }
+
     function clearRulerPreview() {
       rulerPreviewLine.setLatLngs([]);
       if (rulerPreviewMarker) { map.removeLayer(rulerPreviewMarker); rulerPreviewMarker = null; }
@@ -2940,78 +3067,7 @@
         // The band that led here has been committed, so it stops being a
         // preview; the next mousemove starts a new one from this point.
         clearRulerPreview();
-        const ptIdx = rulerPoints.length;
-        const marker = L.marker(e.latlng, {
-          icon: L.divIcon({
-            className: 'ruler-icon',
-            html: `<div class="ruler-label">Ruler ${ptIdx}</div>`,
-            iconAnchor: [15, 10]
-          })
-        }).addTo(map);
-        rulerMarkers.push(marker);
-
-        // THE COMMITTED LINE IS DENSIFIED (v16.91). It never was, so in
-        // great-circle mode the ruler DREW a rhumb while calcDistanceNM
-        // MEASURED a geodesic, and the segment chip - placed with
-        // interpolateGeo, i.e. on the measured path - floated off the line it
-        // labelled. Measured on Tromso-Kirkenes at 69 N: 5.15 NM apart at the
-        // midpoint. That is v16.63's rule never applied to this surface.
-        if (rulerPoints.length > 1) {
-          rulerLine.setLatLngs(densifyPath(rulerPoints.map(p => [p.lat, p.lng])));
-          const unit = aircraftProfile.distUnit || 'NM';
-          const uLbl = distLabel(unit);
-          const p1 = rulerPoints[rulerPoints.length - 2];
-          const p2 = rulerPoints[rulerPoints.length - 1];
-          const legNM = calcDistanceNM(p1.lat, p1.lng, p2.lat, p2.lng);
-          const tt = calcTrueTrack(p1.lat, p1.lng, p2.lat, p2.lng);
-          const magVar = resolveMagVar(p2.lat, p2.lng).val;
-          const mt = Math.round((tt + magVar + 360) % 360);
-
-          let totalNM = 0;
-          for (let i = 0; i < rulerPoints.length - 1; i++) {
-            totalNM += calcDistanceNM(rulerPoints[i].lat, rulerPoints[i].lng,
-                                      rulerPoints[i+1].lat, rulerPoints[i+1].lng);
-          }
-
-          // Banner readout (kept) ...
-          document.getElementById('ruler-readout').innerHTML =
-            `Leg ${rulerPoints.length - 1}: <b>${tt}°T</b> / <b>${mt}°M</b> &nbsp;` +
-            `<b>${convertDist(legNM, unit).toFixed(1)} ${uLbl}</b> &nbsp;|&nbsp; ` +
-            `Total: <b>${convertDist(totalNM, unit).toFixed(1)} ${uLbl}</b>`;
-
-          // ... plus the same figures ON the map: a chip at each segment's
-          // midpoint (track + distance), offset perpendicular-right of the
-          // segment so it sits beside the line, not on it.
-          if (legNM > 0.02) {
-            const [mLat, mLng] = interpolateGeo(p1.lat, p1.lng, p2.lat, p2.lng, legNM / 2, legNM);
-            const theta = toRad(tt);
-            const dx = Math.round(16 * Math.cos(theta));
-            const dy = Math.round(16 * Math.sin(theta));
-            const segMarker = L.marker([mLat, mLng], {
-              interactive: false,
-              icon: L.divIcon({
-                className: 'ruler-seg-icon',
-                html: `<div class="ruler-seg-label" style="transform:translate(${dx}px,${dy}px);" title="${tt}°T">${String(mt).padStart(3, '0')}°M · ${convertDist(legNM, unit).toFixed(1)} ${uLbl}</div>`,
-                iconAnchor: [0, 8]
-              })
-            }).addTo(map);
-            rulerMarkers.push(segMarker);
-          }
-
-          // Running total rides along at the newest point (from 2 segments up,
-          // where it stops being identical to the last leg).
-          if (rulerTotalMarker) { map.removeLayer(rulerTotalMarker); rulerTotalMarker = null; }
-          if (rulerPoints.length > 2) {
-            rulerTotalMarker = L.marker([p2.lat, p2.lng], {
-              interactive: false,
-              icon: L.divIcon({
-                className: 'ruler-total-icon',
-                html: `<div class="ruler-total-label" style="transform:translate(10px,-24px);">Σ ${convertDist(totalNM, unit).toFixed(1)} ${uLbl}</div>`,
-                iconAnchor: [0, 0]
-              })
-            }).addTo(map);
-          }
-        }
+        redrawRuler();
         return;
       }
 
@@ -6856,7 +6912,9 @@
         textLike: isTextLikeTarget(e.target),
         editing: isEditableTarget(e.target),
         viewMode: isDoneMode,
-        hasHighlight: !!highlightedWaypoint
+        hasHighlight: !!highlightedWaypoint,
+        rulerMode: isRulerMode,
+        rulerPoints: rulerPoints.length
       }, keybinds);
       if (!act) return;
       if (act.preventDefault) e.preventDefault();
@@ -6872,6 +6930,14 @@
           break;
         case 'undo': undoLast(true); break;
         case 'redo': redoLast(true); break;
+        // WHAT ESCAPE AND UNDO MEAN WHILE THE RULER IS RUNNING. Neither
+        // touches the plan's undo stack: the ruler writes nothing to `flights`,
+        // so an entry for it would undo nothing and cost the pilot a keystroke.
+        case 'ruler-clear':
+          clearRuler();
+          say('Ruler cleared. Escape again to stop the ruler.', 'info', 2500);
+          break;
+        case 'ruler-undo': rulerUndoPoint(); break;
         case 'save': saveCurrentMission(); break;
         case 'focus-search': searchFixes(); break;
         case 'delete-waypoint': deleteHighlightedWaypoint(); break;

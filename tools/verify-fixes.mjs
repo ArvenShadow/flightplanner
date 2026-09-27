@@ -768,6 +768,46 @@ if (rulerPts.a && rulerPts.b && rulerPts.c) {
   check(hadBand === 1 && gone.previews === 0 && gone.band === 0 && gone.readout === '',
     `the band goes when the pointer leaves the map (had ${hadBand}, left ${gone.previews})`);
   check(/Total/.test(gone.committed), 'the committed measurement survived: ' + gone.committed);
+
+  // ESCAPE AND Ctrl+Z BELONG TO THE RULER (v16.92). jsdom proves the decision
+  // and the state; only a browser proves a REAL keystroke reaches the
+  // dispatcher and that the markers actually leave the DOM - which is the half
+  // that would fail silently if redrawRuler stopped removing layers.
+  const chips = () => page.evaluate(() => ({
+    dots: document.querySelectorAll('.ruler-label').length,
+    segs: document.querySelectorAll('.ruler-seg-label').length,
+    total: document.querySelectorAll('.ruler-total-label').length,
+    pts: rulerPoints.length,
+    banner: getComputedStyle(document.getElementById('ruler-banner')).display,
+    running: isRulerMode
+  }));
+  await page.mouse.move(rulerPts.b.x, rulerPts.b.y, { steps: 6 });
+  await page.mouse.click(rulerPts.b.x, rulerPts.b.y);
+  await page.waitForTimeout(200);
+  const three = await chips();
+  check(three.pts === 3 && three.dots === 3 && three.total === 1,
+    `three points drawn: ${JSON.stringify(three)}`);
+
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  const undone = await chips();
+  check(undone.pts === 2 && undone.dots === 2 && undone.segs === three.segs - 1 && undone.total === 0,
+    `Ctrl+Z took the last point and its ink off the map: ${JSON.stringify(undone)}`);
+  check(undone.running === true, 'and left the ruler running - it removed a point, not the tool');
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  const cleared = await chips();
+  check(cleared.pts === 0 && cleared.dots === 0 && cleared.segs === 0 && cleared.total === 0,
+    `Escape cleared every mark: ${JSON.stringify(cleared)}`);
+  check(cleared.running === true && cleared.banner === 'flex',
+    'and the ruler is still running - Escape cleared the measurement, not the tool');
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  const stopped = await chips();
+  check(stopped.running === false && stopped.banner === 'none',
+    `a second Escape stopped the empty ruler: ${JSON.stringify(stopped)}`);
 }
 await page.evaluate(() => { if (isRulerMode) toggleRulerMode(); });
 await page.waitForTimeout(150);

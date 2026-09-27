@@ -2061,6 +2061,101 @@ Clicking a published aerodrome now asks: **touch & go**, **full stop**, or
   and the derived circuit altitude is unchanged at 1000. Corrected here rather
   than left as a number the code disagrees with.
 
+## ESCAPE AND UNDO BELONG TO THE RULER WHILE IT IS RUNNING (v16.92)
+
+The pilot: *"Please let me press escape on ruler to reset the ruler and ctrl-Z
+to remove last ruler waypoint."*
+
+### ESCAPE BACKS OUT ONE LEVEL AT A TIME, WHICH IS WHAT IT ALREADY MEANT
+
+- Points on the ruler -> **clear the measurement**. Nothing left to clear ->
+  **stop the ruler**. That second half is DERIVED rather than invented: it is
+  what Escape does everywhere else in this app, and it is what keeps the key
+  from being the silent keystroke `keys.js` exists to prevent - there is always
+  an outcome to see.
+- **AN OVERLAY IS STILL THE OUTER LEVEL.** A modal open over the map closes
+  first and the measurement underneath survives; `dialog.js` still owns its own
+  Escape; and a line drag still wins over everything, because a drag is the
+  state that TRAPS the map (v16.46). All four orderings are asserted.
+
+### UNDO IS KEYED ON THE ACTION, NOT ON Ctrl+Z
+
+While the ruler runs, whatever chord is bound to **undo** removes the last ruler
+point. It is matched on `spec.id === 'undo'`, so a pilot who rebound undo to
+Alt+U gets this on Alt+U - **asserted, rather than left as a sentence in a
+comment**, because a mutation keying it on the literal chord otherwise passes.
+
+- **WITH NO POINTS IT SAYS SO, and does NOT fall through to the plan's undo.**
+  One mode, one meaning: a Ctrl+Z that quietly removed a waypoint because the
+  ruler happened to be empty is exactly the surprise this project refuses. You
+  cannot edit the route while the ruler owns the map's clicks anyway, so there
+  is nothing new to undo, and stopping the ruler is one keystroke away.
+- **NEITHER TOUCHES THE PLAN'S UNDO STACK**, and that is a decision rather than
+  an omission: the ruler writes nothing to `flights`, so an entry for it would
+  undo nothing and cost the pilot a second Ctrl+Z to reach a real edit.
+- **REDO IS DELIBERATELY LEFT ALONE.** The ruler is click-to-place, so putting a
+  point back is one click on the map - it already HAS a redo, and it is the
+  mouse. A second stack for a transient measuring tool is the mechanism v16.61
+  says to prefer the deletion of. Stated in the guide rather than left as an
+  asymmetry to discover.
+- `ruler-clear` and `ruler-undo` join `cancel-drag` as actions the page must
+  handle but the menu does not OFFER: they are not bindings, they are what an
+  existing chord MEANS in a state. A test asserts they are in `KEY_ACTIONS` and
+  NOT in `ACTION_SPECS`, and the existing switch-coverage guard then requires the
+  page to have a case for each.
+
+### THE DRAWING HAD TO STOP BEING INCREMENTAL FIRST
+
+The click path appended the newest dot and the newest chip, which is fine while
+a ruler only ever GROWS - and Ctrl+Z makes it shrink. An undo that removed
+markers with its own copy of that drawing logic would be a **second mechanism**
+that can drift from the first, which is the v16.27 `flightLineCoords` rule.
+
+`redrawRuler()` rebuilds everything from `rulerPoints`, and BOTH the click and
+the undo end there. Two invariants hold it down, and the second is the one that
+matters:
+
+1. **Drawing the same points twice is identical** - so a stale chip cannot
+   survive a redraw.
+2. **Undoing a point lands exactly where the pilot was one click ago**, compared
+   as a whole state: the points, every marker's markup, the drawn line's point
+   count, the total chip and the banner text. **The fixture asserts the fourth
+   click CHANGED that state first**, or the comparison would pass against a
+   snapshot of nothing happening.
+
+The marker ORDER is the one the incremental version produced (dot, then that
+segment's chip), so nothing downstream sees a different array.
+
+### THE MENU SAYS BOTH, BECAUSE THE MENU IS WHERE A PILOT LOOKS
+
+`close-overlays` now reads *"Close a dialog, abandon a drag, clear the ruler,
+clear the selection"* and its hint spells out the one-level-at-a-time order;
+`undo` gained a hint saying what it does while the ruler runs and that rebinding
+moves it. A behaviour that only the source knows about is folklore.
+
+### SEVEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+Escape not reaching the ruler (2 tests); Escape clearing but never stopping the
+empty ruler (2); Escape reaching the ruler THROUGH an open modal (1); undo
+falling through to the plan (3, one of them reporting `Ctrl+Z leaked through to
+the plan and undid a route edit`); the ruler undo keyed on the literal `Ctrl+Z`
+so a rebound undo stops following (1); the undo popping a point without
+redrawing - the stale-chip failure (1, and it is the whole-state invariant that
+catches it); and the ruler pushing the plan's undo stack (1, `1 -> 3`).
+
+### AND THE BROWSER CHECK IS THE HALF jsdom CANNOT SEE
+
+`verify:fixes` presses a REAL Ctrl+Z and a REAL Escape after real mouse clicks
+and counts the ink in the DOM: `3 dots / 2 chips / 1 total` -> `2 / 1 / 0` on
+undo -> `0 / 0 / 0` on Escape with the banner still up -> banner gone on the
+second Escape. That is what would fail silently if `redrawRuler` ever stopped
+REMOVING layers rather than just rebuilding the array.
+
+**TWO OF ITS CHECK MESSAGES READ BACKWARDS AT FIRST.** `check(cond, msg)` prints
+the message on a PASS too, so "Ctrl+Z stopped the ruler instead of removing a
+point" said the opposite of what had just been proved. A message that describes
+the failure is a message that lies on every green run.
+
 ## THE RULER PREVIEWS, AND MEASURING IT FOUND THE RULER DRAWING THE WRONG LINE (v16.91)
 
 The pilot: *"Make the ruler function as a preview, when clicking a point a
