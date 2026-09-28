@@ -31,11 +31,12 @@ import * as ofpform from './lib/ofpform.js';
 import * as keys from './lib/keys.js';
 import * as corridor from './lib/corridor.js';
 import * as skins from './lib/skins.js';
+import * as massbalance from './lib/massbalance.js';
 
 const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs,
     ...airspace, ...vac, ...anchors,
               ...daylight, ...winds, ...integrity, ...exchange, ...plotting, ...metar,
-              ...ofpform, ...keys, ...corridor, ...skins };
+              ...ofpform, ...keys, ...corridor, ...skins, ...massbalance };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {

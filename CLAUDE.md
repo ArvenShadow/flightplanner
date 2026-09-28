@@ -202,8 +202,18 @@ That condition is now a constraint on the project, not a footnote:
   name, an email, a licence number and coordinates through
   buildExportPayload and asserts none of it appears in the JSON. Add new
   aircraft settings to PROFILE_KEYS; never widen it to anything that
-  identifies a person, a machine or a place. (v16.34 added `fixesOn`, a
-  boolean layer toggle.)
+  identifies a PERSON or a PLACE. (v16.34 added `fixesOn`, a boolean layer
+  toggle.)
+  - **THE "MACHINE" HALF OF THAT RULE WAS RELAXED BY THE AUTHOR AT v16.93**,
+    in these words: *"Aircraft registrations and their data can be stored.
+    Theres no privacy issue there. Crew manifest is not required to input the
+    weights. PIC and PAX names are only written on the printed sheet."* So a
+    REGISTRATION may travel in an export once the M&B tab exists (Phase C);
+    a crew name, a licence number, a person's weight tied to a name, and a
+    place still may not. The v16.41 rule that the printed form's Reg box stays
+    empty rested on the planner not knowing which tail is flown - a premise
+    that expires the moment a tail is selectable, and the two tests encoding
+    it are to be updated deliberately in Phase C, not left to fail.
 
 ## Phase 2: types (v16.20)
 
@@ -379,10 +389,13 @@ three cheap disciplines applied every time the page is touched:
 - **Map**: locked to a single world copy (maxBounds ±180°, viscosity 1,
   noWrap on tiles). Kartverket tile URL is WMTS webmercator cache.
 - **Mass & Balance**: WAS out of scope — the user kept M&B in their Excel
-  OFP. SUPERSEDED at v16.28: it is roadmap item 5 (see Roadmap below), but
-  nothing is built yet and it needs the real sheet plus the POH arms and
-  limits in hand first. Fuel-requirement and POH takeoff/landing features
-  remain out of scope.
+  OFP. SUPERSEDED TWICE: at v16.28 it became roadmap item 5, and at **v16.93
+  the pure engine is BUILT** — see "MASS & BALANCE, THE OTHER HALF OF THE
+  FORM" above. `OFP-C182.xlsx` is committed and is the authoritative source,
+  corroborated figure for figure by the printed form. Fuel-requirement and POH
+  takeoff/landing performance are still not built; the workbook's own tables
+  and its stated limits (PA 5000 ft, 40 °C) are recorded there for when they
+  are.
 - **Daylight / VFR day (v16.3)**: legal basis verified — SERA Art. 2(97)
   (Reg. (EU) 923/2012) defines night via civil twilight, sun centre 6°
   below the horizon; Norway's BSL F 1-1 (forskrift 2016-12-14-1578) was
@@ -1492,13 +1505,19 @@ scoped. In the user's order:
    map), hover for the name, click for the detail, a layer toggle in
    PROFILE_KEYS, and the attribution line. Sourcing rule satisfied: it is
    AIP Norge, it names its edition, and permission is held.
-5. **Mass & Balance from the Excel sheet.** NOTE: CLAUDE.md currently
-   records M&B as explicitly OUT OF SCOPE at the user's own decision. That
-   entry is now superseded by this roadmap item, but the work needs the
-   real sheet and the POH arms/limits in hand before a line is written.
+5. **IN PROGRESS at v16.93 - Mass & Balance from the Excel sheet.** The sheet
+   arrived (`OFP-C182.xlsx`) and PHASE A - the pure engine, the fleet, the
+   envelope and 18 tests - is built. See "MASS & BALANCE, THE OTHER HALF OF
+   THE FORM" above for what is settled and what is not. Still to do:
+   **Phase B** - capture each sector's UNROUNDED departure and arrival gallons
+   in the pass that builds `ofpPrintModel`, and unify the fuel density;
+   **Phase C** - the M&B tab (weights, registration, the CG chart, fuel,
+   METAR/TAF for departure and arrival), the per-sector vs whole-mission
+   toggle, the envelope SVG, and integrity findings that reach the PRINTED
+   output as well as the banner.
 6. **PARTLY DONE at v16.41** - the OFP half. Print OFP now outputs the
    company "Operational flightplan" form filled from the plan; see the section
-   above. The M&B half waits on item 5.
+   above. The M&B half waits on item 5, whose engine landed at v16.93.
 
 ### Added v16.41 (a QoL batch, in the user's order)
 
@@ -1854,6 +1873,169 @@ asserts nothing M&B appears on the sheet.
   - then renders a real PDF and counts the pages.
 - NOT REPRODUCED: the school's UiT logo. Embedding someone's letterhead into
   generated output is their call, not ours; ask before adding it.
+
+## MASS & BALANCE, THE OTHER HALF OF THE FORM (v16.93, roadmap item 5 - PHASE A)
+
+**THIS SUPERSEDES "Mass & Balance: WAS out of scope".** That entry said M&B
+stayed in the user's Excel sheet; v16.28 already downgraded it to "roadmap item
+5, nothing built, needs the real sheet and the POH arms and limits in hand
+first". Both halves of that precondition are now met: `OFP-C182.xlsx` is
+committed beside `C182OFPMBv4.2.pdf`, and the planner already computes the one
+number the spreadsheet cannot get for itself - the fuel actually burned on each
+sector.
+
+**PHASE A IS THE PURE MODULE AND NOTHING ELSE.** `src/lib/massbalance.js`, the
+fleet, the types and 18 tests. No UI, no wiring, no fuel capture: the app still
+shows no M&B. Phases B (per-sector fuel capture) and C (the tab, the envelope
+SVG, the banner) follow.
+
+### TWO SOURCES, AND THEY AGREE - which is what makes this importable at all
+
+Every constant is in BOTH the printed form and the live workbook, independently:
+the station arms (37 / 37 / 74 / 46.5 / 97 / 116 / 129 in), all TEN fleet
+figures for LN-TRA..LN-TRE, and the Va table (3100->110, 2600->101, 2100->91).
+The form carries `Version date 10.08.2026`, which is what `FLEET_SOURCE`
+records - the WORKBOOK states no revision date anywhere, and its document
+`modified` property is just when it was uploaded, so using that would have been
+a provenance figure that means nothing.
+
+- **THE GOLDEN FIXTURE REPRODUCES THE WORKBOOK CELL FOR CELL**, including the
+  digits Excel itself carries: take-off 2582.3 lb / 40.2 in / 103700.6,
+  landing 2378.3 / **39.61426228818904** / 94214.6, zero-fuel 2198.3 /
+  **39.05044807351135** / 85844.6.
+- **AND AN INDEPENDENT CROSS-CHECK FELL OUT OF IT.** `Performance!W1:X3` draws
+  the MLW line as arm 39 -> 46 at 2950 lb, in a different block of the sheet
+  from the envelope. The envelope's own width at 2950 is **39.05 to 46.00**. A
+  mistranscribed vertex would have shown up here; it did not.
+- **THE ARM IS NEVER ROUNDED IN THE MODULE, and that departs from the sheet on
+  purpose.** `OFP!E11` rounds the take-off arm to 0.1 in while `E14` and `E15`
+  leave landing and zero-fuel at full precision. Rounding one of three
+  identical calculations is an inconsistency, not a rule, so all three are
+  exact and the DISPLAY rounds - which still prints every figure the sheet
+  prints.
+
+### CHECKING THE TWO ENDS IS ENOUGH, AND IT IS A PROOF - BUT THE SWEEP THAT "PROVED" IT WAS BLIND
+
+Burning fuel is a STRAIGHT LINE in (moment, weight): weight falls a pound per
+pound, moment falls 46.5 per pound. The envelope is CONVEX in that same space -
+forward slopes **33.00 -> 46.12 -> 51.72 -> 70.90 -> 81.30**, non-decreasing
+across both joins, and the aft boundary is the straight `moment = 46 * weight`.
+A segment between two points of a convex set stays inside, so two legal
+endpoints mean a legal path and there is no interior case to search for.
+
+- **THE FIRST VERSION OF THE PATH SWEEP COULD NOT SEE A NON-CONVEX ENVELOPE.**
+  Mutated with a dent at the 2700 lb vertex it reported **0 violations over
+  407 824 paths** - looking exactly like a guard confirming correct code.
+- **THE REASON IS ARITHMETIC, NOT COVERAGE.** A fuel path's slope is fixed at
+  46.5, so it can only leave through the forward boundary where the boundary's
+  OWN slope brackets 46.5 - which on this envelope is across the **2225 lb
+  vertex** (33.00 -> 46.12) and nowhere else. The sweep started from a
+  zero-fuel grid and never put an endpoint there.
+- Rewritten to walk the TAKE-OFF point across the whole envelope it sweeps
+  41 293 paths, 10 637 of them crossing that vertex, and a dent AT 2225 now
+  fails it by name with **3199 violating points**.
+- **SO NEITHER CHECK CARRIES THIS ALONE**, and the file should not pretend one
+  does: the convexity assertion catches the 2700 dent, the path sweep catches
+  the 2225 one, and both are mutated. This is M5 in its subtlest form - the
+  sweep was not looser than its measurement, it was measuring in a place where
+  the defect provably cannot appear.
+
+### THE FIGURES THAT ARE NOT THE SHEET'S, EACH FOR A STATED REASON
+
+- **Va COMES FROM THE POH TABLE, INTERPOLATED, NOT FROM `=110-(((3100-D14)*9)/500)`.**
+  That formula is exact at 3100 and 2600 and gives **92 kt at 2100 where the
+  table in the same workbook says 91** - one knot HIGH at the light end, which
+  is the unsafe direction. The user's instruction was to use the table.
+  - Va is read at the **landing** mass, as the sheet does, and that is right
+    rather than incidental: Va falls with weight, so the lightest moment of the
+    flight is the one that binds all of it.
+  - **NULL BELOW 2100 lb rather than extrapolated.** That is below every
+    aircraft's empty weight plus a pilot, so it is close to unreachable - and
+    an invented Va is a speed a pilot writes on the form and flies to.
+- **Vglide HAS NO POH TABLE BEHIND IT.** The form prints a `V GLIDE` box with
+  nothing in it and the workbook fills it with a straight line. Reproduced and
+  labelled the school's figure; it must never be presented as a POH value.
+- **NO MAXIMUM BAGGAGE WEIGHT IS PUBLISHED IN EITHER SOURCE**, so none is
+  checked. `BAGGAGE_MAX_LB` is `null` and a caution says the check is not
+  performed. Reaching for the C182's usual 200 lb would read as a checked limit
+  and be a guess - the exact plausible wrong answer this project refuses.
+- **THE AUTOPILOT LIMIT IS AN INFERENCE, AND THE DATA ARGUES FOR IT.**
+  `Performance!T1:U3` is a two-point line labelled `autopilot`: arm 34 at
+  1800 lb and at 2400 lb. It stops at 2400 because **the standard forward limit
+  reaches 34.03 in there** - the line is drawn exactly as far as it constrains
+  anything. Shipped as a CAUTION naming its source, never as an out-of-limits
+  finding, and it wants confirming against the autopilot supplement.
+- **LN-TRE's 22.7 lb IS AIRFRAME, NOT BAGGAGE.** The user: "LNTRE is the only
+  A/C where compartment B is not included in the total mass/arm". So it is
+  added at the compartment B arm before any load, and an unloaded LN-TRE still
+  carries it. The workbook adds it into the same cell the pilot types extra
+  baggage into; here the two are kept apart, because one is a property of the
+  machine and one is what got loaded.
+
+### A FORWARD CG VIOLATION IS NOT REACHABLE ON THIS FLEET
+
+Measured across all five aircraft with up to 500 lb in the front seats - the
+only station forward of the empty arm - the closest any of them gets to the
+forward limit is **LN-TRD at 37.67 in against a limit of 34.77, i.e. 2.9 in of
+margin**. Every other station is at 74 in or further aft and the empty arms are
+38.98-39.60.
+
+So the forward branch is exercised against a HYPOTHETICAL airframe and the test
+SAYS it is hypothetical. The alternative - a fixture quietly labelled LN-TRB
+that cannot occur - is the v16.58 failure where a test asserted the broken case
+as correct.
+
+### MLW AT EVERY LANDING, AND A MASTER THAT WALKS
+
+The user: "Check the landing weight / t&g weight for every stop". A mid-mission
+refuel can make an EARLIER arrival the heavy one, so `worstLanding` is the
+heaviest arrival anywhere, not the final one - and `computeMissionMassBalance`
+takes `first` and `last` from the sector results themselves. Subtracting a
+total burn from the ramp weight would print a weight the aircraft never has the
+moment anyone refuels.
+
+Taxi fuel is in the TAKE-OFF mass (the user's instruction), which is why
+`MTOW_LB` doubling as the ramp limit is their explicit answer and not an
+assumption: "Assume MTOW is max ramp".
+
+### ONE FUEL DENSITY, AND PHASE B HAS TO FINISH THE JOB
+
+`FUEL_LB_PER_GAL = 6.0` and `FUEL_KG_PER_GAL` is DERIVED from it. The app's
+existing `convertFuel`/`toGal` still carry a separate `2.72` kg/gal against the
+derived 2.72155 - 0.057% apart. Measured: unifying them moves **578 of 900**
+tenth-gallon values by one 0.1 kg display step (64 gal 174.1 -> 174.2). Storage
+is in gallons so nothing saved changes, but it is a visible change and it
+belongs in Phase B with the fuel capture, not smuggled in here.
+
+### RECORDED FOR PHASE D: THE WORKBOOK STATES ITS OWN PERFORMANCE LIMITS
+
+`OFP!O34` reads "TO/LDG dist limitations: Max pressure alt 5000ft, Max temp
+40°C". That matters because `CALC_TOD` is not merely undefined above 5000 ft,
+it is DANGEROUSLY wrong: 3100 lb / 20 C gives 2595 ft at PA 5000 and **1730 ft
+at PA 6000** - the required distance FALLS as conditions worsen, because the
+`FILTER` fallback of 8000 is not a table row so its distance reads 0. The sheet
+declares the boundary; any import of those tables must refuse outside it rather
+than interpolate into the hole.
+
+### NO PERSON IS NAMED, AND A TEST GREPS FOR IT
+
+The workbook's document properties carry an author. A registration identifies a
+MACHINE, which the user has explicitly cleared ("Aircraft registrations and
+their data can be stored. Theres no privacy issue there"), and that is where it
+stops. The crew block on the printed form stays a box for a pen.
+
+### SEVEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+Envelope dented at 2700 (4 tests) and at 2225 (4, including the rewritten
+sweep); Va from the sheet's formula (1, reporting `Va at 2100: 92`); the fixed
+extra at the baggage A arm (1); `worstLanding` as the last sector (1); an absent
+figure coerced to 0 (1); and the arm rounded inside `point()` (1, reporting the
+landing arm as 39.6).
+
+**AND ONE "MUTATION" NEVER APPLIED, REPORTING `FAIL=0`** - a `sed` expression
+whose `||` broke the substitution. A mutation that does not land looks exactly
+like a guard that does not fire, which is the `grep | head` lesson from v16.62
+in a new costume: assert the edit was made before believing the run.
 
 ## AIRAC updates: what re-importing actually costs (v16.42, 2026-09-03)
 

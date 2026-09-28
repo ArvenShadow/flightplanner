@@ -1088,6 +1088,7 @@
     //   keyboard bindings           -> src/lib/keys.js
     //   the skin list               -> src/lib/skins.js
     //   which VAC chart is drawn    -> src/lib/vac.js
+    //   mass & balance, the fleet -> src/lib/massbalance.js
     //
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
@@ -1317,7 +1318,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.92';
+    const APP_VERSION = '16.93';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
