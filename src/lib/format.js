@@ -9,10 +9,25 @@
  * across midnight without a browser.
  */
 
+import { FUEL_KG_PER_GAL } from './massbalance.js';
+
 // ---- units -------------------------------------------------------------
 // The pilot picks NM/SM/KM and gal/L/kg; everything is COMPUTED in NM and
 // US gallons (the POH's units) and converted only for display, so a unit
 // change can never move a number.
+//
+// THE KILOGRAM FIGURE COMES FROM THE ONE FUEL DENSITY (v16.94). This file
+// carried its own `2.72` against massbalance.js's 6 lb/gal - two roundings of
+// the same physical fact, 0.057% apart, and the M&B sheet would have weighed a
+// gallon differently from the fuel column beside it. The density is a POH/M&B
+// fact rather than a formatting one, which is why the import goes this way
+// round; `massbalance.js` imports nothing, so there is no cycle.
+//
+// MEASURED COST OF UNIFYING: 578 of the 901 tenth-gallon values between 0 and
+// 90 gal move by one 0.1 kg display step (64 gal 174.1 -> 174.2, 87 gal
+// 236.6 -> 236.8), worst case 0.2 kg. NOTHING STORED CHANGES - every fuel
+// figure in this project is held in gallons - so it is a display change only,
+// and it moves those displays TOWARDS the sheet the school actually uses.
 
 /** @param {number|string|null|undefined} mins @returns {string} "HH:MM", or "-" */
 export function formatTimeHHMM(mins) {
@@ -122,8 +137,25 @@ export function convertDist(nm, targetUnit) {
 /** @param {number} gal @param {string} [targetUnit] @returns {number} */
 export function convertFuel(gal, targetUnit) {
   if (targetUnit === 'LITERS') return gal * 3.78541;
-  if (targetUnit === 'KG') return gal * 2.72; // AvGas 100LL density approx
+  if (targetUnit === 'KG') return gal * FUEL_KG_PER_GAL;
   return gal;
+}
+
+/**
+ * The EXACT INVERSE of `convertFuel` - a displayed figure back into gallons.
+ *
+ * It exists so there is ONE pair of constants rather than two. The page
+ * carried its own `toGal` with a literal `2.72` and `3.78541`; a density
+ * changed in one of them and not the other would make a round trip through the
+ * settings form silently reinterpret a number the pilot had already written
+ * down. A test asserts the round trip is exact.
+ *
+ * @param {number} value @param {string} [fromUnit] @returns {number} gallons
+ */
+export function toGallons(value, fromUnit) {
+  if (fromUnit === 'LITERS') return value / 3.78541;
+  if (fromUnit === 'KG') return value / FUEL_KG_PER_GAL;
+  return value;
 }
 
 // ---- HTML escaping -----------------------------------------------------

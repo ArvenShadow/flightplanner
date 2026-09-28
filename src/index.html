@@ -1318,7 +1318,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.93';
+    const APP_VERSION = '16.94';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1884,11 +1884,10 @@
       return [2, 3, 5].includes(m) ? m : 3;
     }
 
-    function toGal(value, fromUnit) {
-      if (fromUnit === 'LITERS') return value / 3.78541;
-      if (fromUnit === 'KG') return value / 2.72;
-      return value;
-    }
+    // -> src/lib/format.js (toGallons). The page carried THREE hand-rolled
+    // copies of this inverse, each with its own literal 2.72 and 3.78541:
+    // `toGal`, the refuel box in setStopRefuel, and the unit switch that
+    // rewrites the Initial Fuel field. A grep for `toGal` found one of them.
 
     // The unit the Settings-modal fuel inputs are CURRENTLY displayed in.
     // Performance values are always stored internally in gallons; the form
@@ -1942,7 +1941,7 @@
       if (newUnit === settingsFuelUnit) return;
       ['perf-climb-ff', 'perf-desc-ff', 'perf-pattern-ff', 'perf-taxi-fuel', 'perf-cruise-ff', 'cc-ff'].forEach(id => {
         const el = document.getElementById(id);
-        const gal = toGal(Number(el.value) || 0, settingsFuelUnit);
+        const gal = toGallons(Number(el.value) || 0, settingsFuelUnit);
         el.value = convertFuel(gal, newUnit).toFixed(1);
       });
       settingsFuelUnit = newUnit;
@@ -5165,9 +5164,7 @@
       if (raw === '') {
         delete wp.fuelAfterGal;
       } else {
-        const asGal = unit === 'LITERS' ? Number(raw) / 3.78541
-                    : unit === 'KG' ? Number(raw) / 2.72
-                    : Number(raw);
+        const asGal = toGallons(Number(raw), unit);
         const gal = normaliseRefuelGal(asGal);
         if (gal === null) delete wp.fuelAfterGal; else wp.fuelAfterGal = gal;
       }
@@ -6178,8 +6175,36 @@
       legStartTimes = {};
       // An empty "Initial Fuel" box yielded NaN, which then propagated into
       // every Rem cell and the mission summary as "NaN".
-      const initialFuelRaw = Number(document.getElementById('fuel-dep').value);
+      const initialFuelText = String(document.getElementById('fuel-dep').value || '').trim();
+      const initialFuelRaw = Number(initialFuelText);
       let runningFuelRemaining = isNaN(initialFuelRaw) ? 0 : initialFuelRaw;
+      // THE EXACT FIGURE, IN GALLONS, NEVER ROUNDED (v16.94, Phase B of
+      // roadmap item 5). Mass & Balance needs the fuel on board at each
+      // sector's engine start and at its arrival fix, and NEITHER can be read
+      // off the line above: `runningFuelRemaining` is in the pilot's DISPLAY
+      // unit and is re-rounded to 0.1 at every step, so in litres it is not
+      // even gallons and in gallons it has accumulated up to 0.05 of rounding
+      // per row. A weight computed from it would be wrong by the rounding of
+      // every leg of the mission.
+      //
+      // IT IS A SECOND TRACKER, AND THAT IS DELIBERATE RATHER THAN DRIFT - the
+      // display is a ROUNDED RENDERING of this, not a rival computation of it.
+      // Both subtract the SAME per-row gallon figure (`legBurnGal`,
+      // `patternBurnGal`), and a test asserts the two never diverge by more
+      // than the rounding can explain, plus that fuel is continuous across
+      // every sector boundary. Without those this would be exactly the second
+      // mechanism v16.61 says to prefer the deletion of.
+      //
+      // ABSENT STAYS ABSENT (the v16.44 rule). An unreadable Initial Fuel box
+      // shows 0 in the column, because that column has always done that - but
+      // the M&B figure stays NaN, so `massBalanceProblems` reports "the fuel on
+      // board is not known" instead of weighing the aircraft with empty tanks.
+      // `Number('') === 0`, so an EMPTY box cannot be told from a typed zero by
+      // isNaN - which is why the raw string is read. A typed 0 is a real answer
+      // (a sector that departs with empty tanks must show it, v16.57); an empty
+      // box is the absence the M&B findings have to name.
+      let runningFuelGal = (initialFuelText === '' || isNaN(initialFuelRaw))
+        ? NaN : toGallons(initialFuelRaw, fuelUnit);
       let taxiFuelApplied = false;
       ofpPrintModel = [];
       let grandTotalDist = 0;
@@ -6188,7 +6213,7 @@
       const sectorTimeWindows = [];   // per flight: minutes after ETD at takeoff & landing
       /** The ground or circuit time of a stop, waiting for the sector it
        *  delays. See the two blocks below. @type {null|{min:number, kind:string,
-       *  burn:number, refuelGal:number|null}} */
+       *  burn:number, burnGal:number, refuelGal:number|null}} */
       let pendingStop = null;
 
       flights.forEach((fl, fIdx) => {
@@ -6214,15 +6239,27 @@
             taxiFuelApplied = false;    // the next departure pays for its own start-up
             if (pendingStop.refuelGal !== null) {
               runningFuelRemaining = Number(convertFuel(pendingStop.refuelGal, fuelUnit).toFixed(1));
+              // The refuel is STORED in gallons (v16.57), so the exact tracker
+              // takes it raw - the display is the one that converts and rounds.
+              runningFuelGal = pendingStop.refuelGal;
             }
           } else if (pendingStop.burn > 0) {
             runningAccBurn = Number((runningAccBurn + pendingStop.burn).toFixed(1));
             runningFuelRemaining = Number((runningFuelRemaining - pendingStop.burn).toFixed(1));
+            runningFuelGal -= pendingStop.burnGal;
             sectorPrefixBurn = pendingStop.burn;
           }
           pendingStop = null;
         }
         const sectorStartMin = runningAccTime;
+        // ON BOARD AT THIS SECTOR'S ENGINE START - after the stop before it has
+        // been paid for or refuelled, and before anything this sector burns.
+        // Taxi is charged to this sector's first leg, so it is INSIDE the burn
+        // below and this figure includes it, which is what the M&B take-off
+        // mass wants ("Count taxi fuel in takeoff mass" - the author).
+        // A leading circuit is also charged after this point, which is right:
+        // the laps are flown after start-up, not before it.
+        const sectorDepGal = runningFuelGal;
         const sectionDiv = document.createElement('div');
         sectionDiv.className = 'flight-section';
 
@@ -6332,6 +6369,7 @@
             runningAccTime += patternMinutes;
             runningAccBurn = Number((runningAccBurn + patternBurn).toFixed(1));
             runningFuelRemaining = Number((runningFuelRemaining - patternBurn).toFixed(1));
+            runningFuelGal -= patternBurnGal;
             sectorTime += patternMinutes;
             sectorBurn += patternBurn;
 
@@ -6443,6 +6481,7 @@
           runningAccTime += legTime;
           runningAccBurn = Number((runningAccBurn + legBurn).toFixed(1));
           runningFuelRemaining = Number((runningFuelRemaining - legBurn).toFixed(1));
+          runningFuelGal -= legBurnGal;
           sectorDist += dist; sectorTime += legTime; sectorBurn += legBurn;
           runningAccDist += dist;
 
@@ -6502,7 +6541,13 @@
             totals: { dist: sectorDist.toFixed(1), time: formatTimeHHMM(sectorTime),
                       burn: sectorBurn.toFixed(1), rem: runningFuelRemaining.toFixed(1) }
           },
-          rows: printRows
+          rows: printRows,
+          // NOT INSIDE `meta`, and that is the point: `meta` is what the
+          // printed FORM shows, in the pilot's display unit. These are the
+          // POH-unit figures Mass & Balance weighs, and mixing the two is how
+          // a rounded display value ends up in a weight. One push keeps the
+          // two in step - a separate array could get out of sync with this one.
+          fuelGal: { dep: sectorDepGal, arr: runningFuelGal }
         });
 
         grandTotalDist += sectorDist;
@@ -6551,6 +6596,10 @@
           pendingStop = {
             min: stopMin, kind: stopKind,
             burn: Number(convertFuel(gal, fuelUnit).toFixed(1)),
+            // The same burn unrounded and in gallons, for the exact tracker.
+            // Carried on the SAME object as the display figure so the two
+            // cannot be derived from different stop minutes.
+            burnGal: gal,
             refuelGal: normaliseRefuelGal(lastReal.fuelAfterGal)
           };
         }
@@ -6690,7 +6739,7 @@
       aircraftProfile.cruiseTas   = Math.max(1,   numOr('perf-cruise-tas', 130));
       const readFuel = (id, defGal) => {
         const v = Number(document.getElementById(id).value);
-        return isNaN(v) ? defGal : toGal(v, settingsFuelUnit);
+        return isNaN(v) ? defGal : toGallons(v, settingsFuelUnit);
       };
       aircraftProfile.cruiseFf    = Math.max(0.1, readFuel('perf-cruise-ff', 12.5));
       aircraftProfile.climbMode   = document.getElementById('c182-climb-mode').value === 'POH' ? 'POH' : 'CRUISECLIMB';
@@ -6752,9 +6801,7 @@
         ['fuel-dep', 'fuel-reserve'].forEach(function(id) {
           const box = document.getElementById(id);
           const current = Number(box.value) || 0;
-          const asGal = prevFuelUnit === 'LITERS' ? current / 3.78541
-                      : prevFuelUnit === 'KG'     ? current / 2.72
-                      : current;
+          const asGal = toGallons(current, prevFuelUnit);
           box.value = convertFuel(asGal, newFuelUnit).toFixed(1);
         });
         savePlanningPrefs();

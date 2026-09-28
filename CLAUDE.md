@@ -1514,8 +1514,9 @@ scoped. In the user's order:
    arrived (`OFP-C182.xlsx`) and PHASE A - the pure engine, the fleet, the
    envelope and 18 tests - is built. See "MASS & BALANCE, THE OTHER HALF OF
    THE FORM" above for what is settled and what is not. Still to do:
-   **Phase B** - capture each sector's UNROUNDED departure and arrival gallons
-   in the pass that builds `ofpPrintModel`, and unify the fuel density;
+   **Phase B is DONE at v16.94** - each sector's unrounded departure and
+   arrival gallons now ride on `ofpPrintModel[i].fuelGal`, and the fuel density
+   is one constant used in both directions. Still to do:
    **Phase C** - the M&B tab (weights, registration, the CG chart, fuel,
    METAR/TAF for departure and arrival), the per-sector vs whole-mission
    toggle, the envelope SVG, and integrity findings that reach the PRINTED
@@ -2058,6 +2059,94 @@ derived 2.72155 - 0.057% apart. Measured: unifying them moves **578 of 900**
 tenth-gallon values by one 0.1 kg display step (64 gal 174.1 -> 174.2). Storage
 is in gallons so nothing saved changes, but it is a visible change and it
 belongs in Phase B with the fuel capture, not smuggled in here.
+
+### PHASE B (v16.94): THE EXACT GALLONS, AND ONE FUEL DENSITY
+
+Two things, and the second one found more than it was sent for.
+
+**THE FUEL COLUMN IS UNCHANGED.** What is new is that the gallons behind it
+now leave the render pass unrounded, on `ofpPrintModel[i].fuelGal = {dep, arr}` -
+`dep` is what is on board at that sector's ENGINE START, `arr` what remains at
+its arrival fix. Phase C reads those; nothing else does yet.
+
+- **IT IS A SECOND TRACKER, AND THAT NEEDED ARGUING** against v16.61's "prefer
+  the deletion to the second mechanism". It survives because the display is a
+  ROUNDED RENDERING of it rather than a rival computation: both subtract the
+  same per-row gallon figure (`legBurnGal`, `patternBurnGal`,
+  `pendingStop.burnGal`), and two tests hold them together - the gap may never
+  exceed what the rounding can explain (0.05 a row), and fuel must be
+  CONTINUOUS across every sector boundary (`dep(k) === arr(k-1)`, adjusted by
+  the stop). Measured on the two-sector seed: the gap is **0.0761 gal**, and a
+  test pins that it stays in the rounding regime rather than drifting to the
+  bound.
+- **DERIVING THE DISPLAY FROM THE EXACT TRACKER WAS CONSIDERED AND DECLINED**,
+  which would have deleted the second mechanism outright. The column is
+  `F - sum(round(burn_i))` and deriving it would make it `round(F - sum(burn_i))` -
+  a different number by up to 0.05 a leg, i.e. exactly the 0.0761 measured
+  above. That is a visible change to the fuel column, and Phase B was asked for
+  the M&B figures, not for the pilot's fuel column to move.
+- **ABSENT STAYS ABSENT, AND `isNaN` COULD NEVER SEE IT.** `Number('') === 0`,
+  so an empty Initial Fuel box is indistinguishable from a typed zero unless
+  the RAW STRING is read - which it now is. The column still shows 0.0 for an
+  empty box (it always has, and that is not being changed); the M&B figure
+  stays `NaN`, so `massBalanceProblems` says "the fuel on board is not known"
+  instead of weighing an aircraft with empty tanks. A typed 0 remains a real
+  answer (v16.57).
+- **TAXI IS INSIDE THE BURN, AND `dep` IS BEFORE IT.** "Count taxi fuel in
+  takeoff mass" is the author's instruction and is why MTOW doubles as the ramp
+  limit. Asserted by TAKING IT AWAY - the sector burn with taxi 1.7 minus the
+  same sector at 0 must be exactly 1.7 - and a full stop re-arms it, so a
+  two-sector mission carries 3.4. A leading circuit is also charged after
+  `dep`, which is right: the laps are flown after start-up.
+
+### THERE WERE THREE COPIES OF THE FUEL DENSITY, NOT TWO
+
+The plan said "unify `convertFuel` and `toGal`". A grep for `toGal` found one
+of them. The test written to assert no literal `2.72` survives **failed on its
+first run** and named the third:
+
+1. `convertFuel` in `format.js` (`* 2.72`),
+2. the page's own `toGal` (`/ 2.72`),
+3. **`setStopRefuel`** - the `⛽ Fuel after` box, converting a typed refuel back
+   to gallons with its own inline `/ 2.72` and `/ 3.78541`,
+4. **the unit switch** that rewrites Initial Fuel and Reserve when the pilot
+   changes display units - a fourth inline copy of the same pair.
+
+So a density changed in one place would have made the settings form silently
+reinterpret a figure already written down. `toGallons` in `format.js` is now the
+one exact inverse, all four sites call it, and a test asserts the round trip is
+exact in every unit.
+
+- **THE IMPORT GOES `format.js -> massbalance.js`**, and the direction is
+  argued: a density is a POH/M&B fact, not a formatting one, and
+  `massbalance.js` imports nothing so there is no cycle.
+- **MEASURED COST**: 578 of the 901 tenth-gallon values between 0 and 90 gal
+  move by one 0.1 kg display step (64 gal 174.1 -> 174.2, 87 gal 236.6 ->
+  236.8), worst case 0.2 kg. **Nothing stored changes** - every fuel figure in
+  this project is held in gallons - so it is a display change only, and it
+  moves those displays towards the sheet the school actually uses. Litres are
+  untouched.
+
+**SEVEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`**: the leg burn never
+reaching the tracker (3 tests), the refuel not reaching it (1), the inter-sector
+circuit burn skipped (1), the tracker fed the ROUNDED DISPLAY figure instead of
+gallons (3, one reporting `48.6 vs 59.9` under a litre display), `dep` captured
+at the END of the sector (4), an empty box coerced to zero gallons (1), and
+`convertFuel` back on its own 2.72 (1, reporting `round trip broken in KG`).
+
+**AND THE FIRST ATTEMPT AT ONE OF THEM APPLIED AND CHANGED NOTHING** - again.
+`const x = v` mutated to `let x = v; x = v` is a textual edit that assigns the
+same value at the same point, so it reported `FAIL=0` and read exactly like a
+guard that does not fire. The mutation that bites writes `dep: runningFuelGal`
+into the push, which really does capture it at the wrong moment. Asserting that
+the EDIT landed is not enough; the edit has to change the BEHAVIOUR.
+
+**AND THE BLOCK PUTS THE SHARED FIXTURE BACK.** `T` runs immediately and `TA`
+is queued to the end, so a `T` written at the bottom of the file still runs
+BEFORE every async test - and these left a two-sector mission behind, which made
+an unrelated plan-management test report `expected 3 flights, got 4`. That is
+the v16.89 lesson (a check that mutates shared state is not free to sit
+anywhere) arriving through the runner rather than through the browser.
 
 ### THE PERFORMANCE TABLES: THE WORKBOOK IS SHORT OF THE POH, NOT THE OTHER WAY ROUND
 

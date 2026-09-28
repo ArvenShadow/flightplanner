@@ -11668,6 +11668,233 @@ T('the POH landing table agrees with the workbook, and carries ONE weight', () =
     'the flaps-up landing penalty is not recorded');
 });
 
+// =========================================================================
+// PHASE B (v16.94): the exact per-sector fuel Mass & Balance weighs, and the
+// single fuel density. The display column is unchanged; what is new is that
+// the gallons behind it are now carried out of the render pass unrounded.
+// =========================================================================
+
+const SEED_STOP = `flights = [
+  { id: 1, title: "F1", depElev: 254, waypoints: [
+    { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 254,  oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12,
+      stop: "full-stop", stopMin: 10, fuelAfterGal: 50 }
+  ]},
+  { id: 2, title: "F2", depElev: 229, waypoints: [
+    { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 229,  oat: 10, wdir: 0, wspd: 0, var: -12 },
+    { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }
+  ]}
+]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+
+T('every sector carries its fuel in GALLONS, whatever the column is showing', () => {
+  // The whole point of Phase B: a weight can never be computed from a figure
+  // that is in litres, or that has been through toFixed(1) once a leg.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const inGal = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  assert(inGal.length === 2, 'expected two sectors: ' + inGal.length);
+  assert(Math.abs(inGal[0][0] - 64) < 1e-9, 'sector 1 does not start at the 64 gal typed: ' + inGal[0][0]);
+
+  // Switch the DISPLAY to litres and the gallons must not move one bit.
+  ev('aircraftProfile.fuelUnit = "LITERS";');
+  doc.getElementById('fuel-dep').value = String(64 * 3.78541);
+  w.renderAllFlightTables();
+  const inL = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  assert(Math.abs(inL[0][0] - 64) < 1e-6,
+    'a litre display changed the gallons: ' + inL[0][0] + ' (the tracker is reading display units)');
+  assert(Math.abs(inL[0][1] - inGal[0][1]) < 1e-6,
+    'arrival gallons moved with the display unit: ' + inL[0][1] + ' vs ' + inGal[0][1]);
+  assert(Math.abs(inL[1][1] - inGal[1][1]) < 1e-6, 'sector 2 arrival moved with the display unit');
+  ev('aircraftProfile.fuelUnit = "GAL";');
+});
+
+T('the exact gallons and the printed figure describe the same fuel', () => {
+  // The display is a ROUNDED RENDERING of the tracker, not a rival computation
+  // of it - so they may differ only by the rounding the column does, which is
+  // at most 0.05 per row. Anything larger means a row was missed, or the
+  // tracker was fed a display figure.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const sectors = ev('ofpPrintModel.map(s => ({ arr: s.fuelGal.arr, rem: Number(s.meta.totals.rem), rows: s.rows.length }))');
+  let rowsSoFar = 0, worst = 0;
+  for (const s of sectors) {
+    rowsSoFar += s.rows;
+    const gap = Math.abs(s.arr - s.rem);
+    if (gap > worst) worst = gap;
+    assert(gap <= 0.05 * rowsSoFar + 1e-9,
+      'the exact gallons and the printed remaining disagree by more than the rounding can explain: ' +
+      s.arr + ' vs ' + s.rem + ' over ' + rowsSoFar + ' rows');
+  }
+  // M5: the bound above grows with the route, so pin what was actually
+  // measured on this fixture too - a regression that doubled the gap would
+  // otherwise still sit inside the bound.
+  assert(worst < 0.09, 'the measured gap on the seed mission grew: ' + worst);
+  assert(worst > 0.001, 'the gap is now zero, so the display has stopped rounding ' +
+    'or the two trackers have become the same number - either way this no longer ' +
+    'tests what it says (measured 0.0761 when written)');
+  assert(rowsSoFar >= 2, 'the fixture stopped producing rows to round');
+});
+
+T('fuel is continuous across a sector boundary, and a refuel sets it outright', () => {
+  // The one invariant a second tracker really needs: it cannot quietly lose
+  // or gain fuel between sectors.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const plain = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  assert(Math.abs(plain[1][0] - plain[0][1]) < 1e-9,
+    'with no stop, sector 2 must depart with exactly what sector 1 landed with: ' +
+    plain[1][0] + ' vs ' + plain[0][1]);
+  assert(plain[0][1] < plain[0][0], 'sector 1 burned nothing');
+
+  // A FULL STOP THAT REFUELS SETS THE FIGURE, it does not add to it (v16.57).
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const stopped = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  assert(Math.abs(stopped[1][0] - 50) < 1e-9,
+    'the refuel did not set the next sector\'s fuel to 50 gal: ' + stopped[1][0]);
+  assert(Math.abs(stopped[0][1] - plain[0][1]) < 1e-9,
+    'adding a stop changed what sector 1 landed with');
+  // And it is a REFUEL, not a carry-over: the fixture must actually differ.
+  assert(Math.abs(stopped[1][0] - stopped[0][1]) > 1,
+    'the fixture refuels to the figure it already had, so it proves nothing');
+});
+
+T('a touch & go burns its circuit fuel out of the exact tracker too', () => {
+  // 'touch-go' is the spelling STOP_KINDS accepts; anything else normalises to
+  // null and the stop silently does not exist, which is how the first version
+  // of this test reported a missing circuit burn that was never queued.
+  assert(moduleExports.anchors.STOP_KINDS.join(',') === 'touch-go,full-stop',
+    'the stop kinds moved: ' + moduleExports.anchors.STOP_KINDS.join(','));
+  const tg = SEED_STOP.replace('stop: "full-stop", stopMin: 10, fuelAfterGal: 50',
+                               'stop: "touch-go", stopMin: 10');
+  assert(tg !== SEED_STOP, 'the touch & go fixture did not substitute');
+  ev(tg);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const g = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  const ff = ev('Number(aircraftProfile.patternFf)');
+  const expect = g[0][1] - ff * (10 / 60);
+  assert(Math.abs(g[1][0] - expect) < 1e-9,
+    'the circuit burn between sectors is missing from the exact tracker: ' +
+    g[1][0] + ' against ' + expect);
+  assert(ff > 0, 'the pattern fuel flow is zero, so this test cannot discriminate');
+});
+
+T('an unreadable Initial Fuel stays ABSENT in gallons, though the column shows 0', () => {
+  // The v16.44 rule. The column has always shown 0 for an empty box and that
+  // is not being changed here - but a weight computed from a 0 would state an
+  // aircraft with empty tanks, where massBalanceProblems must say the fuel is
+  // not known.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '';
+  w.renderAllFlightTables();
+  const g = ev('ofpPrintModel.map(s => s.fuelGal.dep)');
+  assert(g.every((v) => !Number.isFinite(v)),
+    'an empty Initial Fuel box produced a finite gallon figure: ' + JSON.stringify(g));
+  // The COLUMN is unchanged and still numeric - it starts from 0 and goes
+  // negative, which is what it has always done and what the red banner exists
+  // to catch. This test is about the gallons behind it, not about that.
+  const shown = txtOf('f-tot-rem-0');
+  assert(/^-?\d+\.\d$/.test(shown), 'the displayed column is no longer a number: ' + shown);
+  assert(!/NaN/.test(shown), 'the absent gallons leaked into the display: ' + shown);
+  // And it really does reach the M&B finding rather than weighing empty tanks.
+  const MB = moduleExports.mb;
+  const m = MB.computeMissionMassBalance(MB.aircraftByReg('LN-TRB'),
+    { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 0 },
+    ev('ofpPrintModel.map(s => ({ fuelDepGal: s.fuelGal.dep, fuelArrGal: s.fuelGal.arr }))'));
+  assert(MB.massBalanceProblems(m).some((p) => /fuel on board is not known/.test(p)),
+    'the absent fuel did not reach the M&B findings');
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+});
+
+T('taxi fuel is inside the departure-to-arrival burn, which is what MTOW checks', () => {
+  // "Count taxi fuel in takeoff mass" (the author), and MTOW doubles as the
+  // ramp limit because of it. So the figure handed to M&B must be the fuel at
+  // ENGINE START, before the taxi is burned.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  // SET it rather than read whatever an earlier test left behind - the first
+  // run of this test reported "the profile has no taxi fuel" against correct
+  // code, because something upstream had zeroed it.
+  ev('aircraftProfile.taxiFuel = 1.7;');
+  w.renderAllFlightTables();
+  const taxi = ev('Number(aircraftProfile.taxiFuel)');
+  assert(taxi === 1.7, 'the taxi fuel did not take: ' + taxi);
+  const g = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  // Sector 1 departs with exactly what was typed - the taxi has NOT been
+  // taken off before engine start.
+  assert(Math.abs(g[0][0] - 64) < 1e-9, 'the taxi was charged before engine start: ' + g[0][0]);
+
+  // AND IT IS INSIDE THE BURN, measured by taking it away rather than by
+  // reaching into the schedule for a field name. The first version of this
+  // test summed `l.fuelGal` off the schedule legs, which do not carry that
+  // field, so `airborne` was 0 and a correct build failed by 4 gallons.
+  const burnWith = g[0][0] - g[0][1];
+  ev('aircraftProfile.taxiFuel = 0;');
+  w.renderAllFlightTables();
+  const g0 = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  const burnWithout = g0[0][0] - g0[0][1];
+  assert(Math.abs((burnWith - burnWithout) - taxi) < 1e-9,
+    'the taxi is not inside the sector burn: ' + burnWith + ' against ' + burnWithout +
+    ' for a taxi of ' + taxi);
+
+  // TAXI IS PER DEPARTURE, NOT PER MISSION (v16.54), and the exact tracker has
+  // to follow that too - a full stop shuts down and starts again.
+  ev('aircraftProfile.taxiFuel = 1.7;');
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const two = ev('ofpPrintModel.map(s => s.fuelGal.dep - s.fuelGal.arr)');
+  ev('aircraftProfile.taxiFuel = 0;');
+  w.renderAllFlightTables();
+  const two0 = ev('ofpPrintModel.map(s => s.fuelGal.dep - s.fuelGal.arr)');
+  const extra = (two[0] - two0[0]) + (two[1] - two0[1]);
+  assert(Math.abs(extra - 2 * 1.7) < 1e-9,
+    'a full stop did not re-arm the taxi in the exact tracker: ' + extra +
+    ' of taxi over two sectors, expected ' + (2 * 1.7));
+  ev('aircraftProfile.taxiFuel = 1.7;');
+});
+
+T('there is ONE fuel density, used in both directions', () => {
+  const F = moduleExports.fmt, MB = moduleExports.mb;
+  // convertFuel and toGallons must be exact inverses, or a round trip through
+  // the settings form silently reinterprets a number already written down.
+  for (const unit of ['GAL', 'LITERS', 'KG']) {
+    for (const gal of [0, 1, 12.5, 64, 87.3]) {
+      const back = F.toGallons(F.convertFuel(gal, unit), unit);
+      assert(Math.abs(back - gal) < 1e-9, 'round trip broken in ' + unit + ': ' + gal + ' -> ' + back);
+    }
+  }
+  // And the kilogram side is the M&B density, not a second rounding of it.
+  assert(Math.abs(F.convertFuel(1, 'KG') - MB.FUEL_KG_PER_GAL) < 1e-12,
+    'convertFuel does not use the M&B density: ' + F.convertFuel(1, 'KG'));
+  assert(Math.abs(F.convertFuel(64, 'KG') - 174.18) < 0.005,
+    '64 gal should weigh 174.2 kg at 6 lb/gal: ' + F.convertFuel(64, 'KG'));
+  // The page's own copy is gone, and with it the second constant.
+  assert(!/function toGal\s*\(/.test(APP_SRC), 'the page grew back its own toGal');
+  assert(!/\/\s*2\.72\b/.test(APP_SRC) && !/\*\s*2\.72\b/.test(APP_SRC),
+    'a literal 2.72 kg/gal is back in the app');
+});
+
+// THE QUEUED `TA` TESTS RUN AFTER EVERY `T`, so the last thing this block does
+// is put the shared fixture back. Without it the async plan-management tests
+// inherited the two-sector mission left here and reported "expected 3 flights,
+// got 4" - a failure in a test that has nothing to do with fuel, which is the
+// v16.89 lesson that a check mutating shared state is not free to sit anywhere.
+T('the Phase B block leaves the shared fixture as it found it', () => {
+  ev('aircraftProfile.fuelUnit = "GAL";');
+  doc.getElementById('fuel-dep').value = '64';
+  ev(SEED);
+  assert(ev('flights.length') === 1, 'the seed did not restore one flight');
+  assert(ev('aircraftProfile.fuelUnit') === 'GAL', 'the fuel unit was left in another unit');
+});
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');
