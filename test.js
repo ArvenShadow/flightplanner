@@ -2762,6 +2762,9 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const corridorModule = require('./src/lib/corridor.js');
   const skinsModule = require('./src/lib/skins.js');
   assert(skinsModule.normaliseSkin('menu') === 'menu', 'skins: a real skin was rejected');
+  const mbModule = require('./src/lib/massbalance.js');
+  assert(mbModule.aircraftByReg('ln-trb').emptyWeightLb === 2020.3,
+    'massbalance: LN-TRB did not come back from the fleet');
   const rhumbModule = require('./src/lib/rhumb.js');
   assert(rhumbModule.rhumbBearing(69, 18, 70, 18) === 0, 'rhumb: due north is not 000');
   // CALLED, not merely required: require() does not execute function bodies, so
@@ -2776,7 +2779,8 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
                     exch: exchModule, plot: plotModule, metar: metarModule,
                     airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
                     vac: require('./src/lib/vac.js'),
-                    keys: keysModule, corridor: corridorModule, rhumb: rhumbModule, skins: skinsModule };
+                    keys: keysModule, corridor: corridorModule, rhumb: rhumbModule, skins: skinsModule,
+                    mb: mbModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3013,6 +3017,18 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                            ff: 13, legBurn: 3.4, accBurn: 3.4, alt: 2500, mh: 58, gs: 120,
                            dist: 20, time: '00:08', eto: '', rem: 60 }),
                          M.ofp.buildOfpSheets({}, [])],
+    'massbalance.js': () => [M.mb.aircraftByReg('LN-TRE'),
+                            M.mb.emptyMass(M.mb.FLEET[0]),
+                            M.mb.armLimits(2600), M.mb.momentLimits(2600),
+                            M.mb.envelopePosition(2600, 38), M.mb.autopilotAllowed(2200, 35),
+                            M.mb.minFlightMinutes(3000), M.mb.vaKt(2600), M.mb.vGlideKt(2582.3),
+                            M.mb.computeMassBalance(M.mb.FLEET[1],
+                              { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 7.3, bagBLb: 0, bagCLb: 0.7 },
+                              64, 30, 'ENDU -> ENTC'),
+                            M.mb.computeMissionMassBalance(M.mb.FLEET[1],
+                              { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 0 },
+                              [{ fuelDepGal: 64, fuelArrGal: 30 }]),
+                            M.mb.massBalanceProblems(null), M.mb.massBalanceCautions(null)],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -6073,11 +6089,18 @@ T('the page builds the form from the SAME pass that renders the screen', () => {
   assert(/DEP/.test(host.textContent) && /Off block/.test(host.textContent),
     'the DEP/DEST block is missing');
 });
-T('the printed form carries no personal data, and no registration', () => {
-  // The form has CREW, PASSENGERS, PIC and Reg boxes. The planner holds none of
-  // that: crew are people and a tail number identifies a machine, so both stay
-  // empty boxes for the pen. PROFILE_KEYS must never grow to carry either.
+T('the printed form carries no personal data; the Reg box follows the tail', () => {
+  // UPDATED DELIBERATELY AT v16.95, not left to fail. The v16.41 rule kept the
+  // Reg box empty because the planner did not know which tail was flown - a
+  // premise that expired when M&B made one selectable. The author: "Aircraft
+  // registrations and their data can be stored. Theres no privacy issue
+  // there." So the MACHINE half moved and the PEOPLE half did not: CREW,
+  // PASSENGERS and PIC are still empty boxes for the pen, and PROFILE_KEYS
+  // still must not carry any of it (the reg lives in mbPrefs, which is never
+  // exported - see "the M&B inputs are stored, but never exported").
   ev(SEED);
+  ev('mbPrefs.reg = null;');
+  w.renderAllFlightTables();
   const host = doc.getElementById('ofp-print');
   const crew = host.querySelector('.ofp-crew');
   assert(crew, 'the crew block is missing from the form');
@@ -6087,6 +6110,21 @@ T('the printed form carries no personal data, and no registration', () => {
   const keys = moduleExports.exch.PROFILE_KEYS || [];
   for (const bad of ['reg', 'registration', 'tail', 'pic', 'crew', 'pilot'])
     assert(!keys.includes(bad), 'PROFILE_KEYS gained "' + bad + '"');
+  // With no tail chosen there is still nothing to read, exactly as before.
+  const regCell = () => {
+    const th = [...doc.querySelectorAll('#ofp-print th')].find((t) => /^Reg:?$/.test(t.textContent.trim()));
+    return th && th.nextElementSibling ? th.nextElementSibling.textContent.trim() : null;
+  };
+  assert(regCell() === '', 'the Reg box is not empty with no aircraft chosen: ' + regCell());
+  // Pick one and it is on the paperwork - the same tail page 2 weighed, or the
+  // one printout would name two different aircraft.
+  ev('mbPrefs.reg = "LN-TRC";');
+  w.renderAllFlightTables();
+  assert(regCell() === 'LN-TRC', 'the Reg box did not follow the tail: ' + regCell());
+  assert(/LN-TRC/.test(doc.getElementById('ofp-print').textContent),
+    'the M&B page does not name the same aircraft');
+  ev('mbPrefs.reg = null;');
+  w.renderAllFlightTables();
 });
 T('a leg lands in the right cells, and what we do not know stays EMPTY', () => {
   const F = moduleExports.ofp;
@@ -11017,6 +11055,1155 @@ T('the VAC overlay draws below everything the pilot touches', () => {
   assert(z('vacPane') < 400, 'the VAC is above the route line (overlayPane is 400)');
   assert(/getPane\('vacPane'\)\.style\.pointerEvents = 'none'/.test(APP_SRC),
     'the VAC pane takes pointer events - a click meant for the map could land on the image');
+});
+
+// =========================================================================
+// MASS & BALANCE (v16.93, roadmap item 5). The arithmetic is checked against
+// the school's own two sources, which agree with each other: the printed
+// form C182OFPMBv4.2.pdf and the live workbook OFP-C182.xlsx. Nothing here
+// is a round number someone liked - every figure asserted below is quoted
+// from one of those two, and where they are silent the module is too.
+// =========================================================================
+
+T('the M&B golden fixture reproduces the workbook cell for cell', () => {
+  const MB = moduleExports.mb;
+  // OFP!A2 = LN-TRB, D4 = 170, M8 = 64 gal, D8 = 7.3, D10 = 0.7, M3 = 34.0 gal.
+  const ac = MB.aircraftByReg('LN-TRB');
+  assert(ac !== null, 'LN-TRB is not in the fleet');
+  const st = { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 7.3, bagBLb: 0, bagCLb: 0.7 };
+  const r = MB.computeMassBalance(ac, st, 64, 64 - 34, 'ENDU -> ENTC');
+  const near = (got, want, tol, what) =>
+    assert(Math.abs(got - want) <= tol, what + ': ' + got + ' against the sheet\'s ' + want);
+  // OFP!D11 / G11, and E11 which the sheet ROUNDS to 0.1 - so the rounding is
+  // applied here rather than inside the module, which keeps all three arms
+  // computed the same way (see the note on point()).
+  near(r.takeoff.weightLb, 2582.3, 1e-9, 'D11 total take-off mass');
+  near(r.takeoff.momentInLb, 103700.6, 1e-6, 'G11 take-off moment');
+  near(Math.round(r.takeoff.armIn * 10) / 10, 40.2, 1e-9, 'E11 take-off arm');
+  // OFP!D14 / E14 / G14 - E14 is NOT rounded in the sheet, so this is the
+  // full-precision figure the workbook itself carries.
+  near(r.landing.weightLb, 2378.3, 1e-9, 'D14 total landing mass');
+  near(r.landing.armIn, 39.61426228818904, 1e-9, 'E14 landing arm');
+  near(r.landing.momentInLb, 94214.6, 1e-6, 'G14 landing moment');
+  // OFP!D15 / E15 / G15.
+  near(r.zeroFuel.weightLb, 2198.3, 1e-9, 'D15 zero fuel mass');
+  near(r.zeroFuel.armIn, 39.05044807351135, 1e-9, 'E15 zero fuel arm');
+  near(r.zeroFuel.momentInLb, 85844.6, 1e-6, 'G15 zero fuel moment');
+  // OFP!D7 = N8 = M8 * 6, and D12 = N3 = M3 * 6.
+  near(r.fuelDepGal * MB.FUEL_LB_PER_GAL, 384, 1e-9, 'D7 fuel on board in pounds');
+  near(r.burnGal * MB.FUEL_LB_PER_GAL, 204, 1e-9, 'D12 enroute fuel consumed in pounds');
+  // OFP!N13 (Min FLT) and S12 (Vglide) on this fixture.
+  assert(r.minFlightMin === 0, 'N13 should be zero below MLW: ' + r.minFlightMin);
+  assert(r.vGlideKt === 70, 'S12 Vglide: ' + r.vGlideKt);
+  // Every limit passes on the sheet's own example, or the fixture would be
+  // asserting the arithmetic through a failure path.
+  assert(r.checks.takeoffWeight === 'ok' && r.checks.landingWeight === 'ok' &&
+    r.checks.takeoffCg === 'ok' && r.checks.landingCg === 'ok' &&
+    r.checks.zeroFuelCg === 'ok', 'the sheet\'s own example does not pass: ' +
+    JSON.stringify(r.checks));
+});
+
+T('the fleet is the published one, and it names no person', () => {
+  const MB = moduleExports.mb;
+  // 'AC REG'!A3:D7, corroborated figure for figure by the table printed on
+  // page 2 of the form. Both sources, ten numbers, no disagreement.
+  const want = [
+    ['LN-TRA', 1993.6, 75870.2, 0], ['LN-TRB', 2020.3, 78756.2, 0],
+    ['LN-TRC', 2031.1, 77121.6, 0], ['LN-TRD', 2024.5, 76587.7, 0],
+    ['LN-TRE', 2038.5, 78989.1, 22.7]
+  ];
+  assert(MB.FLEET.length === want.length, 'the fleet size moved: ' + MB.FLEET.length);
+  want.forEach((w, i) => {
+    const a = MB.FLEET[i];
+    assert(a.reg === w[0] && a.emptyWeightLb === w[1] && a.emptyMomentInLb === w[2] &&
+      a.fixedExtraLb === w[3], 'fleet row ' + i + ' differs from the sheet: ' + JSON.stringify(a));
+  });
+  // The workbook's document properties carry an author. A registration is a
+  // machine, which the user has cleared; a name is not, and must never ride in.
+  const json = JSON.stringify({ fleet: MB.FLEET, source: MB.FLEET_SOURCE });
+  assert(!/Rockstad|Ole Markus/i.test(json), 'a person is named in the M&B dataset');
+  assert(MB.FLEET_SOURCE.versionDate === '10.08.2026',
+    'the version date does not match the one printed on the form: ' + MB.FLEET_SOURCE.versionDate);
+});
+
+T('LN-TRE carries its compartment B structure; nobody else does', () => {
+  const MB = moduleExports.mb;
+  // The user: "LNTRE is the only A/C where compartment B is not included in
+  // the total mass/arm". So 22.7 lb at the compartment B arm is part of the
+  // AIRFRAME and is in the empty mass before any load is added - which is what
+  // the workbook does with its VLOOKUP into the Baggage Area B row.
+  const tre = MB.emptyMass(MB.aircraftByReg('LN-TRE'));
+  assert(Math.abs(tre.weightLb - (2038.5 + 22.7)) < 1e-9, 'TRE empty weight: ' + tre.weightLb);
+  assert(Math.abs(tre.momentInLb - (78989.1 + 22.7 * MB.STATION_ARMS.bagBLb)) < 1e-6,
+    'TRE extra is not at the compartment B arm: ' + tre.momentInLb);
+  for (const a of MB.FLEET) {
+    if (a.reg === 'LN-TRE') continue;
+    const e = MB.emptyMass(a);
+    assert(e.weightLb === a.emptyWeightLb && e.momentInLb === a.emptyMomentInLb,
+      a.reg + ' gained an extra it does not publish');
+  }
+  // And it is NOT baggage: loading nothing still leaves it there.
+  const zero = { pilotLb: 0, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 0 };
+  const r = MB.computeMassBalance(MB.aircraftByReg('LN-TRE'), zero, 0, 0);
+  assert(Math.abs(r.zeroFuel.weightLb - tre.weightLb) < 1e-9,
+    'an unloaded LN-TRE lost its compartment B structure');
+});
+
+T('the CG envelope is the workbook\'s, and it is CONVEX', () => {
+  const MB = moduleExports.mb;
+  // Performance!Q1:R8, the block the workbook itself labels USED FOR CG CALCS.
+  const want = [[33, 1800], [33, 2225], [35.8, 2700], [41, 3100], [46, 3100], [46, 1800]];
+  assert(JSON.stringify(MB.CG_ENVELOPE) === JSON.stringify(want),
+    'the envelope moved: ' + JSON.stringify(MB.CG_ENVELOPE));
+  // CONVEXITY IS NOT DECORATION - it is what makes checking only the take-off
+  // and landing points sufficient. Every turn must go the same way.
+  const ring = MB.CG_ENVELOPE, n = ring.length;
+  let signs = 0;
+  for (let i = 0; i < n; i++) {
+    const a = ring[i], b = ring[(i + 1) % n], c = ring[(i + 2) % n];
+    const z = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    assert(z !== 0, 'vertex ' + ((i + 1) % n) + ' is collinear - a wasted vertex');
+    signs += z > 0 ? 1 : -1;
+  }
+  assert(Math.abs(signs) === n, 'the envelope is NOT convex - the endpoint check ' +
+    'in computeMassBalance is only valid on a convex envelope');
+});
+
+T('the envelope is convex in MOMENT-weight space, which is where fuel burns', () => {
+  const MB = moduleExports.mb;
+  // Burning fuel is a STRAIGHT LINE in (moment, weight): weight falls one
+  // pound per pound, moment falls FUEL_ARM_IN per pound. So the space that
+  // matters for "are the endpoints enough" is this one, not (arm, weight) -
+  // and the map between them is not affine, so the previous test does not
+  // imply this one. The forward boundary must be CONVEX and the aft CONCAVE.
+  const step = 0.5, lo = 1800, hi = 3100;
+  /** @type {number[]} */ const fwd = []; /** @type {number[]} */ const aft = [];
+  for (let w = lo; w <= hi + 1e-9; w += step) {
+    const m = MB.momentLimits(w);
+    assert(m !== null, 'no moment limits at ' + w + ' lb, inside the envelope\'s own range');
+    fwd.push(m.minInLb); aft.push(m.maxInLb);
+  }
+  let curvedFwd = 0;
+  for (let i = 1; i < fwd.length - 1; i++) {
+    const d2f = fwd[i + 1] - 2 * fwd[i] + fwd[i - 1];
+    const d2a = aft[i + 1] - 2 * aft[i] + aft[i - 1];
+    assert(d2f >= -1e-6, 'the forward moment boundary bends the wrong way at ' +
+      (lo + i * step) + ' lb (' + d2f + ')');
+    assert(d2a <= 1e-6, 'the aft moment boundary bends the wrong way at ' +
+      (lo + i * step) + ' lb (' + d2a + ')');
+    if (d2f > 1e-6) curvedFwd++;
+  }
+  // If the forward boundary were straight everywhere, "convex" would be true
+  // and would have proved nothing about the shape the argument relies on.
+  assert(curvedFwd > 0, 'the forward boundary is straight throughout - this test ' +
+    'is passing vacuously');
+  // The aft boundary is the constant arm 46, so moment = 46 * weight exactly.
+  assert(Math.abs(aft[0] - 46 * lo) < 1e-6 && Math.abs(aft[aft.length - 1] - 46 * hi) < 1e-6,
+    'the aft boundary is no longer the constant arm 46');
+});
+
+T('the whole fuel-burn path stays inside, not just its two ends', () => {
+  const MB = moduleExports.mb;
+  // The convexity above says this must hold. This is the behavioural half:
+  // start from every legal take-off point across the WHOLE envelope, burn a
+  // real amount of fuel, and look at every weight in between.
+  //
+  // WALKING THE TAKE-OFF POINT, NOT A ZERO-FUEL GRID, and that is what makes
+  // this discriminating. A fuel path has a fixed slope of FUEL_ARM_IN in
+  // (moment, weight), so it can only leave through the forward boundary where
+  // the boundary's OWN slope brackets 46.5 - which on this envelope is across
+  // the 2225 lb vertex, where it goes 33.00 -> 46.12. A grid that never puts
+  // an endpoint near that vertex sweeps hundreds of thousands of paths and
+  // proves nothing about the shape: measured, a version of this test that
+  // started from zero-fuel weights found 0 violations against an envelope
+  // deliberately dented AT that vertex.
+  const SAMPLES = 50;
+  const wStep = Math.max(1, Math.round(10 / SWEEP_N));
+  const aStep = 0.2 / SWEEP_N;
+  let pairs = 0, violations = 0, longest = 0, nearVertex = 0;
+  for (let w0 = 1800; w0 <= 3100; w0 += wStep) {
+    const l0 = MB.armLimits(w0);
+    if (!l0) continue;
+    for (let a0 = l0.fwdIn; a0 <= l0.aftIn + 1e-9; a0 += aStep) {
+      const m0 = a0 * w0;
+      for (const burnLb of [30, 60, 120, 200, 300, 400, 500, 600]) {
+        const w1 = w0 - burnLb;
+        if (w1 < 1800) continue;
+        const m1 = m0 - burnLb * MB.FUEL_ARM_IN;
+        if (MB.envelopePosition(w1, m1 / w1) !== 'ok') continue;
+        pairs++;
+        if (burnLb > longest) longest = burnLb;
+        if (w1 <= 2225 && w0 >= 2225) nearVertex++;
+        for (let k = 1; k < SAMPLES; k++) {
+          const t = k / SAMPLES;
+          const w = w0 + (w1 - w0) * t, m = m0 + (m1 - m0) * t;
+          if (MB.envelopePosition(w, m / w) !== 'ok') violations++;
+        }
+      }
+    }
+  }
+  assert(violations === 0, violations + ' points on a fuel-burn path left the ' +
+    'envelope although both ends were inside - the endpoint check in ' +
+    'computeMassBalance is not sufficient');
+  // M5: assert what the sweep actually measured. A sweep that stopped
+  // generating legal pairs, or stopped crossing the one vertex where a path
+  // CAN exit, would otherwise pass by finding nothing to check.
+  assert(pairs > 20000, 'the sweep only found ' + pairs + ' legal endpoint pairs');
+  assert(nearVertex > 1000, 'only ' + nearVertex + ' paths cross the 2225 lb vertex, ' +
+    'which is the only place a fuel path can leave this envelope');
+  assert(longest === 600, 'the longest burn swept was ' + longest + ' lb');
+  // And the sampler discriminates: move one end out and it says so.
+  assert(MB.envelopePosition(2600, 32.5) === 'fwd' &&
+    MB.envelopePosition(2600, 46.5) === 'aft' &&
+    MB.envelopePosition(3200, 40) === 'weight',
+    'envelopePosition is not actually evaluating anything');
+});
+
+T('the arm limits reproduce the workbook\'s separately drawn MLW line', () => {
+  const MB = moduleExports.mb;
+  // Performance!W1:X3 draws the MLW line as arm 39 -> 46 at 2950 lb. That is a
+  // DIFFERENT block of the sheet from the envelope, so if the envelope were
+  // mistranscribed the two would disagree. They do not: the envelope's own
+  // width at 2950 lb is 39.05 to 46.00.
+  const lim = MB.armLimits(MB.MLW_LB);
+  assert(lim !== null, 'no limits at MLW');
+  assert(Math.abs(lim.fwdIn - 39.05) < 0.005, 'forward limit at MLW: ' + lim.fwdIn);
+  assert(lim.aftIn === 46, 'aft limit at MLW: ' + lim.aftIn);
+  // Boundaries are inclusive - a published limit is a value you may load to.
+  assert(MB.envelopePosition(2950, 39.05) === 'ok', 'the forward limit itself is refused');
+  assert(MB.envelopePosition(2950, 46) === 'ok', 'the aft limit itself is refused');
+  // Outside the envelope's weight range there is no limit to state.
+  assert(MB.armLimits(1700) === null && MB.armLimits(3200) === null,
+    'limits are being stated for weights the envelope does not cover');
+  assert(MB.armLimits(NaN) === null, 'a missing weight produced limits');
+});
+
+T('Va comes from the POH table, not the sheet\'s linear formula', () => {
+  const MB = moduleExports.mb;
+  // The table is printed on the form AND in Performance!R7:S9. The workbook's
+  // own formula =110-(((3100-D14)*9)/500) is exact at 3100 and 2600 and gives
+  // 92 at 2100, where the table says 91 - one knot HIGH at the light end,
+  // which is the unsafe direction. The user's instruction: use the table.
+  const linear = (w) => 110 - ((3100 - w) * 9) / 500;
+  assert(MB.vaKt(3100) === 110, 'Va at 3100: ' + MB.vaKt(3100));
+  assert(MB.vaKt(2600) === 101, 'Va at 2600: ' + MB.vaKt(2600));
+  assert(MB.vaKt(2100) === 91, 'Va at 2100: ' + MB.vaKt(2100));
+  assert(Math.round(linear(2100)) === 92, 'the sheet formula no longer disagrees at 2100 - ' +
+    'this test has stopped discriminating between the two');
+  // Between the rows it interpolates in the table, so it must NOT match the
+  // straight line through the end points.
+  const mid = MB.vaKt(2378.3);
+  assert(Math.abs(mid - 96.566) < 0.001, 'Va at the fixture\'s landing mass: ' + mid);
+  assert(Math.abs(mid - linear(2378.3)) > 0.4, 'Va is tracking the sheet formula, not the table');
+  // Below the table it refuses rather than extrapolating a speed a pilot would fly.
+  assert(MB.vaKt(2099) === null, 'Va was invented below the table: ' + MB.vaKt(2099));
+  assert(MB.vaKt(3200) === 110, 'Va above MTOW should clamp to the table top');
+});
+
+T('Min FLT reproduces OFP!N13 at 12 gal/h', () => {
+  const MB = moduleExports.mb;
+  assert(MB.MIN_FLIGHT_GPH === 12, 'the Min FLT rate moved: ' + MB.MIN_FLIGHT_GPH);
+  assert(MB.minFlightMinutes(2950) === 0, 'at MLW exactly, nothing must be burned off');
+  assert(MB.minFlightMinutes(2400) === 0, 'below MLW, nothing must be burned off');
+  // =IF((D11>2950),((D11-2950)/6)/P4/24,0), expressed in minutes rather than
+  // Excel's day fraction.
+  const w = 3100;
+  const want = ((w - 2950) / MB.FUEL_LB_PER_GAL) / 12 * 60;
+  assert(Math.abs(MB.minFlightMinutes(w) - want) < 1e-9,
+    'Min FLT at MTOW: ' + MB.minFlightMinutes(w) + ' against ' + want);
+  assert(Math.abs(want - 125) < 1e-9, 'the worked figure moved: ' + want);
+  // 150 lb over MLW is 25 gal, and 25 gal at 12 gal/h is 2 h 05 - which is a
+  // long time to be told to stay airborne, and exactly why the figure is shown.
+});
+
+T('there is ONE fuel density, and the kilogram figure is derived from it', () => {
+  const MB = moduleExports.mb;
+  // The workbook's =M8*6 and the user's answer: 6 lb/gal at standard temperature.
+  assert(MB.FUEL_LB_PER_GAL === 6.0, 'the density moved: ' + MB.FUEL_LB_PER_GAL);
+  // Derived, not carried separately - two roundings are two things that drift.
+  assert(Math.abs(MB.FUEL_KG_PER_GAL - 6 / 2.20462262184878) < 1e-12,
+    'the kilogram figure is not derived from the pound figure');
+  assert(Math.abs(MB.FUEL_KG_PER_GAL - 2.72155) < 0.00001,
+    'kg per gallon: ' + MB.FUEL_KG_PER_GAL);
+});
+
+T('MLW is checked at EVERY landing, not just the last one', () => {
+  const MB = moduleExports.mb;
+  // The user: "Check the landing weight / t&g weight for every stop to ensure
+  // we're within limits (2950lbs)". A mid-mission refuel can make an EARLIER
+  // arrival the heavy one, so a master that looked only at the final arrival
+  // would report a legal mission that is not.
+  const ac = MB.aircraftByReg('LN-TRB');
+  const st = { pilotLb: 400, rightLb: 200, rearLb: 200, bagALb: 40, bagBLb: 0, bagCLb: 0 };
+  const m = MB.computeMissionMassBalance(ac, st, [
+    { fuelDepGal: 40, fuelArrGal: 32, label: 'ENDU -> ENTC' },   // heavy arrival
+    { fuelDepGal: 10, fuelArrGal: 4, label: 'ENTC -> ENEV' }     // light arrival
+  ]);
+  assert(m.sectors.length === 2, 'the mission lost a sector');
+  assert(m.last.checks.landingWeight === 'ok',
+    'the fixture no longer ends light - it cannot discriminate');
+  assert(m.sectors[0].checks.landingWeight === 'over',
+    'the heavy intermediate arrival was not flagged: ' + m.sectors[0].landing.weightLb);
+  assert(m.worstLanding === m.sectors[0], 'worstLanding is not the heaviest arrival');
+  const probs = MB.massBalanceProblems(m);
+  assert(probs.some(p => /ENDU -> ENTC/.test(p) && /landing mass/.test(p)),
+    'the banner does not name the sector and the finding: ' + JSON.stringify(probs));
+});
+
+T('a master M&B walks the sectors; it does not subtract a total', () => {
+  const MB = moduleExports.mb;
+  // With a refuel at a full stop the landing weight is NOT the take-off weight
+  // less the trip burn. A master computed that way prints a weight the
+  // aircraft never has.
+  const ac = MB.aircraftByReg('LN-TRB');
+  const st = { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 0 };
+  const m = MB.computeMissionMassBalance(ac, st, [
+    { fuelDepGal: 40, fuelArrGal: 20 },
+    { fuelDepGal: 60, fuelArrGal: 45 }   // refuelled to 60 on the ground
+  ]);
+  const totalBurn = m.sectors.reduce((a, s) => a + s.burnGal, 0);
+  const naive = m.first.takeoff.weightLb - totalBurn * MB.FUEL_LB_PER_GAL;
+  assert(Math.abs(m.last.landing.weightLb - naive) > 100,
+    'the fixture has no refuel in it, so it cannot tell the two apart');
+  assert(Math.abs(m.last.landing.weightLb -
+    (m.zeroFuel.weightLb + 45 * MB.FUEL_LB_PER_GAL)) < 1e-9,
+    'the final landing weight is not the last sector\'s own arrival fuel');
+});
+
+T('a missing figure is a finding, never a zero', () => {
+  const MB = moduleExports.mb;
+  const ac = MB.aircraftByReg('LN-TRB');
+  const st = { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 0 };
+  // An absent fuel figure must not be read as an empty tank.
+  const m = MB.computeMissionMassBalance(ac, st, [{ fuelDepGal: NaN, fuelArrGal: 20 }]);
+  assert(!Number.isFinite(m.sectors[0].takeoff.weightLb),
+    'an unknown fuel load produced a take-off weight anyway: ' + m.sectors[0].takeoff.weightLb);
+  const probs = MB.massBalanceProblems(m);
+  assert(probs.some(p => /fuel on board is not known/.test(p)),
+    'the missing fuel was not reported: ' + JSON.stringify(probs));
+  assert(MB.envelopePosition(NaN, 40) === 'unknown' && MB.envelopePosition(2500, null) === 'unknown',
+    'a missing figure got a verdict');
+  // No aircraft at all is a finding too, not a silent empty sheet.
+  assert(MB.massBalanceProblems(null).length === 1, 'no aircraft produced no finding');
+  assert(MB.aircraftByReg('LN-TRZ') === null && MB.aircraftByReg(null) === null,
+    'an unknown registration resolved to something');
+});
+
+T('no maximum baggage weight is claimed, and the absence is stated', () => {
+  const MB = moduleExports.mb;
+  // Neither the form nor the workbook prints one. Inventing 200 lb from
+  // general C182 knowledge would read as a checked limit and be a guess.
+  assert(MB.BAGGAGE_MAX_LB === null, 'a baggage limit appeared from somewhere');
+  const ac = MB.aircraftByReg('LN-TRB');
+  const st = { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 300, bagBLb: 0, bagCLb: 0 };
+  const m = MB.computeMissionMassBalance(ac, st, [{ fuelDepGal: 30, fuelArrGal: 10 }]);
+  const cautions = MB.massBalanceCautions(m);
+  assert(cautions.some(c => /baggage limit is NOT checked/.test(c)),
+    'the absent baggage check is not declared: ' + JSON.stringify(cautions));
+  // A caution is not a DO-NOT-USE finding, and the two lists must stay apart.
+  assert(!MB.massBalanceProblems(m).some(p => /baggage/i.test(p)),
+    'the baggage caution leaked into the banner\'s findings');
+});
+
+T('one fault is reported once, and the autopilot line is a caution', () => {
+  const MB = moduleExports.mb;
+  const ac = MB.aircraftByReg('LN-TRB');
+  // Over MTOW: the envelope's ceiling IS 3100, so the point is outside the
+  // envelope as well as over weight. That is one fault, not two.
+  const heavy = { pilotLb: 400, rightLb: 250, rearLb: 300, bagALb: 100, bagBLb: 0, bagCLb: 0 };
+  const m = MB.computeMissionMassBalance(ac, heavy, [{ fuelDepGal: 64, fuelArrGal: 40 }]);
+  const probs = MB.massBalanceProblems(m);
+  assert(probs.some(p => /take-off mass/.test(p) && /3100/.test(p)),
+    'over MTOW was not reported: ' + JSON.stringify(probs));
+  assert(!probs.some(p => /take-off CG/.test(p)),
+    'the same fault was reported twice, as weight and as CG: ' + JSON.stringify(probs));
+  // The autopilot limit is read off a two-point line in the workbook, so it is
+  // a caution naming its source - never an out-of-limits finding.
+  assert(MB.AUTOPILOT_MIN_ARM_IN === 34 && MB.AUTOPILOT_LIMIT_MAX_LB === 2400,
+    'the autopilot line moved');
+  assert(MB.autopilotAllowed(2200, 33.5) === false, 'forward of 34 in at 2200 lb is allowed');
+  assert(MB.autopilotAllowed(2200, 34) === true, 'the limit itself is refused');
+  assert(MB.autopilotAllowed(2600, 33.5) === true,
+    'the autopilot limit is being applied above the weight the line is drawn to');
+  // It stops at 2400 lb because that is where the STANDARD forward limit
+  // reaches 34 in - which is why reading the line that way is an inference
+  // from the data rather than a guess about intent.
+  const at2400 = MB.armLimits(MB.AUTOPILOT_LIMIT_MAX_LB);
+  assert(Math.abs(at2400.fwdIn - MB.AUTOPILOT_MIN_ARM_IN) < 0.05,
+    'the standard forward limit at 2400 lb is ' + at2400.fwdIn +
+    ', so the autopilot line no longer ends where the two meet');
+});
+
+T('every CG finding names the sector, the figure and the limit', () => {
+  const MB = moduleExports.mb;
+  // The v16.20 rule: "a non-numeric value appeared" is not something a pilot
+  // can act on. Each message must carry enough to fix the load.
+  //
+  // THE FIXTURE IS TAIL-HEAVY, BECAUSE NOSE-HEAVY IS NOT REACHABLE ON THIS
+  // FLEET and a test has to exercise a case that can happen. Measured over
+  // all five aircraft with up to 500 lb in the front seats (the only station
+  // forward of the empty arm), the closest any of them gets to the forward
+  // limit is LN-TRD at 37.67 in against a limit of 34.77 - 2.9 in of margin.
+  // Every other station is at 74 in or further aft. So the forward branch is
+  // exercised below against a HYPOTHETICAL airframe instead, and said to be
+  // hypothetical rather than dressed up as a fleet case.
+  const ac = MB.aircraftByReg('LN-TRB');
+  const aft = { pilotLb: 0, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 220 };
+  const m = MB.computeMissionMassBalance(ac, aft, [{ fuelDepGal: 5, fuelArrGal: 1, label: 'ENDU -> ENTC' }]);
+  assert(m.sectors[0].checks.zeroFuelCg === 'aft',
+    'the fixture is no longer tail-heavy: ' + JSON.stringify(m.sectors[0].checks));
+  const p = MB.massBalanceProblems(m).find(x => /zero-fuel CG/.test(x));
+  assert(p, 'the aft CG was not reported');
+  assert(/ENDU -> ENTC/.test(p), 'the finding does not name the sector: ' + p);
+  assert(/aft of the aft limit/.test(p), 'the finding does not say which way: ' + p);
+  assert(/\d+\.\d in/.test(p) && /\d+\.\d lb/.test(p), 'the finding carries no figures: ' + p);
+  assert(/ 46\.0 in/.test(p), 'the finding does not quote the limit it broke: ' + p);
+
+  // The forward wording, on an airframe that does not exist - the only way to
+  // reach that branch, and the comment above says why.
+  const hypothetical = { reg: 'LN-TEST', emptyWeightLb: 2000, emptyMomentInLb: 2000 * 32,
+                         fixedExtraLb: 0 };
+  const fm = MB.computeMissionMassBalance(hypothetical,
+    { pilotLb: 200, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 0 },
+    [{ fuelDepGal: 5, fuelArrGal: 1, label: 'test' }]);
+  const fp = MB.massBalanceProblems(fm).find(x => /take-off CG/.test(x));
+  assert(fp && /forward of the forward limit/.test(fp),
+    'the forward branch produces no finding: ' + JSON.stringify(MB.massBalanceProblems(fm)));
+});
+
+// The POH takeoff tables are DATA ONLY at this point - nothing in the app
+// reads them. They are guarded anyway, because the thing that makes them
+// trustworthy is an agreement between two INDEPENDENT transcriptions of the
+// same POH, and an agreement nobody checks is an agreement that drifts.
+//
+// THE FIRST VERSION OF THIS TEST DID NOT OPEN THE WORKBOOK AT ALL. Its comment
+// claimed the 90-cell agreement was asserted; it only checked the snapshot
+// against itself and passed. That is the v16.88 vacuous-comparison failure
+// exactly - a comparison against a value that is not there proves nothing in
+// either direction - and the fix is to read the real file, which needs no
+// dependency: an .xlsx is a ZIP of XML and zlib is built in.
+function xlsxSheet(file, sheetName) {
+  const fs = require('fs'), zlib = require('zlib');
+  const buf = fs.readFileSync(file);
+  const entry = (name) => {
+    let i = 0;
+    while (i < buf.length - 4) {
+      if (buf.readUInt32LE(i) !== 0x04034b50) { i++; continue; }
+      const method = buf.readUInt16LE(i + 8), compSize = buf.readUInt32LE(i + 18);
+      const nameLen = buf.readUInt16LE(i + 26), extraLen = buf.readUInt16LE(i + 28);
+      const fname = buf.slice(i + 30, i + 30 + nameLen).toString('latin1');
+      const dataAt = i + 30 + nameLen + extraLen;
+      if (fname === name) {
+        const d = buf.slice(dataAt, dataAt + compSize);
+        return method === 0 ? d : zlib.inflateRawSync(d);
+      }
+      i = dataAt + (compSize || 1);
+    }
+    return null;
+  };
+  // Resolve the sheet by NAME through the relationships, never by guessing
+  // sheet2.xml - the file order is not the tab order and a re-save can move it.
+  const wbXml = entry('xl/workbook.xml').toString('utf8');
+  const sheet = new RegExp('<sheet name="' + sheetName + '"[^>]*r:id="([^"]+)"').exec(wbXml);
+  assert(sheet, 'the workbook has no sheet named ' + sheetName);
+  const rels = entry('xl/_rels/workbook.xml.rels').toString('utf8');
+  const target = new RegExp('Id="' + sheet[1] + '"[^>]*Target="([^"]+)"').exec(rels);
+  assert(target, 'no relationship for ' + sheet[1]);
+  const xml = entry('xl/' + target[1].replace(/^\/?xl\//, '')).toString('utf8');
+  /** @type {Record<string, number>} */
+  const cells = {};
+  // Numeric cells only: a shared string carries t="s" and we want none of them.
+  for (const m of xml.matchAll(/<c r="([A-Z]+\d+)"(?![^>]*t="s")[^>]*>\s*<v>([^<]*)<\/v>/g)) {
+    cells[m[1]] = Number(m[2]);
+  }
+  return cells;
+}
+
+T('the POH takeoff tables agree with the workbook, cell for cell', () => {
+  const poh = JSON.parse(require('fs').readFileSync('./tools/prepared/poh-takeoff.json', 'utf8'));
+  const temps = poh.temperaturesC;
+  assert(JSON.stringify(temps) === '[0,10,20,30,40]', 'the temperature axis moved');
+  assert(JSON.stringify(poh.weightsLb) === '[2300,2700,3100]', 'the weight axis moved');
+  assert(JSON.stringify(poh.pressureAltitudesFt) === '[0,1000,2000,3000,4000,5000,6000,7000,8000]',
+    'the pressure-altitude axis moved');
+
+  // THE REAL CROSS-CHECK. Performance!A:D was transcribed by the author from
+  // the same POH pages, independently of the screenshots this snapshot was read
+  // from, and covers PA 0-5000. Every one of those cells must agree exactly -
+  // that is what makes the 6000/7000/8000 rows, which exist ONLY here,
+  // trustworthy read by the same method.
+  const cells = xlsxSheet('./OFP-C182.xlsx', 'Performance');
+  let checked = 0, maxPa = 0;
+  for (let r = 2; r <= 91; r++) {
+    const w = cells['A' + r], pa = cells['B' + r], t = cells['C' + r], d = cells['D' + r];
+    assert(Number.isFinite(w) && Number.isFinite(pa) && Number.isFinite(t) && Number.isFinite(d),
+      'the workbook row ' + r + ' is not four numbers - has Performance!A:D moved?');
+    const col = poh.table[String(w)] && poh.table[String(w)][String(pa)];
+    assert(col, 'the POH snapshot has no ' + w + ' lb / ' + pa + ' ft row');
+    const cell = col[temps.indexOf(t)];
+    assert(Array.isArray(cell), 'no POH cell at ' + w + '/' + pa + '/' + t);
+    assert(cell[1] === d, 'POH and workbook disagree at ' + w + ' lb / ' + pa +
+      ' ft / ' + t + ' C: snapshot ' + cell[1] + ', workbook ' + d);
+    assert(cell[1] > cell[0], 'the 50 ft distance is not longer than the ground roll at ' +
+      w + '/' + pa + '/' + t + ': ' + JSON.stringify(cell));
+    checked++;
+    if (pa > maxPa) maxPa = pa;
+  }
+  // M5: assert what the cross-check actually covered. A workbook re-saved with
+  // fewer rows would otherwise shrink the overlap silently.
+  assert(checked === 90, 'the overlap with the workbook is no longer 90 cells: ' + checked);
+  assert(maxPa === 5000, 'the workbook now reaches ' + maxPa +
+    ' ft, so it is no longer the SHORT side of this comparison');
+  assert(poh.pressureAltitudesFt[poh.pressureAltitudesFt.length - 1] === 8000,
+    'the POH table no longer reaches 8000 ft, so there is nothing the workbook is short of');
+
+  // A DELETED CELL IS A REFUSAL, NOT MISSING DATA. The POH prints "---" and
+  // says why: climb after lift-off is below 150 fpm. Exactly three cells, all
+  // at 3100 lb, and they must stay null - a future interpolator that filled
+  // them in would state a distance the manufacturer declines to certify.
+  const deleted = [];
+  for (const w of poh.weightsLb) {
+    for (const pa of poh.pressureAltitudesFt) {
+      poh.table[String(w)][String(pa)].forEach((c, i) => {
+        if (c === null) deleted.push(w + '/' + pa + '/' + temps[i]);
+      });
+    }
+  }
+  assert(deleted.join(',') === '3100/7000/40,3100/8000/30,3100/8000/40',
+    'the deleted cells moved: ' + deleted.join(','));
+  assert(/150 FPM/i.test(poh.deletedCellMeaning), 'the reason for a deleted cell is not recorded');
+
+  // Monotonic in both directions the physics demands - an independent way a
+  // misread digit shows up, and it covers the rows the workbook cannot check.
+  for (const w of poh.weightsLb) {
+    for (const pa of poh.pressureAltitudesFt) {
+      const row = poh.table[String(w)][String(pa)];
+      for (let i = 1; i < row.length; i++) {
+        if (!row[i] || !row[i - 1]) continue;
+        assert(row[i][1] > row[i - 1][1], 'distance does not increase with temperature at ' +
+          w + '/' + pa + ': ' + row[i - 1][1] + ' -> ' + row[i][1]);
+      }
+    }
+    for (let k = 1; k < poh.pressureAltitudesFt.length; k++) {
+      const lo = poh.table[String(w)][String(poh.pressureAltitudesFt[k - 1])];
+      const hi = poh.table[String(w)][String(poh.pressureAltitudesFt[k])];
+      for (let i = 0; i < temps.length; i++) {
+        if (!lo[i] || !hi[i]) continue;
+        assert(hi[i][1] > lo[i][1], 'distance does not increase with pressure altitude at ' +
+          w + ' lb / ' + temps[i] + ' C');
+      }
+    }
+  }
+  // And heavier is always longer, at every shared condition.
+  for (const pa of poh.pressureAltitudesFt) {
+    for (let i = 0; i < temps.length; i++) {
+      const a = poh.table['2300'][String(pa)][i], b = poh.table['2700'][String(pa)][i],
+            c = poh.table['3100'][String(pa)][i];
+      if (a && b) assert(b[1] > a[1], 'heavier is not longer at ' + pa + '/' + temps[i]);
+      if (b && c) assert(c[1] > b[1], 'heavier is not longer at ' + pa + '/' + temps[i]);
+    }
+  }
+});
+
+T('the POH landing table agrees with the workbook, and carries ONE weight', () => {
+  const ldg = JSON.parse(require('fs').readFileSync('./tools/prepared/poh-landing.json', 'utf8'));
+  const temps = ldg.temperaturesC;
+  assert(JSON.stringify(temps) === '[0,10,20,30,40]', 'the temperature axis moved');
+  assert(JSON.stringify(ldg.pressureAltitudesFt) === '[0,1000,2000,3000,4000,5000,6000,7000,8000]',
+    'the pressure-altitude axis moved');
+
+  // ONE WEIGHT, AND IT IS MLW. This is not a weight axis with a single row -
+  // the POH publishes the landing distance at 2950 lb only. A future
+  // interpolator must never scale it by weight; a lighter aeroplane lands
+  // SHORTER, so the 2950 figure errs long for any legal landing weight, which
+  // is the safe direction and is why one table suffices.
+  assert(ldg.weightLb === 2950, 'the landing table weight moved: ' + ldg.weightLb);
+  assert(ldg.weightIsMaximumLanding === true, 'the table no longer declares itself to be at MLW');
+  assert(!('weightsLb' in ldg) && !Array.isArray(ldg.weightLb),
+    'the landing table has grown a weight axis the POH does not publish');
+  // Third independent statement of MLW, after the drawn line and the author's own.
+  assert(ldg.weightLb === moduleExports.mb.MLW_LB,
+    'the POH landing table is published at ' + ldg.weightLb +
+    ' lb but massbalance.js uses ' + moduleExports.mb.MLW_LB + ' lb as MLW');
+
+  // THE REAL CROSS-CHECK, against the workbook's own Performance!F:H.
+  const cells = xlsxSheet('./OFP-C182.xlsx', 'Performance');
+  let checked = 0, maxPa = 0;
+  for (let r = 2; r <= 31; r++) {
+    const pa = cells['F' + r], t = cells['G' + r], d = cells['H' + r];
+    assert(Number.isFinite(pa) && Number.isFinite(t) && Number.isFinite(d),
+      'the workbook landing row ' + r + ' is not three numbers - has Performance!F:H moved?');
+    const row = ldg.table[String(pa)];
+    assert(row, 'the POH snapshot has no ' + pa + ' ft landing row');
+    const cell = row[temps.indexOf(t)];
+    assert(Array.isArray(cell), 'no landing cell at ' + pa + '/' + t);
+    assert(cell[1] === d, 'POH and workbook disagree at ' + pa + ' ft / ' + t +
+      ' C: snapshot ' + cell[1] + ', workbook ' + d);
+    assert(cell[1] > cell[0], 'the 50 ft distance is not longer than the ground roll at ' +
+      pa + '/' + t + ': ' + JSON.stringify(cell));
+    checked++;
+    if (pa > maxPa) maxPa = pa;
+  }
+  assert(checked === 30, 'the overlap with the workbook is no longer 30 cells: ' + checked);
+  assert(maxPa === 5000, 'the workbook landing table now reaches ' + maxPa +
+    ' ft, so it is no longer the SHORT side of this comparison');
+
+  // Monotonic in both directions - the only guard that reaches PA 6000-8000,
+  // where nothing can corroborate.
+  for (const pa of ldg.pressureAltitudesFt) {
+    const row = ldg.table[String(pa)];
+    for (let i = 1; i < row.length; i++) {
+      assert(row[i][1] > row[i - 1][1], 'landing distance does not increase with temperature at ' +
+        pa + ' ft: ' + row[i - 1][1] + ' -> ' + row[i][1]);
+    }
+  }
+  for (let k = 1; k < ldg.pressureAltitudesFt.length; k++) {
+    const lo = ldg.table[String(ldg.pressureAltitudesFt[k - 1])];
+    const hi = ldg.table[String(ldg.pressureAltitudesFt[k])];
+    for (let i = 0; i < temps.length; i++) {
+      assert(hi[i][1] > lo[i][1],
+        'landing distance does not increase with pressure altitude at ' + temps[i] + ' C');
+    }
+  }
+  // NOTHING IS DELETED HERE, unlike the 3100 lb takeoff table - a landing needs
+  // no climb performance, so there is no condition the POH declines to publish.
+  const nulls = ldg.pressureAltitudesFt.reduce(
+    (n, pa) => n + ldg.table[String(pa)].filter((c) => c === null).length, 0);
+  assert(nulls === 0, 'the landing table has gained a deleted cell: ' + nulls);
+
+  // THE GRASS CORRECTION IS NOT THE TAKEOFF ONE, and the two must never be
+  // shared: 45% of the ground roll here against 15% for takeoff. Identical
+  // wording, different number - the "old rule applied to a new surface" shape.
+  const to = JSON.parse(require('fs').readFileSync('./tools/prepared/poh-takeoff.json', 'utf8'));
+  assert(/45%/.test(ldg.corrections.grassRunway), 'the landing grass figure moved: ' +
+    ldg.corrections.grassRunway);
+  assert(/15%/.test(to.corrections.grassRunway), 'the takeoff grass figure moved: ' +
+    to.corrections.grassRunway);
+  assert(ldg.corrections.grassRunway !== to.corrections.grassRunway,
+    'the landing and takeoff grass corrections have become the same string');
+  // The wind corrections ARE identical in the POH, and that is worth pinning
+  // too - so a future change has to be deliberate rather than a copy-paste.
+  assert(ldg.corrections.tailwind === to.corrections.tailwind &&
+    ldg.corrections.headwind === to.corrections.headwind,
+    'the POH wind corrections used to be identical for takeoff and landing');
+  assert(/40% longer/.test(ldg.corrections.flapsUp),
+    'the flaps-up landing penalty is not recorded');
+});
+
+// =========================================================================
+// PHASE B (v16.94): the exact per-sector fuel Mass & Balance weighs, and the
+// single fuel density. The display column is unchanged; what is new is that
+// the gallons behind it are now carried out of the render pass unrounded.
+// =========================================================================
+
+const SEED_STOP = `flights = [
+  { id: 1, title: "F1", depElev: 254, waypoints: [
+    { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 254,  oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12,
+      stop: "full-stop", stopMin: 10, fuelAfterGal: 50 }
+  ]},
+  { id: 2, title: "F2", depElev: 229, waypoints: [
+    { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 229,  oat: 10, wdir: 0, wspd: 0, var: -12 },
+    { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }
+  ]}
+]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+
+T('every sector carries its fuel in GALLONS, whatever the column is showing', () => {
+  // The whole point of Phase B: a weight can never be computed from a figure
+  // that is in litres, or that has been through toFixed(1) once a leg.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const inGal = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  assert(inGal.length === 2, 'expected two sectors: ' + inGal.length);
+  assert(Math.abs(inGal[0][0] - 64) < 1e-9, 'sector 1 does not start at the 64 gal typed: ' + inGal[0][0]);
+
+  // Switch the DISPLAY to litres and the gallons must not move one bit.
+  ev('aircraftProfile.fuelUnit = "LITERS";');
+  doc.getElementById('fuel-dep').value = String(64 * 3.78541);
+  w.renderAllFlightTables();
+  const inL = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  assert(Math.abs(inL[0][0] - 64) < 1e-6,
+    'a litre display changed the gallons: ' + inL[0][0] + ' (the tracker is reading display units)');
+  assert(Math.abs(inL[0][1] - inGal[0][1]) < 1e-6,
+    'arrival gallons moved with the display unit: ' + inL[0][1] + ' vs ' + inGal[0][1]);
+  assert(Math.abs(inL[1][1] - inGal[1][1]) < 1e-6, 'sector 2 arrival moved with the display unit');
+  ev('aircraftProfile.fuelUnit = "GAL";');
+});
+
+T('the exact gallons and the printed figure describe the same fuel', () => {
+  // The display is a ROUNDED RENDERING of the tracker, not a rival computation
+  // of it - so they may differ only by the rounding the column does, which is
+  // at most 0.05 per row. Anything larger means a row was missed, or the
+  // tracker was fed a display figure.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const sectors = ev('ofpPrintModel.map(s => ({ arr: s.fuelGal.arr, rem: Number(s.meta.totals.rem), rows: s.rows.length }))');
+  let rowsSoFar = 0, worst = 0;
+  for (const s of sectors) {
+    rowsSoFar += s.rows;
+    const gap = Math.abs(s.arr - s.rem);
+    if (gap > worst) worst = gap;
+    assert(gap <= 0.05 * rowsSoFar + 1e-9,
+      'the exact gallons and the printed remaining disagree by more than the rounding can explain: ' +
+      s.arr + ' vs ' + s.rem + ' over ' + rowsSoFar + ' rows');
+  }
+  // M5: the bound above grows with the route, so pin what was actually
+  // measured on this fixture too - a regression that doubled the gap would
+  // otherwise still sit inside the bound.
+  assert(worst < 0.09, 'the measured gap on the seed mission grew: ' + worst);
+  assert(worst > 0.001, 'the gap is now zero, so the display has stopped rounding ' +
+    'or the two trackers have become the same number - either way this no longer ' +
+    'tests what it says (measured 0.0761 when written)');
+  assert(rowsSoFar >= 2, 'the fixture stopped producing rows to round');
+});
+
+T('fuel is continuous across a sector boundary, and a refuel sets it outright', () => {
+  // The one invariant a second tracker really needs: it cannot quietly lose
+  // or gain fuel between sectors.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const plain = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  assert(Math.abs(plain[1][0] - plain[0][1]) < 1e-9,
+    'with no stop, sector 2 must depart with exactly what sector 1 landed with: ' +
+    plain[1][0] + ' vs ' + plain[0][1]);
+  assert(plain[0][1] < plain[0][0], 'sector 1 burned nothing');
+
+  // A FULL STOP THAT REFUELS SETS THE FIGURE, it does not add to it (v16.57).
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const stopped = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  assert(Math.abs(stopped[1][0] - 50) < 1e-9,
+    'the refuel did not set the next sector\'s fuel to 50 gal: ' + stopped[1][0]);
+  assert(Math.abs(stopped[0][1] - plain[0][1]) < 1e-9,
+    'adding a stop changed what sector 1 landed with');
+  // And it is a REFUEL, not a carry-over: the fixture must actually differ.
+  assert(Math.abs(stopped[1][0] - stopped[0][1]) > 1,
+    'the fixture refuels to the figure it already had, so it proves nothing');
+});
+
+T('a touch & go burns its circuit fuel out of the exact tracker too', () => {
+  // 'touch-go' is the spelling STOP_KINDS accepts; anything else normalises to
+  // null and the stop silently does not exist, which is how the first version
+  // of this test reported a missing circuit burn that was never queued.
+  assert(moduleExports.anchors.STOP_KINDS.join(',') === 'touch-go,full-stop',
+    'the stop kinds moved: ' + moduleExports.anchors.STOP_KINDS.join(','));
+  const tg = SEED_STOP.replace('stop: "full-stop", stopMin: 10, fuelAfterGal: 50',
+                               'stop: "touch-go", stopMin: 10');
+  assert(tg !== SEED_STOP, 'the touch & go fixture did not substitute');
+  ev(tg);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const g = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  const ff = ev('Number(aircraftProfile.patternFf)');
+  const expect = g[0][1] - ff * (10 / 60);
+  assert(Math.abs(g[1][0] - expect) < 1e-9,
+    'the circuit burn between sectors is missing from the exact tracker: ' +
+    g[1][0] + ' against ' + expect);
+  assert(ff > 0, 'the pattern fuel flow is zero, so this test cannot discriminate');
+});
+
+T('an unreadable Initial Fuel stays ABSENT in gallons, though the column shows 0', () => {
+  // The v16.44 rule. The column has always shown 0 for an empty box and that
+  // is not being changed here - but a weight computed from a 0 would state an
+  // aircraft with empty tanks, where massBalanceProblems must say the fuel is
+  // not known.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '';
+  w.renderAllFlightTables();
+  const g = ev('ofpPrintModel.map(s => s.fuelGal.dep)');
+  assert(g.every((v) => !Number.isFinite(v)),
+    'an empty Initial Fuel box produced a finite gallon figure: ' + JSON.stringify(g));
+  // The COLUMN is unchanged and still numeric - it starts from 0 and goes
+  // negative, which is what it has always done and what the red banner exists
+  // to catch. This test is about the gallons behind it, not about that.
+  const shown = txtOf('f-tot-rem-0');
+  assert(/^-?\d+\.\d$/.test(shown), 'the displayed column is no longer a number: ' + shown);
+  assert(!/NaN/.test(shown), 'the absent gallons leaked into the display: ' + shown);
+  // And it really does reach the M&B finding rather than weighing empty tanks.
+  const MB = moduleExports.mb;
+  const m = MB.computeMissionMassBalance(MB.aircraftByReg('LN-TRB'),
+    { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 0 },
+    ev('ofpPrintModel.map(s => ({ fuelDepGal: s.fuelGal.dep, fuelArrGal: s.fuelGal.arr }))'));
+  assert(MB.massBalanceProblems(m).some((p) => /fuel on board is not known/.test(p)),
+    'the absent fuel did not reach the M&B findings');
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+});
+
+T('taxi fuel is inside the departure-to-arrival burn, which is what MTOW checks', () => {
+  // "Count taxi fuel in takeoff mass" (the author), and MTOW doubles as the
+  // ramp limit because of it. So the figure handed to M&B must be the fuel at
+  // ENGINE START, before the taxi is burned.
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  // SET it rather than read whatever an earlier test left behind - the first
+  // run of this test reported "the profile has no taxi fuel" against correct
+  // code, because something upstream had zeroed it.
+  ev('aircraftProfile.taxiFuel = 1.7;');
+  w.renderAllFlightTables();
+  const taxi = ev('Number(aircraftProfile.taxiFuel)');
+  assert(taxi === 1.7, 'the taxi fuel did not take: ' + taxi);
+  const g = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  // Sector 1 departs with exactly what was typed - the taxi has NOT been
+  // taken off before engine start.
+  assert(Math.abs(g[0][0] - 64) < 1e-9, 'the taxi was charged before engine start: ' + g[0][0]);
+
+  // AND IT IS INSIDE THE BURN, measured by taking it away rather than by
+  // reaching into the schedule for a field name. The first version of this
+  // test summed `l.fuelGal` off the schedule legs, which do not carry that
+  // field, so `airborne` was 0 and a correct build failed by 4 gallons.
+  const burnWith = g[0][0] - g[0][1];
+  ev('aircraftProfile.taxiFuel = 0;');
+  w.renderAllFlightTables();
+  const g0 = ev('ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr])');
+  const burnWithout = g0[0][0] - g0[0][1];
+  assert(Math.abs((burnWith - burnWithout) - taxi) < 1e-9,
+    'the taxi is not inside the sector burn: ' + burnWith + ' against ' + burnWithout +
+    ' for a taxi of ' + taxi);
+
+  // TAXI IS PER DEPARTURE, NOT PER MISSION (v16.54), and the exact tracker has
+  // to follow that too - a full stop shuts down and starts again.
+  ev('aircraftProfile.taxiFuel = 1.7;');
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  w.renderAllFlightTables();
+  const two = ev('ofpPrintModel.map(s => s.fuelGal.dep - s.fuelGal.arr)');
+  ev('aircraftProfile.taxiFuel = 0;');
+  w.renderAllFlightTables();
+  const two0 = ev('ofpPrintModel.map(s => s.fuelGal.dep - s.fuelGal.arr)');
+  const extra = (two[0] - two0[0]) + (two[1] - two0[1]);
+  assert(Math.abs(extra - 2 * 1.7) < 1e-9,
+    'a full stop did not re-arm the taxi in the exact tracker: ' + extra +
+    ' of taxi over two sectors, expected ' + (2 * 1.7));
+  ev('aircraftProfile.taxiFuel = 1.7;');
+});
+
+T('there is ONE fuel density, used in both directions', () => {
+  const F = moduleExports.fmt, MB = moduleExports.mb;
+  // convertFuel and toGallons must be exact inverses, or a round trip through
+  // the settings form silently reinterprets a number already written down.
+  for (const unit of ['GAL', 'LITERS', 'KG']) {
+    for (const gal of [0, 1, 12.5, 64, 87.3]) {
+      const back = F.toGallons(F.convertFuel(gal, unit), unit);
+      assert(Math.abs(back - gal) < 1e-9, 'round trip broken in ' + unit + ': ' + gal + ' -> ' + back);
+    }
+  }
+  // And the kilogram side is the M&B density, not a second rounding of it.
+  assert(Math.abs(F.convertFuel(1, 'KG') - MB.FUEL_KG_PER_GAL) < 1e-12,
+    'convertFuel does not use the M&B density: ' + F.convertFuel(1, 'KG'));
+  assert(Math.abs(F.convertFuel(64, 'KG') - 174.18) < 0.005,
+    '64 gal should weigh 174.2 kg at 6 lb/gal: ' + F.convertFuel(64, 'KG'));
+  // The page's own copy is gone, and with it the second constant.
+  assert(!/function toGal\s*\(/.test(APP_SRC), 'the page grew back its own toGal');
+  assert(!/\/\s*2\.72\b/.test(APP_SRC) && !/\*\s*2\.72\b/.test(APP_SRC),
+    'a literal 2.72 kg/gal is back in the app');
+});
+
+// THE QUEUED `TA` TESTS RUN AFTER EVERY `T`, so the last thing this block does
+// is put the shared fixture back. Without it the async plan-management tests
+// inherited the two-sector mission left here and reported "expected 3 flights,
+// got 4" - a failure in a test that has nothing to do with fuel, which is the
+// v16.89 lesson that a check mutating shared state is not free to sit anywhere.
+T('the Phase B block leaves the shared fixture as it found it', () => {
+  ev('aircraftProfile.fuelUnit = "GAL";');
+  doc.getElementById('fuel-dep').value = '64';
+  ev(SEED);
+  assert(ev('flights.length') === 1, 'the seed did not restore one flight');
+  assert(ev('aircraftProfile.fuelUnit') === 'GAL', 'the fuel unit was left in another unit');
+});
+
+// =========================================================================
+// PHASE C (v16.95): the Mass & Balance tab, the CG chart, the toggle, and the
+// findings reaching the banner and the paper.
+// =========================================================================
+
+T('the CG chart is drawn from the envelope, and it never clips a mark', () => {
+  const MB = moduleExports.mb;
+  // A chart that clipped the very point that is out of limits would hide the
+  // one thing it exists to show, so the axes expand to hold every mark.
+  const far = MB.cgChartModel([
+    { key: 'TO', label: 'T/O', weightLb: 2600, armIn: 40 },
+    { key: 'LDG', label: 'LDG', weightLb: 2400, armIn: 52 }   // WAY aft of the envelope
+  ]);
+  assert(far.armRange[1] > 52, 'the arm axis does not reach an out-of-limits mark: ' + far.armRange[1]);
+  for (const m of far.marks) {
+    assert(m.x >= 0 && m.x <= far.width && m.y >= 0 && m.y <= far.height,
+      'a mark is drawn outside the chart box: ' + JSON.stringify(m));
+  }
+  const aft = far.marks.find((m) => m.key === 'LDG');
+  assert(aft.verdict === 'aft', 'the out-of-limits mark is not reported as aft: ' + aft.verdict);
+
+  // The polygon IS the envelope - same count, and weight grows upwards.
+  const norm = MB.cgChartModel([{ key: 'TO', label: 'T/O', weightLb: 2582.3, armIn: 40.16 }]);
+  assert(norm.envelope.length === MB.CG_ENVELOPE.length,
+    'the drawn polygon is not the envelope: ' + norm.envelope.length);
+  const heavy = norm.gridY.find((g) => g.weight === 3000);
+  const light = norm.gridY.find((g) => g.weight === 2000);
+  assert(heavy && light && heavy.y < light.y, 'weight does not grow upwards on the chart');
+  assert(norm.marks[0].verdict === 'ok', 'the golden fixture plots as out of limits');
+
+  // A mark with no arm is SAID, never dropped - an absent dot reads as "fine".
+  const missing = MB.cgChartModel([
+    { key: 'TO', label: 'T/O', weightLb: 2600, armIn: 40 },
+    { key: 'ZFM', label: 'ZFM', weightLb: NaN, armIn: null }
+  ]);
+  assert(missing.marks.length === 1 && missing.undrawn.join() === 'ZFM',
+    'an unplottable mark was silently dropped: ' + JSON.stringify(missing.undrawn));
+});
+
+T('station loads and a registration are re-validated on every read', () => {
+  const MB = moduleExports.mb;
+  // localStorage is hand-editable, so this follows normaliseFixStyle exactly.
+  const s = MB.normaliseStationLoads({ pilotLb: '170', rightLb: -5, rearLb: 'x', bagALb: 99999 });
+  assert(s.pilotLb === 170, 'a numeric string was rejected: ' + s.pilotLb);
+  assert(s.rightLb === 0, 'a negative weight was kept: ' + s.rightLb);
+  assert(s.rearLb === 0, 'an unreadable weight became NaN rather than an empty seat: ' + s.rearLb);
+  assert(s.bagALb === MB.STATION_MAX_LB, 'the typo guard did not clamp: ' + s.bagALb);
+  assert(Object.keys(s).length === Object.keys(MB.STATION_ARMS).length, 'a station went missing');
+  // An unreadable object is six empty seats, not six NaNs - a NaN in one
+  // station would make the whole take-off mass NaN, which reads as "no M&B"
+  // when the pilot has simply left a seat empty.
+  assert(Object.values(MB.normaliseStationLoads(null)).every((v) => v === 0),
+    'an absent load object did not come back as zeros');
+  // Only the published fleet: a tail we have no empty weight for cannot be weighed.
+  assert(MB.normaliseReg('ln-trb') === 'LN-TRB', 'a lowercase registration was rejected');
+  assert(MB.normaliseReg('LN-ABC') === null, 'an unknown registration was accepted');
+  assert(MB.normaliseReg(null) === null && MB.normaliseReg(42) === null, 'a non-string was accepted');
+});
+
+T('the tab weighs the mission from the plan\'s own fuel, not a second number', () => {
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  ev('mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 170 }); mbPrefs.view = "sector";');
+  w.renderAllFlightTables();
+  const got = ev('JSON.stringify(massBalanceMission.sectors.map(s => ' +
+    '[s.fuelDepGal, s.fuelArrGal, s.takeoff.weightLb]))');
+  const sectors = JSON.parse(got);
+  const fuel = ev('JSON.stringify(ofpPrintModel.map(s => [s.fuelGal.dep, s.fuelGal.arr]))');
+  assert(got.length && sectors.length === 2, 'the mission was not weighed: ' + got);
+  JSON.parse(fuel).forEach((f, i) => {
+    assert(Math.abs(sectors[i][0] - f[0]) < 1e-9 && Math.abs(sectors[i][1] - f[1]) < 1e-9,
+      'the M&B fuel is not the plan\'s own fuel on sector ' + i);
+  });
+  // 2020.3 empty + 170 pilot + 64 gal * 6 lb = 2574.3 lb at take-off.
+  assert(Math.abs(sectors[0][2] - (2020.3 + 170 + 64 * 6)) < 1e-9,
+    'the take-off weight is not empty + load + fuel: ' + sectors[0][2]);
+  // No aircraft, no weighing - and no banner noise either.
+  ev('mbPrefs.reg = null;');
+  w.renderAllFlightTables();
+  assert(ev('massBalanceMission') === null, 'a mission was weighed with no aircraft selected');
+});
+
+T('an out-of-limits load reaches the red banner AND the printed sheet', () => {
+  ev(SEED2);
+  doc.getElementById('fuel-dep').value = '64';
+  // Tail-heavy: 220 lb in baggage C at 129 in takes the CG aft of 46.
+  ev('mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ bagCLb: 220 }); mbPrefs.view = "sector";');
+  w.renderAllFlightTables();
+  const banner = doc.getElementById('integrity-banner');
+  assert(banner.style.display !== 'none', 'the banner is hidden for an out-of-limits load');
+  assert(/Mass & balance/.test(banner.textContent),
+    'the M&B finding is not in the banner: ' + banner.textContent.slice(0, 200));
+  // ...and the DO-NOT-USE band prints, on the M&B page as well as the OFP one.
+  const print = doc.getElementById('ofp-print');
+  assert(/INTEGRITY CHECK FAILED/.test(print.textContent), 'the printed band is missing');
+  assert(/MASS & BALANCE/.test(print.textContent), 'the M&B page did not print');
+  const voids = print.querySelectorAll('.ofp-void').length;
+  const sheets = print.querySelectorAll('.ofp-sheet').length;
+  assert(voids === sheets, 'not every printed sheet carries the band: ' + voids + ' of ' + sheets);
+
+  // A LEGAL load raises nothing and still prints the sheet.
+  ev('mbPrefs.loads = normaliseStationLoads({ pilotLb: 170 });');
+  w.renderAllFlightTables();
+  assert(!/Mass & balance/.test(doc.getElementById('integrity-banner').textContent),
+    'a legal load still raises an M&B finding');
+  assert(/MASS & BALANCE/.test(doc.getElementById('ofp-print').textContent),
+    'the M&B page stopped printing for a legal load');
+});
+
+T('with no aircraft selected the banner stays quiet', () => {
+  // A finding on every plan for a pilot who is not using M&B is noise they
+  // learn to scroll past, which is how a real finding gets missed.
+  ev(SEED2);
+  ev('mbPrefs.reg = null;');
+  w.renderAllFlightTables();
+  const b = doc.getElementById('integrity-banner');
+  assert(!/Mass & balance/.test(b.textContent),
+    'an unselected aircraft put M&B noise in the banner: ' + b.textContent.slice(0, 160));
+  assert(!/MASS & BALANCE/.test(doc.getElementById('ofp-print').textContent),
+    'an M&B page printed with no aircraft selected');
+});
+
+T('the toggle changes what is SHOWN, never what is checked', () => {
+  // The author: "Check the landing weight / t&g weight for every stop". So the
+  // whole-mission view must not become a way to miss a heavy intermediate
+  // landing - it is a display choice and nothing more.
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev('mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 400, rightLb: 250, rearLb: 300 });');
+  ev('mbPrefs.view = "sector";');
+  w.renderAllFlightTables();
+  const perSector = ev('JSON.stringify(collectIntegrityProblems ? runIntegrityCheck() : [])');
+  ev('mbPrefs.view = "mission";');
+  w.renderAllFlightTables();
+  const whole = ev('JSON.stringify(runIntegrityCheck())');
+  assert(perSector === whole,
+    'the toggle changed the findings:\n  sector: ' + perSector + '\n  mission: ' + whole);
+  assert(/Mass & balance/.test(perSector),
+    'the fixture is not out of limits, so this test cannot discriminate: ' + perSector);
+  // And the two views really do render differently, or the assert above is vacuous.
+  const nMission = doc.querySelectorAll('#mb-body .mb-chart').length;
+  ev('mbPrefs.view = "sector";');
+  w.renderAllFlightTables();
+  const nSector = doc.querySelectorAll('#mb-body .mb-chart').length;
+  assert(nSector > nMission, 'the two views render the same thing: ' + nSector + ' vs ' + nMission);
+});
+
+T('the M&B inputs are stored, but never exported', () => {
+  // The author cleared REGISTRATIONS for storage. A route file is for sharing a
+  // ROUTE - a seat weight carries no name but is still a fact about the people
+  // who were aboard, so none of this rides out in an export.
+  const E = moduleExports.exch;
+  assert(!E.PROFILE_KEYS.some((k) => /reg|pic|crew|pilot|bag|load/i.test(k)),
+    'PROFILE_KEYS grew an M&B key: ' + E.PROFILE_KEYS.join(','));
+  const payload = JSON.stringify(E.buildExportPayload({
+    flights: [], profile: { mode: 'C182T', reg: 'LN-TRB', loads: { pilotLb: 170 } }
+  }));
+  assert(!/LN-TR/.test(payload), 'a registration reached the export: ' + payload.slice(0, 200));
+  assert(!/pilotLb/.test(payload), 'a station load reached the export');
+  // It IS persisted, under its own key, so the pilot does not retype it.
+  assert(/c182_mb_prefs/.test(APP_SRC), 'the M&B prefs are not persisted at all');
+});
+
+T('the sidebar has two panes and the tabs switch them', () => {
+  ev('showSidePane("mb")');
+  assert(doc.getElementById('pane-plan').style.display === 'none', 'the plan pane is still shown');
+  assert(doc.getElementById('pane-mb').style.display !== 'none', 'the M&B pane is hidden');
+  assert(doc.getElementById('tab-mb').getAttribute('aria-selected') === 'true', 'the tab is not marked selected');
+  ev('showSidePane("plan")');
+  assert(doc.getElementById('pane-mb').style.display === 'none', 'the M&B pane is still shown');
+  assert(doc.getElementById('tab-plan').classList.contains('side-tab-on'), 'the plan tab is not on');
+  // The flight-plan pane must still contain the things the rest of the suite
+  // and the pilot reach for - moving them into a tab must not hide them.
+  for (const id of ['flight-plans-container', 'integrity-banner', 'daylight-card', 'metar-card']) {
+    assert(doc.querySelector('#pane-plan #' + id), id + ' left the flight-plan pane');
+  }
+});
+
+T('the weather is decoded once, for two hosts', () => {
+  // A second decoder of the same METAR is exactly what v16.21 refuses.
+  const n = (APP_SRC.match(/function renderMetarCard\(/g) || []).length;
+  assert(n === 1, 'there is more than one METAR renderer: ' + n);
+  assert(/renderMetarCard\(want, lastWeather\.metars, lastWeather\.tafs, 'mb-wx'\)/.test(APP_SRC),
+    'the M&B tab does not reuse the one renderer');
+  assert(!/localStorage[^;]*lastWeather/.test(APP_SRC), 'the weather is being persisted');
+  ev('lastWeather = null; renderMbWeather();');
+  assert(/Not fetched yet/.test(doc.getElementById('mb-wx').textContent),
+    'the unfetched state says nothing');
+});
+
+T('the whole-mission master walks the fuel, and summarises without laundering', () => {
+  // Built ONCE (missionMaster) for the screen and the paper. Each assert below
+  // is a figure the first version took from `first` or `last` and got wrong -
+  // and every one of them was silent on a one-sector mission.
+  const MB = moduleExports.mb;
+  const ac = MB.aircraftByReg('LN-TRB');
+  const heavy = MB.normaliseStationLoads({ pilotLb: 400, rightLb: 250, rearLb: 150 });
+  // Sector 2 departs after a refuel, heavy; sectors 1 and 3 are legal.
+  const m = MB.computeMissionMassBalance(ac, heavy, [
+    { fuelDepGal: 30, fuelArrGal: 20, label: 'A → B' },
+    { fuelDepGal: 60, fuelArrGal: 40, label: 'B → C' },   // refuelled +40 at B
+    { fuelDepGal: 40, fuelArrGal: 10, label: 'C → A' }
+  ]);
+  const M = MB.missionMaster(m);
+  // THE FIXTURE MUST BE ABLE TO SEE THE DEFECT, or the asserts below are vacuous.
+  assert(m.first.checks.takeoffWeight === 'ok' && m.sectors[1].checks.takeoffWeight === 'over',
+    'the fixture no longer has a heavy take-off in the MIDDLE: ' +
+    m.sectors.map((r) => r.takeoff.weightLb.toFixed(1)).join(', '));
+  // 1. The burn is walked: 10 + 20 + 30, not 30 - 10.
+  assert(Math.abs(M.burnGal - 60) < 1e-9, 'the master burn is not walked over the sectors: ' + M.burnGal);
+  assert(Math.abs(M.stopChangeGal - 40) < 1e-9, 'the fuel taken on at the stop is lost: ' + M.stopChangeGal);
+  assert(Math.abs(M.fuelDepGal - M.burnGal + M.stopChangeGal - M.fuelArrGal) < 1e-9,
+    'the master fuel does not reconcile: dep - burn + stops != arr');
+  // 2. A check failing anywhere fails on the master.
+  assert(M.checks.takeoffWeight === 'over',
+    'a heavy intermediate take-off printed a green master: ' + M.checks.takeoffWeight);
+  assert(M.checks.landingWeight === 'over', 'a heavy intermediate landing was laundered');
+  // 3. Min FLT is the heaviest take-off's, which is sector 2's.
+  assert(M.minFlightMin === Math.max(...m.sectors.map((r) => r.minFlightMin)) && M.minFlightMin > 0,
+    'Min FLT is not the binding one: ' + M.minFlightMin + ' vs ' + m.sectors.map((r) => r.minFlightMin));
+  assert(M.minFlightMin !== m.first.minFlightMin, 'the fixture cannot tell Min FLT sources apart');
+
+  // 4. Va comes from the LIGHTEST landing, which a refuel can put mid-mission.
+  const light = MB.normaliseStationLoads({ pilotLb: 200 });
+  const m2 = MB.computeMissionMassBalance(ac, light, [
+    { fuelDepGal: 40, fuelArrGal: 10, label: 'A → B' },    // lightest landing here
+    { fuelDepGal: 60, fuelArrGal: 50, label: 'B → A' }
+  ]);
+  const M2 = MB.missionMaster(m2);
+  const lightest = Math.min(...m2.sectors.map((r) => r.landing.weightLb));
+  assert(m2.sectors[0].landing.weightLb === lightest && m2.last.vaKt !== m2.sectors[0].vaKt,
+    'the fixture no longer puts the lightest landing in the middle');
+  assert(M2.vaKt === MB.vaKt(lightest), 'Va is not the lightest landing\'s: ' + M2.vaKt);
+
+  // And the master still shows what the author asked for: start and final weights.
+  assert(M.takeoff === m.first.takeoff && M.landing === m.last.landing,
+    'the master is no longer the mission\'s start and final weights');
+  assert(MB.missionMaster(null) === null, 'an absent mission produced a master');
+});
+
+T('the printed whole-mission sheet adds up, with a refuel in the middle', () => {
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '30';     // so the stop's 50 gal is an UPLIFT
+  ev('mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); mbPrefs.view = "mission";');
+  w.renderAllFlightTables();
+  const rows = {};
+  for (const tr of doc.querySelectorAll('#ofp-print .mb-sheet tr')) {
+    const td = tr.querySelectorAll('td');
+    if (td.length >= 2) rows[td[0].textContent.trim()] = Number(td[1].textContent.trim());
+  }
+  const stopKey = Object.keys(rows).find((k) => /^Fuel change at stops/.test(k));
+  assert(stopKey, 'the refuel is missing from the printed master: ' + Object.keys(rows).join(' | '));
+  const tom = rows['Total take-off mass'], burn = rows['Enroute fuel consumed'],
+        stop = rows[stopKey], ldm = rows['Total landing mass'];
+  assert([tom, burn, stop, ldm].every(Number.isFinite), 'a printed figure is not a number: ' + JSON.stringify(rows));
+  // Each is printed to 0.1 lb, so they may disagree by the rounding and no more.
+  assert(Math.abs(tom - burn + stop - ldm) <= 0.15,
+    'the printed master does not add up: ' + tom + ' - ' + burn + ' + ' + stop + ' != ' + ldm);
+  // The old sheet printed the FIRST sector's burn under a whole-mission heading.
+  const mission = w.eval('massBalanceMission');
+  assert(Math.abs(burn - mission.sectors[0].burnGal * 6) > 1,
+    'the fixture cannot tell the mission burn from the first sector\'s');
+  assert(stop > 0, 'the fixture does not refuel upwards: ' + stop);
+  ev('mbPrefs.reg = null; mbPrefs.view = "sector";');
+  w.renderAllFlightTables();
+});
+
+T('the tab SAYS takeoff and landing distances are not computed yet', () => {
+  // The author asked for them in this tab, and they need runway data the
+  // planner does not hold. A tab with no distances and no word about it reads
+  // as an oversight - or as "no limitation", which is worse. When Phase D
+  // computes them, this test is the one to update, deliberately.
+  const note = doc.getElementById('mb-perf-note');
+  assert(note, 'the distances note is gone from the M&B tab');
+  assert(/Not computed yet/.test(note.textContent) && /POH/.test(note.textContent),
+    'the note no longer says the distances are not computed: ' + note.textContent.trim().slice(0, 120));
+  // And it must not name a figure number it cannot source: the landing page
+  // as supplied carries only its title.
+  assert(!/Figure 5-(?!6\b)\d+/.test(note.textContent), 'the note names an unsourced POH figure number');
+});
+
+T('the Phase C block leaves the shared fixture as it found it', () => {
+  ev('mbPrefs = { reg: null, loads: normaliseStationLoads({}), view: "sector" };');
+  doc.getElementById('fuel-dep').value = '64';
+  ev(SEED);
+  assert(ev('flights.length') === 1, 'the seed did not restore one flight');
+  assert(ev('mbPrefs.reg') === null, 'a registration was left selected');
 });
 
 runAsyncTests().then(() => {

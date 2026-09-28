@@ -110,6 +110,18 @@
          tabindex="0" title="Drag to give more of the window to the map or to the plan. Double-click to reset."></div>
     <div id="sidebar">
       <div id="slot-sidebar-top" class="skin-slot no-print"></div>
+      <!-- TWO PANES, ONE SIDEBAR (v16.95). Mass & Balance is a different job
+           from building the route - different inputs, entered once a mission
+           rather than per leg - so it gets its own tab instead of a ninth card
+           the pilot scrolls past. The plan pane is everything that was here
+           before, unmoved. -->
+      <div class="side-tabs no-print" role="tablist">
+        <button class="side-tab side-tab-on" id="tab-plan" role="tab" aria-selected="true"
+                onclick="showSidePane('plan')">&#9992; Flight plan</button>
+        <button class="side-tab" id="tab-mb" role="tab" aria-selected="false"
+                onclick="showSidePane('mb')">&#9878; Mass &amp; Balance</button>
+      </div>
+      <div id="pane-plan" class="side-pane">
       <div class="card no-print">
         <div class="card-title">
           <span>Flight Defaults <span id="perf-model-badge" style="font-weight:600; color:var(--highlight-text); background:var(--highlight-bg); padding:1px 6px; border-radius:3px; margin-left:4px; text-transform:none;" title="Active performance model — change in Settings"></span></span>
@@ -209,6 +221,86 @@
         <div id="metar-status" style="font-size:10px; color:var(--text-muted); margin-bottom:4px;"></div>
         <div id="metar-body" style="font-size:11px; line-height:1.6;"></div>
       </div>
+      </div><!-- /#pane-plan -->
+
+      <div id="pane-mb" class="side-pane" style="display:none;">
+        <div class="card no-print">
+          <div class="card-title">
+            <span>&#9878; Aircraft &amp; Load</span>
+            <span id="mb-source" style="font-weight:600; font-size:10px; color:var(--text-muted);"></span>
+          </div>
+          <div class="global-inputs">
+            <div class="input-group">
+              <label title="The fleet published on the school's OFP form. Only these five have a published empty weight and moment.">Registration</label>
+              <select id="mb-reg" onchange="setMbReg(this.value)"></select>
+            </div>
+            <div class="input-group">
+              <label>Pilot &#183; left (lb)</label>
+              <input type="number" id="mb-pilotLb" min="0" step="5" onfocus="this.select()" onchange="setMbLoad('pilotLb', this.value)">
+            </div>
+            <div class="input-group">
+              <label>Right seat (lb)</label>
+              <input type="number" id="mb-rightLb" min="0" step="5" onfocus="this.select()" onchange="setMbLoad('rightLb', this.value)">
+            </div>
+            <div class="input-group">
+              <label>Rear passengers (lb)</label>
+              <input type="number" id="mb-rearLb" min="0" step="5" onfocus="this.select()" onchange="setMbLoad('rearLb', this.value)">
+            </div>
+            <div class="input-group">
+              <label title="Baggage A, B and C are one compartment at three distances from the datum - 97, 116 and 129 in. Put each item on the line nearest where it actually sits.">Baggage A &#183; 97 in (lb)</label>
+              <input type="number" id="mb-bagALb" min="0" step="5" onfocus="this.select()" onchange="setMbLoad('bagALb', this.value)">
+            </div>
+            <div class="input-group">
+              <label>Baggage B &#183; 116 in (lb)</label>
+              <input type="number" id="mb-bagBLb" min="0" step="5" onfocus="this.select()" onchange="setMbLoad('bagBLb', this.value)">
+            </div>
+            <div class="input-group">
+              <label>Baggage C &#183; 129 in (lb)</label>
+              <input type="number" id="mb-bagCLb" min="0" step="5" onfocus="this.select()" onchange="setMbLoad('bagCLb', this.value)">
+            </div>
+          </div>
+          <div id="mb-reg-note" style="font-size:10px; color:var(--text-muted); margin-top:6px; line-height:1.6;"></div>
+        </div>
+
+        <div class="card no-print" style="margin-top:4px;">
+          <div class="card-title">
+            <span>Sheet</span>
+            <span>
+              <button class="btn btn-sm" id="mb-view-sector" onclick="setMbView('sector')">Every sector</button>
+              <button class="btn btn-sm" id="mb-view-mission" onclick="setMbView('mission')">Whole mission</button>
+            </span>
+          </div>
+          <div id="mb-view-note" style="font-size:10px; color:var(--text-muted); line-height:1.6;"></div>
+        </div>
+
+        <div id="mb-body"></div>
+
+        <div class="card no-print" style="margin-top:4px;" id="mb-wx-card">
+          <div class="card-title">
+            &#128225; Departure &amp; destination weather
+            <span style="float:right;">
+              <button class="btn" onclick="fetchMetarTaf()" style="font-size:10px; padding:2px 8px;">Fetch</button>
+            </span>
+          </div>
+          <div id="mb-wx" style="font-size:11px; line-height:1.6;"></div>
+        </div>
+
+        <!-- SAID, NOT LEFT AS A GAP. The author asked for takeoff and landing
+             distances here, and they are not computed yet. The POH tables are
+             in the repo and cross-checked; what is missing is a per-runway
+             pressure altitude, wind component, surface and TODA/LDA, which the
+             AIP importer does not read. A tab that simply had no distances
+             would look like an oversight, or worse, like "no limitation". -->
+        <div class="card no-print" style="margin-top:4px;" id="mb-perf-note">
+          <div class="card-title">&#128747; Takeoff &amp; landing distances</div>
+          <div style="font-size:11px; line-height:1.6; color:var(--text-muted);">
+            <b>Not computed yet - use the POH: Figure 5-6 for takeoff, and the Short Field Landing Distance table.</b> The tables are transcribed
+            and cross-checked against the school's OFP workbook, but reading them needs the runway:
+            its pressure altitude, the wind component along it, its surface, and the distance
+            available to compare against. The planner does not hold runway data today.
+          </div>
+        </div>
+      </div><!-- /#pane-mb -->
     </div>
   </div>
 
@@ -351,7 +443,7 @@
               <ul>
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
                 <li><b>The ACC columns count the whole mission</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the mission total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
-                <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>Reg, CREW, PASSENGERS and PIC</b> — the planner does not hold crew names or a tail number, and it never will.</li>
+                <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>CREW, PASSENGERS and PIC</b> — crew are people, and the planner holds no one's name. <b>Reg</b> is filled from the aircraft you pick on the Mass &amp; Balance tab, and is blank until you pick one — a tail number identifies a machine, not a person.</li>
                 <li>The <b>Mass &amp; Balance</b> side of the form is not reproduced yet.</li>
               </ul>
             </li>
@@ -1088,11 +1180,12 @@
     //   keyboard bindings           -> src/lib/keys.js
     //   the skin list               -> src/lib/skins.js
     //   which VAC chart is drawn    -> src/lib/vac.js
+    //   mass & balance, the fleet -> src/lib/massbalance.js
     //
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 133 inline on*= handlers - 103 written
+    // map, markers, undoStack...) plus 151 inline on*= handlers - 121 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1105,6 +1198,7 @@
     //   2b  base chart (topo <-> VFR)  7b2 integrity banner (thin wrapper)
     //   4   map interactions, undo     7c  plotting list UI
     //   6   wind entry modal           8   saved routes & localStorage
+    //   2h  mass & balance tab
     // =========================================================================
 
     // =========================================================================
@@ -1317,7 +1411,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.92';
+    const APP_VERSION = '16.95';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1883,11 +1977,10 @@
       return [2, 3, 5].includes(m) ? m : 3;
     }
 
-    function toGal(value, fromUnit) {
-      if (fromUnit === 'LITERS') return value / 3.78541;
-      if (fromUnit === 'KG') return value / 2.72;
-      return value;
-    }
+    // -> src/lib/format.js (toGallons). The page carried THREE hand-rolled
+    // copies of this inverse, each with its own literal 2.72 and 3.78541:
+    // `toGal`, the refuel box in setStopRefuel, and the unit switch that
+    // rewrites the Initial Fuel field. A grep for `toGal` found one of them.
 
     // The unit the Settings-modal fuel inputs are CURRENTLY displayed in.
     // Performance values are always stored internally in gallons; the form
@@ -1941,7 +2034,7 @@
       if (newUnit === settingsFuelUnit) return;
       ['perf-climb-ff', 'perf-desc-ff', 'perf-pattern-ff', 'perf-taxi-fuel', 'perf-cruise-ff', 'cc-ff'].forEach(id => {
         const el = document.getElementById(id);
-        const gal = toGal(Number(el.value) || 0, settingsFuelUnit);
+        const gal = toGallons(Number(el.value) || 0, settingsFuelUnit);
         el.value = convertFuel(gal, newUnit).toFixed(1);
       });
       settingsFuelUnit = newUnit;
@@ -5164,9 +5257,7 @@
       if (raw === '') {
         delete wp.fuelAfterGal;
       } else {
-        const asGal = unit === 'LITERS' ? Number(raw) / 3.78541
-                    : unit === 'KG' ? Number(raw) / 2.72
-                    : Number(raw);
+        const asGal = toGallons(Number(raw), unit);
         const gal = normaliseRefuelGal(asGal);
         if (gal === null) delete wp.fuelAfterGal; else wp.fuelAfterGal = gal;
       }
@@ -6071,7 +6162,9 @@
           } finally { clearTimeout(timer); }
         };
         const [metars, tafs] = await Promise.all([grab('metar'), grab('taf')]);
+        lastWeather = { icaos, metars, tafs };
         renderMetarCard(icaos, metars, tafs);
+        renderMbWeather();
         metarStatus('Retrieved ' + new Date().toISOString().slice(11, 16) + 'Z \u00b7 ' +
                     METAR_ATTRIBUTION, false);
       } catch (e) {
@@ -6082,8 +6175,19 @@
       }
     }
 
-    function renderMetarCard(icaos, metars, tafs) {
-      const body = document.getElementById('metar-body');
+    /** The last fetch, so the M&B tab can paint on a tab switch without asking
+     *  MET Norway again. NEVER persisted: a cached forecast is a wrong
+     *  forecast (v16.21), so this dies with the page. @type {any} */
+    let lastWeather = null;
+
+    /**
+     * ONE RENDERER, TWO HOSTS. The M&B tab shows the same reports for just the
+     * departure and destination; giving it its own builder would be a second
+     * decoder of the same METAR, which is exactly what v16.21 refuses.
+     */
+    function renderMetarCard(icaos, metars, tafs, hostId) {
+      const body = document.getElementById(hostId || 'metar-body');
+      if (!body) return;
       const parts = [];
       for (const icao of icaos) {
         const rawM = metars[icao], rawT = tafs[icao];
@@ -6177,8 +6281,36 @@
       legStartTimes = {};
       // An empty "Initial Fuel" box yielded NaN, which then propagated into
       // every Rem cell and the mission summary as "NaN".
-      const initialFuelRaw = Number(document.getElementById('fuel-dep').value);
+      const initialFuelText = String(document.getElementById('fuel-dep').value || '').trim();
+      const initialFuelRaw = Number(initialFuelText);
       let runningFuelRemaining = isNaN(initialFuelRaw) ? 0 : initialFuelRaw;
+      // THE EXACT FIGURE, IN GALLONS, NEVER ROUNDED (v16.94, Phase B of
+      // roadmap item 5). Mass & Balance needs the fuel on board at each
+      // sector's engine start and at its arrival fix, and NEITHER can be read
+      // off the line above: `runningFuelRemaining` is in the pilot's DISPLAY
+      // unit and is re-rounded to 0.1 at every step, so in litres it is not
+      // even gallons and in gallons it has accumulated up to 0.05 of rounding
+      // per row. A weight computed from it would be wrong by the rounding of
+      // every leg of the mission.
+      //
+      // IT IS A SECOND TRACKER, AND THAT IS DELIBERATE RATHER THAN DRIFT - the
+      // display is a ROUNDED RENDERING of this, not a rival computation of it.
+      // Both subtract the SAME per-row gallon figure (`legBurnGal`,
+      // `patternBurnGal`), and a test asserts the two never diverge by more
+      // than the rounding can explain, plus that fuel is continuous across
+      // every sector boundary. Without those this would be exactly the second
+      // mechanism v16.61 says to prefer the deletion of.
+      //
+      // ABSENT STAYS ABSENT (the v16.44 rule). An unreadable Initial Fuel box
+      // shows 0 in the column, because that column has always done that - but
+      // the M&B figure stays NaN, so `massBalanceProblems` reports "the fuel on
+      // board is not known" instead of weighing the aircraft with empty tanks.
+      // `Number('') === 0`, so an EMPTY box cannot be told from a typed zero by
+      // isNaN - which is why the raw string is read. A typed 0 is a real answer
+      // (a sector that departs with empty tanks must show it, v16.57); an empty
+      // box is the absence the M&B findings have to name.
+      let runningFuelGal = (initialFuelText === '' || isNaN(initialFuelRaw))
+        ? NaN : toGallons(initialFuelRaw, fuelUnit);
       let taxiFuelApplied = false;
       ofpPrintModel = [];
       let grandTotalDist = 0;
@@ -6187,7 +6319,7 @@
       const sectorTimeWindows = [];   // per flight: minutes after ETD at takeoff & landing
       /** The ground or circuit time of a stop, waiting for the sector it
        *  delays. See the two blocks below. @type {null|{min:number, kind:string,
-       *  burn:number, refuelGal:number|null}} */
+       *  burn:number, burnGal:number, refuelGal:number|null}} */
       let pendingStop = null;
 
       flights.forEach((fl, fIdx) => {
@@ -6213,15 +6345,27 @@
             taxiFuelApplied = false;    // the next departure pays for its own start-up
             if (pendingStop.refuelGal !== null) {
               runningFuelRemaining = Number(convertFuel(pendingStop.refuelGal, fuelUnit).toFixed(1));
+              // The refuel is STORED in gallons (v16.57), so the exact tracker
+              // takes it raw - the display is the one that converts and rounds.
+              runningFuelGal = pendingStop.refuelGal;
             }
           } else if (pendingStop.burn > 0) {
             runningAccBurn = Number((runningAccBurn + pendingStop.burn).toFixed(1));
             runningFuelRemaining = Number((runningFuelRemaining - pendingStop.burn).toFixed(1));
+            runningFuelGal -= pendingStop.burnGal;
             sectorPrefixBurn = pendingStop.burn;
           }
           pendingStop = null;
         }
         const sectorStartMin = runningAccTime;
+        // ON BOARD AT THIS SECTOR'S ENGINE START - after the stop before it has
+        // been paid for or refuelled, and before anything this sector burns.
+        // Taxi is charged to this sector's first leg, so it is INSIDE the burn
+        // below and this figure includes it, which is what the M&B take-off
+        // mass wants ("Count taxi fuel in takeoff mass" - the author).
+        // A leading circuit is also charged after this point, which is right:
+        // the laps are flown after start-up, not before it.
+        const sectorDepGal = runningFuelGal;
         const sectionDiv = document.createElement('div');
         sectionDiv.className = 'flight-section';
 
@@ -6331,6 +6475,7 @@
             runningAccTime += patternMinutes;
             runningAccBurn = Number((runningAccBurn + patternBurn).toFixed(1));
             runningFuelRemaining = Number((runningFuelRemaining - patternBurn).toFixed(1));
+            runningFuelGal -= patternBurnGal;
             sectorTime += patternMinutes;
             sectorBurn += patternBurn;
 
@@ -6442,6 +6587,7 @@
           runningAccTime += legTime;
           runningAccBurn = Number((runningAccBurn + legBurn).toFixed(1));
           runningFuelRemaining = Number((runningFuelRemaining - legBurn).toFixed(1));
+          runningFuelGal -= legBurnGal;
           sectorDist += dist; sectorTime += legTime; sectorBurn += legBurn;
           runningAccDist += dist;
 
@@ -6482,11 +6628,21 @@
             dep: real.length ? real[0].name : '',
             dest: real.length ? real[real.length - 1].name : '',
             date: (document.getElementById('def-date') || {}).value || '',
-            // Reg is left BLANK on purpose. The planner does not know which of
-            // LN-TRA..TRE is being flown, and a tail number identifies a
-            // MACHINE - PROFILE_KEYS must never carry one, so there is nothing
-            // to read. The pilot writes it, as they do on the paper form.
-            reg: '',
+            // REG IS FILLED FROM THE SELECTED TAIL SINCE v16.95, and that is a
+            // DELIBERATE reversal of the v16.41 rule rather than a drift. That
+            // rule read "the planner does not know which of LN-TRA..TRE is
+            // being flown, so there is nothing to read" - a premise that
+            // expired the moment M&B made a tail selectable. The author
+            // cleared it outright: "Aircraft registrations and their data can
+            // be stored. Theres no privacy issue there." A registration
+            // identifies a MACHINE; CREW, PASSENGERS and PIC are people and
+            // stay empty boxes for the pen.
+            //
+            // AND IT WOULD BE AN INCONSISTENCY ON ONE PRINTOUT to leave it
+            // blank: page 2 of the same sheet names the aircraft it weighed.
+            // With no tail chosen there is still nothing to read, so it stays
+            // empty exactly as before - the M&B page is absent then too.
+            reg: mbPrefs.reg || '',
             fuelDep: (Number((document.getElementById('fuel-dep') || {}).value) || 0).toFixed(1),
             fuelRem: runningFuelRemaining.toFixed(1),
             // THE TOTAL LINE IS THIS SECTOR'S, all three figures alike. The
@@ -6501,7 +6657,13 @@
             totals: { dist: sectorDist.toFixed(1), time: formatTimeHHMM(sectorTime),
                       burn: sectorBurn.toFixed(1), rem: runningFuelRemaining.toFixed(1) }
           },
-          rows: printRows
+          rows: printRows,
+          // NOT INSIDE `meta`, and that is the point: `meta` is what the
+          // printed FORM shows, in the pilot's display unit. These are the
+          // POH-unit figures Mass & Balance weighs, and mixing the two is how
+          // a rounded display value ends up in a weight. One push keeps the
+          // two in step - a separate array could get out of sync with this one.
+          fuelGal: { dep: sectorDepGal, arr: runningFuelGal }
         });
 
         grandTotalDist += sectorDist;
@@ -6550,6 +6712,10 @@
           pendingStop = {
             min: stopMin, kind: stopKind,
             burn: Number(convertFuel(gal, fuelUnit).toFixed(1)),
+            // The same burn unrounded and in gallons, for the exact tracker.
+            // Carried on the SAME object as the display figure so the two
+            // cannot be derived from different stop minutes.
+            burnGal: gal,
             refuelGal: normaliseRefuelGal(lastReal.fuelAfterGal)
           };
         }
@@ -6563,6 +6729,13 @@
       const remEl = document.getElementById('grand-final-rem');
       remEl.innerText = runningFuelRemaining.toFixed(1) + ` ${fuelLabel(fuelUnit)}`;
       remEl.classList.toggle('low-fuel', runningFuelRemaining < getReserveDisplayUnits());
+
+      // WEIGHED BEFORE THE SAFETY NET RUNS, so an out-of-limits load reaches the
+      // red banner on the same pass that produced the figures (v16.95). It is
+      // wrapped for the v16.43 reason: a throw here must not be able to skip
+      // the check that follows.
+      try { massBalanceMission = buildMassBalanceMission(); }
+      catch (e) { massBalanceMission = null; }
 
       // THE SAFETY NET RUNS FIRST, AND NOTHING BEFORE IT MAY SKIP IT (v16.43).
       //
@@ -6581,6 +6754,28 @@
         showIntegrityProblems(problems);
       }
       renderOfpPrintSheets(problems);
+      try { renderMassBalance(); }
+      catch (e) {
+        problems = problems.concat('The Mass & Balance sheet failed to render: ' +
+          (e && e.message) + '. Weigh the aircraft on the paper form.');
+        showIntegrityProblems(problems);
+      }
+      try { renderMbWeather(); } catch (e) { /* the card is a convenience */ }
+    }
+
+    /** The departure and destination reports, in the M&B tab. */
+    function renderMbWeather() {
+      const host = document.getElementById('mb-wx');
+      if (!host) return;
+      if (!lastWeather) {
+        host.innerHTML = '<span style="color:var(--text-muted);">Not fetched yet.</span>';
+        return;
+      }
+      // First and last ICAO of the mission - the two aerodromes the takeoff and
+      // landing distances are read for, and the two the daylight card judges.
+      const all = lastWeather.icaos;
+      const want = all.length <= 2 ? all : [all[0], all[all.length - 1]];
+      renderMetarCard(want, lastWeather.metars, lastWeather.tafs, 'mb-wx');
     }
 
     function createRowHTML(fromName, toName, type, altDisplay, oat, tas, tt, magVar, varIndicator, mt, wdir, wspd, wca, mh, gs, dist, threeMinNM, legTime, accTime, ff, legBurn, accBurn, remFuel, fIdx, wpIndex, showDelete) {
@@ -6689,7 +6884,7 @@
       aircraftProfile.cruiseTas   = Math.max(1,   numOr('perf-cruise-tas', 130));
       const readFuel = (id, defGal) => {
         const v = Number(document.getElementById(id).value);
-        return isNaN(v) ? defGal : toGal(v, settingsFuelUnit);
+        return isNaN(v) ? defGal : toGallons(v, settingsFuelUnit);
       };
       aircraftProfile.cruiseFf    = Math.max(0.1, readFuel('perf-cruise-ff', 12.5));
       aircraftProfile.climbMode   = document.getElementById('c182-climb-mode').value === 'POH' ? 'POH' : 'CRUISECLIMB';
@@ -6751,9 +6946,7 @@
         ['fuel-dep', 'fuel-reserve'].forEach(function(id) {
           const box = document.getElementById(id);
           const current = Number(box.value) || 0;
-          const asGal = prevFuelUnit === 'LITERS' ? current / 3.78541
-                      : prevFuelUnit === 'KG'     ? current / 2.72
-                      : current;
+          const asGal = toGallons(current, prevFuelUnit);
           box.value = convertFuel(asGal, newFuelUnit).toFixed(1);
         });
         savePlanningPrefs();
@@ -7083,8 +7276,18 @@
         fuelRemaining: remEl ? parseFloat(remEl.innerText !== undefined ? remEl.innerText : remEl.textContent) : NaN
       });
 
-      showIntegrityProblems(problems);
-      return problems;
+      // MASS & BALANCE JOINS THE SAME LIST, so an out-of-limits load raises the
+      // same red banner and prints in the same DO NOT USE band (v16.43) - there
+      // is no second place for a safety finding to live.
+      //
+      // ONLY ONCE AN AIRCRAFT IS SELECTED. With no registration there is no M&B
+      // to be wrong about, and a banner reading "no aircraft selected" on every
+      // plan would be noise a pilot learns to scroll past - which is how a real
+      // finding gets missed. The tab says so where it matters instead.
+      const mbProblems = mbPrefs.reg ? massBalanceProblems(massBalanceMission) : [];
+
+      showIntegrityProblems(problems.concat(mbProblems));
+      return problems.concat(mbProblems);
     }
 
     /** Paint the red banner. Split out so a failure discovered AFTER the check
@@ -7173,9 +7376,10 @@
     // raster with the text drawn over it. This function only turns that
     // specification into markup.
     //
-    // The MASS & BALANCE side (page 2 of the form) is deliberately NOT
-    // reproduced - it is a separate piece of work with its own data (arms,
-    // limits, the real sheet) that has not been done.
+    // The MASS & BALANCE side (page 2 of the form) is reproduced since v16.95
+    // by `mbPrintHTML` - by its ROWS and its vocabulary, not by its geometry.
+    // See that function for why page 2 is not pixel-measured the way this one
+    // was.
     // =========================================================================
     function ofpSheetHTML(sheet) {
       const widths = columnWidthsPct();
@@ -7237,7 +7441,7 @@
             <table class="ofp-admin"><tbody>
               <tr><th>Date</th><td>${esc(sheet.date)}</td><th>Flight time</th><td></td></tr>
               <tr><th>Lesson</th><td></td><th>Block time</th><td></td></tr>
-              <tr><th>Reg:</th><td></td><th>Fuel Dep</th><td>${esc(sheet.fuelDep)}</td></tr>
+              <tr><th>Reg:</th><td>${esc(sheet.reg)}</td><th>Fuel Dep</th><td>${esc(sheet.fuelDep)}</td></tr>
               <tr><th></th><td></td><th>Fuel Rem</th><td>${esc(sheet.fuelRem)}</td></tr>
             </tbody></table>
             <table class="ofp-crew"><tbody>
@@ -7278,7 +7482,98 @@
       let html = '';
       for (const f of ofpPrintModel)
         for (const sheet of buildOfpSheets(f.meta, f.rows)) html += band + ofpSheetHTML(sheet);
+      // THE M&B SHEET PRINTS AFTER THE OFP SHEETS, exactly as it is page 2 of
+      // the paper form - and it carries the SAME band, because a plan the app
+      // has declared unusable must not print as clean company paperwork on
+      // either page (v16.43).
+      html += mbPrintHTML(band);
       host.innerHTML = html;
+    }
+
+    /**
+     * The Mass & Balance page, filled from the same figures the tab shows.
+     *
+     * **THIS IS NOT A PIXEL REPRODUCTION OF THE FORM'S PAGE 2**, and saying so
+     * matters: page 1 was measured off a 200 dpi render to 25 column edges
+     * (v16.41) because it is a dense grid. Page 2 is a list of named rows, so
+     * it is reproduced by its ROWS and its vocabulary rather than by its
+     * geometry - the same content, laid out cleanly, not a forgery of the
+     * paper. Measuring page 2's grid the way page 1 was measured is a separate
+     * piece of work and is written down rather than half-done.
+     *
+     * CREW, PIC AND PASSENGER NAMES STAY EMPTY BOXES. The author: "PIC and PAX
+     * names are only written on the printed sheet" - by hand. Nothing in this
+     * app holds a person's name, and PROFILE_KEYS still must not.
+     */
+    function mbPrintHTML(band) {
+      const m = massBalanceMission;
+      if (!m) return '';
+      // The master is the SAME object the tab shows (missionMaster), so the
+      // paper cannot print a different whole-mission figure from the screen.
+      const master = mbPrefs.view === 'mission' ? missionMaster(m) : null;
+      const sheets = master
+        ? [{ res: master, title: 'Whole mission' }]
+        : m.sectors.map((r) => ({ res: r, title: r.label }));
+      let out = '';
+      for (const sh of sheets) {
+        const r = sh.res;
+        const cell = (v, d) => (isFinite(v) ? v.toFixed(d === undefined ? 1 : d) : '');
+        const line = (label, pt) =>
+          '<tr><td>' + esc(label) + '</td><td>' + cell(pt.weightLb) + '</td><td>' +
+          (pt.armIn === null || !isFinite(pt.armIn) ? '' : pt.armIn.toFixed(1)) +
+          '</td><td>' + (isFinite(pt.momentInLb) ? Math.round(pt.momentInLb) : '') + '</td></tr>';
+        out += band + '<div class="ofp-sheet mb-sheet">';
+        out += '<div class="mb-sheet-head"><b>MASS &amp; BALANCE</b>' +
+               '<span>' + esc(r.aircraft.reg) + '</span>' +
+               '<span>' + esc(sh.title) + '</span>' +
+               '<span>PIC: __________________</span></div>';
+        out += '<table class="mb-sheet-grid"><tr><th>Item</th><th>Weight (lb)</th>' +
+               '<th>Arm (in)</th><th>Moment (in-lb)</th></tr>';
+        out += line('Basic empty mass', r.emptyMass);
+        for (const [key, label] of [['pilotLb', 'Pilot - left seat'], ['rightLb', 'Pilot or passenger - right seat'],
+                                    ['rearLb', 'Rear passengers'], ['bagALb', 'Baggage area A'],
+                                    ['bagBLb', 'Baggage area B'], ['bagCLb', 'Baggage area C']]) {
+          const lb = r.loads[key];
+          out += '<tr><td>' + esc(label) + '</td><td>' + (lb ? lb.toFixed(1) : '') + '</td><td>' +
+                 STATION_ARMS[key].toFixed(1) + '</td><td>' + (lb ? Math.round(lb * STATION_ARMS[key]) : '') +
+                 '</td></tr>';
+        }
+        out += '<tr><td>Fuel (' + cell(r.fuelDepGal) + ' US gal)</td><td>' +
+               cell(r.fuelDepGal * FUEL_LB_PER_GAL) + '</td><td>' + FUEL_ARM_IN.toFixed(1) +
+               '</td><td>' + Math.round(r.fuelDepGal * FUEL_LB_PER_GAL * FUEL_ARM_IN) + '</td></tr>';
+        out += '<tr class="mb-sheet-rule">' + line('Total take-off mass', r.takeoff).slice(4);
+        // THE SHEET HAS TO ADD UP: take-off, minus what was burned, plus what
+        // changed at the stops, is the landing printed below it. On a sector
+        // sheet there are no stops and the burn is dep - arr; on the master
+        // the burn is WALKED over the sectors, never "first dep minus last arr",
+        // which is the burn only when nothing was taken on.
+        const burnLb = r.burnGal * FUEL_LB_PER_GAL;
+        out += '<tr><td>Enroute fuel consumed</td><td>' + cell(burnLb) + '</td><td>' +
+               FUEL_ARM_IN.toFixed(1) + '</td><td>' + Math.round(burnLb * FUEL_ARM_IN) + '</td></tr>';
+        const stopGal = /** @type {any} */ (r).stopChangeGal;
+        if (isFinite(stopGal) && Math.abs(stopGal) >= 0.05) {
+          const stopLb = stopGal * FUEL_LB_PER_GAL;
+          out += '<tr><td>Fuel change at stops (net: refuel adds, circuits subtract)</td><td>' +
+                 (stopLb > 0 ? '+' : '') + cell(stopLb) + '</td><td>' + FUEL_ARM_IN.toFixed(1) +
+                 '</td><td>' + (stopLb > 0 ? '+' : '') + Math.round(stopLb * FUEL_ARM_IN) + '</td></tr>';
+        }
+        out += '<tr><td>Last minute change</td><td></td><td></td><td></td></tr>';
+        out += '<tr class="mb-sheet-rule">' + line('Total landing mass', r.landing).slice(4);
+        out += '<tr class="mb-sheet-rule">' + line('Zero fuel mass', r.zeroFuel).slice(4);
+        out += '</table>';
+        out += '<div class="mb-sheet-notes">MTOW ' + MTOW_LB + ' lb &middot; MLW ' + MLW_LB +
+               ' lb &middot; V<sub>A</sub> ' + (r.vaKt === null ? '---' : Math.round(r.vaKt)) +
+               ' kt &middot; V<sub>GLIDE</sub> ' + (r.vGlideKt === null ? '---' : r.vGlideKt) +
+               ' kt &middot; ' + esc(FLEET_SOURCE.workbook) + ' / form v' + esc(FLEET_SOURCE.versionDate) +
+               '</div>';
+        out += mbChartSVG([
+          { key: 'TO', label: 'T/O', weightLb: r.takeoff.weightLb, armIn: r.takeoff.armIn },
+          { key: 'LDG', label: 'LDG', weightLb: r.landing.weightLb, armIn: r.landing.armIn },
+          { key: 'ZFM', label: 'ZFM', weightLb: r.zeroFuel.weightLb, armIn: r.zeroFuel.armIn }
+        ]);
+        out += '</div>';
+      }
+      return out;
     }
 
     /** @param {boolean} [batched] true when the caller already pushed an undo
@@ -7714,6 +8009,271 @@
 
     function saveActiveState() {
       localStorage.setItem('c182_active_mission', JSON.stringify(flights));
+    }
+
+    /* ===================================================================
+       2h. MASS & BALANCE (v16.95, roadmap item 5 Phase C)
+       The engine is src/lib/massbalance.js; this is the shell around it.
+       =================================================================== */
+
+    /**
+     * THE M&B INPUTS DO NOT TRAVEL IN AN EXPORT, and that is deliberate rather
+     * than an oversight. The author cleared REGISTRATIONS for storage ("no
+     * privacy issue there"), and these are stored - in their own localStorage
+     * entry, so the pilot does not retype them every session. They are NOT in
+     * PROFILE_KEYS, so nothing here can ride out in a route file somebody
+     * emails: a seat weight carries no name, but it is still a fact about the
+     * people who were in the aeroplane, and a route file is for sharing a
+     * ROUTE. PROFILE_KEYS therefore still has no reg, pic or crew key, and the
+     * v16.18 test asserting that is unchanged.
+     */
+    let mbPrefs = { reg: null, loads: normaliseStationLoads({}), view: 'sector' };
+    /** Rebuilt on every render from ofpPrintModel. @type {any} */
+    let massBalanceMission = null;
+
+    function loadMbPrefs() {
+      try {
+        const p = JSON.parse(localStorage.getItem('c182_mb_prefs') || 'null') || {};
+        mbPrefs = {
+          reg: normaliseReg(p.reg),
+          loads: normaliseStationLoads(p.loads),
+          view: p.view === 'mission' ? 'mission' : 'sector'
+        };
+      } catch (e) {
+        // A corrupt entry costs the LOADS, never the plan in front of the
+        // pilot - the v16.44 rule for the saved-route library.
+        mbPrefs = { reg: null, loads: normaliseStationLoads({}), view: 'sector' };
+      }
+    }
+    function saveMbPrefs() {
+      try { localStorage.setItem('c182_mb_prefs', JSON.stringify(mbPrefs)); } catch (e) {}
+    }
+
+    function setMbReg(v) {
+      mbPrefs.reg = normaliseReg(v);
+      saveMbPrefs();
+      renderAllFlightTables();
+    }
+    function setMbLoad(key, v) {
+      const next = Object.assign({}, mbPrefs.loads);
+      next[key] = Number(v);
+      // Re-validated on every write AND on every read, because localStorage is
+      // hand-editable (the v16.35 rule for the fix style).
+      mbPrefs.loads = normaliseStationLoads(next);
+      saveMbPrefs();
+      renderAllFlightTables();
+    }
+    function setMbView(v) {
+      mbPrefs.view = v === 'mission' ? 'mission' : 'sector';
+      saveMbPrefs();
+      renderMassBalance();
+    }
+
+    function showSidePane(which) {
+      const mb = which === 'mb';
+      const pp = document.getElementById('pane-plan');
+      const pm = document.getElementById('pane-mb');
+      if (!pp || !pm) return;
+      pp.style.display = mb ? 'none' : '';
+      pm.style.display = mb ? '' : 'none';
+      for (const [id, on] of [['tab-plan', !mb], ['tab-mb', mb]]) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.classList.toggle('side-tab-on', on);
+        el.setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+    }
+
+    /**
+     * The mission weighed, from the fuel the render pass just measured.
+     *
+     * THE FUEL IS NOT RE-DERIVED HERE. `ofpPrintModel[i].fuelGal` is the
+     * unrounded gallon figure captured while the table was rendered (v16.94),
+     * so the sheet cannot disagree with the fuel column beside it - the v16.41
+     * "one computation, two outputs" rule.
+     */
+    function buildMassBalanceMission() {
+      const ac = mbPrefs.reg ? aircraftByReg(mbPrefs.reg) : null;
+      if (!ac) return null;
+      const sectors = ofpPrintModel.map((s) => ({
+        fuelDepGal: s.fuelGal.dep,
+        fuelArrGal: s.fuelGal.arr,
+        label: (s.meta.dep || '?') + ' → ' + (s.meta.dest || '?')
+      }));
+      return computeMissionMassBalance(ac, mbPrefs.loads, sectors);
+    }
+
+    /** One weight/arm/moment line. */
+    function mbRow(label, pt, cls) {
+      const arm = pt.armIn === null || !isFinite(pt.armIn) ? '---' : pt.armIn.toFixed(1);
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' +
+        '<td>' + esc(label) + '</td>' +
+        '<td>' + (isFinite(pt.weightLb) ? pt.weightLb.toFixed(1) : '---') + '</td>' +
+        '<td>' + arm + '</td>' +
+        '<td>' + (isFinite(pt.momentInLb) ? Math.round(pt.momentInLb).toLocaleString('en-GB') : '---') + '</td>' +
+        '</tr>';
+    }
+
+    /** The CG chart, drawn entirely from the pure model. */
+    function mbChartSVG(marks) {
+      const m = cgChartModel(marks, { width: 320, height: 250 });
+      const pt = (p) => p.x.toFixed(1) + ',' + p.y.toFixed(1);
+      let g = '<svg class="mb-chart" viewBox="0 0 ' + m.width + ' ' + m.height +
+              '" role="img" aria-label="Centre of gravity envelope">';
+      for (const gx of m.gridX) {
+        g += '<line class="mb-grid-line" x1="' + gx.x.toFixed(1) + '" y1="' + m.pad +
+             '" x2="' + gx.x.toFixed(1) + '" y2="' + (m.height - m.pad) + '"/>' +
+             '<text class="mb-axis" x="' + gx.x.toFixed(1) + '" y="' + (m.height - m.pad + 11) +
+             '" text-anchor="middle">' + gx.arm + '</text>';
+      }
+      for (const gy of m.gridY) {
+        g += '<line class="mb-grid-line" x1="' + m.pad + '" y1="' + gy.y.toFixed(1) +
+             '" x2="' + (m.width - m.pad) + '" y2="' + gy.y.toFixed(1) + '"/>' +
+             '<text class="mb-axis" x="' + (m.pad - 4) + '" y="' + (gy.y + 3).toFixed(1) +
+             '" text-anchor="end">' + gy.weight + '</text>';
+      }
+      g += '<polygon class="mb-env" points="' + m.envelope.map(pt).join(' ') + '"/>';
+      g += '<polyline class="mb-ref" points="' + m.autopilot.map(pt).join(' ') + '"/>';
+      g += '<polyline class="mb-ref" points="' + m.mlw.map(pt).join(' ') + '"/>';
+      for (const k of m.marks) {
+        const col = k.verdict === 'ok' ? '#2b6cb0' : '#e53e3e';
+        g += '<circle class="mb-pt" cx="' + k.x.toFixed(1) + '" cy="' + k.y.toFixed(1) +
+             '" r="4" fill="' + col + '"><title>' + esc(k.label) + ': ' +
+             k.weightLb.toFixed(1) + ' lb at ' + k.armIn.toFixed(2) + ' in</title></circle>' +
+             '<text class="mb-lbl" x="' + (k.x + 7).toFixed(1) + '" y="' + (k.y + 3).toFixed(1) +
+             '">' + esc(k.label) + '</text>';
+      }
+      g += '<text class="mb-axis" x="' + (m.width / 2) + '" y="' + (m.height - 3) +
+           '" text-anchor="middle">Arm, inches aft of datum</text>';
+      g += '</svg>';
+      // A point that could not be plotted is SAID, never dropped - an absent
+      // dot would read as "fine".
+      if (m.undrawn.length) {
+        g += '<div style="font-size:10px; color:#c05621; margin-top:4px;">Not plotted: ' +
+             esc(m.undrawn.join(', ')) + ' - a weight or arm is missing.</div>';
+      }
+      return g;
+    }
+
+    /** One sector (or the mission master) as a card. */
+    function mbSheetHTML(res, title) {
+      const c = res.checks;
+      const bad = (v) => v === 'ok' ? '' : 'mb-bad';
+      let h = '<div class="card" style="margin-top:4px;"><div class="card-title">' + esc(title) + '</div>';
+      h += '<table class="mb-grid"><tr><th>Item</th><th>Weight (lb)</th><th>Arm (in)</th><th>Moment (in-lb)</th></tr>';
+      h += mbRow('Basic empty mass' + (res.aircraft.fixedExtraLb
+            ? ' (incl. ' + res.aircraft.fixedExtraLb + ' lb compartment B)' : ''), res.emptyMass);
+      h += mbRow('Zero fuel mass', res.zeroFuel, bad(c.zeroFuelCg));
+      h += mbRow('Take-off mass', res.takeoff,
+            (c.takeoffWeight === 'ok' && c.takeoffCg === 'ok') ? 'mb-rule' : 'mb-rule mb-bad');
+      h += mbRow('Landing mass', res.landing,
+            (c.landingWeight === 'ok' && c.landingCg === 'ok') ? 'mb-rule' : 'mb-rule mb-bad');
+      h += '</table>';
+
+      const lim = armLimits(res.takeoff.weightLb);
+      const f1 = (n) => isFinite(n) ? n.toFixed(1) : '---';
+      h += '<div style="font-size:10px; color:var(--text-muted); margin-top:6px; line-height:1.7;">';
+      h += 'Fuel ' + f1(res.fuelDepGal) + ' → ' + f1(res.fuelArrGal) + ' US gal (burn ' +
+           f1(res.burnGal) + ')<br>';
+      // Only the whole-mission sheet has stops inside it. Said separately, so
+      // the three fuel figures on the line above still add up to the tanks.
+      if (isFinite(res.stopChangeGal) && Math.abs(res.stopChangeGal) >= 0.05)
+        h += 'At the stops ' + (res.stopChangeGal > 0 ? '+' : '') + f1(res.stopChangeGal) +
+             ' US gal net (refuel adds; circuit and ground minutes subtract)<br>';
+      h += 'MTOW ' + MTOW_LB + ' lb · MLW ' + MLW_LB + ' lb' +
+           (lim ? ' · CG limits at take-off ' + f1(lim.fwdIn) + '–' + f1(lim.aftIn) + ' in' : '') + '<br>';
+      h += 'V<sub>A</sub> ' + (res.vaKt === null ? 'not tabulated below 2100 lb' :
+             Math.round(res.vaKt) + ' kt (POH table, at the landing mass)') +
+           ' · V<sub>GLIDE</sub> ' + (res.vGlideKt === null ? '---' : res.vGlideKt + ' kt') +
+           ' <span title="The form prints a V GLIDE box with no POH table behind it; this is the school sheet\'s own straight-line figure, not a POH value.">(sheet figure)</span>';
+      if (res.minFlightMin > 0) {
+        h += '<br><b class="mb-bad">Over MLW at take-off:</b> ' + Math.ceil(res.minFlightMin) +
+             ' min of flight at ' + MIN_FLIGHT_GPH + ' gal/h before it is light enough to land.';
+      }
+      h += '</div>';
+      h += mbChartSVG([
+        { key: 'TO', label: 'T/O', weightLb: res.takeoff.weightLb, armIn: res.takeoff.armIn },
+        { key: 'LDG', label: 'LDG', weightLb: res.landing.weightLb, armIn: res.landing.armIn },
+        { key: 'ZFM', label: 'ZFM', weightLb: res.zeroFuel.weightLb, armIn: res.zeroFuel.armIn }
+      ]);
+      h += '</div>';
+      return h;
+    }
+
+    function renderMassBalance() {
+      const body = document.getElementById('mb-body');
+      if (!body) return;
+      const sel = document.getElementById('mb-reg');
+      if (sel && !sel.options.length) {
+        sel.innerHTML = '<option value="">- select an aircraft -</option>' +
+          FLEET.map((a) => '<option value="' + esc(a.reg) + '">' + esc(a.reg) + '</option>').join('');
+      }
+      if (sel) sel.value = mbPrefs.reg || '';
+      for (const key of Object.keys(STATION_ARMS)) {
+        const el = document.getElementById('mb-' + key);
+        if (el && document.activeElement !== el) el.value = String(mbPrefs.loads[key]);
+      }
+      const src = document.getElementById('mb-source');
+      if (src) src.innerText = 'OFP form v' + FLEET_SOURCE.versionDate;
+
+      const note = document.getElementById('mb-reg-note');
+      if (note) {
+        const ac = mbPrefs.reg ? aircraftByReg(mbPrefs.reg) : null;
+        note.innerHTML = ac
+          ? 'Empty ' + ac.emptyWeightLb.toFixed(1) + ' lb at ' +
+            (ac.emptyMomentInLb / ac.emptyWeightLb).toFixed(2) + ' in.' +
+            (ac.fixedExtraLb ? ' <b>' + esc(ac.reg) + '</b> carries ' + ac.fixedExtraLb +
+              ' lb of compartment B structure that its empty weight was established without - ' +
+              'it is added automatically and is not baggage.' : '')
+          : 'No aircraft selected, so nothing is weighed and nothing is checked.';
+      }
+      for (const [id, on] of [['mb-view-sector', mbPrefs.view === 'sector'],
+                              ['mb-view-mission', mbPrefs.view === 'mission']]) {
+        const el = document.getElementById(id);
+        if (el) el.className = 'btn btn-sm' + (on ? ' btn-primary' : '');
+      }
+      const vn = document.getElementById('mb-view-note');
+      if (vn) {
+        vn.innerHTML = mbPrefs.view === 'mission'
+          ? 'One sheet for the whole mission: the weights it leaves with and the weights it comes back at. ' +
+            '<b>Every landing in between is still checked against ' + MLW_LB + ' lb</b> - this changes what is ' +
+            'SHOWN, never what is checked.'
+          : 'One sheet per sector, which is how the paper form is used - it has one DEP and one DEST.';
+      }
+
+      const m = massBalanceMission;
+      if (!m) {
+        body.innerHTML = '<div class="card" style="margin-top:4px;"><div style="font-size:11px; ' +
+          'line-height:1.7;">Pick a registration above to weigh this mission. The fuel comes from the ' +
+          'flight plan itself - the figures on the OFP, not a second number to keep in step.</div></div>';
+        return;
+      }
+      let h = '';
+      if (mbPrefs.view === 'mission' && m.first && m.last) {
+        // ONE master, built in the engine and shared with the printed page:
+        // every figure on it is the one that binds the whole mission, and the
+        // fuel is walked over the sectors rather than "dep minus arr", which is
+        // the burn only when nothing was taken on (missionMaster, massbalance.js).
+        const master = missionMaster(m);
+        h += mbSheetHTML(master, 'Whole mission · ' +
+          (m.first.label.split(' → ')[0] || '') + ' → ' +
+          (m.last.label.split(' → ')[1] || ''));
+        if (m.worstLanding && m.worstLanding !== m.last) {
+          h += '<div class="card" style="margin-top:4px;"><div style="font-size:11px; line-height:1.7;">' +
+            'The heaviest landing of the mission is <b>' + esc(m.worstLanding.label) + '</b> at ' +
+            m.worstLanding.landing.weightLb.toFixed(1) + ' lb, not the final one. It is checked against MLW ' +
+            'whichever sheet you are looking at.</div></div>';
+        }
+      } else {
+        for (const r of m.sectors) h += mbSheetHTML(r, r.label);
+      }
+      const cautions = massBalanceCautions(m);
+      if (cautions.length) {
+        h += '<div class="card" style="margin-top:4px;"><div class="card-title">Worth knowing</div>' +
+          '<ul style="font-size:10px; line-height:1.7; margin:0; padding-left:16px;">' +
+          cautions.map((c) => '<li>' + esc(c) + '</li>').join('') + '</ul></div>';
+      }
+      body.innerHTML = h;
     }
 
     function savePlanningPrefs() {
@@ -8249,6 +8809,7 @@
     // Initialize
     loadSavedProfile();
     loadPlanningPrefs();
+    loadMbPrefs();
     populateRouteDropdown();
     applyZoomDeclutter();   // needs aircraftProfile, so it runs here, not at map setup
     updateAirspaceBtn();    // same: reads the persisted profile

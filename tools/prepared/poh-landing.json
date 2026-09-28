@@ -1,0 +1,276 @@
+{
+  "_README": [
+    "SHORT FIELD LANDING DISTANCE, Cessna 182T NAV III, POH Section 5",
+    "Performance. Transcribed from the printed table supplied by the author.",
+    "",
+    "DATA ONLY - NOTHING READS THIS YET. Consumer is roadmap item 5 Phase D",
+    "(performance), which is not built and not approved.",
+    "",
+    "ONE WEIGHT, AND IT IS THE MAXIMUM LANDING MASS. The POH publishes this",
+    "table at 2950 lb only - it is NOT a weight axis with one row, and it must",
+    "never be interpolated or scaled by weight. A lighter aeroplane lands",
+    "SHORTER, so reading the 2950 lb figure for any legal landing weight errs",
+    "long, which is the safe direction and is presumably why one table suffices.",
+    "Stating that reasoning matters: the takeoff tables DO carry three weights,",
+    "so a shared interpolator that assumed a weight axis here would silently",
+    "invent one.",
+    "",
+    "THE GRASS CORRECTION IS NOT THE TAKEOFF ONE. Landing adds 45% of the",
+    "ground roll; takeoff adds 15%. Two different numbers under near-identical",
+    "wording is exactly the shape this project keeps getting caught by, so the",
+    "corrections live with their own table and are never shared.",
+    "",
+    "WHY IT CAN BE TRUSTED: the OFP workbook's Performance!F:H independently",
+    "carries 30 of these cells (PA 0-5000 x 5 temperatures), transcribed by the",
+    "author from the same POH. All 30 agree exactly, which is what makes the",
+    "PA 6000/7000/8000 rows - present here and absent from the workbook -",
+    "trustworthy read by the same method. test.js asserts that agreement.",
+    "",
+    "AND THE TITLE CORROBORATES MLW A THIRD TIME: 2950 lb is what",
+    "Performance!W1:X3 draws as the MLW line and what the author stated, and it",
+    "is what this page is published at."
+  ],
+  "source": {
+    "document": "Cessna 182T NAV III POH, Section 5 Performance",
+    "figure": "SHORT FIELD LANDING DISTANCE AT 2950 POUNDS",
+    "suppliedBy": "the flight school, as a printed-page image",
+    "corroboratedBy": "OFP-C182.xlsx, Performance!F:H (30 of 30 cells agree)"
+  },
+  "weightLb": 2950,
+  "weightIsMaximumLanding": true,
+  "conditions": [
+    "Flaps FULL",
+    "Power IDLE",
+    "Maximum braking",
+    "Paved, level, dry runway",
+    "Zero wind",
+    "Short field technique as specified in Section 4"
+  ],
+  "speedAt50FtKias": 60,
+  "corrections": {
+    "headwind": "Decrease distances 10% for each 9 knots headwind.",
+    "tailwind": "For operation with tail winds up to 10 knots, increase distances by 10% for each 2 knots.",
+    "tailwindLimitKt": 10,
+    "grassRunway": "For operation on dry grass runway, increase distances by 45% of the GROUND ROLL figure.",
+    "flapsUp": "If landing with flaps up, increase the approach speed by 10 KIAS and allow for 40% longer distances."
+  },
+  "pressureAltitudesFt": [
+    0,
+    1000,
+    2000,
+    3000,
+    4000,
+    5000,
+    6000,
+    7000,
+    8000
+  ],
+  "temperaturesC": [
+    0,
+    10,
+    20,
+    30,
+    40
+  ],
+  "units": "feet; each cell is [ground roll, total to clear a 50 ft obstacle]",
+  "table": {
+    "0": [
+      [
+        560,
+        1300
+      ],
+      [
+        580,
+        1335
+      ],
+      [
+        600,
+        1365
+      ],
+      [
+        620,
+        1400
+      ],
+      [
+        640,
+        1435
+      ]
+    ],
+    "1000": [
+      [
+        580,
+        1335
+      ],
+      [
+        600,
+        1365
+      ],
+      [
+        620,
+        1400
+      ],
+      [
+        645,
+        1440
+      ],
+      [
+        665,
+        1475
+      ]
+    ],
+    "2000": [
+      [
+        600,
+        1370
+      ],
+      [
+        625,
+        1405
+      ],
+      [
+        645,
+        1440
+      ],
+      [
+        670,
+        1480
+      ],
+      [
+        690,
+        1515
+      ]
+    ],
+    "3000": [
+      [
+        625,
+        1410
+      ],
+      [
+        645,
+        1445
+      ],
+      [
+        670,
+        1485
+      ],
+      [
+        695,
+        1525
+      ],
+      [
+        715,
+        1560
+      ]
+    ],
+    "4000": [
+      [
+        650,
+        1450
+      ],
+      [
+        670,
+        1485
+      ],
+      [
+        695,
+        1525
+      ],
+      [
+        720,
+        1565
+      ],
+      [
+        740,
+        1600
+      ]
+    ],
+    "5000": [
+      [
+        670,
+        1485
+      ],
+      [
+        695,
+        1525
+      ],
+      [
+        720,
+        1565
+      ],
+      [
+        745,
+        1610
+      ],
+      [
+        770,
+        1650
+      ]
+    ],
+    "6000": [
+      [
+        700,
+        1530
+      ],
+      [
+        725,
+        1575
+      ],
+      [
+        750,
+        1615
+      ],
+      [
+        775,
+        1660
+      ],
+      [
+        800,
+        1700
+      ]
+    ],
+    "7000": [
+      [
+        725,
+        1575
+      ],
+      [
+        750,
+        1615
+      ],
+      [
+        780,
+        1665
+      ],
+      [
+        805,
+        1710
+      ],
+      [
+        830,
+        1750
+      ]
+    ],
+    "8000": [
+      [
+        755,
+        1625
+      ],
+      [
+        780,
+        1655
+      ],
+      [
+        810,
+        1715
+      ],
+      [
+        835,
+        1760
+      ],
+      [
+        865,
+        1805
+      ]
+    ]
+  }
+}

@@ -467,6 +467,126 @@ interface WeatherReport {
   isTaf: boolean;
 }
 
+/**
+ * One aircraft of the school's fleet, from the OFP workbook's `AC REG` tab
+ * and the table printed on the form. Weights in pounds, moments in
+ * inch-pounds, arms in inches aft of datum - the POH's units.
+ */
+interface Aircraft {
+  /** e.g. "LN-TRB". A registration identifies a machine, not a person. */
+  reg: string;
+  emptyWeightLb: number;
+  emptyMomentInLb: number;
+  /** Structure the empty weight was established WITHOUT, at the baggage B
+   *  arm. Only LN-TRE has one; it is part of the airframe, not a load. */
+  fixedExtraLb: number;
+}
+
+/** What got loaded, in pounds, at each of the form's stations. */
+interface StationLoads {
+  pilotLb: number;
+  rightLb: number;
+  rearLb: number;
+  bagALb: number;
+  bagBLb: number;
+  bagCLb: number;
+}
+
+/** A weight with its moment; the arm is derived and never stored rounded. */
+interface MassPoint {
+  weightLb: number;
+  momentInLb: number;
+  /** Inches aft of datum. Null only when the weight is zero. */
+  armIn: number | null;
+}
+
+/** Where a point sits against the CG envelope. */
+type CgVerdict = 'ok' | 'fwd' | 'aft' | 'weight' | 'unknown';
+
+/** One sector weighed: on the ramp, at the arrival fix, and with no fuel. */
+interface MassBalanceResult {
+  /** What to call this sector in a message, e.g. "ENDU -> ENTC". */
+  label: string;
+  aircraft: Aircraft;
+  loads: StationLoads;
+  emptyMass: MassPoint;
+  zeroFuel: MassPoint;
+  takeoff: MassPoint;
+  landing: MassPoint;
+  /** US gallons on board at engine start; includes the taxi fuel. */
+  fuelDepGal: number;
+  /** US gallons remaining at the arrival fix, per the OFP's own column. */
+  fuelArrGal: number;
+  burnGal: number;
+  checks: {
+    takeoffWeight: 'ok' | 'over';
+    landingWeight: 'ok' | 'over';
+    takeoffCg: CgVerdict;
+    landingCg: CgVerdict;
+    zeroFuelCg: CgVerdict;
+    autopilotTakeoff: boolean;
+    autopilotLanding: boolean;
+  };
+  /** Minutes to fly before the aircraft is light enough to land; 0 if none. */
+  minFlightMin: number;
+  /** Knots, from the POH table; null below the lightest tabulated weight. */
+  vaKt: number | null;
+  /** Knots, from the school sheet's own formula - NOT a POH figure. */
+  vGlideKt: number | null;
+}
+
+/** Every sector of a mission weighed, plus the master figures. */
+interface MassBalanceMission {
+  aircraft: Aircraft;
+  sectors: MassBalanceResult[];
+  /** The first sector's take-off, i.e. the mission's ramp figures. */
+  first: MassBalanceResult | null;
+  /** The last sector's arrival. */
+  last: MassBalanceResult | null;
+  /** The heaviest arrival anywhere - MLW is checked at every landing. */
+  worstLanding: MassBalanceResult | null;
+  zeroFuel: MassPoint;
+  /** Walked over the sectors, never "first dep minus last arr": that is the
+   *  burn only when nothing was taken on. dep - consumed + stopChange === arr. */
+  fuel: {
+    depGal: number;
+    arrGal: number;
+    /** Burned in the sectors, taxi included. */
+    consumedGal: number;
+    /** Net change at the stops: refuel adds, circuit and ground minutes subtract. */
+    stopChangeGal: number;
+  };
+}
+
+/** One plotted point on the CG chart, in SVG pixels. */
+interface CgChartMark {
+  key: string;
+  label: string;
+  x: number;
+  y: number;
+  weightLb: number;
+  armIn: number;
+  verdict: CgVerdict;
+}
+
+/** Everything an inline CG chart needs, computed without a DOM. */
+interface CgChartModel {
+  width: number;
+  height: number;
+  pad: number;
+  /** Inches aft of datum, [low, high], widened to hold every mark. */
+  armRange: [number, number];
+  weightRange: [number, number];
+  envelope: Array<{ x: number; y: number }>;
+  autopilot: Array<{ x: number; y: number }>;
+  mlw: Array<{ x: number; y: number }>;
+  gridX: Array<{ arm: number; x: number }>;
+  gridY: Array<{ weight: number; y: number }>;
+  marks: CgChartMark[];
+  /** Keys of marks that could not be plotted, so the UI can say so. */
+  undrawn: string[];
+}
+
 /** A choice offered in a dialog. */
 interface DialogButton {
   id: string;

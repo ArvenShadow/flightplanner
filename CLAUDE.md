@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 45 shared mutable
+    decision, not unfinished work: it is one web of 48 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -202,8 +202,26 @@ That condition is now a constraint on the project, not a footnote:
   name, an email, a licence number and coordinates through
   buildExportPayload and asserts none of it appears in the JSON. Add new
   aircraft settings to PROFILE_KEYS; never widen it to anything that
-  identifies a person, a machine or a place. (v16.34 added `fixesOn`, a
-  boolean layer toggle.)
+  identifies a PERSON or a PLACE. (v16.34 added `fixesOn`, a boolean layer
+  toggle.)
+  - **THE "MACHINE" HALF OF THAT RULE WAS RELAXED BY THE AUTHOR AT v16.93**,
+    in these words: *"Aircraft registrations and their data can be stored.
+    Theres no privacy issue there. Crew manifest is not required to input the
+    weights. PIC and PAX names are only written on the printed sheet."* So a
+    REGISTRATION may travel in an export once the M&B tab exists (Phase C);
+    a crew name, a licence number, a person's weight tied to a name, and a
+    place still may not. The v16.41 rule that the printed form's Reg box stays
+    empty rested on the planner not knowing which tail is flown - a premise
+    that expires the moment a tail is selectable, and the two tests encoding
+    it are to be updated deliberately in Phase C, not left to fail.
+  - **v16.95 DID THAT, AND TOOK THE PERMISSION NARROWER THAN GIVEN.** The Reg
+    box now prints the selected tail, and the test says why it changed. But
+    "may travel in an export" was a permission, not a request, and the M&B
+    inputs are NOT exported: they are stored under their own key
+    (`c182_mb_prefs`), outside PROFILE_KEYS. The seat weights are the reason -
+    they carry no name, but they are a fact about who was aboard, and a route
+    file is for sharing a ROUTE. Exporting the registration alone is a one-line
+    change if the author wants it; it was not done on assumption.
 
 ## Phase 2: types (v16.20)
 
@@ -379,10 +397,13 @@ three cheap disciplines applied every time the page is touched:
 - **Map**: locked to a single world copy (maxBounds ±180°, viscosity 1,
   noWrap on tiles). Kartverket tile URL is WMTS webmercator cache.
 - **Mass & Balance**: WAS out of scope — the user kept M&B in their Excel
-  OFP. SUPERSEDED at v16.28: it is roadmap item 5 (see Roadmap below), but
-  nothing is built yet and it needs the real sheet plus the POH arms and
-  limits in hand first. Fuel-requirement and POH takeoff/landing features
-  remain out of scope.
+  OFP. SUPERSEDED TWICE: at v16.28 it became roadmap item 5, and at **v16.93
+  the pure engine is BUILT** — see "MASS & BALANCE, THE OTHER HALF OF THE
+  FORM" above. `OFP-C182.xlsx` is committed and is the authoritative source,
+  corroborated figure for figure by the printed form. Fuel-requirement and POH
+  takeoff/landing performance are still not built; the workbook's own tables
+  and its stated limits (PA 5000 ft, 40 °C) are recorded there for when they
+  are.
 - **Daylight / VFR day (v16.3)**: legal basis verified — SERA Art. 2(97)
   (Reg. (EU) 923/2012) defines night via civil twilight, sun centre 6°
   below the horizon; Norway's BSL F 1-1 (forskrift 2016-12-14-1578) was
@@ -1360,7 +1381,12 @@ three cheap disciplines applied every time the page is touched:
     re-asserts that a click inside the airspace still reaches the map.
   - 227 features (was 228): Ørje 2 publishes ONE volume, and the old rule had
     given it two wrong bands. A correctness improvement, not a loss.
-- **Not planned** (verified dead ends): NOTAM (no reliable free API),
+- **Not planned** (verified dead ends): ~~NOTAM (no reliable free API)~~ -
+  **REOPENED at v16.93: the author named a source, `ippc.no`** (Avinor's
+  pre-flight planning centre). That is a changed premise, not a changed mind -
+  the old entry said no reliable free API had been FOUND, and a named one has
+  to be checked rather than dismissed. See roadmap item 20; nothing is built
+  and nothing is promised until the CORS question is answered.
   georeferenced 1:500 000 ICAO charts (licensing - and note this is a DIFFERENT
   product from the VAC under different terms; the VAC overlay shipped at v16.86
   under the permission this project already holds), traffic (needs receivers).
@@ -1459,6 +1485,13 @@ is forgotten.
 13. **`verify-visual.mjs` always reports 2 problems on a version bump** (the
     8x8 badge). It could accept a known badge region rather than needing the
     diff read by hand every time.
+14. **THE MENU SKIN REVEALS THE EMPTY `#slot-sidebar-top`** (found at v16.95).
+    `#sidebar:hover > * { display: revert }` out-specifies
+    `#slot-sidebar-top:empty { display: none }`, so on hover a 0-height slot
+    takes a flex gap and everything in the rail sits 10 px lower (6 on a short
+    window). Pre-existing since v16.66 - v16.94's first card is exactly as far
+    down - and the same `revert` trap v16.95 fixed for the panes and the tabs.
+    One more rule of the same shape; left out to keep Phase C to its scope.
 
 ## Roadmap (the user's list, v16.28, extended v16.41 - NOT yet agreed in detail)
 
@@ -1492,13 +1525,22 @@ scoped. In the user's order:
    map), hover for the name, click for the detail, a layer toggle in
    PROFILE_KEYS, and the attribution line. Sourcing rule satisfied: it is
    AIP Norge, it names its edition, and permission is held.
-5. **Mass & Balance from the Excel sheet.** NOTE: CLAUDE.md currently
-   records M&B as explicitly OUT OF SCOPE at the user's own decision. That
-   entry is now superseded by this roadmap item, but the work needs the
-   real sheet and the POH arms/limits in hand before a line is written.
-6. **PARTLY DONE at v16.41** - the OFP half. Print OFP now outputs the
-   company "Operational flightplan" form filled from the plan; see the section
-   above. The M&B half waits on item 5.
+5. **PHASES A-C DONE (v16.93-v16.95) - Mass & Balance from the Excel sheet.**
+   Phase A the pure engine and fleet, Phase B the exact per-sector gallons and
+   one fuel density, Phase C the tab, the CG chart, the sector/mission toggle
+   and findings on the banner AND the paper. See "MASS & BALANCE, THE OTHER
+   HALF OF THE FORM" and "PHASE C" below it.
+   **NOT BUILT, and the tab says so rather than leaving a gap that looks like
+   an oversight:** the takeoff and landing DISTANCES the author asked to see in
+   the tab. The POH tables are committed and cross-checked
+   (`tools/prepared/poh-*.json`), but reading them needs a pressure altitude,
+   an OAT, a wind component and a surface per runway, and comparing them needs
+   TODA/LDA - which the AIP importer does not read today. That is **Phase D**,
+   and it is not approved yet.
+6. **DONE at v16.95** - the OFP half at v16.41, the M&B half with item 5's
+   Phase C. The M&B page is reproduced by its ROWS and vocabulary, NOT
+   pixel-measured the way page 1 was; measuring page 2's grid is a separate
+   piece of work, recorded rather than half-done.
 
 ### Added v16.41 (a QoL batch, in the user's order)
 
@@ -1638,6 +1680,53 @@ and H2 all hold exactly as described.
    next leg climbs from the FIELD ELEVATION, after a touch & go from the circuit
    altitude - which is why C1's mechanical fix (no stale cursor) and its
    semantics are separable, and the mechanical one should not wait for this.
+
+### 20. AERODROME OPENING HOURS, AND NOTAMs (v16.93, the author's request)
+
+*"Opening hours for all aerodromes fetched from the AIS, and NOTAMs fetched
+from ippc.no. If a closed airport is in the flight plan, a warning shall be
+issued."*
+
+NOTHING IS BUILT AND NOTHING IS VERIFIED. What follows is the shape of the
+work and, more importantly, the question that decides whether each half can
+exist at all - because this is the surface where this project has already
+refused two features (openAIP, aviationweather.gov) and removed a third (the
+offline chart download).
+
+- **THE TWO HALVES ARE NOT THE SAME PROBLEM, and they should be scoped apart.**
+  - **OPENING HOURS look cheap and may need no new source.** AD 2.3
+    "Operational hours" is a section of every AD 2 page, and `build-aip.mjs`
+    ALREADY fetches all 53 of those pages for the airspace and the ARPs. If the
+    hours arrive as tagged `class="SD"` fields the way everything else on those
+    pages does, this is an importer change and a dataset column - no runtime
+    fetch, no CORS, works offline, and it ships with the AIRAC snapshot like the
+    rest. **CHECK THAT FIRST**, against a cached AD 2 page, before designing
+    anything: if the hours are untagged PROSE ("HJ", "MON-FRI 0600-2100, other
+    times O/R"), then reading them is sentence-parsing, which is precisely what
+    the v16.29 entry says the importer must never do.
+  - **NOTAMs ARE LIVE DATA AND CANNOT BE CACHED**, exactly like the weather: a
+    stale NOTAM is a wrong NOTAM. So they are a runtime fetch, and **the whole
+    question is whether a BROWSER may make it.** `api.met.no` works because it
+    sends `access-control-allow-origin: *`; `aviationweather.gov` was rejected
+    twice for sending none. Check `ippc.no` for a CORS header, an
+    unauthenticated endpoint, and its licence terms BEFORE any UI is drawn -
+    and if it needs a login or sends no CORS header, say so and build nothing.
+    A NOTAM feature that silently fails is worse than no NOTAM feature.
+- **A CLOSED AERODROME IS AN INTEGRITY FINDING**, which is where it belongs:
+  `collectIntegrityProblems` already names the waypoint at fault, the banner
+  already reaches the printed sheet (v16.43), and a closed destination is
+  exactly "do not use these figures". It should name the aerodrome and the hours
+  it is closed, never just "an aerodrome is closed".
+- **THE ETO IS WHAT DECIDES IT, not the calendar day.** The daylight card
+  already computes every takeoff and landing at its own aerodrome on its own
+  date (v16.3); opening hours have to be judged the same way, against the
+  arrival time at THAT aerodrome, or a plan landing at 2305 reads as legal
+  because the field was open at 0900.
+- **"HJ" AND "O/R" ARE NOT CLOCK TIMES.** Sunrise-to-sunset (HJ) is computable
+  from `daylight.js` and is therefore honest; "on request" is a phone call, and
+  the only correct rendering of it is to say so rather than to guess a window.
+  Whatever cannot be resolved must be REPORTED as unresolved, per the rule the
+  AIP importer already follows.
 
 ### 18. PUT THE PAGE SCRIPT UNDER THE COMPILER (`src/page.js`)
 
@@ -1797,11 +1886,16 @@ asserts nothing M&B appears on the sheet.
   (actuals, and this is a ground-planning tool); Freq (AIP frequencies belong to
   an airspace, not to a leg); the alternate line. An empty box for the pilot's
   pen, never a 0 or a dash that could read as a planned figure.
-- **Reg, CREW, PASSENGERS and PIC STAY EMPTY, and that is the privacy rule, not
-  laziness.** Crew are people; a tail number identifies a MACHINE. PROFILE_KEYS
-  must never carry either, so there is nothing to read - which is why adding a
-  registration setting to fill the Reg box was rejected. A test asserts the crew
-  block prints empty and that PROFILE_KEYS has not grown a reg/pic/crew key.
+- **CREW, PASSENGERS and PIC STAY EMPTY, and that is the privacy rule, not
+  laziness.** Crew are people. A test asserts the crew block prints empty and
+  that PROFILE_KEYS has not grown a reg/pic/crew key.
+  - **Reg WAS in this list until v16.95**, on the premise that the planner did
+    not know which tail was flown. M&B made one selectable and the author
+    cleared registrations outright, so the box now prints the selected tail -
+    and it would be an inconsistency on ONE printout not to, because page 2
+    names the aircraft it weighed. **AND THE BOX HAD NEVER BEEN WIRED**: the
+    sheet model carried `reg` all along while the markup hardcoded an empty
+    cell, so setting it changed nothing until the test that asserted it failed.
 - **SOLID BLACK ON WHITE, and getting there needed a BLUNT rule** (v16.41, the
   pilot's correction: "the OFP looks greyed and the texting is also greyed").
   The app's theme variables reach the form's cells through the global table
@@ -1854,6 +1948,493 @@ asserts nothing M&B appears on the sheet.
   - then renders a real PDF and counts the pages.
 - NOT REPRODUCED: the school's UiT logo. Embedding someone's letterhead into
   generated output is their call, not ours; ask before adding it.
+
+## MASS & BALANCE, THE OTHER HALF OF THE FORM (v16.93, roadmap item 5 - PHASE A)
+
+**THIS SUPERSEDES "Mass & Balance: WAS out of scope".** That entry said M&B
+stayed in the user's Excel sheet; v16.28 already downgraded it to "roadmap item
+5, nothing built, needs the real sheet and the POH arms and limits in hand
+first". Both halves of that precondition are now met: `OFP-C182.xlsx` is
+committed beside `C182OFPMBv4.2.pdf`, and the planner already computes the one
+number the spreadsheet cannot get for itself - the fuel actually burned on each
+sector.
+
+**PHASE A IS THE PURE MODULE AND NOTHING ELSE.** `src/lib/massbalance.js`, the
+fleet, the types and 18 tests. No UI, no wiring, no fuel capture: the app still
+shows no M&B. Phases B (per-sector fuel capture) and C (the tab, the envelope
+SVG, the banner) follow.
+
+### TWO SOURCES, AND THEY AGREE - which is what makes this importable at all
+
+Every constant is in BOTH the printed form and the live workbook, independently:
+the station arms (37 / 37 / 74 / 46.5 / 97 / 116 / 129 in), all TEN fleet
+figures for LN-TRA..LN-TRE, and the Va table (3100->110, 2600->101, 2100->91).
+The form carries `Version date 10.08.2026`, which is what `FLEET_SOURCE`
+records - the WORKBOOK states no revision date anywhere, and its document
+`modified` property is just when it was uploaded, so using that would have been
+a provenance figure that means nothing.
+
+- **THE GOLDEN FIXTURE REPRODUCES THE WORKBOOK CELL FOR CELL**, including the
+  digits Excel itself carries: take-off 2582.3 lb / 40.2 in / 103700.6,
+  landing 2378.3 / **39.61426228818904** / 94214.6, zero-fuel 2198.3 /
+  **39.05044807351135** / 85844.6.
+- **AND AN INDEPENDENT CROSS-CHECK FELL OUT OF IT.** `Performance!W1:X3` draws
+  the MLW line as arm 39 -> 46 at 2950 lb, in a different block of the sheet
+  from the envelope. The envelope's own width at 2950 is **39.05 to 46.00**. A
+  mistranscribed vertex would have shown up here; it did not.
+- **THE ARM IS NEVER ROUNDED IN THE MODULE, and that departs from the sheet on
+  purpose.** `OFP!E11` rounds the take-off arm to 0.1 in while `E14` and `E15`
+  leave landing and zero-fuel at full precision. Rounding one of three
+  identical calculations is an inconsistency, not a rule, so all three are
+  exact and the DISPLAY rounds - which still prints every figure the sheet
+  prints.
+
+### CHECKING THE TWO ENDS IS ENOUGH, AND IT IS A PROOF - BUT THE SWEEP THAT "PROVED" IT WAS BLIND
+
+Burning fuel is a STRAIGHT LINE in (moment, weight): weight falls a pound per
+pound, moment falls 46.5 per pound. The envelope is CONVEX in that same space -
+forward slopes **33.00 -> 46.12 -> 51.72 -> 70.90 -> 81.30**, non-decreasing
+across both joins, and the aft boundary is the straight `moment = 46 * weight`.
+A segment between two points of a convex set stays inside, so two legal
+endpoints mean a legal path and there is no interior case to search for.
+
+- **THE FIRST VERSION OF THE PATH SWEEP COULD NOT SEE A NON-CONVEX ENVELOPE.**
+  Mutated with a dent at the 2700 lb vertex it reported **0 violations over
+  407 824 paths** - looking exactly like a guard confirming correct code.
+- **THE REASON IS ARITHMETIC, NOT COVERAGE.** A fuel path's slope is fixed at
+  46.5, so it can only leave through the forward boundary where the boundary's
+  OWN slope brackets 46.5 - which on this envelope is across the **2225 lb
+  vertex** (33.00 -> 46.12) and nowhere else. The sweep started from a
+  zero-fuel grid and never put an endpoint there.
+- Rewritten to walk the TAKE-OFF point across the whole envelope it sweeps
+  41 293 paths, 10 637 of them crossing that vertex, and a dent AT 2225 now
+  fails it by name with **3199 violating points**.
+- **SO NEITHER CHECK CARRIES THIS ALONE**, and the file should not pretend one
+  does: the convexity assertion catches the 2700 dent, the path sweep catches
+  the 2225 one, and both are mutated. This is M5 in its subtlest form - the
+  sweep was not looser than its measurement, it was measuring in a place where
+  the defect provably cannot appear.
+
+### THE FIGURES THAT ARE NOT THE SHEET'S, EACH FOR A STATED REASON
+
+- **Va COMES FROM THE POH TABLE, INTERPOLATED, NOT FROM `=110-(((3100-D14)*9)/500)`.**
+  That formula is exact at 3100 and 2600 and gives **92 kt at 2100 where the
+  table in the same workbook says 91** - one knot HIGH at the light end, which
+  is the unsafe direction. The user's instruction was to use the table.
+  - Va is read at the **landing** mass, as the sheet does, and that is right
+    rather than incidental: Va falls with weight, so the lightest moment of the
+    flight is the one that binds all of it.
+  - **NULL BELOW 2100 lb rather than extrapolated.** That is below every
+    aircraft's empty weight plus a pilot, so it is close to unreachable - and
+    an invented Va is a speed a pilot writes on the form and flies to.
+- **Vglide HAS NO POH TABLE BEHIND IT.** The form prints a `V GLIDE` box with
+  nothing in it and the workbook fills it with a straight line. Reproduced and
+  labelled the school's figure; it must never be presented as a POH value.
+- **NO MAXIMUM BAGGAGE WEIGHT IS PUBLISHED IN EITHER SOURCE**, so none is
+  checked. `BAGGAGE_MAX_LB` is `null` and a caution says the check is not
+  performed. Reaching for the C182's usual 200 lb would read as a checked limit
+  and be a guess - the exact plausible wrong answer this project refuses.
+- **THE AUTOPILOT LIMIT IS AN INFERENCE, AND THE DATA ARGUES FOR IT.**
+  `Performance!T1:U3` is a two-point line labelled `autopilot`: arm 34 at
+  1800 lb and at 2400 lb. It stops at 2400 because **the standard forward limit
+  reaches 34.03 in there** - the line is drawn exactly as far as it constrains
+  anything. Shipped as a CAUTION naming its source, never as an out-of-limits
+  finding, and it wants confirming against the autopilot supplement.
+- **LN-TRE's 22.7 lb IS AIRFRAME, NOT BAGGAGE.** The user: "LNTRE is the only
+  A/C where compartment B is not included in the total mass/arm". So it is
+  added at the compartment B arm before any load, and an unloaded LN-TRE still
+  carries it. The workbook adds it into the same cell the pilot types extra
+  baggage into; here the two are kept apart, because one is a property of the
+  machine and one is what got loaded.
+
+### A FORWARD CG VIOLATION IS NOT REACHABLE ON THIS FLEET
+
+Measured across all five aircraft with up to 500 lb in the front seats - the
+only station forward of the empty arm - the closest any of them gets to the
+forward limit is **LN-TRD at 37.67 in against a limit of 34.77, i.e. 2.9 in of
+margin**. Every other station is at 74 in or further aft and the empty arms are
+38.98-39.60.
+
+So the forward branch is exercised against a HYPOTHETICAL airframe and the test
+SAYS it is hypothetical. The alternative - a fixture quietly labelled LN-TRB
+that cannot occur - is the v16.58 failure where a test asserted the broken case
+as correct.
+
+### MLW AT EVERY LANDING, AND A MASTER THAT WALKS
+
+The user: "Check the landing weight / t&g weight for every stop". A mid-mission
+refuel can make an EARLIER arrival the heavy one, so `worstLanding` is the
+heaviest arrival anywhere, not the final one - and `computeMissionMassBalance`
+takes `first` and `last` from the sector results themselves. Subtracting a
+total burn from the ramp weight would print a weight the aircraft never has the
+moment anyone refuels.
+
+Taxi fuel is in the TAKE-OFF mass (the user's instruction), which is why
+`MTOW_LB` doubling as the ramp limit is their explicit answer and not an
+assumption: "Assume MTOW is max ramp".
+
+### ONE FUEL DENSITY, AND PHASE B HAS TO FINISH THE JOB
+
+`FUEL_LB_PER_GAL = 6.0` and `FUEL_KG_PER_GAL` is DERIVED from it. The app's
+existing `convertFuel`/`toGal` still carry a separate `2.72` kg/gal against the
+derived 2.72155 - 0.057% apart. Measured: unifying them moves **578 of 900**
+tenth-gallon values by one 0.1 kg display step (64 gal 174.1 -> 174.2). Storage
+is in gallons so nothing saved changes, but it is a visible change and it
+belongs in Phase B with the fuel capture, not smuggled in here.
+
+### PHASE B (v16.94): THE EXACT GALLONS, AND ONE FUEL DENSITY
+
+Two things, and the second one found more than it was sent for.
+
+**THE FUEL COLUMN IS UNCHANGED.** What is new is that the gallons behind it
+now leave the render pass unrounded, on `ofpPrintModel[i].fuelGal = {dep, arr}` -
+`dep` is what is on board at that sector's ENGINE START, `arr` what remains at
+its arrival fix. Phase C reads those; nothing else does yet.
+
+- **IT IS A SECOND TRACKER, AND THAT NEEDED ARGUING** against v16.61's "prefer
+  the deletion to the second mechanism". It survives because the display is a
+  ROUNDED RENDERING of it rather than a rival computation: both subtract the
+  same per-row gallon figure (`legBurnGal`, `patternBurnGal`,
+  `pendingStop.burnGal`), and two tests hold them together - the gap may never
+  exceed what the rounding can explain (0.05 a row), and fuel must be
+  CONTINUOUS across every sector boundary (`dep(k) === arr(k-1)`, adjusted by
+  the stop). Measured on the two-sector seed: the gap is **0.0761 gal**, and a
+  test pins that it stays in the rounding regime rather than drifting to the
+  bound.
+- **DERIVING THE DISPLAY FROM THE EXACT TRACKER WAS CONSIDERED AND DECLINED**,
+  which would have deleted the second mechanism outright. The column is
+  `F - sum(round(burn_i))` and deriving it would make it `round(F - sum(burn_i))` -
+  a different number by up to 0.05 a leg, i.e. exactly the 0.0761 measured
+  above. That is a visible change to the fuel column, and Phase B was asked for
+  the M&B figures, not for the pilot's fuel column to move.
+- **ABSENT STAYS ABSENT, AND `isNaN` COULD NEVER SEE IT.** `Number('') === 0`,
+  so an empty Initial Fuel box is indistinguishable from a typed zero unless
+  the RAW STRING is read - which it now is. The column still shows 0.0 for an
+  empty box (it always has, and that is not being changed); the M&B figure
+  stays `NaN`, so `massBalanceProblems` says "the fuel on board is not known"
+  instead of weighing an aircraft with empty tanks. A typed 0 remains a real
+  answer (v16.57).
+- **TAXI IS INSIDE THE BURN, AND `dep` IS BEFORE IT.** "Count taxi fuel in
+  takeoff mass" is the author's instruction and is why MTOW doubles as the ramp
+  limit. Asserted by TAKING IT AWAY - the sector burn with taxi 1.7 minus the
+  same sector at 0 must be exactly 1.7 - and a full stop re-arms it, so a
+  two-sector mission carries 3.4. A leading circuit is also charged after
+  `dep`, which is right: the laps are flown after start-up.
+
+### THERE WERE THREE COPIES OF THE FUEL DENSITY, NOT TWO
+
+The plan said "unify `convertFuel` and `toGal`". A grep for `toGal` found one
+of them. The test written to assert no literal `2.72` survives **failed on its
+first run** and named the third:
+
+1. `convertFuel` in `format.js` (`* 2.72`),
+2. the page's own `toGal` (`/ 2.72`),
+3. **`setStopRefuel`** - the `⛽ Fuel after` box, converting a typed refuel back
+   to gallons with its own inline `/ 2.72` and `/ 3.78541`,
+4. **the unit switch** that rewrites Initial Fuel and Reserve when the pilot
+   changes display units - a fourth inline copy of the same pair.
+
+So a density changed in one place would have made the settings form silently
+reinterpret a figure already written down. `toGallons` in `format.js` is now the
+one exact inverse, all four sites call it, and a test asserts the round trip is
+exact in every unit.
+
+- **THE IMPORT GOES `format.js -> massbalance.js`**, and the direction is
+  argued: a density is a POH/M&B fact, not a formatting one, and
+  `massbalance.js` imports nothing so there is no cycle.
+- **MEASURED COST**: 578 of the 901 tenth-gallon values between 0 and 90 gal
+  move by one 0.1 kg display step (64 gal 174.1 -> 174.2, 87 gal 236.6 ->
+  236.8), worst case 0.2 kg. **Nothing stored changes** - every fuel figure in
+  this project is held in gallons - so it is a display change only, and it
+  moves those displays towards the sheet the school actually uses. Litres are
+  untouched.
+
+**SEVEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`**: the leg burn never
+reaching the tracker (3 tests), the refuel not reaching it (1), the inter-sector
+circuit burn skipped (1), the tracker fed the ROUNDED DISPLAY figure instead of
+gallons (3, one reporting `48.6 vs 59.9` under a litre display), `dep` captured
+at the END of the sector (4), an empty box coerced to zero gallons (1), and
+`convertFuel` back on its own 2.72 (1, reporting `round trip broken in KG`).
+
+**AND THE FIRST ATTEMPT AT ONE OF THEM APPLIED AND CHANGED NOTHING** - again.
+`const x = v` mutated to `let x = v; x = v` is a textual edit that assigns the
+same value at the same point, so it reported `FAIL=0` and read exactly like a
+guard that does not fire. The mutation that bites writes `dep: runningFuelGal`
+into the push, which really does capture it at the wrong moment. Asserting that
+the EDIT landed is not enough; the edit has to change the BEHAVIOUR.
+
+**AND THE BLOCK PUTS THE SHARED FIXTURE BACK.** `T` runs immediately and `TA`
+is queued to the end, so a `T` written at the bottom of the file still runs
+BEFORE every async test - and these left a two-sector mission behind, which made
+an unrelated plan-management test report `expected 3 flights, got 4`. That is
+the v16.89 lesson (a check that mutates shared state is not free to sit
+anywhere) arriving through the runner rather than through the browser.
+
+### THE PERFORMANCE TABLES: THE WORKBOOK IS SHORT OF THE POH, NOT THE OTHER WAY ROUND
+
+`OFP!O34` reads "TO/LDG dist limitations: Max pressure alt 5000ft, Max temp
+40°C", and `CALC_TOD` is not merely undefined above 5000 ft but DANGEROUSLY
+wrong: 3100 lb / 20 C gives 2595 ft at PA 5000 and **1730 ft at PA 6000** - the
+required distance FALLS as conditions worsen, because the `FILTER` fallback of
+8000 is not a row in the workbook's table so its distance reads 0.
+
+**AND THE REASON IT IS NOT A ROW IS A TRANSCRIPTION GAP, WHICH IS THE OPPOSITE
+OF WHAT THIS FILE FIRST SAID.** The entry used to read "the sheet declares the
+boundary", which was true of the sheet and false of the aircraft: the author
+supplied the printed POH pages (Figure 5-6 sheets 1-3) and **the POH tabulates
+PA 0-8000 ft**. The workbook carries 0-5000. The 40 °C ceiling IS the POH's;
+the 5000 ft one is the workbook's own.
+
+- **TRANSCRIBED AND CROSS-CHECKED, NOT OCR'd AND HOPED FOR.**
+  `tools/prepared/poh-takeoff.json` holds all three weights (2300 / 2700 /
+  3100 lb) at PA 0-8000 and 0-40 °C, each cell a ground roll and a total to
+  clear 50 ft. The workbook's `Performance!A:D` independently carries **90** of
+  those cells, transcribed by the author from the same POH - and all **90 of 90
+  agree exactly**. That agreement is what makes the PA 6000/7000/8000 rows,
+  which exist ONLY in the snapshot, trustworthy read by the same method, and a
+  test asserts it so neither side can drift.
+- **THREE CELLS ARE DELETED IN THE POH AND MUST STAY REFUSED.** At 3100 lb:
+  7000 ft/40 °C, 8000 ft/30 °C and 8000 ft/40 °C print `---`, and the POH says
+  why - "climb performance after lift-off is less than 150 FPM at takeoff
+  speed". They are `null`, not missing, and an interpolator that filled them in
+  would state a distance the manufacturer declines to certify. The test pins
+  exactly which three they are.
+- **THE WORKBOOK'S WIND RULES REPRODUCE THE POH's NOTES**, checked rather than
+  assumed: "+10% per 2 kt of tailwind, up to 10 kt" is the sheet's
+  `(|W|/2)*0.1` with its `LIMIT` past -10, and "decrease 10% for each 9 knots
+  headwind" is its "no corr. < 9kts". Grass is +15% of the GROUND ROLL, which
+  is why the snapshot keeps both columns rather than only the 50 ft figure.
+- **THE LANDING TABLE ARRIVED TOO, AND IT IS A DIFFERENT SHAPE.**
+  `tools/prepared/poh-landing.json`, PA 0-8000 at 0-40 °C - so the workbook is
+  short of the POH on BOTH tables by exactly the same three rows, which was
+  guessed and is now measured. `Performance!F:H` independently carries 30 of
+  those cells and **all 30 of 30 agree**.
+  - **ONE WEIGHT, AND IT IS MLW.** The POH publishes the landing distance at
+    2950 lb only - it is NOT a weight axis with a single row, and a future
+    interpolator must never scale it. The author said so outright ("note there
+    is only 1 weight which is the MLW"), and the reasoning is worth keeping:
+    a lighter aeroplane lands SHORTER, so the 2950 lb figure errs long for any
+    legal landing weight, which is the safe direction and is presumably why one
+    table suffices. The TAKEOFF tables do carry three weights, so a shared
+    interpolator that assumed a weight axis here would silently invent one.
+  - **A THIRD INDEPENDENT STATEMENT OF MLW.** 2950 lb is what
+    `Performance!W1:X3` draws as the MLW line, what the author stated, and what
+    this page is titled. A test asserts the snapshot's weight equals
+    `massbalance.js`'s `MLW_LB`, so the two cannot drift apart.
+  - **THE GRASS CORRECTION IS 45% ON LANDING AND 15% ON TAKEOFF** - near-identical
+    wording, different number, which is this file's first named failure shape
+    waiting to happen. The corrections live with their own table, a test asserts
+    the two strings differ, and a fourth asserts the WIND corrections are
+    identical, so that sameness is deliberate rather than a copy-paste. Landing
+    also carries a flaps-up penalty (+10 KIAS approach, +40% distance) that
+    takeoff has no equivalent of.
+  - **NOTHING IS DELETED HERE**, unlike the 3100 lb takeoff table: a landing
+    needs no climb performance, so there is no condition the POH declines to
+    publish. Asserted, so a null appearing later is a finding rather than noise.
+  - FOUR MUTATIONS, ALL CAUGHT BY NAME: a wrong digit inside the overlap (the
+    workbook), one outside it at PA 7000 (monotonicity), the weight moved off
+    MLW, and the takeoff grass figure copy-pasted onto landing.
+- **DATA ONLY: NOTHING READS THE SNAPSHOT.** It is committed now because the
+  source was a set of screenshots and the cross-check is cheap once and
+  expensive to redo. The consumer is Phase D, which is neither built nor
+  approved.
+
+**THE FIRST VERSION OF THAT TEST NEVER OPENED THE WORKBOOK.** Its comment said
+the 90-cell agreement was asserted; it compared the snapshot with itself and
+passed. That is the v16.88 vacuous-comparison failure verbatim - *a comparison
+against a value that is not there proves nothing in either direction* - and it
+got written because the suite had no way to read an `.xlsx` and I let the
+comment stand in for the check. It needs no dependency: an `.xlsx` is a ZIP of
+XML and `zlib` is built in, so `xlsxSheet()` resolves the sheet BY NAME through
+the workbook relationships (never by guessing `sheet2.xml`, which is file order
+rather than tab order) and reads the numeric cells directly.
+
+**THREE MUTATIONS, ALL CAUGHT BY NAME, AND EACH THROUGH A DIFFERENT GUARD** -
+which is the point, because the three guards cover different parts of the table:
+a misread digit INSIDE the overlap (`snapshot 1990, workbook 1890`) is caught by
+the workbook; one OUTSIDE it at PA 7000, where nothing can corroborate, is
+caught by monotonicity in pressure altitude; and a deleted cell filled in with a
+plausible number is caught by the pinned list of exactly which three are refused.
+
+**AND THE FIRST ATTEMPT AT ALL THREE SILENTLY DID NOTHING.** The snapshot is
+pretty-printed JSON, so `sed 's/\[980,1890\]/.../'` matched no text and every
+run came back `FAIL=0` - looking exactly like three guards that do not fire, an
+hour after this file recorded that same trap in the v16.93 entry below. The
+mutations now edit the PARSED JSON and assert the value actually changed before
+the suite is believed.
+
+### NO PERSON IS NAMED, AND A TEST GREPS FOR IT
+
+The workbook's document properties carry an author. A registration identifies a
+MACHINE, which the user has explicitly cleared ("Aircraft registrations and
+their data can be stored. Theres no privacy issue there"), and that is where it
+stops. The crew block on the printed form stays a box for a pen.
+
+### SEVEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+Envelope dented at 2700 (4 tests) and at 2225 (4, including the rewritten
+sweep); Va from the sheet's formula (1, reporting `Va at 2100: 92`); the fixed
+extra at the baggage A arm (1); `worstLanding` as the last sector (1); an absent
+figure coerced to 0 (1); and the arm rounded inside `point()` (1, reporting the
+landing arm as 39.6).
+
+**AND ONE "MUTATION" NEVER APPLIED, REPORTING `FAIL=0`** - a `sed` expression
+whose `||` broke the substitution. A mutation that does not land looks exactly
+like a guard that does not fire, which is the `grep | head` lesson from v16.62
+in a new costume: assert the edit was made before believing the run.
+
+### PHASE C (v16.95): THE TAB, THE CHART, AND THE PAPER
+
+The author's words: *"a user-friendly tab separate from the flight plan tab for
+inputting weights, registration, etc. It will show the values, the CG-limit
+chart (with correct values), fuel, metar/taf for departure/arrival with takeoff
+and landing distances"*, and *"a single toggle option to have m&b sheet
+calculated for EVERY plan ... AND the option for the M&B sheet to only show the
+W&B and fuel planning for the whole plan"*.
+
+The sidebar has two panes now, `✈ Flight plan` and `⚖ Mass & Balance`
+(`showSidePane`, section 2h of the page). Everything that was in the sidebar
+is the plan pane, unmoved. The engine is still `massbalance.js`; the tab is a
+shell around it.
+
+- **THE FUEL IS THE PLAN'S, NEVER A SECOND NUMBER.** `buildMassBalanceMission`
+  reads `ofpPrintModel[i].fuelGal` - the unrounded gallons Phase B captured - so
+  the sheet cannot disagree with the fuel column beside it. Mutated to re-round
+  them to 0.1 first, a test fails by name.
+- **FINDINGS REACH THE BANNER AND THE PAPER**, through the SAME list
+  (`collectIntegrityProblems` concatenates `massBalanceProblems`), so an
+  out-of-limits load raises the red banner and prints the DO NOT USE band on the
+  M&B page as well as the OFP - there is no second place for a finding to live.
+- **ONLY ONCE A TAIL IS CHOSEN.** With no registration there is nothing to be
+  wrong about, and a banner on every plan reading "no aircraft selected" is
+  noise a pilot learns to scroll past, which is how a real finding gets missed.
+  Mutated to always check, EIGHT unrelated tests fail - every clean-plan test in
+  the suite - which is the noise, measured.
+- **THE TOGGLE CHANGES WHAT IS SHOWN, NEVER WHAT IS CHECKED.** "Check the
+  landing weight / t&g weight for every stop" is the author's rule, so the
+  whole-mission view cannot become a way to miss a heavy intermediate landing.
+  The test compares the findings in both views, and first asserts its fixture IS
+  out of limits - otherwise equal-and-empty would pass.
+- **THE M&B INPUTS ARE STORED BUT NOT EXPORTED** - see the PROFILE_KEYS entry.
+- **THE CG CHART NEVER CLIPS A MARK.** `cgChartModel` (pure) draws the envelope,
+  the autopilot line and the MLW line, and its axes EXPAND to hold every point:
+  a chart that clipped the one point that is out of limits would hide the only
+  thing it exists to show.
+- **WEATHER IS DECODED ONCE, FOR TWO HOSTS.** `renderMetarCard` takes a host
+  id, and the last fetch is kept in memory only (`lastWeather`, never
+  persisted - a cached METAR is a wrong METAR), so the tab shows the same
+  decoded reports as the plan card without a second fetch or a second decoder.
+- **THE DISTANCES ARE NOT BUILT, AND THE TAB SAYS SO.** The author asked for
+  them here. The POH tables are committed; reading them needs a per-runway
+  pressure altitude, wind component, surface and TODA/LDA, and the AIP importer
+  reads no runway data. A tab with no distances and no word about it reads as
+  "no limitation", so a card says they are not computed and points at the POH.
+  **IT NAMES NO FIGURE NUMBER FOR THE LANDING TABLE**, because the page as
+  supplied carries only its title - I wrote "5-12" from memory first, and the
+  snapshot does not say so. A test guards both halves.
+
+#### THE WHOLE-MISSION MASTER WAS WRONG FOUR WAYS, AND ALL FOUR WERE SILENT ON ONE SECTOR
+
+The first version assembled the master from `first` and `last` in the page.
+Found while writing this entry, not by a test - none covered it:
+
+1. **THE BURN** was `first.dep - last.arr` on screen, and the FIRST SECTOR'S
+   burn on paper, under a heading that said "whole mission". So the printed
+   take-off minus consumed did not equal the printed landing, and with an uplift
+   the screen could print a NEGATIVE consumption.
+2. **THE CHECKS** were the first take-off's and the last landing's, so a heavy
+   take-off after a mid-mission refuel could print a green master while the
+   banner was red.
+3. **Va** came from the last landing. Va falls with weight and the LIGHTEST
+   landing binds it (the v16.93 rule), which a refuel can move mid-mission.
+4. **Min FLT** came from the first take-off, where the heaviest one binds.
+
+`missionMaster(m)` in the engine builds it ONCE, for the screen and the paper
+alike, and `computeMissionMassBalance` now WALKS the fuel into two figures:
+`consumedGal` (burned in the sectors, taxi included) and `stopChangeGal` (the
+NET change at the stops). It is net on purpose: a refuel is entered as the fuel
+AFTER, so the split between uplift and circuit minutes is not something the plan
+states, and inventing one would be a guess. `dep - consumed + stopChange === arr`
+exactly, and the printed master carries a `Fuel change at stops` row so the page
+adds up. It is the v16.93 "a master walks, it does not subtract" rule, which the
+ENGINE followed for weights and the PAGE broke for fuel - this file's first
+named failure shape again.
+
+#### THE TAB STRIP COST THE FOLD, AND THE FIRST FIX HID A SECOND REGRESSION
+
+- **`verify:layout` CAUGHT IT**: the strip put the daylight card at 425 px into
+  424 visible at 1280x720, undoing v16.49's QoL 4. A smaller strip in the
+  short-window block got it to 416 - and that 416 was a LIE, because:
+- **THE PANE WRAPPER HAD COLLAPSED THE CARD SPACING.** `#sidebar` spaces its
+  cards with a flex `gap`; inside `#pane-plan` they were no longer its children,
+  so they went from 14 px apart to 4. That silently SAVED space, which is why
+  the fold check passed. `verify:visual` is what showed it: 317 k pixels
+  differed, and a pure-shift test failed (222 k still differ at the best
+  offset), so it was a REFLOW rather than a move. Card positions against v16.94
+  then named it.
+- **`display: contents` ON THE PANES** gives the old box tree back, so the
+  sidebar's own gap reaches every card in every skin with no second copy of the
+  number. Measured against v16.94 in all four skins at 1500x950 and 1280x720:
+  card gaps and heights IDENTICAL. The panes carry no ARIA role, so there is no
+  semantics for `contents` to drop.
+- **THAT PUT THE CARD BACK OVER THE FOLD (440/424)**, and the strip is now
+  ATTACHED rather than floating - flush to the sidebar top and 1 px over the
+  first card's border, which is what the styling always meant (the active tab's
+  bottom border is card-coloured, only its top corners round). Its margins are
+  `var(--sb-pad)` / `var(--sb-gap)`, which `#sidebar` and every skin now spacing
+  itself BY, so the attachment is exact in each without restating a pixel.
+  Result: **420 px into 424**. v16.94 had 410; ten pixels is what the strip
+  costs, and 4 px of slack is what is left.
+- **A SHORT-WINDOW RULE MUST SIT BELOW WHAT IT OVERRIDES** - the v16.49 `.card`
+  trap. Proved rather than asserted: the same rule placed in the earlier media
+  block reproduces 425/424 exactly.
+- **THE MENU SKIN'S `display: revert` BROKE BOTH NEW ELEMENTS**, because
+  `revert` is the BROWSER'S default and not the stylesheet's. Measured with the
+  fix removed: card gaps 488/82/69 -> 458/72/59, and the tabs shrank to 90 and
+  119 px of a 538 px strip instead of 267 each. My comment first said the tabs
+  "stacked vertically"; measuring showed they stay on one row as inline buttons
+  and only the width is lost, and the comment says that now.
+- **FINAL PIXELS vs v16.94**, identical in light and dark: 58 px in an 8x8 box at
+  x 300-307, y 19-26 (the version badge, nit 13); the MAP 0 px; the sidebar below
+  the strip 0 px once shifted 16 px. The tab strip itself is the only new ink.
+
+#### THE REG BOX HAD NEVER BEEN WIRED
+
+Filling Reg from the selected tail (see the OFP-form entry) changed nothing at
+first: the sheet model has carried `reg` since v16.41 while the markup
+hardcoded `<td></td>`. The updated privacy test is what failed. A value that
+has never been anything but empty is a value nobody ever checked reaches the
+page. `verify:ofp` now measures it in its box: `LN-TRA`, 119 px in 119.
+
+#### `verify:ofp` HAD A CHECK WHOSE PREMISE EXPIRED
+
+"The Mass & Balance side is left out, not half-built" kept PASSING - because a
+fresh browser has no tail chosen, so no M&B page prints. A check that passes
+for an expired reason is the v16.56 failure. It is replaced by both directions
+(absent with no tail, present with one), the DO NOT USE band on every M&B sheet
+of a broken plan, and the cell-fit and page-width measurements that are the
+reason this verifier exists - including the whole-mission sheet with a refuel,
+whose stop row is the longest label on the page: 0 cells overflow, 1400 in 1400.
+
+#### FIFTEEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+Chart axes not expanding (1); loads trusted (1); an unknown tail accepted (1);
+fuel re-rounded (1); findings off the banner (2, one of them the fixture's own
+discrimination guard); the banner nagging with no tail (8); the mission view
+narrowing the checks (1); the reg and loads in PROFILE_KEYS (3); the Reg box
+ignoring the tail (1); master burn as dep minus arr (2, printing
+`consumed -85.4`); master checks from the first sector (1); Va from the last
+landing (1); Min FLT from the first take-off (1); the printed burn as dep minus
+arr (1); the stop row omitted (1). Plus three CSS mutations against the real
+browser: the short-window strip rule removed, and moved above the base rules -
+both reproduce `425 px into 424` exactly - and the Menu reveal fix removed,
+which reproduces the collapsed gaps and the shrunken tabs quoted above.
+
+**MY OWN MUTATION HARNESS REPORTED THE FIRST ONE AS NOT CAUGHT.** It grepped
+`^FAIL`, and a failing test prints `  FAIL  ` indented. The guard had fired; the
+harness could not see it. Probing the mutated function directly before
+believing "not caught" is what exposed it - the v16.93 lesson that a mutation
+run has to be checked for having measured anything, applied to the measuring.
 
 ## AIRAC updates: what re-importing actually costs (v16.42, 2026-09-03)
 

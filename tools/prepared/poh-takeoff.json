@@ -1,0 +1,677 @@
+{
+  "_README": [
+    "SHORT FIELD TAKEOFF DISTANCE, Cessna 182T NAV III with GFC 700 AFCS,",
+    "POH Section 5 Performance, Figure 5-6 sheets 1-3. Transcribed from the",
+    "printed tables supplied by the author.",
+    "",
+    "DATA ONLY - NOTHING READS THIS YET. It is committed now because the",
+    "source is a set of screenshots and the cross-check that validates the",
+    "transcription is cheap to do once and expensive to redo. The consumer is",
+    "roadmap item 5 Phase D (performance), which is not built and not approved.",
+    "",
+    "WHY IT CAN BE TRUSTED: the OFP workbook's own Performance!A:D tab carries",
+    "90 of these cells independently (3 weights x PA 0-5000 x 5 temperatures),",
+    "transcribed by the author from the same POH. All 90 agree exactly, which",
+    "is what makes the PA 6000/7000/8000 rows - present here and absent from",
+    "the workbook - trustworthy read by the same method. test.js asserts that",
+    "agreement, so an edit to either side fails the suite.",
+    "",
+    "A DELETED CELL IS A REFUSAL AND MUST STAY ONE. null is not missing data:",
+    "the POH prints '---' and states why. Interpolating into those cells would",
+    "produce a takeoff distance for a configuration the manufacturer declines",
+    "to certify."
+  ],
+  "source": {
+    "document": "Cessna 182T NAV III POH, Section 5 Performance",
+    "figure": "Figure 5-6, sheets 1 of 3, 2 and 3",
+    "suppliedBy": "the flight school, as printed-page images",
+    "corroboratedBy": "OFP-C182.xlsx, Performance!A:D (90 of 90 cells agree)"
+  },
+  "conditions": [
+    "Flaps 20 degrees",
+    "2400 RPM, full throttle and mixture set prior to brake release",
+    "Cowl flaps OPEN",
+    "Paved, level, dry runway",
+    "Zero wind",
+    "Short field technique as specified in Section 4",
+    "Prior to takeoff, the mixture should be leaned to the Maximum Power Fuel Flow schedule in a full throttle, static run-up"
+  ],
+  "speedsKias": {
+    "2300": {
+      "liftOff": 42,
+      "at50Ft": 50
+    },
+    "2700": {
+      "liftOff": 45,
+      "at50Ft": 54
+    },
+    "3100": {
+      "liftOff": 49,
+      "at50Ft": 58
+    }
+  },
+  "corrections": {
+    "headwind": "Decrease distances 10% for each 9 knots headwind.",
+    "tailwind": "For operation with tail winds up to 10 knots, increase distances by 10% for each 2 knots.",
+    "tailwindLimitKt": 10,
+    "grassRunway": "For operation on dry, grass runway, increase distances by 15% of the GROUND ROLL figure."
+  },
+  "deletedCellMeaning": "Where distance values have been deleted, climb performance after lift-off is less than 150 FPM at takeoff speed. Printed as '---' in the POH and carried here as null.",
+  "weightsLb": [
+    2300,
+    2700,
+    3100
+  ],
+  "pressureAltitudesFt": [
+    0,
+    1000,
+    2000,
+    3000,
+    4000,
+    5000,
+    6000,
+    7000,
+    8000
+  ],
+  "temperaturesC": [
+    0,
+    10,
+    20,
+    30,
+    40
+  ],
+  "units": "feet; each cell is [ground roll, total to clear a 50 ft obstacle]; null = deleted by the POH",
+  "table": {
+    "2300": {
+      "0": [
+        [
+          365,
+          705
+        ],
+        [
+          390,
+          750
+        ],
+        [
+          420,
+          800
+        ],
+        [
+          450,
+          850
+        ],
+        [
+          480,
+          905
+        ]
+      ],
+      "1000": [
+        [
+          395,
+          765
+        ],
+        [
+          425,
+          815
+        ],
+        [
+          455,
+          870
+        ],
+        [
+          490,
+          925
+        ],
+        [
+          520,
+          985
+        ]
+      ],
+      "2000": [
+        [
+          430,
+          830
+        ],
+        [
+          460,
+          885
+        ],
+        [
+          495,
+          940
+        ],
+        [
+          530,
+          1005
+        ],
+        [
+          565,
+          1070
+        ]
+      ],
+      "3000": [
+        [
+          470,
+          900
+        ],
+        [
+          505,
+          960
+        ],
+        [
+          540,
+          1025
+        ],
+        [
+          580,
+          1090
+        ],
+        [
+          620,
+          1165
+        ]
+      ],
+      "4000": [
+        [
+          510,
+          980
+        ],
+        [
+          550,
+          1045
+        ],
+        [
+          590,
+          1115
+        ],
+        [
+          630,
+          1190
+        ],
+        [
+          675,
+          1270
+        ]
+      ],
+      "5000": [
+        [
+          555,
+          1065
+        ],
+        [
+          600,
+          1140
+        ],
+        [
+          640,
+          1220
+        ],
+        [
+          690,
+          1305
+        ],
+        [
+          735,
+          1390
+        ]
+      ],
+      "6000": [
+        [
+          610,
+          1165
+        ],
+        [
+          655,
+          1250
+        ],
+        [
+          700,
+          1335
+        ],
+        [
+          755,
+          1430
+        ],
+        [
+          805,
+          1530
+        ]
+      ],
+      "7000": [
+        [
+          665,
+          1275
+        ],
+        [
+          715,
+          1370
+        ],
+        [
+          770,
+          1470
+        ],
+        [
+          825,
+          1570
+        ],
+        [
+          885,
+          1685
+        ]
+      ],
+      "8000": [
+        [
+          730,
+          1405
+        ],
+        [
+          785,
+          1510
+        ],
+        [
+          845,
+          1620
+        ],
+        [
+          905,
+          1735
+        ],
+        [
+          970,
+          1865
+        ]
+      ]
+    },
+    "2700": {
+      "0": [
+        [
+          520,
+          995
+        ],
+        [
+          560,
+          1065
+        ],
+        [
+          600,
+          1135
+        ],
+        [
+          645,
+          1215
+        ],
+        [
+          690,
+          1295
+        ]
+      ],
+      "1000": [
+        [
+          565,
+          1080
+        ],
+        [
+          610,
+          1155
+        ],
+        [
+          655,
+          1235
+        ],
+        [
+          700,
+          1320
+        ],
+        [
+          750,
+          1410
+        ]
+      ],
+      "2000": [
+        [
+          615,
+          1180
+        ],
+        [
+          665,
+          1260
+        ],
+        [
+          710,
+          1350
+        ],
+        [
+          765,
+          1445
+        ],
+        [
+          820,
+          1545
+        ]
+      ],
+      "3000": [
+        [
+          675,
+          1285
+        ],
+        [
+          725,
+          1380
+        ],
+        [
+          775,
+          1480
+        ],
+        [
+          835,
+          1585
+        ],
+        [
+          895,
+          1695
+        ]
+      ],
+      "4000": [
+        [
+          735,
+          1410
+        ],
+        [
+          790,
+          1510
+        ],
+        [
+          850,
+          1625
+        ],
+        [
+          910,
+          1740
+        ],
+        [
+          975,
+          1870
+        ]
+      ],
+      "5000": [
+        [
+          805,
+          1550
+        ],
+        [
+          865,
+          1665
+        ],
+        [
+          930,
+          1790
+        ],
+        [
+          1000,
+          1920
+        ],
+        [
+          1070,
+          2065
+        ]
+      ],
+      "6000": [
+        [
+          880,
+          1705
+        ],
+        [
+          950,
+          1840
+        ],
+        [
+          1020,
+          1980
+        ],
+        [
+          1095,
+          2135
+        ],
+        [
+          1175,
+          2300
+        ]
+      ],
+      "7000": [
+        [
+          965,
+          1890
+        ],
+        [
+          1040,
+          2040
+        ],
+        [
+          1120,
+          2205
+        ],
+        [
+          1200,
+          2380
+        ],
+        [
+          1290,
+          2575
+        ]
+      ],
+      "8000": [
+        [
+          1060,
+          2100
+        ],
+        [
+          1145,
+          2275
+        ],
+        [
+          1230,
+          2465
+        ],
+        [
+          1320,
+          2675
+        ],
+        [
+          1420,
+          2910
+        ]
+      ]
+    },
+    "3100": {
+      "0": [
+        [
+          715,
+          1365
+        ],
+        [
+          765,
+          1460
+        ],
+        [
+          825,
+          1570
+        ],
+        [
+          885,
+          1680
+        ],
+        [
+          945,
+          1800
+        ]
+      ],
+      "1000": [
+        [
+          775,
+          1490
+        ],
+        [
+          835,
+          1600
+        ],
+        [
+          900,
+          1720
+        ],
+        [
+          965,
+          1845
+        ],
+        [
+          1030,
+          1980
+        ]
+      ],
+      "2000": [
+        [
+          850,
+          1635
+        ],
+        [
+          915,
+          1760
+        ],
+        [
+          980,
+          1890
+        ],
+        [
+          1055,
+          2035
+        ],
+        [
+          1130,
+          2190
+        ]
+      ],
+      "3000": [
+        [
+          925,
+          1800
+        ],
+        [
+          995,
+          1940
+        ],
+        [
+          1070,
+          2090
+        ],
+        [
+          1150,
+          2255
+        ],
+        [
+          1235,
+          2435
+        ]
+      ],
+      "4000": [
+        [
+          1015,
+          1990
+        ],
+        [
+          1090,
+          2150
+        ],
+        [
+          1175,
+          2325
+        ],
+        [
+          1260,
+          2515
+        ],
+        [
+          1355,
+          2720
+        ]
+      ],
+      "5000": [
+        [
+          1110,
+          2210
+        ],
+        [
+          1195,
+          2395
+        ],
+        [
+          1290,
+          2595
+        ],
+        [
+          1385,
+          2820
+        ],
+        [
+          1485,
+          3070
+        ]
+      ],
+      "6000": [
+        [
+          1220,
+          2470
+        ],
+        [
+          1315,
+          2690
+        ],
+        [
+          1415,
+          2930
+        ],
+        [
+          1520,
+          3200
+        ],
+        [
+          1635,
+          3510
+        ]
+      ],
+      "7000": [
+        [
+          1340,
+          2785
+        ],
+        [
+          1445,
+          3045
+        ],
+        [
+          1560,
+          3345
+        ],
+        [
+          1675,
+          3685
+        ],
+        null
+      ],
+      "8000": [
+        [
+          1480,
+          3175
+        ],
+        [
+          1595,
+          3500
+        ],
+        [
+          1720,
+          3880
+        ],
+        null,
+        null
+      ]
+    }
+  }
+}
