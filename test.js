@@ -697,6 +697,157 @@ T('the preview band follows the path model too, through that same densifier', ()
   stopRuler();
 });
 
+// -- 13b. ESCAPE AND UNDO BELONG TO THE RULER (v16.92) -----------------------
+// The pilot: "let me press escape on ruler to reset the ruler and ctrl-Z to
+// remove last ruler waypoint." Both rules are decided in the PURE resolver, so
+// they are checked without a browser first - which is the whole reason
+// keys.js exists (a binding that quietly does nothing looks exactly like a key
+// that was never pressed).
+T('Escape backs out of the ruler one level at a time', () => {
+  const K = w;   // main.js puts every module export on window
+  const esc = { key: 'Escape' };
+  const at = (n) => K.resolveKey(esc, { rulerMode: true, rulerPoints: n });
+  assert(at(3).action === 'ruler-clear', 'Escape did not clear a ruler with points');
+  assert(at(1).action === 'ruler-clear', 'one point is still a measurement to clear');
+  // ...and with nothing left to clear it stops the tool, so Escape is never the
+  // silent keystroke this module exists to prevent.
+  assert(at(0).action === 'toggle-ruler', 'Escape on an empty ruler did not stop it');
+  // The ruler off is the behaviour every earlier version had.
+  assert(K.resolveKey(esc, {}).action === 'close-overlays', 'Escape outside the ruler changed');
+});
+
+T('...but an overlay, a dialog and a drag are all OUTSIDE the ruler', () => {
+  const K = w;   // main.js puts every module export on window
+  const esc = { key: 'Escape' };
+  // A modal open over the map is the outer level, so Escape closes that first
+  // and the measurement underneath survives.
+  assert(K.resolveKey(esc, { rulerMode: true, rulerPoints: 3, overlayOpen: true }).action
+    === 'close-overlays', 'Escape reached the ruler through an open modal');
+  assert(K.resolveKey(esc, { rulerMode: true, rulerPoints: 3, dialogOpen: true, overlayOpen: true })
+    === null, 'Escape was taken from dialog.js');
+  // A drag is the state that TRAPS the map, so it still wins over everything.
+  assert(K.resolveKey(esc, { rulerMode: true, rulerPoints: 3, dragging: true }).action
+    === 'cancel-drag', 'a stuck drag lost its way out to the ruler');
+});
+
+T('undo is the ruler\'s while the ruler runs - on whatever key undo is bound to', () => {
+  const K = w;   // main.js puts every module export on window
+  const z = { key: 'z', ctrlKey: true };
+  assert(K.resolveKey(z, { rulerMode: true }).action === 'ruler-undo', 'Ctrl+Z was not the ruler\'s');
+  assert(K.resolveKey(z, {}).action === 'undo', 'Ctrl+Z stopped being undo outside the ruler');
+  // THE CLAIM IN THE COMMENT IS THAT IT FOLLOWS A REBOUND UNDO, so assert it
+  // rather than leaving a sentence nothing checks. Keyed on the SPEC, not the
+  // chord.
+  const km = Object.assign(K.defaultKeymap(), { undo: 'Alt+U' });
+  assert(K.resolveKey({ key: 'u', altKey: true }, { rulerMode: true }, km).action === 'ruler-undo',
+    'a rebound undo did not follow the ruler');
+  assert(K.resolveKey(z, { rulerMode: true }, km) === null, 'the old chord still fired');
+  // REDO IS DELIBERATELY LEFT ALONE: the ruler is click-to-place, so putting a
+  // point back is one click, and a second stack is the mechanism v16.61 says
+  // to prefer the deletion of.
+  assert(K.resolveKey({ key: 'z', ctrlKey: true, shiftKey: true }, { rulerMode: true }).action
+    === 'redo', 'redo was quietly taken as well');
+});
+
+T('both are actions the page must handle, not bindings the menu offers', () => {
+  const K = w;   // main.js puts every module export on window
+  // They are what an existing chord MEANS in a state, exactly like cancel-drag,
+  // so there is nothing for the pilot to set - and the switch-coverage test
+  // then requires the page to have a case for each.
+  assert(K.KEY_ACTIONS.includes('ruler-clear') && K.KEY_ACTIONS.includes('ruler-undo'),
+    'the page is not required to handle them');
+  assert(!K.ACTION_SPECS.some((a) => a.id === 'ruler-clear' || a.id === 'ruler-undo'),
+    'a derived meaning was listed as a bindable action');
+});
+
+// -- and in the page, where the markers actually are -------------------------
+const rulerState = () => ev(`(function(){
+  return JSON.stringify({
+    pts: rulerPoints.map(function(p){ return [p.lat, p.lng]; }),
+    icons: rulerMarkers.map(function(m){ return m._opts.icon.html; }),
+    line: (rulerLine._ll || []).length,
+    total: rulerTotalMarker ? rulerTotalMarker._opts.icon.html : null,
+    readout: document.getElementById('ruler-readout').textContent
+  });
+})()`);
+const rulerZ = () => doc.dispatchEvent(new w.KeyboardEvent('keydown',
+  { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+const pressEsc = () => doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+
+T('THE INVARIANT: Ctrl+Z lands exactly where the pilot was one click ago', () => {
+  startRuler();
+  const clk = (lat, lng) => w.__mapHandlers.click({ latlng: { lat: lat, lng: lng } });
+  clk(69.0, 18.0); clk(69.4, 18.3); clk(69.6, 19.1);
+  const three = rulerState();
+  clk(69.9, 19.8);
+  assert(rulerState() !== three, 'the fourth click changed nothing - the fixture proves nothing');
+  rulerZ();
+  assert(rulerState() === three,
+    'undo did not restore the three-point state:\n  want ' + three + '\n  got  ' + rulerState());
+  // ...and it keeps going down to empty.
+  rulerZ(); rulerZ(); rulerZ();
+  assert(ev('rulerPoints.length') === 0 && ev('rulerMarkers.length') === 0 &&
+    ev('rulerTotalMarker') === null && ev('rulerLine._ll.length') === 0,
+    'undoing every point left something drawn');
+  assert(/No legs measured yet/.test(doc.getElementById('ruler-readout').textContent),
+    'the banner still claims a measurement');
+  stopRuler();
+});
+
+T('the redraw is the ONE drawing path - running it again changes nothing', () => {
+  // The click used to append the newest dot and chip incrementally, which only
+  // works while a ruler grows. Both paths end at redrawRuler now, so drawing
+  // from the same points twice must be identical - otherwise the two could
+  // drift and an undo would leave a stale chip behind.
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__mapHandlers.click({ latlng: { lat: 69.4, lng: 18.3 } });
+  w.__mapHandlers.click({ latlng: { lat: 69.6, lng: 19.1 } });
+  const drawn = rulerState();
+  ev('redrawRuler();');
+  assert(rulerState() === drawn, 'a second redraw from the same points differed');
+  stopRuler();
+});
+
+T('Escape clears the measurement, and a second Escape stops the ruler', () => {
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__mapHandlers.click({ latlng: { lat: 69.5, lng: 18.5 } });
+  assert(ev('rulerMarkers.length') === 3, 'setup failed: ' + ev('rulerMarkers.length'));
+  pressEsc();
+  assert(ev('rulerPoints.length') === 0 && ev('rulerMarkers.length') === 0,
+    'Escape did not clear the ruler');
+  assert(ev('isRulerMode') === true, 'Escape stopped the ruler instead of clearing it');
+  pressEsc();
+  assert(ev('isRulerMode') === false, 'a second Escape did not stop the empty ruler');
+  assert(doc.getElementById('ruler-banner').style.display === 'none', 'the banner stayed up');
+});
+
+T('neither touches the plan - not the route, not the undo stack', () => {
+  // ONE MODE, ONE MEANING. A Ctrl+Z that quietly removed a waypoint because the
+  // ruler happened to be empty is the surprise this rule exists to refuse, so
+  // the fixture makes an unguarded undo VISIBLE: rename a fix first, then an
+  // undo that leaked would put the old name back.
+  ev(SEED);
+  ev('undoStack = []; redoStack = [];');
+  w.pushUndoState('rename a waypoint');
+  ev(`flights[0].waypoints[1].name = 'RENAMED'; refreshMap(); renderAllFlightTables();`);
+  const depth = ev('undoStack.length');
+  startRuler();
+  w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
+  w.__mapHandlers.click({ latlng: { lat: 69.5, lng: 18.5 } });
+  rulerZ(); rulerZ();                       // down to an empty ruler
+  rulerZ();                                 // and one more, with nothing left
+  assert(ev(`flights[0].waypoints[1].name`) === 'RENAMED',
+    'Ctrl+Z leaked through to the plan and undid a route edit');
+  pressEsc(); pressEsc();
+  assert(ev('undoStack.length') === depth,
+    'the ruler put an entry on the plan\'s undo stack (' + depth + ' -> ' + ev('undoStack.length') + ')');
+  assert(ev(`flights[0].waypoints[1].name`) === 'RENAMED', 'Escape reached the plan');
+  ev(SEED);
+});
+stopRuler();
+
 T('the chip rides clear of the cursor, and the marker still takes no mouse', () => {
   // TWO THINGS, AND ONLY MEASURING THEM SEPARATELY TOLD THEM APART. The offset
   // moves the visible LABEL clear of the pointer - but the marker's own 12x12

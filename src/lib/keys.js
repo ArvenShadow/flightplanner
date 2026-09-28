@@ -76,6 +76,8 @@
  * @property {boolean} [editing]      focus is in ANY field that takes typed keys
  * @property {boolean} [viewMode]     the read-only "View Mode" is on
  * @property {boolean} [hasHighlight] a waypoint is selected
+ * @property {boolean} [rulerMode]    the ruler is running
+ * @property {number}  [rulerPoints]  how many points it has measured
  */
 
 /**
@@ -111,7 +113,11 @@
  */
 export const ACTION_SPECS = /** @type {ActionSpec[]} */ ([
   // --- the plan -----------------------------------------------------------
-  { id: 'undo', group: 'Editing', label: 'Undo', dflt: 'Ctrl+Z' },
+  { id: 'undo', group: 'Editing', label: 'Undo',
+    hint: 'While the ruler is running this key removes the last ruler point instead - the ' +
+      'ruler does not edit your route, so it never touches the plan’s undo history. ' +
+      'Rebinding undo moves that with it.',
+    dflt: 'Ctrl+Z' },
   { id: 'redo', group: 'Editing', label: 'Redo', dflt: 'Ctrl+Shift+Z' },
   { id: 'delete-waypoint', group: 'Editing', label: 'Delete the selected waypoint',
     hint: 'Click a waypoint on the map to select it. Edit Mode only - View Mode is read-only.',
@@ -152,15 +158,23 @@ export const ACTION_SPECS = /** @type {ActionSpec[]} */ ([
   { id: 'print', group: 'Plan & output', label: 'Print / preview the OFP', dflt: null },
 
   // --- and the one that is not yours to move ------------------------------
-  { id: 'close-overlays', group: 'Always', label: 'Close a dialog, abandon a drag, clear the selection',
-    hint: 'Escape is fixed. It is the way out of a dialog and out of a stuck line drag, so ' +
-      'rebinding it could leave you with no way back.',
+  { id: 'close-overlays', group: 'Always',
+    label: 'Close a dialog, abandon a drag, clear the ruler, clear the selection',
+    hint: 'Escape is fixed. It is the way out of a dialog, out of a stuck line drag and out ' +
+      'of the ruler, so rebinding it could leave you with no way back. It backs out ONE ' +
+      'level at a time: a dialog first, then the ruler’s measurement, then the ruler itself.',
     dflt: 'Escape', fixed: true }
 ]);
 
-/** Actions the page must handle. `cancel-drag` is not in the table above
- *  because it is not a binding: it is what Escape means while dragging. */
-export const KEY_ACTIONS = ACTION_SPECS.map((a) => a.id).concat(['cancel-drag']);
+/** Actions the page must handle. These three are not in the table above
+ *  because they are not BINDINGS - they are what an existing chord MEANS in a
+ *  particular state, so there is nothing for the pilot to set. `cancel-drag` is
+ *  what Escape means while dragging; `ruler-clear` is what it means while the
+ *  ruler holds points; `ruler-undo` is what whatever chord is bound to undo
+ *  means while the ruler is running. Rebinding undo moves this with it, which
+ *  is the reason it is derived from the spec rather than hardcoded to Ctrl+Z. */
+export const KEY_ACTIONS = ACTION_SPECS.map((a) => a.id)
+  .concat(['cancel-drag', 'ruler-clear', 'ruler-undo']);
 
 /** @param {string} id @returns {ActionSpec|undefined} */
 export function actionSpec(id) { return ACTION_SPECS.find((a) => a.id === id); }
@@ -337,6 +351,20 @@ export function resolveKey(ev, ctx, keymap) {
   if (chord === 'Escape') {
     if (c.dragging) return { action: 'cancel-drag', preventDefault: false };
     if (c.dialogOpen) return null;          // dialog.js owns its own Escape
+    // ESCAPE BACKS OUT ONE LEVEL AT A TIME, which is what it already means
+    // everywhere else here - so with the ruler running it clears the
+    // measurement first and STOPS the tool only once there is nothing left to
+    // clear (v16.92, the pilot: "let me press escape on ruler to reset the
+    // ruler"). That also means it is never the silent keystroke this module
+    // exists to prevent: there is always an outcome to see.
+    //
+    // AN OVERLAY STILL COMES FIRST. A modal open over the map is the outermost
+    // level, so Escape closes that before it reaches the tool underneath.
+    if (c.rulerMode && !c.overlayOpen) {
+      return (c.rulerPoints || 0) > 0
+        ? { action: 'ruler-clear', preventDefault: false }
+        : { action: 'toggle-ruler', preventDefault: false };
+    }
     return { action: 'close-overlays', preventDefault: false };
   }
 
@@ -352,6 +380,15 @@ export function resolveKey(ev, ctx, keymap) {
     if (c.editing && !spec.inText && isBareKey(ev)) return null;
     if (spec.needsEdit && c.viewMode) return null;
     if (spec.needsSelection && !c.hasHighlight) return null;
+    // WHILE THE RULER IS RUNNING, UNDO IS THE RULER'S (v16.92, the pilot:
+    // "ctrl-Z to remove last ruler waypoint"). It is keyed on the SPEC, not on
+    // the chord, so a pilot who has rebound undo gets this on their own key.
+    // Redo is deliberately left alone: the ruler is click-to-place, so putting
+    // a point back is one click on the map, and a second stack for a transient
+    // measuring tool is the mechanism v16.61 says to prefer the deletion of.
+    if (spec.id === 'undo' && c.rulerMode) {
+      return { action: 'ruler-undo', preventDefault: true };
+    }
     /** @type {KeyAction} */
     const act = { action: spec.id, preventDefault: true };
     if (spec.index !== undefined) act.index = spec.index;
