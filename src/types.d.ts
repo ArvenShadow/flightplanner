@@ -546,6 +546,45 @@ interface MassBalanceMission {
   /** The heaviest arrival anywhere - MLW is checked at every landing. */
   worstLanding: MassBalanceResult | null;
   zeroFuel: MassPoint;
+  /** Walked over the sectors, never "first dep minus last arr": that is the
+   *  burn only when nothing was taken on. dep - consumed + stopChange === arr. */
+  fuel: {
+    depGal: number;
+    arrGal: number;
+    /** Burned in the sectors, taxi included. */
+    consumedGal: number;
+    /** Net change at the stops: refuel adds, circuit and ground minutes subtract. */
+    stopChangeGal: number;
+  };
+}
+
+/** One plotted point on the CG chart, in SVG pixels. */
+interface CgChartMark {
+  key: string;
+  label: string;
+  x: number;
+  y: number;
+  weightLb: number;
+  armIn: number;
+  verdict: CgVerdict;
+}
+
+/** Everything an inline CG chart needs, computed without a DOM. */
+interface CgChartModel {
+  width: number;
+  height: number;
+  pad: number;
+  /** Inches aft of datum, [low, high], widened to hold every mark. */
+  armRange: [number, number];
+  weightRange: [number, number];
+  envelope: Array<{ x: number; y: number }>;
+  autopilot: Array<{ x: number; y: number }>;
+  mlw: Array<{ x: number; y: number }>;
+  gridX: Array<{ arm: number; x: number }>;
+  gridY: Array<{ weight: number; y: number }>;
+  marks: CgChartMark[];
+  /** Keys of marks that could not be plotted, so the UI can say so. */
+  undrawn: string[];
 }
 
 /** A choice offered in a dialog. */

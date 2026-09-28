@@ -44,7 +44,7 @@
    -------------------------------------------------------------------------- */
 body.skin-compact #header { padding: 3px 10px; gap: 3px 8px; }
 body.skin-compact #header h1 { font-size: 13px; }
-body.skin-compact #sidebar { padding: 5px; gap: 5px; }
+body.skin-compact #sidebar { --sb-pad: 5px; --sb-gap: 5px; }
 body.skin-compact .card { padding: 6px 8px; }
 body.skin-compact .btn { padding: 3px 7px; font-size: 10px; border-radius: 3px; }
 body.skin-compact .btn-sm { padding: 2px 5px; font-size: 9px; }
@@ -61,7 +61,7 @@ body.skin-compact h2, body.skin-compact h3 { font-size: 11px; margin: 2px 0; }
    -------------------------------------------------------------------------- */
 body.skin-bold #header { padding: 12px 20px; border-bottom: 3px solid var(--accent-line); }
 body.skin-bold #header h1 { font-size: 20px; letter-spacing: 0.3px; }
-body.skin-bold #sidebar { padding: 14px; gap: 14px; }
+body.skin-bold #sidebar { --sb-pad: 14px; --sb-gap: 14px; }
 body.skin-bold .card { padding: 14px 16px; border-width: 2px; border-radius: 8px; }
 body.skin-bold .btn {
   padding: 9px 16px; font-size: 13px; font-weight: 700;
@@ -103,7 +103,7 @@ body.skin-menu #sidebar > * { display: none; }
 body.skin-menu #sidebar:hover,
 body.skin-menu #sidebar:focus-within {
   flex: 0 0 min(560px, 55vw);
-  padding: 10px;
+  --sb-pad: 10px; padding: var(--sb-pad);
   overflow-y: auto;
   box-shadow: -6px 0 18px rgba(0, 0, 0, 0.18);
 }
@@ -117,9 +117,23 @@ body.skin-menu #map-container { flex: 1; border-right: none; }
    nothing about a horizontal split. */
 body.skin-menu.layout-stacked #map-container { border-bottom: 2px solid var(--border-color); }
 /* The explicit layout choices still win over the skin. */
-body.skin-menu.layout-plan #sidebar { flex: 1; padding: 10px; overflow-y: auto; }
+body.skin-menu.layout-plan #sidebar { flex: 1; --sb-pad: 10px; padding: var(--sb-pad); overflow-y: auto; }
 body.skin-menu.layout-plan #sidebar::before { display: none; }
 body.skin-menu.layout-plan #sidebar > * { display: revert; }
+/* `revert` IS THE BROWSER'S DEFAULT, NOT THE STYLESHEET'S: it turns a div back
+   into `display: block`. That was harmless while every child of the sidebar
+   was a block card, and stopped being so at v16.95 - the tab strip is a flex
+   ROW and the two panes are `display: contents`. MEASURED with these rules
+   removed: the card gaps fell from 488/82/69 px to 458/72/59, and the two tabs
+   shrank to 90 and 119 px of a 538 px strip instead of 267 each (they stay on
+   one row - a block of inline buttons - so the damage is width, not stacking).
+   These re-state the two real values, one specificity step above the reveal. */
+body.skin-menu #sidebar:hover > .side-pane,
+body.skin-menu #sidebar:focus-within > .side-pane,
+body.skin-menu.layout-plan #sidebar > .side-pane { display: contents; }
+body.skin-menu #sidebar:hover > .side-tabs,
+body.skin-menu #sidebar:focus-within > .side-tabs,
+body.skin-menu.layout-plan #sidebar > .side-tabs { display: flex; }
 
 /* The stacked layout makes #main a COLUMN, so the rail has to collapse the
    panel's HEIGHT there rather than its width. Without this the Menu skin

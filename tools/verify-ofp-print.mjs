@@ -241,11 +241,107 @@ const pdfBad = await page.pdf({ format: 'A4', landscape: true, printBackground: 
   margin: { top: '6mm', bottom: '6mm', left: '6mm', right: '6mm' } });
 check(pdfBad.length > 1000, 'the broken plan still renders a PDF (' + pdfBad.length + ' bytes)');
 
-// The M&B side is explicitly NOT reproduced yet - guard that we did not half
-// do it, which would be worse than not doing it.
-const mb = await page.evaluate(() => document.getElementById('ofp-print').textContent);
-check(!/MASS\s*&\s*BALANCE|Basic Empty Mass/i.test(mb),
-  'the Mass & Balance side is left out, not half-built');
+// THE M&B SIDE EXISTS SINCE v16.95, so this check's OLD premise ("left out,
+// not half-built") has expired and is replaced DELIBERATELY rather than left
+// to pass for the wrong reason - the v16.56 lesson. What it guards now is the
+// rule that makes it safe for a pilot who does not use M&B: the page prints
+// only once a REGISTRATION is chosen, and is absent until then. Both
+// directions, because one of them alone is not a test of the condition.
+const mbOff = await page.evaluate(() => document.getElementById('ofp-print').textContent);
+check(!/MASS\s*&\s*BALANCE/i.test(mbOff),
+  'with no registration chosen, no M&B page is printed');
+const mbOn = await page.evaluate(() => {
+  // @ts-ignore - page globals
+  setMbReg('LN-TRA');
+  const t = document.getElementById('ofp-print');
+  return { text: t.textContent, sheets: t.querySelectorAll('.mb-sheet').length };
+});
+check(/MASS\s*&\s*BALANCE/i.test(mbOn.text),
+  'choosing a registration prints the M&B page');
+check(/LN-TRA/.test(mbOn.text), 'the M&B page names the aircraft it was computed for');
+check(mbOn.sheets > 0, 'the M&B page is a real sheet: ' + mbOn.sheets);
+// Page 1's Reg box was an empty cell for fifty versions, so a value there has
+// never been measured against the box it prints in.
+const regBox = await page.evaluate(() => {
+  const ths = [...document.querySelectorAll('#ofp-print .ofp-sheet:not(.mb-sheet) th')]
+    .filter((t) => /^Reg:?$/.test(t.textContent.trim()));
+  return ths.map((t) => {
+    const td = t.nextElementSibling;
+    return { v: td.textContent.trim(), need: td.scrollWidth, w: td.clientWidth };
+  });
+});
+check(regBox.length > 0 && regBox.every((r) => r.v === 'LN-TRA'),
+  'every OFP sheet names the same tail the M&B page weighed: ' + JSON.stringify(regBox.map((r) => r.v)));
+check(regBox.every((r) => r.need <= r.w + 1),
+  'the registration fits its Reg box: ' + regBox.map((r) => r.need + ' in ' + r.w).join(', '));
+// The plan on screen is still the BROKEN one, so the band rule (v16.43) has to
+// reach page 2 as well - company paperwork must not print clean on either side.
+const mbBands = await page.evaluate(() => {
+  const sh = [...document.querySelectorAll('#ofp-print .mb-sheet')];
+  return sh.every((s) => s.previousElementSibling &&
+    s.previousElementSibling.classList.contains('ofp-void'));
+});
+check(mbBands, 'every M&B sheet of a broken plan carries the DO NOT USE band');
+
+// AND THE REASON THIS VERIFIER EXISTS APPLIES TO PAGE 2 TOO: jsdom has no
+// layout, so only a browser can say whether a value fits its printed cell.
+// The M&B figures are bounded by the airframe rather than by the route - a
+// weight is under four digits and a tenth, an arm under three, a moment under
+// six - so any populated sheet exercises the widest cell the page can hold.
+const mbFit = await page.evaluate(() => {
+  const bad = [];
+  let filled = 0;
+  for (const td of document.querySelectorAll('#ofp-print .mb-sheet td')) {
+    const t = td.textContent.trim();
+    if (!t) continue;
+    filled++;
+    if (td.scrollWidth > td.clientWidth + 1)
+      bad.push(`"${t}" needs ${td.scrollWidth} in ${td.clientWidth}px`);
+  }
+  const sh = document.querySelector('#ofp-print .mb-sheet');
+  const host = document.getElementById('ofp-print');
+  return { bad, filled, w: sh ? sh.scrollWidth : 0, hostW: host.clientWidth };
+});
+check(mbFit.filled > 20, 'the M&B sheet is actually populated: ' + mbFit.filled + ' filled cells');
+check(mbFit.bad.length === 0, mbFit.bad.length + ' M&B cells overflow their box' +
+  (mbFit.bad.length ? ': ' + mbFit.bad.slice(0, 6).join(' | ') : ''));
+check(mbFit.w <= mbFit.hostW + 1,
+  'the M&B sheet does not run off the page: ' + mbFit.w + ' in ' + mbFit.hostW);
+const mbPdf = await page.pdf({ format: 'A4', landscape: true, printBackground: true,
+  margin: { top: '6mm', bottom: '6mm', left: '6mm', right: '6mm' } });
+check(mbPdf.length > 1000, 'the plan with an M&B page still renders a PDF (' + mbPdf.length + ' bytes)');
+// THE WHOLE-MISSION SHEET HAS A ROW THE SECTOR SHEETS NEVER DO - the net fuel
+// change at the stops - and its label is the longest on the page, so it has to
+// be measured in the view that prints it. A full stop with a refuel is put on
+// the first sector so there is a change to print.
+const master = await page.evaluate(() => {
+  // @ts-ignore - page globals
+  const wps = flights[0].waypoints, last = wps[wps.length - 1];
+  last.stop = 'full-stop'; last.stopMin = 10; last.fuelAfterGal = 80;
+  // @ts-ignore - page globals
+  setMbView('mission'); renderAllFlightTables();
+  const sh = [...document.querySelectorAll('#ofp-print .mb-sheet')];
+  const bad = [];
+  let stopRow = null;
+  for (const td of document.querySelectorAll('#ofp-print .mb-sheet td')) {
+    if (/^Fuel change at stops/.test(td.textContent.trim())) stopRow = td.textContent.trim();
+    if (td.textContent.trim() && td.scrollWidth > td.clientWidth + 1)
+      bad.push(`"${td.textContent.trim()}" needs ${td.scrollWidth} in ${td.clientWidth}px`);
+  }
+  return { sheets: sh.length, stopRow, bad,
+           w: sh[0] ? sh[0].scrollWidth : 0, hostW: document.getElementById('ofp-print').clientWidth };
+});
+check(master.sheets === 1, 'the whole-mission view prints ONE M&B sheet: ' + master.sheets);
+check(!!master.stopRow, 'the refuel is on the printed master: ' + master.stopRow);
+check(master.bad.length === 0, master.bad.length + ' whole-mission cells overflow' +
+  (master.bad.length ? ': ' + master.bad.slice(0, 4).join(' | ') : ''));
+check(master.w <= master.hostW + 1, 'the whole-mission sheet fits the page: ' + master.w + ' in ' + master.hostW);
+await page.evaluate(() => {
+  // @ts-ignore - page globals
+  setMbView('sector');
+  // @ts-ignore - page globals
+  setMbReg('');
+});
 
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''));
 await b.close();

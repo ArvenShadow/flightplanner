@@ -533,13 +533,37 @@ export function computeMissionMassBalance(aircraft, stations, sectors) {
   for (const r of list) {
     if (!worst || r.landing.weightLb > worst.landing.weightLb) worst = r;
   }
+  // THE WHOLE-MISSION FUEL IS WALKED, NOT SUBTRACTED - the same rule as
+  // `first` and `last` above. "Departure fuel minus arrival fuel" is the burn
+  // only when nothing was taken on: refuel to 64 gal half way and a mission
+  // that burned 44 reports 24. So the two things that happen to the tanks are
+  // kept apart and each is summed where it happens:
+  //   consumedGal   - burned IN each sector, taxi included (dep - arr)
+  //   stopChangeGal - the NET change at the stops between them: a refuel adds,
+  //                   circuit and ground minutes subtract. It is net on purpose:
+  //                   a refuel is entered as the fuel AFTER, so the split
+  //                   between uplift and ground burn is not something the plan
+  //                   states, and inventing one would be a guess.
+  // Together they reconcile exactly: depGal - consumedGal + stopChangeGal
+  // is arrGal, which is what lets a printed sheet add up.
+  let consumed = 0, stopChange = 0;
+  for (let i = 0; i < list.length; i++) {
+    consumed += list[i].fuelDepGal - list[i].fuelArrGal;
+    if (i > 0) stopChange += list[i].fuelDepGal - list[i - 1].fuelArrGal;
+  }
   const res = {
     aircraft,
     sectors: list,
     first: list.length ? list[0] : null,
     last: list.length ? list[list.length - 1] : null,
     worstLanding: worst,
-    zeroFuel: list.length ? list[0].zeroFuel : emptyMass(aircraft)
+    zeroFuel: list.length ? list[0].zeroFuel : emptyMass(aircraft),
+    fuel: {
+      depGal: list.length ? list[0].fuelDepGal : NaN,
+      arrGal: list.length ? list[list.length - 1].fuelArrGal : NaN,
+      consumedGal: list.length ? consumed : NaN,
+      stopChangeGal: list.length ? stopChange : NaN
+    }
   };
   return /** @type {MassBalanceMission} */ (res);
 }
@@ -645,4 +669,190 @@ export function massBalanceCautions(mission) {
     }
   }
   return out;
+}
+
+/**
+ * A registration, or null. Only the published fleet is accepted - a typed
+ * tail that is not one of ours has no empty weight, and an M&B computed
+ * against a guessed airframe is the plausible wrong answer.
+ * @param {unknown} v
+ * @returns {string|null}
+ */
+export function normaliseReg(v) {
+  if (typeof v !== 'string') return null;
+  const a = aircraftByReg(v);
+  return a ? a.reg : null;
+}
+
+/**
+ * The most a single station may be given, pounds.
+ *
+ * A TYPO GUARD, NOT A LIMIT, and the difference is the one REFUEL_MAX_GAL
+ * turns on. The real limits are MTOW and the CG envelope, and both are
+ * checked; this only catches a slipped decimal (1700 for 170). 1000 lb in one
+ * seat is roughly the whole useful load of the aeroplane, so it cannot reject
+ * a figure anybody would really load.
+ */
+/**
+ * The whole-mission sheet: the weights the mission leaves with and comes back
+ * at, as the author asked for ("a master OFP to show the start and final
+ * weights") - built ONCE here so the screen and the printed page cannot
+ * describe two different masters.
+ *
+ * **EVERY FIGURE IS THE ONE THAT BINDS THE WHOLE MISSION, NOT THE FIRST OR
+ * THE LAST SECTOR'S.** Assembling it from `first` and `last` alone was wrong in
+ * four places at once, and all four were silent on a one-sector mission:
+ *   - the BURN was the first sector's, so the printed take-off minus consumed
+ *     did not equal the printed landing;
+ *   - the CHECKS were the first take-off's and the last landing's, so a heavy
+ *     intermediate take-off after a refuel could print a green master;
+ *   - Va came from the last landing, but Va falls with weight and the LIGHTEST
+ *     landing is what binds it (the v16.93 rule), which a refuel can move to
+ *     the middle of the mission;
+ *   - Min FLT came from the first take-off, where the heaviest one binds.
+ * A check that fails anywhere fails here, so the master can summarise but
+ * never launder a sector's finding.
+ *
+ * @param {MassBalanceMission} m
+ * @returns {MassBalanceResult & {stopChangeGal:number}|null}
+ */
+export function missionMaster(m) {
+  if (!m || !m.first || !m.last) return null;
+  /** @param {'takeoffWeight'|'landingWeight'|'takeoffCg'|'landingCg'|'zeroFuelCg'} k */
+  const worst = (k) => {
+    for (const r of m.sectors) if (r.checks[k] !== 'ok') return r.checks[k];
+    return 'ok';
+  };
+  let lightest = m.sectors[0];
+  let minFlt = 0;
+  for (const r of m.sectors) {
+    if (r.landing.weightLb < lightest.landing.weightLb) lightest = r;
+    if (r.minFlightMin > minFlt) minFlt = r.minFlightMin;
+  }
+  return Object.assign({}, m.first, {
+    label: 'Whole mission',
+    landing: m.last.landing,
+    fuelDepGal: m.fuel.depGal,
+    fuelArrGal: m.fuel.arrGal,
+    burnGal: m.fuel.consumedGal,
+    stopChangeGal: m.fuel.stopChangeGal,
+    checks: Object.assign({}, m.first.checks, {
+      takeoffWeight: worst('takeoffWeight'),
+      landingWeight: worst('landingWeight'),
+      takeoffCg: worst('takeoffCg'),
+      landingCg: worst('landingCg'),
+      zeroFuelCg: worst('zeroFuelCg'),
+      autopilotTakeoff: m.sectors.every((r) => r.checks.autopilotTakeoff),
+      autopilotLanding: m.sectors.every((r) => r.checks.autopilotLanding)
+    }),
+    minFlightMin: minFlt,
+    vaKt: vaKt(lightest.landing.weightLb)
+  });
+}
+
+export const STATION_MAX_LB = 1000;
+
+/**
+ * Station loads, validated on every read.
+ *
+ * They can arrive from `localStorage`, which is hand-editable, so this is the
+ * same arrangement `normaliseFixStyle` has: values are stored already-checked
+ * and re-checked on the way out, and anything unreadable falls back to 0
+ * rather than to NaN. A station carrying NaN would make the whole take-off
+ * mass NaN, which reads as "no M&B" when the pilot has simply left a seat
+ * empty - and an empty seat IS zero.
+ *
+ * @param {unknown} o
+ * @returns {StationLoads}
+ */
+export function normaliseStationLoads(o) {
+  const src = (o && typeof o === 'object') ? /** @type {any} */ (o) : {};
+  /** @type {any} */
+  const out = {};
+  for (const key of Object.keys(STATION_ARMS)) {
+    const n = Number(src[key]);
+    out[key] = Number.isFinite(n) ? Math.min(STATION_MAX_LB, Math.max(0, n)) : 0;
+  }
+  return /** @type {StationLoads} */ (out);
+}
+
+/**
+ * Everything an inline CG chart needs, in SVG pixel coordinates.
+ *
+ * PURE ON PURPOSE. The page emits `<svg>` from this and computes no geometry
+ * of its own, so what the chart draws and what `envelopePosition` decides are
+ * the same envelope - the v16.35 rule that made the fix-style preview call the
+ * map's own `fixSymbolSvg`.
+ *
+ * **THE AXES EXPAND TO INCLUDE THE MARKS.** A chart that clipped the very
+ * point that is out of limits would hide the one thing it exists to show, so
+ * the range is the envelope's own box widened to hold every mark, then padded.
+ * The envelope is drawn at its true size either way; it is the VIEW that grows.
+ *
+ * @param {Array<{key: string, label: string, weightLb: number, armIn: number|null}>} marks
+ * @param {{width?: number, height?: number, pad?: number}} [opts]
+ * @returns {CgChartModel}
+ */
+export function cgChartModel(marks, opts) {
+  const width = (opts && opts.width) || 320;
+  const height = (opts && opts.height) || 240;
+  const pad = (opts && opts.pad) || 34;
+
+  let aLo = Infinity, aHi = -Infinity, wLo = Infinity, wHi = -Infinity;
+  for (const [a, w] of CG_ENVELOPE) {
+    if (a < aLo) aLo = a; if (a > aHi) aHi = a;
+    if (w < wLo) wLo = w; if (w > wHi) wHi = w;
+  }
+  const drawable = (marks || []).filter(
+    (m) => Number.isFinite(m.weightLb) && Number.isFinite(Number(m.armIn)));
+  for (const m of drawable) {
+    const a = Number(m.armIn), w = m.weightLb;
+    if (a < aLo) aLo = a; if (a > aHi) aHi = a;
+    if (w < wLo) wLo = w; if (w > wHi) wHi = w;
+  }
+  // A margin so a point sitting exactly on a limit is not drawn on the frame.
+  const aPad = Math.max(0.5, (aHi - aLo) * 0.06);
+  const wPad = Math.max(50, (wHi - wLo) * 0.06);
+  aLo -= aPad; aHi += aPad; wLo -= wPad; wHi += wPad;
+
+  /** @param {number} a @param {number} w */
+  const px = (a, w) => ({
+    x: pad + ((a - aLo) / (aHi - aLo)) * (width - pad * 2),
+    // Weight grows UPWARDS, as it does on the paper chart.
+    y: height - pad - ((w - wLo) / (wHi - wLo)) * (height - pad * 2)
+  });
+
+  /** @param {number[][]} pts */
+  const path = (pts) => pts.map(([a, w]) => px(a, w));
+
+  /** @type {Array<{arm:number, x:number}>} */
+  const gridX = [];
+  for (let a = Math.ceil(aLo / 2) * 2; a <= aHi; a += 2) gridX.push({ arm: a, x: px(a, wLo).x });
+  /** @type {Array<{weight:number, y:number}>} */
+  const gridY = [];
+  for (let w = Math.ceil(wLo / 200) * 200; w <= wHi; w += 200) gridY.push({ weight: w, y: px(aLo, w).y });
+
+  const res = {
+    width, height, pad,
+    armRange: [aLo, aHi],
+    weightRange: [wLo, wHi],
+    envelope: path(CG_ENVELOPE),
+    // The two reference lines the workbook draws beside the envelope.
+    autopilot: path([[AUTOPILOT_MIN_ARM_IN, 1800], [AUTOPILOT_MIN_ARM_IN, AUTOPILOT_LIMIT_MAX_LB]]),
+    mlw: path([[39, MLW_LB], [46, MLW_LB]]),
+    gridX, gridY,
+    marks: drawable.map((m) => {
+      const p = px(Number(m.armIn), m.weightLb);
+      return {
+        key: m.key, label: m.label, x: p.x, y: p.y,
+        weightLb: m.weightLb, armIn: Number(m.armIn),
+        verdict: envelopePosition(m.weightLb, Number(m.armIn))
+      };
+    }),
+    // A mark with no arm or no weight cannot be plotted, and saying so beats
+    // dropping it silently - the pilot would read an absent point as "fine".
+    undrawn: (marks || []).filter(
+      (m) => !(Number.isFinite(m.weightLb) && Number.isFinite(Number(m.armIn)))).map((m) => m.key)
+  };
+  return /** @type {CgChartModel} */ (res);
 }

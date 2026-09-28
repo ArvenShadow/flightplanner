@@ -1046,7 +1046,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .as-cs { color: var(--overlay-muted); font-size: 9.5px; }
     .as-note { color: var(--overlay-muted); font-size: 9px; font-style: italic; margin-top: 4px; }
             #map { width: 100%; height: 100%; }
-    #sidebar { flex: 1.55; display: flex; flex-direction: column; background: var(--bg-sidebar); overflow-y: auto; padding: 10px; gap: 10px; }
+    /* --sb-pad / --sb-gap are what the sidebar is spaced BY, so the tab strip
+       can sit flush against both without restating a number per skin. */
+    #sidebar { --sb-pad: 10px; --sb-gap: 10px; flex: 1.55; display: flex; flex-direction: column; background: var(--bg-sidebar); overflow-y: auto; padding: var(--sb-pad); gap: var(--sb-gap); }
     
     /* Cards & Panels */
     .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
@@ -1390,7 +1392,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
       .tick-box { padding: 4px 8px; }
       /* The sidebar's own spacing is the other half of the reclaim: six cards
          with 10 px gaps and 10 px padding spend ~100 px on air alone. */
-      #sidebar { padding: 6px; gap: 6px; }
+      #sidebar { --sb-pad: 6px; --sb-gap: 6px; }
       .card { padding: 6px 8px; }
       .input-grid { gap: 6px 10px; }
     }
@@ -1580,3 +1582,85 @@ body.layout-stacked #splitter { flex: 0 0 2px; cursor: row-resize; }
 body.layout-stacked #splitter::after { inset: -6px 0; }
 body.layout-stacked.splitter-dragging { cursor: row-resize; }
 body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter { display: none; }
+
+/* ---- Mass & Balance tab (v16.95) ------------------------------------- */
+/* The sidebar holds two panes now. Tabs rather than a ninth card: M&B is a
+   different job from building the route, with inputs entered once a mission. */
+/* THE PANES ARE NOT BOXES, and that is measured rather than tidy. #sidebar
+   spaces its cards with a flex `gap`, and a wrapper div takes them out of it:
+   the cards went from 14 px apart to 4, and verify:visual reported the whole
+   plan pane reflowed below the strip. `display: contents` gives the old box
+   tree back, so the sidebar's own gap reaches every card in every skin (5 px
+   Compact, 14 px Bold, 6 px on a short window) without a second copy of those
+   numbers here to drift. showSidePane still hides a pane with an inline
+   `display: none`, which out-ranks this. The panes carry no ARIA role, so
+   there is no semantics for `contents` to drop. */
+.side-pane { display: contents; }
+.side-tabs {
+  display: flex; gap: 4px;
+  /* ATTACHED, NOT FLOATING. The active tab's bottom border is card-coloured
+     and only its top corners are rounded, so the design was always a tab that
+     joins the pane below it - sitting in a flex gap it floated. Flush to the
+     sidebar's top edge and 1 px over the card's own top border, so the active
+     tab covers that border and the two read as one surface. The cost was
+     measured, not guessed: floating, the strip spent ~30 px of a 720 px
+     window and pushed the daylight card below the fold (verify:layout). */
+  margin: calc(-1 * var(--sb-pad, 10px)) 0 calc(-1 * var(--sb-gap, 10px) - 1px);
+  position: relative; z-index: 1;
+}
+.side-tab {
+  flex: 1; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
+  background: var(--bg-table-head); color: var(--text-muted);
+  border: 1px solid var(--border-color); border-radius: 6px 6px 0 0;
+}
+.side-tab-on { background: var(--bg-card); color: var(--text-main); border-bottom-color: var(--bg-card); }
+/* THIS BLOCK MUST SIT BELOW THE RULES IT OVERRIDES. A media query adds no
+   specificity, so the short-window block at the top of this file would LOSE to
+   the two rules above on source order - the exact trap v16.49 hit with .card.
+   MEASURED at 1280x720 by verify:layout: a floating strip put the daylight
+   card at 440 px into 424 visible; attached (above) and this smaller type put
+   it at 420. v16.94 had it at 410 - the ten pixels between are what the strip
+   costs, and 4 px of slack is what is left. That check is the guard for it. */
+@media (max-height: 800px) {
+  .side-tab { padding: 2px 8px; font-size: 10px; }
+}
+.mb-grid { width: 100%; font-size: 11px; }
+.mb-grid th { text-align: right; font-size: 10px; color: var(--text-muted); }
+.mb-grid th:first-child { text-align: left; }
+.mb-grid td { text-align: right; }
+.mb-grid td:first-child { text-align: left; }
+.mb-rule td { border-top: 2px solid var(--border-color); font-weight: 700; }
+.mb-bad { color: #e53e3e; font-weight: 700; }
+.mb-ok { color: var(--text-main); }
+/* The chart's ink follows the theme, because unlike the map labels it is drawn
+   on the themed sidebar rather than on a light chart raster (the v16.35 rule,
+   pointed the other way). */
+.mb-chart { display: block; width: 100%; height: auto; }
+.mb-chart .mb-env { fill: var(--highlight-bg); stroke: var(--text-main); stroke-width: 1.5; }
+.mb-chart .mb-grid-line { stroke: var(--border-color); stroke-width: 0.5; }
+.mb-chart .mb-ref { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 4 3; fill: none; }
+.mb-chart .mb-axis { fill: var(--text-muted); font-size: 8px; }
+.mb-chart .mb-pt { stroke: #ffffff; stroke-width: 1.5; paint-order: stroke; }
+.mb-chart .mb-lbl { fill: var(--text-main); font-size: 9px; font-weight: 700;
+  paint-order: stroke; stroke: var(--bg-card); stroke-width: 2.5; }
+
+/* ---- the printed Mass & Balance page (v16.95) ------------------------- */
+/* Solid black on white like page 1 (v16.41); the blanket #ofp-print rule
+   already forces colour and background, and these only do layout. */
+.mb-sheet { page-break-before: always; padding: 8mm; }
+.mb-sheet-head { display: flex; gap: 16px; align-items: baseline;
+  font-size: 12px; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 6px; }
+.mb-sheet-head b { font-size: 15px; letter-spacing: 1px; }
+.mb-sheet-grid { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+.mb-sheet-grid th, .mb-sheet-grid td { border: 1px solid #000; padding: 3px 5px; text-align: right; }
+.mb-sheet-grid th:first-child, .mb-sheet-grid td:first-child { text-align: left; }
+.mb-sheet-rule td { font-weight: 700; }
+.mb-sheet-notes { font-size: 10px; margin: 6px 0; }
+/* The chart is half the page width on paper - it is a cross-check, not the
+   sheet's main statement, which is the table above it. */
+#ofp-print .mb-chart { width: 90mm; margin-top: 4px; }
+#ofp-print .mb-chart .mb-env { fill: none; stroke: #000; }
+#ofp-print .mb-chart .mb-pt { fill: #000 !important; stroke: #fff; }
+#ofp-print .mb-chart .mb-lbl { fill: #000; stroke: #fff; }
+#ofp-print .mb-chart .mb-axis { fill: #000; }
+#ofp-print .mb-chart .mb-grid-line, #ofp-print .mb-chart .mb-ref { stroke: #000; }
