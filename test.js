@@ -11583,6 +11583,91 @@ T('the POH takeoff tables agree with the workbook, cell for cell', () => {
   }
 });
 
+T('the POH landing table agrees with the workbook, and carries ONE weight', () => {
+  const ldg = JSON.parse(require('fs').readFileSync('./tools/prepared/poh-landing.json', 'utf8'));
+  const temps = ldg.temperaturesC;
+  assert(JSON.stringify(temps) === '[0,10,20,30,40]', 'the temperature axis moved');
+  assert(JSON.stringify(ldg.pressureAltitudesFt) === '[0,1000,2000,3000,4000,5000,6000,7000,8000]',
+    'the pressure-altitude axis moved');
+
+  // ONE WEIGHT, AND IT IS MLW. This is not a weight axis with a single row -
+  // the POH publishes the landing distance at 2950 lb only. A future
+  // interpolator must never scale it by weight; a lighter aeroplane lands
+  // SHORTER, so the 2950 figure errs long for any legal landing weight, which
+  // is the safe direction and is why one table suffices.
+  assert(ldg.weightLb === 2950, 'the landing table weight moved: ' + ldg.weightLb);
+  assert(ldg.weightIsMaximumLanding === true, 'the table no longer declares itself to be at MLW');
+  assert(!('weightsLb' in ldg) && !Array.isArray(ldg.weightLb),
+    'the landing table has grown a weight axis the POH does not publish');
+  // Third independent statement of MLW, after the drawn line and the author's own.
+  assert(ldg.weightLb === moduleExports.mb.MLW_LB,
+    'the POH landing table is published at ' + ldg.weightLb +
+    ' lb but massbalance.js uses ' + moduleExports.mb.MLW_LB + ' lb as MLW');
+
+  // THE REAL CROSS-CHECK, against the workbook's own Performance!F:H.
+  const cells = xlsxSheet('./OFP-C182.xlsx', 'Performance');
+  let checked = 0, maxPa = 0;
+  for (let r = 2; r <= 31; r++) {
+    const pa = cells['F' + r], t = cells['G' + r], d = cells['H' + r];
+    assert(Number.isFinite(pa) && Number.isFinite(t) && Number.isFinite(d),
+      'the workbook landing row ' + r + ' is not three numbers - has Performance!F:H moved?');
+    const row = ldg.table[String(pa)];
+    assert(row, 'the POH snapshot has no ' + pa + ' ft landing row');
+    const cell = row[temps.indexOf(t)];
+    assert(Array.isArray(cell), 'no landing cell at ' + pa + '/' + t);
+    assert(cell[1] === d, 'POH and workbook disagree at ' + pa + ' ft / ' + t +
+      ' C: snapshot ' + cell[1] + ', workbook ' + d);
+    assert(cell[1] > cell[0], 'the 50 ft distance is not longer than the ground roll at ' +
+      pa + '/' + t + ': ' + JSON.stringify(cell));
+    checked++;
+    if (pa > maxPa) maxPa = pa;
+  }
+  assert(checked === 30, 'the overlap with the workbook is no longer 30 cells: ' + checked);
+  assert(maxPa === 5000, 'the workbook landing table now reaches ' + maxPa +
+    ' ft, so it is no longer the SHORT side of this comparison');
+
+  // Monotonic in both directions - the only guard that reaches PA 6000-8000,
+  // where nothing can corroborate.
+  for (const pa of ldg.pressureAltitudesFt) {
+    const row = ldg.table[String(pa)];
+    for (let i = 1; i < row.length; i++) {
+      assert(row[i][1] > row[i - 1][1], 'landing distance does not increase with temperature at ' +
+        pa + ' ft: ' + row[i - 1][1] + ' -> ' + row[i][1]);
+    }
+  }
+  for (let k = 1; k < ldg.pressureAltitudesFt.length; k++) {
+    const lo = ldg.table[String(ldg.pressureAltitudesFt[k - 1])];
+    const hi = ldg.table[String(ldg.pressureAltitudesFt[k])];
+    for (let i = 0; i < temps.length; i++) {
+      assert(hi[i][1] > lo[i][1],
+        'landing distance does not increase with pressure altitude at ' + temps[i] + ' C');
+    }
+  }
+  // NOTHING IS DELETED HERE, unlike the 3100 lb takeoff table - a landing needs
+  // no climb performance, so there is no condition the POH declines to publish.
+  const nulls = ldg.pressureAltitudesFt.reduce(
+    (n, pa) => n + ldg.table[String(pa)].filter((c) => c === null).length, 0);
+  assert(nulls === 0, 'the landing table has gained a deleted cell: ' + nulls);
+
+  // THE GRASS CORRECTION IS NOT THE TAKEOFF ONE, and the two must never be
+  // shared: 45% of the ground roll here against 15% for takeoff. Identical
+  // wording, different number - the "old rule applied to a new surface" shape.
+  const to = JSON.parse(require('fs').readFileSync('./tools/prepared/poh-takeoff.json', 'utf8'));
+  assert(/45%/.test(ldg.corrections.grassRunway), 'the landing grass figure moved: ' +
+    ldg.corrections.grassRunway);
+  assert(/15%/.test(to.corrections.grassRunway), 'the takeoff grass figure moved: ' +
+    to.corrections.grassRunway);
+  assert(ldg.corrections.grassRunway !== to.corrections.grassRunway,
+    'the landing and takeoff grass corrections have become the same string');
+  // The wind corrections ARE identical in the POH, and that is worth pinning
+  // too - so a future change has to be deliberate rather than a copy-paste.
+  assert(ldg.corrections.tailwind === to.corrections.tailwind &&
+    ldg.corrections.headwind === to.corrections.headwind,
+    'the POH wind corrections used to be identical for takeoff and landing');
+  assert(/40% longer/.test(ldg.corrections.flapsUp),
+    'the flaps-up landing penalty is not recorded');
+});
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');

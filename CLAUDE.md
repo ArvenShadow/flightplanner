@@ -2093,10 +2093,36 @@ the 5000 ft one is the workbook's own.
   `(|W|/2)*0.1` with its `LIMIT` past -10, and "decrease 10% for each 9 knots
   headwind" is its "no corr. < 9kts". Grass is +15% of the GROUND ROLL, which
   is why the snapshot keeps both columns rather than only the 50 ft figure.
-- **THE LANDING TABLE IS STILL ONLY THE WORKBOOK'S.** `Performance!F:H` is
-  PA 0-5000, weight-independent, and no POH page for it has been supplied - so
-  the same 8000 ft correction may well apply there and is NOT assumed. Ask for
-  Figure 5-7 before building the landing side.
+- **THE LANDING TABLE ARRIVED TOO, AND IT IS A DIFFERENT SHAPE.**
+  `tools/prepared/poh-landing.json`, PA 0-8000 at 0-40 °C - so the workbook is
+  short of the POH on BOTH tables by exactly the same three rows, which was
+  guessed and is now measured. `Performance!F:H` independently carries 30 of
+  those cells and **all 30 of 30 agree**.
+  - **ONE WEIGHT, AND IT IS MLW.** The POH publishes the landing distance at
+    2950 lb only - it is NOT a weight axis with a single row, and a future
+    interpolator must never scale it. The author said so outright ("note there
+    is only 1 weight which is the MLW"), and the reasoning is worth keeping:
+    a lighter aeroplane lands SHORTER, so the 2950 lb figure errs long for any
+    legal landing weight, which is the safe direction and is presumably why one
+    table suffices. The TAKEOFF tables do carry three weights, so a shared
+    interpolator that assumed a weight axis here would silently invent one.
+  - **A THIRD INDEPENDENT STATEMENT OF MLW.** 2950 lb is what
+    `Performance!W1:X3` draws as the MLW line, what the author stated, and what
+    this page is titled. A test asserts the snapshot's weight equals
+    `massbalance.js`'s `MLW_LB`, so the two cannot drift apart.
+  - **THE GRASS CORRECTION IS 45% ON LANDING AND 15% ON TAKEOFF** - near-identical
+    wording, different number, which is this file's first named failure shape
+    waiting to happen. The corrections live with their own table, a test asserts
+    the two strings differ, and a fourth asserts the WIND corrections are
+    identical, so that sameness is deliberate rather than a copy-paste. Landing
+    also carries a flaps-up penalty (+10 KIAS approach, +40% distance) that
+    takeoff has no equivalent of.
+  - **NOTHING IS DELETED HERE**, unlike the 3100 lb takeoff table: a landing
+    needs no climb performance, so there is no condition the POH declines to
+    publish. Asserted, so a null appearing later is a finding rather than noise.
+  - FOUR MUTATIONS, ALL CAUGHT BY NAME: a wrong digit inside the overlap (the
+    workbook), one outside it at PA 7000 (monotonicity), the weight moved off
+    MLW, and the takeoff grass figure copy-pasted onto landing.
 - **DATA ONLY: NOTHING READS THE SNAPSHOT.** It is committed now because the
   source was a set of screenshots and the cross-check is cheap once and
   expensive to redo. The consumer is Phase D, which is neither built nor
