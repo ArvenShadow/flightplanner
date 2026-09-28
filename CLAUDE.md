@@ -1373,7 +1373,12 @@ three cheap disciplines applied every time the page is touched:
     re-asserts that a click inside the airspace still reaches the map.
   - 227 features (was 228): Ørje 2 publishes ONE volume, and the old rule had
     given it two wrong bands. A correctness improvement, not a loss.
-- **Not planned** (verified dead ends): NOTAM (no reliable free API),
+- **Not planned** (verified dead ends): ~~NOTAM (no reliable free API)~~ -
+  **REOPENED at v16.93: the author named a source, `ippc.no`** (Avinor's
+  pre-flight planning centre). That is a changed premise, not a changed mind -
+  the old entry said no reliable free API had been FOUND, and a named one has
+  to be checked rather than dismissed. See roadmap item 20; nothing is built
+  and nothing is promised until the CORS question is answered.
   georeferenced 1:500 000 ICAO charts (licensing - and note this is a DIFFERENT
   product from the VAC under different terms; the VAC overlay shipped at v16.86
   under the permission this project already holds), traffic (needs receivers).
@@ -1657,6 +1662,53 @@ and H2 all hold exactly as described.
    next leg climbs from the FIELD ELEVATION, after a touch & go from the circuit
    altitude - which is why C1's mechanical fix (no stale cursor) and its
    semantics are separable, and the mechanical one should not wait for this.
+
+### 20. AERODROME OPENING HOURS, AND NOTAMs (v16.93, the author's request)
+
+*"Opening hours for all aerodromes fetched from the AIS, and NOTAMs fetched
+from ippc.no. If a closed airport is in the flight plan, a warning shall be
+issued."*
+
+NOTHING IS BUILT AND NOTHING IS VERIFIED. What follows is the shape of the
+work and, more importantly, the question that decides whether each half can
+exist at all - because this is the surface where this project has already
+refused two features (openAIP, aviationweather.gov) and removed a third (the
+offline chart download).
+
+- **THE TWO HALVES ARE NOT THE SAME PROBLEM, and they should be scoped apart.**
+  - **OPENING HOURS look cheap and may need no new source.** AD 2.3
+    "Operational hours" is a section of every AD 2 page, and `build-aip.mjs`
+    ALREADY fetches all 53 of those pages for the airspace and the ARPs. If the
+    hours arrive as tagged `class="SD"` fields the way everything else on those
+    pages does, this is an importer change and a dataset column - no runtime
+    fetch, no CORS, works offline, and it ships with the AIRAC snapshot like the
+    rest. **CHECK THAT FIRST**, against a cached AD 2 page, before designing
+    anything: if the hours are untagged PROSE ("HJ", "MON-FRI 0600-2100, other
+    times O/R"), then reading them is sentence-parsing, which is precisely what
+    the v16.29 entry says the importer must never do.
+  - **NOTAMs ARE LIVE DATA AND CANNOT BE CACHED**, exactly like the weather: a
+    stale NOTAM is a wrong NOTAM. So they are a runtime fetch, and **the whole
+    question is whether a BROWSER may make it.** `api.met.no` works because it
+    sends `access-control-allow-origin: *`; `aviationweather.gov` was rejected
+    twice for sending none. Check `ippc.no` for a CORS header, an
+    unauthenticated endpoint, and its licence terms BEFORE any UI is drawn -
+    and if it needs a login or sends no CORS header, say so and build nothing.
+    A NOTAM feature that silently fails is worse than no NOTAM feature.
+- **A CLOSED AERODROME IS AN INTEGRITY FINDING**, which is where it belongs:
+  `collectIntegrityProblems` already names the waypoint at fault, the banner
+  already reaches the printed sheet (v16.43), and a closed destination is
+  exactly "do not use these figures". It should name the aerodrome and the hours
+  it is closed, never just "an aerodrome is closed".
+- **THE ETO IS WHAT DECIDES IT, not the calendar day.** The daylight card
+  already computes every takeoff and landing at its own aerodrome on its own
+  date (v16.3); opening hours have to be judged the same way, against the
+  arrival time at THAT aerodrome, or a plan landing at 2305 reads as legal
+  because the field was open at 0900.
+- **"HJ" AND "O/R" ARE NOT CLOCK TIMES.** Sunrise-to-sunset (HJ) is computable
+  from `daylight.js` and is therefore honest; "on request" is a phone call, and
+  the only correct rendering of it is to say so rather than to guess a window.
+  Whatever cannot be resolved must be REPORTED as unresolved, per the rule the
+  AIP importer already follows.
 
 ### 18. PUT THE PAGE SCRIPT UNDER THE COMPILER (`src/page.js`)
 
@@ -2007,15 +2059,72 @@ tenth-gallon values by one 0.1 kg display step (64 gal 174.1 -> 174.2). Storage
 is in gallons so nothing saved changes, but it is a visible change and it
 belongs in Phase B with the fuel capture, not smuggled in here.
 
-### RECORDED FOR PHASE D: THE WORKBOOK STATES ITS OWN PERFORMANCE LIMITS
+### THE PERFORMANCE TABLES: THE WORKBOOK IS SHORT OF THE POH, NOT THE OTHER WAY ROUND
 
 `OFP!O34` reads "TO/LDG dist limitations: Max pressure alt 5000ft, Max temp
-40°C". That matters because `CALC_TOD` is not merely undefined above 5000 ft,
-it is DANGEROUSLY wrong: 3100 lb / 20 C gives 2595 ft at PA 5000 and **1730 ft
-at PA 6000** - the required distance FALLS as conditions worsen, because the
-`FILTER` fallback of 8000 is not a table row so its distance reads 0. The sheet
-declares the boundary; any import of those tables must refuse outside it rather
-than interpolate into the hole.
+40°C", and `CALC_TOD` is not merely undefined above 5000 ft but DANGEROUSLY
+wrong: 3100 lb / 20 C gives 2595 ft at PA 5000 and **1730 ft at PA 6000** - the
+required distance FALLS as conditions worsen, because the `FILTER` fallback of
+8000 is not a row in the workbook's table so its distance reads 0.
+
+**AND THE REASON IT IS NOT A ROW IS A TRANSCRIPTION GAP, WHICH IS THE OPPOSITE
+OF WHAT THIS FILE FIRST SAID.** The entry used to read "the sheet declares the
+boundary", which was true of the sheet and false of the aircraft: the author
+supplied the printed POH pages (Figure 5-6 sheets 1-3) and **the POH tabulates
+PA 0-8000 ft**. The workbook carries 0-5000. The 40 °C ceiling IS the POH's;
+the 5000 ft one is the workbook's own.
+
+- **TRANSCRIBED AND CROSS-CHECKED, NOT OCR'd AND HOPED FOR.**
+  `tools/prepared/poh-takeoff.json` holds all three weights (2300 / 2700 /
+  3100 lb) at PA 0-8000 and 0-40 °C, each cell a ground roll and a total to
+  clear 50 ft. The workbook's `Performance!A:D` independently carries **90** of
+  those cells, transcribed by the author from the same POH - and all **90 of 90
+  agree exactly**. That agreement is what makes the PA 6000/7000/8000 rows,
+  which exist ONLY in the snapshot, trustworthy read by the same method, and a
+  test asserts it so neither side can drift.
+- **THREE CELLS ARE DELETED IN THE POH AND MUST STAY REFUSED.** At 3100 lb:
+  7000 ft/40 °C, 8000 ft/30 °C and 8000 ft/40 °C print `---`, and the POH says
+  why - "climb performance after lift-off is less than 150 FPM at takeoff
+  speed". They are `null`, not missing, and an interpolator that filled them in
+  would state a distance the manufacturer declines to certify. The test pins
+  exactly which three they are.
+- **THE WORKBOOK'S WIND RULES REPRODUCE THE POH's NOTES**, checked rather than
+  assumed: "+10% per 2 kt of tailwind, up to 10 kt" is the sheet's
+  `(|W|/2)*0.1` with its `LIMIT` past -10, and "decrease 10% for each 9 knots
+  headwind" is its "no corr. < 9kts". Grass is +15% of the GROUND ROLL, which
+  is why the snapshot keeps both columns rather than only the 50 ft figure.
+- **THE LANDING TABLE IS STILL ONLY THE WORKBOOK'S.** `Performance!F:H` is
+  PA 0-5000, weight-independent, and no POH page for it has been supplied - so
+  the same 8000 ft correction may well apply there and is NOT assumed. Ask for
+  Figure 5-7 before building the landing side.
+- **DATA ONLY: NOTHING READS THE SNAPSHOT.** It is committed now because the
+  source was a set of screenshots and the cross-check is cheap once and
+  expensive to redo. The consumer is Phase D, which is neither built nor
+  approved.
+
+**THE FIRST VERSION OF THAT TEST NEVER OPENED THE WORKBOOK.** Its comment said
+the 90-cell agreement was asserted; it compared the snapshot with itself and
+passed. That is the v16.88 vacuous-comparison failure verbatim - *a comparison
+against a value that is not there proves nothing in either direction* - and it
+got written because the suite had no way to read an `.xlsx` and I let the
+comment stand in for the check. It needs no dependency: an `.xlsx` is a ZIP of
+XML and `zlib` is built in, so `xlsxSheet()` resolves the sheet BY NAME through
+the workbook relationships (never by guessing `sheet2.xml`, which is file order
+rather than tab order) and reads the numeric cells directly.
+
+**THREE MUTATIONS, ALL CAUGHT BY NAME, AND EACH THROUGH A DIFFERENT GUARD** -
+which is the point, because the three guards cover different parts of the table:
+a misread digit INSIDE the overlap (`snapshot 1990, workbook 1890`) is caught by
+the workbook; one OUTSIDE it at PA 7000, where nothing can corroborate, is
+caught by monotonicity in pressure altitude; and a deleted cell filled in with a
+plausible number is caught by the pinned list of exactly which three are refused.
+
+**AND THE FIRST ATTEMPT AT ALL THREE SILENTLY DID NOTHING.** The snapshot is
+pretty-printed JSON, so `sed 's/\[980,1890\]/.../'` matched no text and every
+run came back `FAIL=0` - looking exactly like three guards that do not fire, an
+hour after this file recorded that same trap in the v16.93 entry below. The
+mutations now edit the PARSED JSON and assert the value actually changed before
+the suite is believed.
 
 ### NO PERSON IS NAMED, AND A TEST GREPS FOR IT
 

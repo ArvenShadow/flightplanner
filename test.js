@@ -11449,6 +11449,140 @@ T('every CG finding names the sector, the figure and the limit', () => {
     'the forward branch produces no finding: ' + JSON.stringify(MB.massBalanceProblems(fm)));
 });
 
+// The POH takeoff tables are DATA ONLY at this point - nothing in the app
+// reads them. They are guarded anyway, because the thing that makes them
+// trustworthy is an agreement between two INDEPENDENT transcriptions of the
+// same POH, and an agreement nobody checks is an agreement that drifts.
+//
+// THE FIRST VERSION OF THIS TEST DID NOT OPEN THE WORKBOOK AT ALL. Its comment
+// claimed the 90-cell agreement was asserted; it only checked the snapshot
+// against itself and passed. That is the v16.88 vacuous-comparison failure
+// exactly - a comparison against a value that is not there proves nothing in
+// either direction - and the fix is to read the real file, which needs no
+// dependency: an .xlsx is a ZIP of XML and zlib is built in.
+function xlsxSheet(file, sheetName) {
+  const fs = require('fs'), zlib = require('zlib');
+  const buf = fs.readFileSync(file);
+  const entry = (name) => {
+    let i = 0;
+    while (i < buf.length - 4) {
+      if (buf.readUInt32LE(i) !== 0x04034b50) { i++; continue; }
+      const method = buf.readUInt16LE(i + 8), compSize = buf.readUInt32LE(i + 18);
+      const nameLen = buf.readUInt16LE(i + 26), extraLen = buf.readUInt16LE(i + 28);
+      const fname = buf.slice(i + 30, i + 30 + nameLen).toString('latin1');
+      const dataAt = i + 30 + nameLen + extraLen;
+      if (fname === name) {
+        const d = buf.slice(dataAt, dataAt + compSize);
+        return method === 0 ? d : zlib.inflateRawSync(d);
+      }
+      i = dataAt + (compSize || 1);
+    }
+    return null;
+  };
+  // Resolve the sheet by NAME through the relationships, never by guessing
+  // sheet2.xml - the file order is not the tab order and a re-save can move it.
+  const wbXml = entry('xl/workbook.xml').toString('utf8');
+  const sheet = new RegExp('<sheet name="' + sheetName + '"[^>]*r:id="([^"]+)"').exec(wbXml);
+  assert(sheet, 'the workbook has no sheet named ' + sheetName);
+  const rels = entry('xl/_rels/workbook.xml.rels').toString('utf8');
+  const target = new RegExp('Id="' + sheet[1] + '"[^>]*Target="([^"]+)"').exec(rels);
+  assert(target, 'no relationship for ' + sheet[1]);
+  const xml = entry('xl/' + target[1].replace(/^\/?xl\//, '')).toString('utf8');
+  /** @type {Record<string, number>} */
+  const cells = {};
+  // Numeric cells only: a shared string carries t="s" and we want none of them.
+  for (const m of xml.matchAll(/<c r="([A-Z]+\d+)"(?![^>]*t="s")[^>]*>\s*<v>([^<]*)<\/v>/g)) {
+    cells[m[1]] = Number(m[2]);
+  }
+  return cells;
+}
+
+T('the POH takeoff tables agree with the workbook, cell for cell', () => {
+  const poh = JSON.parse(require('fs').readFileSync('./tools/prepared/poh-takeoff.json', 'utf8'));
+  const temps = poh.temperaturesC;
+  assert(JSON.stringify(temps) === '[0,10,20,30,40]', 'the temperature axis moved');
+  assert(JSON.stringify(poh.weightsLb) === '[2300,2700,3100]', 'the weight axis moved');
+  assert(JSON.stringify(poh.pressureAltitudesFt) === '[0,1000,2000,3000,4000,5000,6000,7000,8000]',
+    'the pressure-altitude axis moved');
+
+  // THE REAL CROSS-CHECK. Performance!A:D was transcribed by the author from
+  // the same POH pages, independently of the screenshots this snapshot was read
+  // from, and covers PA 0-5000. Every one of those cells must agree exactly -
+  // that is what makes the 6000/7000/8000 rows, which exist ONLY here,
+  // trustworthy read by the same method.
+  const cells = xlsxSheet('./OFP-C182.xlsx', 'Performance');
+  let checked = 0, maxPa = 0;
+  for (let r = 2; r <= 91; r++) {
+    const w = cells['A' + r], pa = cells['B' + r], t = cells['C' + r], d = cells['D' + r];
+    assert(Number.isFinite(w) && Number.isFinite(pa) && Number.isFinite(t) && Number.isFinite(d),
+      'the workbook row ' + r + ' is not four numbers - has Performance!A:D moved?');
+    const col = poh.table[String(w)] && poh.table[String(w)][String(pa)];
+    assert(col, 'the POH snapshot has no ' + w + ' lb / ' + pa + ' ft row');
+    const cell = col[temps.indexOf(t)];
+    assert(Array.isArray(cell), 'no POH cell at ' + w + '/' + pa + '/' + t);
+    assert(cell[1] === d, 'POH and workbook disagree at ' + w + ' lb / ' + pa +
+      ' ft / ' + t + ' C: snapshot ' + cell[1] + ', workbook ' + d);
+    assert(cell[1] > cell[0], 'the 50 ft distance is not longer than the ground roll at ' +
+      w + '/' + pa + '/' + t + ': ' + JSON.stringify(cell));
+    checked++;
+    if (pa > maxPa) maxPa = pa;
+  }
+  // M5: assert what the cross-check actually covered. A workbook re-saved with
+  // fewer rows would otherwise shrink the overlap silently.
+  assert(checked === 90, 'the overlap with the workbook is no longer 90 cells: ' + checked);
+  assert(maxPa === 5000, 'the workbook now reaches ' + maxPa +
+    ' ft, so it is no longer the SHORT side of this comparison');
+  assert(poh.pressureAltitudesFt[poh.pressureAltitudesFt.length - 1] === 8000,
+    'the POH table no longer reaches 8000 ft, so there is nothing the workbook is short of');
+
+  // A DELETED CELL IS A REFUSAL, NOT MISSING DATA. The POH prints "---" and
+  // says why: climb after lift-off is below 150 fpm. Exactly three cells, all
+  // at 3100 lb, and they must stay null - a future interpolator that filled
+  // them in would state a distance the manufacturer declines to certify.
+  const deleted = [];
+  for (const w of poh.weightsLb) {
+    for (const pa of poh.pressureAltitudesFt) {
+      poh.table[String(w)][String(pa)].forEach((c, i) => {
+        if (c === null) deleted.push(w + '/' + pa + '/' + temps[i]);
+      });
+    }
+  }
+  assert(deleted.join(',') === '3100/7000/40,3100/8000/30,3100/8000/40',
+    'the deleted cells moved: ' + deleted.join(','));
+  assert(/150 FPM/i.test(poh.deletedCellMeaning), 'the reason for a deleted cell is not recorded');
+
+  // Monotonic in both directions the physics demands - an independent way a
+  // misread digit shows up, and it covers the rows the workbook cannot check.
+  for (const w of poh.weightsLb) {
+    for (const pa of poh.pressureAltitudesFt) {
+      const row = poh.table[String(w)][String(pa)];
+      for (let i = 1; i < row.length; i++) {
+        if (!row[i] || !row[i - 1]) continue;
+        assert(row[i][1] > row[i - 1][1], 'distance does not increase with temperature at ' +
+          w + '/' + pa + ': ' + row[i - 1][1] + ' -> ' + row[i][1]);
+      }
+    }
+    for (let k = 1; k < poh.pressureAltitudesFt.length; k++) {
+      const lo = poh.table[String(w)][String(poh.pressureAltitudesFt[k - 1])];
+      const hi = poh.table[String(w)][String(poh.pressureAltitudesFt[k])];
+      for (let i = 0; i < temps.length; i++) {
+        if (!lo[i] || !hi[i]) continue;
+        assert(hi[i][1] > lo[i][1], 'distance does not increase with pressure altitude at ' +
+          w + ' lb / ' + temps[i] + ' C');
+      }
+    }
+  }
+  // And heavier is always longer, at every shared condition.
+  for (const pa of poh.pressureAltitudesFt) {
+    for (let i = 0; i < temps.length; i++) {
+      const a = poh.table['2300'][String(pa)][i], b = poh.table['2700'][String(pa)][i],
+            c = poh.table['3100'][String(pa)][i];
+      if (a && b) assert(b[1] > a[1], 'heavier is not longer at ' + pa + '/' + temps[i]);
+      if (b && c) assert(c[1] > b[1], 'heavier is not longer at ' + pa + '/' + temps[i]);
+    }
+  }
+});
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');
