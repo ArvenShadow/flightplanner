@@ -1625,6 +1625,14 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
   .side-tab { padding: 2px 8px; font-size: 10px; }
 }
 .mb-grid { width: 100%; font-size: 11px; }
+.perf-row { border-top: 1px solid var(--border-color); padding: 6px 0; }
+.perf-row:first-child { border-top: none; padding-top: 0; }
+.perf-head { font-size: 11px; margin-bottom: 4px; }
+.perf-grid { display: grid; grid-template-columns: 2.2fr repeat(4, 1fr) 1fr; gap: 4px; }
+.perf-grid label { display: flex; flex-direction: column; font-size: 9px; color: var(--text-muted); min-width: 0; }
+.perf-grid input, .perf-grid select { font-size: 11px; width: 100%; min-width: 0; box-sizing: border-box; }
+.perf-result { font-size: 11px; margin-top: 4px; }
+.perf-note { font-size: 10px; color: var(--text-muted); line-height: 1.5; }
 .mb-grid th { text-align: right; font-size: 10px; color: var(--text-muted); }
 .mb-grid th:first-child { text-align: left; }
 .mb-grid td { text-align: right; }

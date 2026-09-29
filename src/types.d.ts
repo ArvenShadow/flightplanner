@@ -607,3 +607,28 @@ declare module 'magvar' {
   export const MODEL_EPOCH: number;
   export const MODEL_VALID_UNTIL: number;
 }
+
+/** One take-off or landing distance against a runway (rwyperf.js), metres. */
+interface RunwayDistance {
+  kind: 'takeoff' | 'landing';
+  paFt: number;
+  /** POH total to clear 50 ft, before any correction. */
+  uncorrectedM: number;
+  windCorrM: number;
+  brakingCorrM: number;
+  /** Grass only: a share of the POH ground roll. 0 on a paved runway. */
+  surfaceCorrM: number;
+  correctedM: number;
+  /** 1.25 take-off, 1.43 landing - the school's factors. */
+  factor: number;
+  /** corrected x factor, rounded UP to the whole metre. */
+  requiredM: number;
+  /** TODA for take-off, LDA for landing; null when not published. */
+  availableM: number | null;
+  marginM: number;
+  ok: boolean;
+  /** Why no figure was produced. A refusal is never a pass. */
+  refused: string | null;
+  /** 'limit' is a finding; 'input' and 'surface' are not. */
+  refusedKind: 'input' | 'limit' | 'surface' | null;
+}

@@ -2767,6 +2767,8 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
     'massbalance: LN-TRB did not come back from the fleet');
   const rhumbModule = require('./src/lib/rhumb.js');
   assert(rhumbModule.rhumbBearing(69, 18, 70, 18) === 0, 'rhumb: due north is not 000');
+  const rwyModule = require('./src/lib/rwyperf.js');
+  assert(rwyModule.pressureAltitudeFt(254, 990) === 875, 'rwyperf: the school\'s pressure altitude moved');
   // CALLED, not merely required: require() does not execute function bodies, so
   // a free identifier inside one only throws when invoked. That is how toRad,
   // OM_LEVELS and flights were caught. Every module in this list gets a real
@@ -2780,7 +2782,7 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
                     airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
                     vac: require('./src/lib/vac.js'),
                     keys: keysModule, corridor: corridorModule, rhumb: rhumbModule, skins: skinsModule,
-                    mb: mbModule };
+                    mb: mbModule, rwy: rwyModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3029,6 +3031,12 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                               { pilotLb: 170, rightLb: 0, rearLb: 0, bagALb: 0, bagBLb: 0, bagCLb: 0 },
                               [{ fuelDepGal: 64, fuelArrGal: 30 }]),
                             M.mb.massBalanceProblems(null), M.mb.massBalanceCautions(null)],
+    'rwyperf.js': () => [M.rwy.pressureAltitudeFt(254, 990), M.rwy.windAlongRunway(109.01, 20, 3),
+                         M.rwy.windFactor(-4), M.rwy.pohDistanceFt('takeoff', 2600, 1000, 10),
+                         M.rwy.pohDistanceFt('landing', null, 1000, 10),
+                         M.rwy.runwayDistance({ kind: 'takeoff', weightLb: 2600, elevFt: 254, qnhHpa: 1013,
+                           tempC: 10, headKt: 0, braking: 6, surface: 'ASPH', availableM: 2443 }),
+                         M.rwy.bestEnd([{ desig: '10', trueBrg: 109 }, { desig: '28', trueBrg: 289 }], 290, 10)],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -11482,7 +11490,7 @@ T('every CG finding names the sector, the figure and the limit', () => {
 // exactly - a comparison against a value that is not there proves nothing in
 // either direction - and the fix is to read the real file, which needs no
 // dependency: an .xlsx is a ZIP of XML and zlib is built in.
-function xlsxSheet(file, sheetName) {
+function xlsxSheet(file, sheetName, opts) {
   const fs = require('fs'), zlib = require('zlib');
   const buf = fs.readFileSync(file);
   const entry = (name) => {
@@ -11510,11 +11518,24 @@ function xlsxSheet(file, sheetName) {
   const target = new RegExp('Id="' + sheet[1] + '"[^>]*Target="([^"]+)"').exec(rels);
   assert(target, 'no relationship for ' + sheet[1]);
   const xml = entry('xl/' + target[1].replace(/^\/?xl\//, '')).toString('utf8');
-  /** @type {Record<string, number>} */
+  /** @type {Record<string, number|string>} */
   const cells = {};
-  // Numeric cells only: a shared string carries t="s" and we want none of them.
-  for (const m of xml.matchAll(/<c r="([A-Z]+\d+)"(?![^>]*t="s")[^>]*>\s*<v>([^<]*)<\/v>/g)) {
+  // Numeric cells only, unless text is asked for: a shared string carries t="s"
+  // and indexes xl/sharedStrings.xml. The POH checks want numbers and nothing
+  // else, so text stays opt-in rather than something they could trip over.
+  // A FORMULA's cached result counts too (`<f>...</f><v>...</v>`): the OFP
+  // sheet's worked example is formulas, and reading only literal cells saw none
+  // of it. A formula whose result is TEXT (t="str", "e", "b") is not a number.
+  for (const m of xml.matchAll(/<c r="([A-Z]+\d+)"(?![^>]*t="(?:s|str|e|b|inlineStr)")[^>]*>(?:\s*<f[^>]*\/>|\s*<f[^>]*>[^<]*<\/f>)?\s*<v>([^<]*)<\/v>/g)) {
     cells[m[1]] = Number(m[2]);
+  }
+  if (opts && opts.strings) {
+    const ssXml = entry('xl/sharedStrings.xml').toString('utf8');
+    const shared = [...ssXml.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((si) =>
+      [...si[1].matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map((t) => t[1]).join(''));
+    for (const m of xml.matchAll(/<c r="([A-Z]+\d+)"[^>]*t="s"[^>]*>\s*<v>([^<]*)<\/v>/g)) {
+      cells[m[1]] = shared[Number(m[2])];
+    }
   }
   return cells;
 }
@@ -12184,18 +12205,150 @@ T('the printed whole-mission sheet adds up, with a refuel in the middle', () => 
   w.renderAllFlightTables();
 });
 
-T('the tab SAYS takeoff and landing distances are not computed yet', () => {
-  // The author asked for them in this tab, and they need runway data the
-  // planner does not hold. A tab with no distances and no word about it reads
-  // as an oversight - or as "no limitation", which is worse. When Phase D
-  // computes them, this test is the one to update, deliberately.
-  const note = doc.getElementById('mb-perf-note');
-  assert(note, 'the distances note is gone from the M&B tab');
-  assert(/Not computed yet/.test(note.textContent) && /POH/.test(note.textContent),
-    'the note no longer says the distances are not computed: ' + note.textContent.trim().slice(0, 120));
-  // And it must not name a figure number it cannot source: the landing page
-  // as supplied carries only its title.
-  assert(!/Figure 5-(?!6\b)\d+/.test(note.textContent), 'the note names an unsourced POH figure number');
+T('each sector end is checked against its own runway, from the METAR unless typed over', () => {
+  // UPDATED DELIBERATELY AT v16.96: this test used to assert the tab SAID the
+  // distances were not computed. They are now, and it says so.
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev(`mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); perfInputs = {};
+      lastWeather = { icaos: ['ENDU', 'ENTC'], tafs: {}, metars: {
+        ENDU: 'ENDU 281150Z 29012KT 9999 FEW040 10/05 Q1005',
+        ENTC: 'ENTC 281150Z 18008KT 9999 SCT030 08/04 Q1003' } };`);
+  w.renderAllFlightTables();
+  const checks = ev('runwayChecks');
+  assert(checks.length === 4, 'two sectors should give four checks: ' + checks.length);
+  const dep = checks[0];
+  assert(dep.icao === 'ENDU' && dep.kind === 'takeoff', 'the first check is not the ENDU take-off: ' + dep.icao + ' ' + dep.kind);
+  // 290/12 is almost straight down RWY 28 (289.05 TRUE), so 28 is the default.
+  assert(dep.opt.desig === '28' && dep.wind.headKt === 12, 'the default is not the runway into wind: ' + dep.opt.desig + ' ' + JSON.stringify(dep.wind));
+  assert(dep.qnh === 1005 && dep.oat === 10 && dep.fromMetar.qnh && dep.fromMetar.oat, 'the METAR did not fill the ENDU inputs');
+  // The card names the report it read, the way the METAR prints its time.
+  const card = doc.getElementById('mb-perf').textContent;
+  assert(/METAR 281150Z/.test(card) && !/\[object/.test(card), 'the card does not name the METAR it used: ' + card.slice(0, 300));
+  assert(dep.res.ok && dep.res.requiredM > 0 && dep.res.availableM === dep.opt.end.toda,
+    'the take-off was not checked against TODA: ' + JSON.stringify(dep.res).slice(0, 200));
+  // The take-off mass is the sector's own, from the M&B pass.
+  const sector0 = ev('massBalanceMission.sectors[0].takeoff.weightLb');
+  const again = moduleExports.rwy.runwayDistance({ kind: 'takeoff', weightLb: sector0, elevFt: 254, qnhHpa: 1005, tempC: 10,
+    headKt: 12, braking: 6, surface: 'ASPH', availableM: dep.opt.end.toda });
+  assert(again.requiredM === dep.res.requiredM, 'the tab did not use the sector take-off mass: ' + again.requiredM + ' vs ' + dep.res.requiredM);
+  // A typed value wins over the METAR, and clearing the box gives it back.
+  ev(`perfInputs = { [runwayChecks[0].key]: { qnh: '980' } };`);
+  w.renderAllFlightTables();
+  assert(ev('runwayChecks[0].qnh') === 980 && !ev('runwayChecks[0].fromMetar.qnh'), 'a typed QNH did not override the METAR');
+  ev(`perfInputs = { [runwayChecks[0].key]: { qnh: '' } };`);
+  w.renderAllFlightTables();
+  assert(ev('runwayChecks[0].qnh') === 1005, 'an EMPTY QNH box was not the METAR again - it read as ' + ev('runwayChecks[0].qnh'));
+});
+
+T('with no weather and nothing typed there is no figure, and no guess', () => {
+  ev(SEED_STOP);
+  ev('mbPrefs.reg = "LN-TRB"; perfInputs = {}; lastWeather = null;');
+  w.renderAllFlightTables();
+  const c = ev('runwayChecks[0]');
+  assert(c.res.refused && c.res.refusedKind === 'input' && /not known/.test(c.res.refused),
+    'a check with no QNH, OAT or wind produced something: ' + JSON.stringify(c.res).slice(0, 160));
+  // Missing input is the pilot not having got there - NOT a red banner.
+  assert(!/distance|RWY/.test(doc.getElementById('integrity-banner').textContent),
+    'unfilled inputs raised the banner: ' + doc.getElementById('integrity-banner').textContent.slice(0, 160));
+  // And nothing about the day's weather is stored.
+  const stored = Object.keys(w.localStorage).filter((k) => /perf|runway|qnh/i.test(k) || /perf|qnh/i.test(w.localStorage.getItem(k) || ''));
+  assert(!stored.length, 'the day\'s runway inputs were persisted: ' + stored.join(', '));
+});
+
+T('the take-off is checked against TODA, not the ASDA column the workbook reads', () => {
+  // ENBR 17: ASDA 2826, TODA 3119. The workbook's "TODA" cell reads 2826.
+  const ads = aipDataset().aerodromes;
+  const enbr = ads.find((a) => a.icao === 'ENBR');
+  const e17 = enbr.runways.flatMap((r) => r.ends).find((e) => e.desig === '17');
+  assert(e17.asda !== e17.toda, 'the fixture cannot tell ASDA from TODA any more');
+  ev(`flights = [{ id: 7, title: "B", depElev: ${enbr.elevFt}, waypoints: [
+      { lat: ${enbr.lat}, lng: ${enbr.lng}, name: "ENBR", alt: ${enbr.elevFt}, oat: 10, wdir: 0, wspd: 0, var: -1 },
+      { lat: ${enbr.lat + 0.3}, lng: ${enbr.lng}, name: "NORTH", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -1 }]}];
+      activeFlightIndex = 0; mbPrefs.reg = "LN-TRB";
+      perfInputs = { '7:dep': { end: '17', windDir: '170', windKt: '5', qnh: '1013', oat: '10' } };
+      refreshMap(); renderAllFlightTables();`);
+  const c = ev('runwayChecks[0]');
+  assert(c.icao === 'ENBR' && c.opt.desig === '17', 'the ENBR 17 take-off was not checked: ' + c.icao + ' ' + (c.opt && c.opt.desig));
+  assert(c.res.availableM === e17.toda && c.res.availableM !== e17.asda,
+    'the take-off was checked against ' + c.res.availableM + ' - TODA is ' + e17.toda + ', ASDA ' + e17.asda);
+  // An intersection position is its own TODA, not the full runway's.
+  const psn = e17.positions && e17.positions[0];
+  if (psn) {
+    ev(`perfInputs['7:dep'].end = '17@${psn.name}'; renderAllFlightTables();`);
+    assert(ev('runwayChecks[0].res.availableM') === psn.toda, 'an intersection departure used the full-length TODA');
+  }
+});
+
+T('a runway that is too short, or a limit, reaches the banner and the paper - once a tail is chosen', () => {
+  // ENSD: LDA 760 m. Braking action 1 doubles the landing distance, which puts
+  // a C182 over it - a real exceedance, not a synthetic one.
+  const ads = aipDataset().aerodromes;
+  const ensd = ads.find((a) => a.icao === 'ENSD');
+  const start = ads.find((a) => a.icao === 'ENBR');
+  ev(`flights = [{ id: 8, title: "S", depElev: ${start.elevFt}, waypoints: [
+      { lat: ${start.lat}, lng: ${start.lng}, name: "ENBR", alt: ${start.elevFt}, oat: 10, wdir: 0, wspd: 0, var: -1 },
+      { lat: ${ensd.lat}, lng: ${ensd.lng}, name: "ENSD", alt: ${ensd.elevFt}, oat: 10, wdir: 0, wspd: 0, var: -1 }]}];
+      activeFlightIndex = 0; mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 });
+      perfInputs = { '8:arr': { windDir: '0', windKt: '0', qnh: '1013', oat: '10', braking: '1' } };
+      refreshMap(); renderAllFlightTables();`);
+  const c = ev('runwayChecks[1]');
+  assert(c.icao === 'ENSD' && c.kind === 'landing' && !c.res.ok && c.res.requiredM > c.res.availableM,
+    'the ENSD landing at braking action 1 did not exceed the LDA: ' + JSON.stringify(c.res).slice(0, 200));
+  const banner = doc.getElementById('integrity-banner').textContent;
+  assert(/ENSD RWY \d+: required landing distance \d+ m exceeds LDA \d+ m/.test(banner),
+    'the exceedance is not in the banner: ' + banner.slice(0, 240));
+  const print = doc.getElementById('ofp-print');
+  assert(/EXCEEDED/.test(print.textContent) && print.querySelector('.ofp-void'),
+    'the exceedance did not reach the printed sheet with its DO NOT USE band');
+  // A LIMIT is a finding too: a 12 kt tailwind is past the POH's 10.
+  // The runway is PINNED: with none chosen the default is the end into wind,
+  // which would turn this tailwind into a headwind and test nothing.
+  ev(`perfInputs['8:arr'] = { end: '${c.opt.id}', windDir: '${Math.round((c.opt.end.trueBrg + 180) % 360)}',
+        windKt: '12', qnh: '1013', oat: '10' }; renderAllFlightTables();`);
+  assert(ev('runwayChecks[1].wind.headKt') === -12, 'the fixture is not a 12 kt tailwind: ' + ev('runwayChecks[1].wind.headKt'));
+  assert(/tailwind is past the POH/.test(doc.getElementById('integrity-banner').textContent),
+    'a tailwind past the limit did not reach the banner');
+  // With no tail chosen, none of it is a finding (the v16.95 rule).
+  ev('mbPrefs.reg = null; renderAllFlightTables();');
+  assert(!/RWY|tailwind/.test(doc.getElementById('integrity-banner').textContent), 'the banner nagged with no aircraft chosen');
+});
+
+T('no page function shadows a bundle export', () => {
+  // A top-level `function x()` in the page script REPLACES the bundle's global
+  // x - silently: nothing throws, the export just never runs. v16.96 wrote a
+  // runway resolver called aerodromeAt beside the page's own aerodromeAt(wp),
+  // and every distance check came back "not at an aerodrome" while the module
+  // passed its own tests in Node. A name clash is the whole bug, so the name
+  // clash is what is tested.
+  const page = new Set([...fs.readFileSync('src/index.html', 'utf8')
+    .matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm)].map((m) => m[1]));
+  assert(page.size > 200, 'the page-function scan found only ' + page.size);
+  const clash = [];
+  for (const f of fs.readdirSync('src/lib').filter((x) => x.endsWith('.js'))) {
+    const src = fs.readFileSync('src/lib/' + f, 'utf8');
+    for (const m of src.matchAll(/^export\s+(?:async\s+)?(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)/gm)) {
+      if (page.has(m[1])) clash.push(f + ': ' + m[1]);
+    }
+  }
+  assert(!clash.length, 'a page function shadows a bundle export: ' + clash.join(', '));
+});
+
+T('the distance card has no inline handlers, and its listener really commits a change', () => {
+  ev(SEED_STOP);
+  ev(`mbPrefs.reg = "LN-TRB"; perfInputs = {}; lastWeather = { icaos: ['ENDU','ENTC'], tafs: {}, metars: {
+        ENDU: 'ENDU 281150Z 29012KT 9999 FEW040 10/05 Q1005', ENTC: 'ENTC 281150Z 18008KT 9999 SCT030 08/04 Q1003' } };`);
+  w.renderAllFlightTables();
+  const host = doc.getElementById('mb-perf');
+  const inline = [...host.querySelectorAll('*')].filter((el) => [...el.attributes].some((a) => /^on/i.test(a.name)));
+  assert(!inline.length, 'the card carries inline handlers: ' + inline.length);
+  const sel = host.querySelector('select[data-field="end"]');
+  const other = [...sel.options].find((o) => !o.selected);
+  sel.value = other.value;
+  sel.dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert(ev('runwayChecks[0].opt.id') === other.value, 'choosing a runway in the card did not change the check');
+  ev('perfInputs = {}; lastWeather = null; mbPrefs.reg = null;');
+  ev(SEED);
 });
 
 T('the Phase C block leaves the shared fixture as it found it', () => {
@@ -12204,6 +12357,318 @@ T('the Phase C block leaves the shared fixture as it found it', () => {
   ev(SEED);
   assert(ev('flights.length') === 1, 'the seed did not restore one flight');
   assert(ev('mbPrefs.reg') === null, 'a registration was left selected');
+});
+
+// =========================================================================
+// RUNWAYS AND DECLARED DISTANCES (v16.96): AD 2.12 and 2.13, imported.
+// =========================================================================
+
+T('a declared-distance column is named by its HEADER, not by its position', () => {
+  const R = require('./tools/aip-runways.mjs');
+  // Avinor's order is TORA | ASDA | TODA | LDA, which is NOT the textbook one,
+  // and the school's workbook read its "TODA" out of the ASDA column because of
+  // it. The same row under the two orders must yield the same distances.
+  const table = (cols) => '<table><tr>' + ['RWY'].concat(cols, ['RMK']).map((c) => '<th>' + c + '</th>').join('') +
+    '</tr><tr><td>10</td>' + cols.map((c) => '<td>' + { 'TORA (M)': 1000, 'ASDA (M)': 1100, 'TODA (M)': 1200, 'LDA (M)': 900 }[c] + '</td>').join('') +
+    '<td>NIL</td></tr></table>';
+  for (const order of [['TORA (M)', 'ASDA (M)', 'TODA (M)', 'LDA (M)'], ['TORA (M)', 'TODA (M)', 'ASDA (M)', 'LDA (M)']]) {
+    const g = R.tableGrid(table(order));
+    const h = R.headerColumns(g);
+    const row = g[1];
+    const v = (k) => Number(row[h.cols[k]].text);
+    assert(v('tora') === 1000 && v('asda') === 1100 && v('toda') === 1200 && v('lda') === 900,
+      'the header order ' + order.join(' | ') + ' was read as position, not name');
+  }
+});
+
+T('a spanned table is laid out the way the browser lays it out', () => {
+  const R = require('./tools/aip-runways.mjs');
+  // ENDU's intersection table: the RWY cell spans two rows, so the "TWY A" row
+  // has one cell FEWER and every figure sits one place left in the markup. A
+  // parser counting cells reads TORA 2438 as the position's name.
+  const g = R.tableGrid('<table>' +
+    '<tr><th>RWY</th><th>TKOF PSN (Intersection)</th><th>TORA (M)</th><th>ASDA (M)</th><th>TODA (M)</th><th>RMK</th></tr>' +
+    '<tr><td rowspan="2">10</td><td>RWY SFC start 10</td><td>2721</td><td>2721</td><td>2721</td><td>O/R</td></tr>' +
+    '<tr><td>TWY A</td><td>2438</td><td>2438</td><td>2438</td><td>NIL</td></tr>' +
+    '<tr><td colspan="2">28</td><td>1</td><td>2</td><td>3</td><td>4</td></tr></table>');
+  assert(g[2][0].text === '10' && g[2][1].text === 'TWY A' && g[2][2].text === '2438',
+    'the rowspan was not carried: ' + g[2].map((c) => c && c.text).join(' | '));
+  assert(g[3][0].text === '28' && g[3][1].text === '28' && g[3][2].text === '1',
+    'the colspan did not fill both columns: ' + g[3].map((c) => c && c.text).join(' | '));
+});
+
+T('the importer refuses a runway it cannot read, rather than guessing one', () => {
+  const R = require('./tools/aip-runways.mjs');
+  const sd = (rec, field, id, v) => '<span class="SD">' + v + '</span><span class="sdParams">' + rec + ';' + field + ';' + id + '</span>';
+  const page = (brgB, unit) =>
+    '<h4>XXXX AD 2.12 Runway physical characteristics</h4><table>' +
+    '<tr><td>' + sd('TRWY_DIRECTION', 'TXT_DESIG', 1, '10') + '</td><td>' + sd('TRWY_DIRECTION', 'VAL_TRUE_BRG', 1, '100.00°') +
+    '</td><td>' + sd('TRWY', 'VAL_LEN', 9, '1000') + ' x ' + sd('TRWY', 'VAL_WID', 9, '30') + '</td><td>' + sd('TRWY', 'CODE_COMPOSITION', 9, 'ASPH') + '</td></tr>' +
+    '<tr><td>' + sd('TRWY_DIRECTION', 'TXT_DESIG', 2, '28') + '</td><td>' + sd('TRWY_DIRECTION', 'VAL_TRUE_BRG', 2, brgB) + '</td></tr></table>' +
+    '<h4>XXXX AD 2.13 Declared distances</h4><table><tr><th>RWY</th><th>TORA (' + unit + ')</th><th>ASDA (' + unit + ')</th><th>TODA (' + unit + ')</th><th>LDA (' + unit + ')</th><th>RMK</th></tr>' +
+    '<tr><td>10</td><td>1000</td><td>1000</td><td>1100</td><td>950' + sd('TRWY_DIRECTION_DECL_DIST', 'VAL_DIST', 3, '') + '</td><td>NIL</td></tr>' +
+    '<tr><td>28</td><td>1000</td><td>1000</td><td>1000</td><td>1000</td><td>NIL</td></tr></table>' +
+    '<h4>XXXX AD 2.14 Lighting</h4>';
+  const good = R.parseRunways(page('280.00°', 'M'));
+  assert(!good.refused && good.runways.length === 1 && good.runways[0].ends[0].toda === 1100,
+    'the well-formed fixture did not parse: ' + JSON.stringify(good).slice(0, 200));
+  assert(/not reciprocal/.test(R.parseRunways(page('250.00°', 'M')).refused || ''),
+    'two ends 150 degrees apart were accepted as one runway');
+  assert(/not metres/.test(R.parseRunways(page('280.00°', 'FT')).refused || ''),
+    'distances in feet were accepted as metres');
+});
+
+T('a helipad published under runway markers in AD 2.16 is not read as a runway', () => {
+  // The DATASET test below cannot catch this on its own: it reads the shipped
+  // data/aip.js, which a parser change does not rebuild, and the eAIP pages are
+  // not committed. So the section rule is held here, on a synthetic page with
+  // the same shape as ENVA's - a runway in AD 2.12 and a FATO in AD 2.16, both
+  // under TRWY and TRWY_DIRECTION.
+  const R = require('./tools/aip-runways.mjs');
+  const sd = (rec, field, id, v) => '<span class="SD">' + v + '</span><span class="sdParams">' + rec + ';' + field + ';' + id + '</span>';
+  const end = (id, desig, brg, extra) => '<tr><td>' + sd('TRWY_DIRECTION', 'TXT_DESIG', id, desig) + '</td><td>' +
+    sd('TRWY_DIRECTION', 'VAL_TRUE_BRG', id, brg) + '</td>' + (extra || '') + '</tr>';
+  const phys = (id, len) => '<td>' + sd('TRWY', 'VAL_LEN', id, len) + ' x ' + sd('TRWY', 'VAL_WID', id, '30') + '</td><td>' + sd('TRWY', 'CODE_COMPOSITION', id, 'ASPH') + '</td>';
+  const html =
+    '<h4>ENXX AD 2.12 Runway physical characteristics</h4><table>' +
+      end(1, '09', '090.00°', phys(9, '2000')) + end(2, '27', '270.00°') + '</table>' +
+    '<h4>ENXX AD 2.13 Declared distances</h4><table><tr><th>RWY</th><th>TORA (M)</th><th>ASDA (M)</th><th>TODA (M)</th><th>LDA (M)</th><th>RMK</th></tr>' +
+      '<tr><td>09</td><td>2000</td><td>2000</td><td>2000</td><td>2000' + sd('TRWY_DIRECTION_DECL_DIST', 'VAL_DIST', 3, '') + '</td><td>NIL</td></tr>' +
+      '<tr><td>27</td><td>2000</td><td>2000</td><td>2000</td><td>2000</td><td>NIL</td></tr></table>' +
+    '<h4>ENXX AD 2.14 Approach and runway lighting</h4>' +
+    '<h4>ENXX AD 2.16 Helicopter landing area</h4><table>' +
+      end(5, '18', '180.00°', phys(8, '13')) + end(6, '36', '000.00°') + '</table>';
+  const got = R.parseRunways(html);
+  assert(!got.refused, 'the page was refused: ' + got.refused);
+  assert(got.runways.length === 1 && got.runways[0].ends.map((e) => e.desig).join('/') === '09/27',
+    'the AD 2.16 helipad was read as a runway: ' + got.runways.map((r) => r.ends.map((e) => e.desig).join('/')).join(' '));
+});
+
+T('a helicopter area in AD 2.16 does not become a runway', () => {
+  const R = require('./tools/aip-runways.mjs');
+  // AD 2.16 publishes FATOs and TLOFs under the SAME markers as a runway. Read
+  // off the whole page, four aerodromes grew a runway that is a helipad: ENVA
+  // and ENKR an 18/36 or 15/33, ENBO a 07W/25W, ENTC an 18N/36N. The expected
+  // lists are the school's own NavData, and the two real two-runway fields
+  // (ENGM, ENZV) are here so the fix cannot pass by dropping second runways.
+  for (const [icao, want] of [['ENVA', '09/27'], ['ENKR', '05/23'], ['ENBO', '07/25'], ['ENTC', '18/36'],
+                              ['ENDU', '10/28'], ['ENGM', '01L/19R 01R/19L'], ['ENZV', '10/28 18/36']]) {
+    const got = aipDataset().aerodromes.find((a) => a.icao === icao).runways
+      .map((r) => r.ends.map((e) => e.desig).join('/')).join(' ');
+    assert(got === want, icao + ' runways read as ' + got + ', want ' + want);
+  }
+});
+
+T('every aerodrome carries its runways, and every figure agrees with itself', () => {
+  const ads = aipDataset().aerodromes;
+  assert(ads.length === 53, 'the aerodrome count moved: ' + ads.length);
+  let ends = 0, positions = 0;
+  for (const a of ads) {
+    assert(a.runways.length > 0, a.icao + ' has no runways - check data/aip-report.json for the refusal');
+    for (const rw of a.runways) {
+      assert(rw.ends.length === 2, a.icao + ' has a runway with ' + rw.ends.length + ' ends');
+      const off = Math.abs((((rw.ends[1].trueBrg - rw.ends[0].trueBrg) % 360) + 360) % 360 - 180);
+      assert(off <= 3, a.icao + ' runway ends are not reciprocal: ' + off.toFixed(2));
+      for (const e of rw.ends) {
+        ends++;
+        for (const k of ['tora', 'asda', 'toda', 'lda']) {
+          assert(Number.isInteger(e[k]) && e[k] > 0, a.icao + ' ' + e.desig + ' ' + k + ' is not a distance: ' + e[k]);
+        }
+        // A stopway or clearway only ever ADDS to TORA, so a column that slid
+        // one place under another header fails one of these.
+        assert(e.toda >= e.tora && e.asda >= e.tora, a.icao + ' ' + e.desig + ' TODA/ASDA shorter than TORA');
+        positions += (e.positions || []).length;
+      }
+    }
+  }
+  // PINNED, and edition-dependent: a parser regression looks exactly like a
+  // runway being withdrawn. Check the AIP before editing these numbers.
+  assert(ends === 112, 'runway ends: ' + ends + ' (was 112 at 2026-09-03)');
+  assert(positions === 120, 'intersection positions: ' + positions + ' (was 120 at 2026-09-03)');
+  const endu = ads.find((a) => a.icao === 'ENDU').runways[0];
+  const e10 = endu.ends.find((e) => e.desig === '10');
+  assert(endu.length === 2995 && endu.width === 45 && endu.surface === 'ASPH' && e10.trueBrg === 109.01,
+    'ENDU 10 physical characteristics: ' + JSON.stringify(endu).slice(0, 160));
+  assert(e10.tora === 2443 && e10.asda === 2443 && e10.toda === 2443 && e10.lda === 2001,
+    'ENDU 10 declared distances: ' + [e10.tora, e10.asda, e10.toda, e10.lda]);
+  assert(e10.positions.some((p) => p.name === 'TWY A' && p.tora === 2438),
+    'ENDU 10 lost its TWY A intersection: ' + JSON.stringify(e10.positions));
+});
+
+T('the import agrees with the school\'s own runway table wherever both exist', () => {
+  // The workbook's NavData is the school's transcription of the same AIP - an
+  // INDEPENDENT reading, which is what the 90/90 POH check was too.
+  const cells = xlsxSheet('./OFP-C182.xlsx', 'NavData', { strings: true });
+  const ads = aipDataset().aerodromes;
+  let compared = 0, agree = 0;
+  const odd = [];
+  for (let r = 2; r < 400; r++) {
+    const icao = cells['O' + r];
+    if (!icao) continue;
+    let rwy = cells['P' + r];
+    rwy = typeof rwy === 'number' ? String(rwy).padStart(2, '0') : String(rwy);
+    compared++;
+    const ad = ads.find((a) => a.icao === icao);
+    const e = ad && ad.runways.flatMap((x) => x.ends).find((x) => x.desig === rwy);
+    if (!e) { odd.push(icao + ' ' + rwy); continue; }
+    if (e.tora === cells['Q' + r] && e.asda === cells['R' + r] && e.toda === cells['S' + r] && e.lda === cells['T' + r]) agree++;
+    else odd.push(icao + ' ' + rwy + ' differs');
+  }
+  // 96 of 98. The two are ENTO 18 and 36, which the AIP has since REDESIGNATED
+  // 17 and 35 (magnetic drift): the sheet is stale there, not the import.
+  assert(compared === 98, 'NavData rows compared: ' + compared);
+  assert(agree === 96, agree + ' of ' + compared + ' agree; the rest: ' + odd.join(', '));
+  assert(odd.join(',') === 'ENTO 18,ENTO 36', 'a new disagreement with the school\'s table: ' + odd.join(', '));
+  const ento = ads.find((a) => a.icao === 'ENTO').runways.flatMap((x) => x.ends).find((e) => e.desig === '17');
+  assert(ento && ento.tora === cells['Q' + Object.keys(cells).find((k) => k[0] === 'O' && cells[k] === 'ENTO').slice(1)],
+    'ENTO 17 is not the old 18 renamed');
+});
+
+// =========================================================================
+// TAKE-OFF AND LANDING DISTANCE (v16.96, phase D): rwyperf.js.
+// =========================================================================
+
+T('the distance engine reproduces the workbook\'s own worked example, cell for cell', () => {
+  const P = moduleExports.rwy;
+  // Read OUT OF THE SHEET, not retyped here: a comparison with a copied number
+  // is a comparison with itself (the v16.93 lesson).
+  const ofp = xlsxSheet('./OFP-C182.xlsx', 'OFP');
+  // The example's inputs: ENDU, 2582.3 lb, QNH 990, 11 C, wind 020/03.
+  assert(ofp.D11 === 2582.3 && ofp.K20 === 990 && ofp.N20 === 11 && ofp.P18 === 875,
+    'the workbook example moved: ' + [ofp.D11, ofp.K20, ofp.N20, ofp.P18]);
+  assert(P.pressureAltitudeFt(254, 990) === ofp.P18, 'pressure altitude differs from OFP!P18');
+  const wind = P.windAlongRunway(109.01, 20, 3);        // ENDU 10, TRUE bearing
+  const to = P.runwayDistance({ kind: 'takeoff', weightLb: 2582.3, elevFt: 254, qnhHpa: 990, tempC: 11,
+    headKt: wind.headKt, braking: 6, surface: 'ASPH', availableM: 2443 });
+  const ld = P.runwayDistance({ kind: 'landing', weightLb: null, elevFt: 254, qnhHpa: 990, tempC: 11,
+    headKt: wind.headKt, braking: 6, surface: 'ASPH', availableM: 2001 });
+  // The sheet stores metres as feet / 3.28, so the feet it interpolated are
+  // O24 x 3.28 - and the sheet ROUNDs them. Ours stay unrounded and must round
+  // to the same whole foot.
+  assert(Math.round(to.uncorrectedM / 0.3048) === Math.round(ofp.O24 * 3.28),
+    'take-off uncorrected: ' + (to.uncorrectedM / 0.3048).toFixed(2) + ' ft vs the sheet\'s ' + (ofp.O24 * 3.28).toFixed(2));
+  assert(Math.round(ld.uncorrectedM / 0.3048) === Math.round(ofp.V24 * 3.28),
+    'landing uncorrected: ' + (ld.uncorrectedM / 0.3048).toFixed(2) + ' ft vs the sheet\'s ' + (ofp.V24 * 3.28).toFixed(2));
+  // And the figure the pilot writes down is the sheet's to the metre.
+  assert(to.requiredM === ofp.O31, 'required take-off ' + to.requiredM + ' m vs OFP!O31 ' + ofp.O31);
+  assert(ld.requiredM === ofp.V31, 'required landing ' + ld.requiredM + ' m vs OFP!V31 ' + ofp.V31);
+  assert(to.ok && ld.ok && to.factor === ofp.L31 + 1 && ld.factor === ofp.S31 + 1,
+    'the performance factors are not the sheet\'s: ' + to.factor + ' / ' + ld.factor);
+});
+
+T('the POH grid is exact on its nodes, and refuses rather than extrapolates', () => {
+  const P = moduleExports.rwy;
+  const poh = JSON.parse(fs.readFileSync('./tools/prepared/poh-takeoff.json', 'utf8'));
+  const node = P.pohDistanceFt('takeoff', 2700, 3000, 20);
+  assert(node.totalFt === poh.table['2700']['3000'][2][1] && node.rollFt === poh.table['2700']['3000'][2][0],
+    'a grid node is not the table value: ' + JSON.stringify(node));
+  // BELOW the table it clamps, as the workbook does and in the safe direction.
+  const at = (w, pa, t) => P.pohDistanceFt('takeoff', w, pa, t).totalFt;
+  assert(at(2700, 3000, -15) === at(2700, 3000, 0), 'a sub-zero temperature was not clamped to 0 C');
+  assert(at(2700, -400, 10) === at(2700, 0, 10), 'a negative pressure altitude was not clamped to sea level');
+  assert(at(2100, 1000, 10) === at(2300, 1000, 10), 'a mass under 2300 lb was not clamped to the 2300 lb table');
+  // ABOVE it there is nothing published. The workbook's fallback read a missing
+  // row as 0 and made PA 6000 SHORTER than PA 5000.
+  for (const [w, pa, t, why] of [[2700, 8001, 10, /above the POH table/], [2700, 3000, 41, /above the POH table/],
+                                 [3101, 1000, 10, /above the POH table/], [NaN, 1000, 10, /not known/]]) {
+    const r = P.pohDistanceFt('takeoff', w, pa, t);
+    assert('refused' in r && why.test(r.refused), `${w} lb / ${pa} ft / ${t} C was not refused: ` + JSON.stringify(r));
+  }
+  // THE DELETED CELLS STAY REFUSED, and so does anything interpolated from one.
+  const deleted = P.pohDistanceFt('takeoff', 3100, 8000, 30);
+  assert('refused' in deleted && /deletes/.test(deleted.refused), 'a POH-deleted cell produced a distance');
+  const near = P.pohDistanceFt('takeoff', 2900, 7500, 35);
+  assert('refused' in near, 'a figure interpolated toward a deleted corner was produced: ' + JSON.stringify(near));
+  // Landing has ONE weight: the mass passed in must change nothing.
+  assert(P.pohDistanceFt('landing', 2200, 2000, 10).totalFt === P.pohDistanceFt('landing', 2950, 2000, 10).totalFt,
+    'the landing table was scaled by weight');
+});
+
+T('more mass, more altitude or more heat never makes a distance shorter', () => {
+  const P = moduleExports.rwy;
+  let checked = 0;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  for (let i = 0; i < 400 * SWEEP_N; i++) {
+    const w = rnd(2300, 3050), pa = rnd(0, 7000), t = rnd(0, 34);
+    const base = P.pohDistanceFt('takeoff', w, pa, t);
+    if ('refused' in base) continue;
+    for (const [dw, dp, dt] of [[40, 0, 0], [0, 400, 0], [0, 0, 4]]) {
+      const more = P.pohDistanceFt('takeoff', w + dw, pa + dp, t + dt);
+      if ('refused' in more) continue;
+      checked++;
+      assert(more.totalFt >= base.totalFt - 1e-9 && more.rollFt >= base.rollFt - 1e-9,
+        `take-off got SHORTER: ${w.toFixed(0)} lb ${pa.toFixed(0)} ft ${t.toFixed(1)} C -> +${dw}/${dp}/${dt}`);
+    }
+    const l0 = P.pohDistanceFt('landing', null, pa, t), l1 = P.pohDistanceFt('landing', null, pa + 400, t + 4);
+    if ('totalFt' in l0 && 'totalFt' in l1) assert(l1.totalFt >= l0.totalFt, 'landing got shorter with height and heat');
+  }
+  assert(checked > 800, 'the monotonicity sweep checked only ' + checked + ' pairs');
+});
+
+T('wind is the school\'s rule, from TRUE directions, and a VRB wind is a tailwind', () => {
+  const P = moduleExports.rwy;
+  assert(P.windFactor(8) === 1, 'a headwind under 9 kt earned credit');
+  assert(Math.abs(P.windFactor(9) - 0.9) < 1e-12 && Math.abs(P.windFactor(18) - 0.8) < 1e-12, 'headwind credit is not 10% per 9 kt');
+  assert(Math.abs(P.windFactor(-2) - 1.1) < 1e-12 && Math.abs(P.windFactor(-10) - 1.5) < 1e-12, 'tailwind is not +10% per 2 kt');
+  assert(P.windFactor(-11) === null, 'an 11 kt tailwind was priced instead of refused');
+  // ENDU 10 is 109.01 TRUE. A METAR wind of 109/20 is straight down it; the
+  // workbook's magnetic 099 would have shaved it and invented a crosswind.
+  const straight = P.windAlongRunway(109.01, 109, 20);
+  assert(straight.headKt === 20 && straight.crossKt === 0, 'a wind down the runway: ' + JSON.stringify(straight));
+  const behind = P.windAlongRunway(109.01, 289, 6);
+  assert(behind.headKt === -6, 'a wind from behind is not a tailwind: ' + JSON.stringify(behind));
+  const calm = P.windAlongRunway(109.01, 0, 0);
+  assert(Object.is(calm.headKt, 0), 'a calm reads as -0, which prints as a tailwind');
+  // The author's decision: VRB is the full speed from behind, on BOTH ends.
+  const vrb = P.windAlongRunway(109.01, 'VRB', 5);
+  assert(vrb.headKt === -5 && vrb.variable, 'VRB 05 is not a 5 kt tailwind: ' + JSON.stringify(vrb));
+  const base = { weightLb: 2600, elevFt: 254, qnhHpa: 1013, tempC: 10, braking: 6, surface: 'ASPH', availableM: 2443 };
+  for (const kind of ['takeoff', 'landing']) {
+    const calmD = P.runwayDistance(Object.assign({ kind, headKt: 0 }, base));
+    const vrbD = P.runwayDistance(Object.assign({ kind, headKt: vrb.headKt }, base));
+    assert(vrbD.correctedM > calmD.correctedM, kind + ': a VRB wind was not priced as a tailwind');
+  }
+  const best = P.bestEnd([{ desig: '10', trueBrg: 109.01 }, { desig: '28', trueBrg: 289.05 }], 290, 12);
+  assert(best.desig === '28', 'the default runway is not the one into wind: ' + best.desig);
+});
+
+T('braking action, surface and the tailwind limit refuse rather than guess', () => {
+  const P = moduleExports.rwy;
+  const x = { kind: 'takeoff', weightLb: 2600, elevFt: 254, qnhHpa: 1013, tempC: 10, headKt: 0, braking: 6, surface: 'ASPH', availableM: 2443 };
+  const d = (o) => P.runwayDistance(Object.assign({}, x, o));
+  const good = d({});
+  assert(!good.refused && good.brakingCorrM === 0 && good.surfaceCorrM === 0, 'a dry paved runway carried a correction');
+  const ba4 = d({ braking: 4 });
+  assert(Math.abs(ba4.brakingCorrM - 0.1 * good.correctedM) < 1e-9, 'braking action 4 is not +10%');
+  assert(/prohibited/.test(d({ braking: 0 }).refused || ''), 'braking action 0 was not refused as prohibited');
+  assert(d({ braking: 7 }).refused, 'braking action 7 was accepted');
+  assert(/tailwind/.test(d({ headKt: -12 }).refused || ''), 'a 12 kt tailwind produced a distance');
+  // ENAS is GRAVEL. The POH corrects for dry grass and nothing else.
+  assert(/no correction for a GRAVEL/.test(d({ surface: 'GRAVEL' }).refused || ''), 'a gravel runway was priced as asphalt');
+  // Grass is a share of the GROUND ROLL - 15% take-off, 45% landing. Same
+  // wording, different number: the named trap from the v16.93 tables.
+  const roll = P.pohDistanceFt('takeoff', 2600, 254, 10).rollFt * 0.3048;
+  assert(Math.abs(d({ surface: 'GRASS' }).surfaceCorrM - 0.15 * roll) < 1e-6, 'take-off grass is not 15% of the roll');
+  const lroll = P.pohDistanceFt('landing', null, 254, 10).rollFt * 0.3048;
+  assert(Math.abs(d({ kind: 'landing', surface: 'GRASS' }).surfaceCorrM - 0.45 * lroll) < 1e-6, 'landing grass is not 45% of the roll');
+  for (const k of ['qnhHpa', 'tempC', 'headKt']) {
+    const r = d({ [k]: NaN });
+    assert(/not known/.test(r.refused || '') && !r.ok, 'a missing ' + k + ' did not refuse');
+  }
+  // A refusal is never a pass, and a too-short runway is never ok.
+  assert(!d({ availableM: 300 }).ok && d({ availableM: 300 }).marginM < 0, 'a 300 m TODA passed');
+  assert(!d({ availableM: null }).ok, 'no published distance passed');
+});
+
+T('the required distance is rounded UP, never to the nearest', () => {
+  const P = moduleExports.rwy;
+  // A requirement rounded down by half a metre is rounded the wrong way.
+  for (let t = 0; t <= 30; t += 0.7) {
+    const r = P.runwayDistance({ kind: 'landing', weightLb: null, elevFt: 100, qnhHpa: 1013, tempC: t,
+      headKt: 0, braking: 6, surface: 'ASPH', availableM: 3000 });
+    assert(r.requiredM >= r.correctedM * r.factor - 1e-9, 'required ' + r.requiredM + ' is below ' + (r.correctedM * r.factor));
+    assert(r.requiredM - r.correctedM * r.factor < 1, 'required overshoots by a whole metre');
+  }
 });
 
 runAsyncTests().then(() => {

@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 48 shared mutable
+    decision, not unfinished work: it is one web of 51 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -400,10 +400,9 @@ three cheap disciplines applied every time the page is touched:
   OFP. SUPERSEDED TWICE: at v16.28 it became roadmap item 5, and at **v16.93
   the pure engine is BUILT** — see "MASS & BALANCE, THE OTHER HALF OF THE
   FORM" above. `OFP-C182.xlsx` is committed and is the authoritative source,
-  corroborated figure for figure by the printed form. Fuel-requirement and POH
-  takeoff/landing performance are still not built; the workbook's own tables
-  and its stated limits (PA 5000 ft, 40 °C) are recorded there for when they
-  are.
+  corroborated figure for figure by the printed form. POH take-off and landing
+  distance against the AIP's TODA/LDA is BUILT at v16.96 (phase D, below).
+  A fuel-REQUIREMENT check is still not built.
 - **Daylight / VFR day (v16.3)**: legal basis verified — SERA Art. 2(97)
   (Reg. (EU) 923/2012) defines night via civil twilight, sun centre 6°
   below the horizon; Norway's BSL F 1-1 (forskrift 2016-12-14-1578) was
@@ -1530,13 +1529,9 @@ scoped. In the user's order:
    one fuel density, Phase C the tab, the CG chart, the sector/mission toggle
    and findings on the banner AND the paper. See "MASS & BALANCE, THE OTHER
    HALF OF THE FORM" and "PHASE C" below it.
-   **NOT BUILT, and the tab says so rather than leaving a gap that looks like
-   an oversight:** the takeoff and landing DISTANCES the author asked to see in
-   the tab. The POH tables are committed and cross-checked
-   (`tools/prepared/poh-*.json`), but reading them needs a pressure altitude,
-   an OAT, a wind component and a surface per runway, and comparing them needs
-   TODA/LDA - which the AIP importer does not read today. That is **Phase D**,
-   and it is not approved yet.
+   **PHASE D DONE at v16.96**: runways and declared distances imported from AD
+   2.12/2.13, and take-off/landing distance worked the school's way against
+   TODA and LDA. See "PHASE D" below.
 6. **DONE at v16.95** - the OFP half at v16.41, the M&B half with item 5's
    Phase C. The M&B page is reproduced by its ROWS and vocabulary, NOT
    pixel-measured the way page 1 was; measuring page 2's grid is a separate
@@ -2324,7 +2319,7 @@ shell around it.
   id, and the last fetch is kept in memory only (`lastWeather`, never
   persisted - a cached METAR is a wrong METAR), so the tab shows the same
   decoded reports as the plan card without a second fetch or a second decoder.
-- **THE DISTANCES ARE NOT BUILT, AND THE TAB SAYS SO.** The author asked for
+- **(SUPERSEDED at v16.96 - phase D built them.) THE DISTANCES ARE NOT BUILT, AND THE TAB SAYS SO.** The author asked for
   them here. The POH tables are committed; reading them needs a per-runway
   pressure altitude, wind component, surface and TODA/LDA, and the AIP importer
   reads no runway data. A tab with no distances and no word about it reads as
@@ -2435,6 +2430,142 @@ which reproduces the collapsed gaps and the shrunken tabs quoted above.
 harness could not see it. Probing the mutated function directly before
 believing "not caught" is what exposed it - the v16.93 lesson that a mutation
 run has to be checked for having measured anything, applied to the measuring.
+
+### PHASE D (v16.96): RUNWAYS FROM THE AIP, AND THE DISTANCE AGAINST THEM
+
+The author: *"import the runway distances from the AIP and add them to the
+importer, and doing phase D"*. Two parts, and each has a pure module.
+
+#### THE IMPORT (`tools/aip-runways.mjs`, wired into `build-aip.mjs`)
+
+Every aerodrome record in `data/aip.js` now carries `runways`: length × width
+and surface from AD 2.12, each end's TRUE bearing, TORA/ASDA/TODA/LDA from AD
+2.13, and the intersection take-off positions. Measured at 2026-09-03: **53 of
+53 aerodromes, 112 runway ends, 120 positions, 0 refused.** Read off the AD 2
+pages the airspace build already fetches - no new request.
+
+- **AD 2.12 IS TAGGED; AD 2.13 IS HALF TAGGED.** Every declared distance is a
+  `TRWY_DIRECTION_DECL_DIST;VAL_DIST`, but WHICH distance it is lives only in
+  the table column. So each table's own header names its columns, and nothing
+  is assigned by position. Two measured reasons:
+  1. **AVINOR'S ORDER IS TORA | ASDA | TODA | LDA**, not the textbook TORA |
+     TODA | ASDA | LDA. Assuming the textbook swaps TODA and ASDA silently -
+     and the school's own workbook did exactly that (see below).
+  2. **ROWSPAN AND COLSPAN, at 20 of 53 aerodromes.** In the intersection
+     table the RWY cell spans its positions, so the next row has one cell fewer
+     and every figure shifts left. `tableGrid` lays the table out the way the
+     browser does.
+- **READ BY SECTION, NEVER BY SCANNING THE PAGE.** AD 2.16 (helicopter landing
+  area) publishes FATOs and TLOFs under the SAME `TRWY`/`TRWY_DIRECTION`
+  markers. A whole-page scan made helipads into runways at four aerodromes
+  (ENVA, ENKR, ENBO's 07W/25W, ENTC's 18N/36N).
+- **THE CHECKS ARE THE ONES THAT ARE PHYSICALLY NECESSARY.** Each runway has
+  two ends with reciprocal true bearings (±3°); TODA ≥ TORA and ASDA ≥ TORA,
+  which a column that slid under the wrong header fails. **TORA ≤ runway
+  length was tried and is FALSE**: AD 2.12's length is threshold to threshold,
+  and ENAS declares TORA 868 m on an 808 m runway because the surface runs
+  30 m past each threshold. My first reciprocal formula was also wrong
+  (reported 180.04° as 179.96° off) - it refused every aerodrome, which is the
+  failure mode that is at least loud.
+- **THE INDEPENDENT CROSS-CHECK**: the workbook's `NavData` is the school's own
+  transcription of the same AIP. **96 of 98 runway ends agree in all four
+  distances**; the two are ENTO 18/36, which the AIP has since REDESIGNATED
+  17/35 (identical TORA/ASDA/TODA, LDA 2449 → 2450). The sheet is stale there.
+- **THE DATASET TESTS CANNOT SEE A PARSER CHANGE**, found by mutation: they read
+  the shipped `data/aip.js`, which a parser edit does not rebuild, and the eAIP
+  page cache is not committed. So every structural rule (header mapping, spans,
+  sections, bearings, units) is ALSO held by a synthetic page in `test.js`.
+  Mutating the section rule passed until that test existed.
+
+#### THE ENGINE (`src/lib/rwyperf.js`)
+
+**THE METHOD IS THE SCHOOL'S, CELL BY CELL** (`CALC_TOD`, `CALC_LDG`,
+OFP!J24:V32). Trilinear interpolation over the POH grid, the 50 ft TOTAL, wind
+correction, braking action (6/5 ×1, 4 ×1.1, 3 ×1.2, 2 ×1.5, 1 ×2, 0 prohibited),
+then ×1.25 take-off and ×1.43 landing. PA = elevation + 27 × (1013 − QNH).
+Headwind earns nothing under 9 kt, then 10% per 9 kt; tailwind +10% per 2 kt to
+10 kt. **It reproduces the workbook's worked example read out of the sheet:
+1052 / 1365 ft uncorrected, 401 / 595 m required** (OFP!O31, V31).
+
+The tables are imported straight from `tools/prepared/poh-*.json`
+(`import ... with { type: 'json' }`), so the cross-checked snapshot IS what the
+app uses - no second copy. Verified to work in bare-Node `require()`, esbuild
+and `tsc` before relying on it.
+
+**FIVE DEPARTURES FROM THE WORKBOOK, each because it is wrong there or the
+author decided:**
+
+1. **THE RUNWAY DIRECTION IS TRUE.** METAR wind is TRUE (Annex 3). NavData's
+   headings are MAGNETIC (ENDU 10 → 099 where the AIP says 109.01 true), and the
+   sheet subtracts one from the other, so its components are off by the local
+   variation - 10-16° across Northern Norway.
+2. **THE TAKE-OFF IS CHECKED AGAINST TODA** (the author's choice). The sheet's
+   cell is LABELLED TODA and reads the ASDA column - the textbook-order trap
+   again. Equal at ENDU; ENBR 17 is 2826 vs 3119.
+3. **A VRB WIND IS A TAILWIND ON BOTH ENDS** (the author's choice). The sheet
+   gives take-off no correction and landing the full speed from behind.
+4. **ABOVE THE TABLE IS REFUSED**, never extrapolated - the sheet's fallback made
+   PA 6000 shorter than PA 5000. Below it clamps to the lowest row, which the
+   sheet also does and which errs long. A POH-DELETED cell, and anything
+   interpolated from one, is refused.
+5. **THE REQUIRED FIGURE ROUNDS UP**, not to the nearest. It is a requirement.
+
+**THREE KINDS OF "NO FIGURE", AND ONLY ONE IS A FINDING.** `refusedKind`: a
+LIMIT (tailwind past 10 kt, above the table, deleted cell, braking 0) goes to
+the red banner; an INPUT not yet given does not - that is the pilot not having
+got there; a SURFACE the POH does not correct is stated and not a finding (ENAS
+is GRAVEL - the POH corrects for dry grass only, 15% take-off and 45% landing
+of the GROUND ROLL; no grass runway exists in this edition).
+
+#### THE TAB, THE BANNER, THE PAPER
+
+- Every sector's departure and arrival is resolved to an aerodrome by the
+  PAGE's existing `aerodromeAt(wp)` - the one a full stop already uses (5 NM,
+  nearest ARP) - and checked against the runway end the pilot picks. The
+  default is the end into wind; a take-off can pick any published intersection,
+  which carries its own TODA.
+- **INPUTS ARE SESSION-ONLY.** Wind, QNH, OAT, braking and the runway choice are
+  the day's; a QNH remembered from yesterday is a wrong QNH (the v16.3 date
+  rule). They prefill from the fetched METAR - labelled with the report's time
+  and AGE, and "NOT CURRENT" past 90 minutes - and any box can be typed over.
+  An EMPTY box means "use the METAR", never 0: a blank QNH read as 0 hPa is a
+  27 000 ft aerodrome, and mutating that fails a test by name.
+- The card's wind field says it wants TRUE, because a tower or ATIS wind is
+  magnetic.
+- Findings reach the banner and the printed M&B sheet, once a tail is chosen
+  (the v16.95 rule). Each printed sheet carries a distance table for its own
+  sector, or every sector on the whole-mission sheet; a figure that was not
+  computed prints as a sentence saying why, never as a blank. `verify:ofp`
+  measures a computed row with the longest position name ("RWY SFC start 10"):
+  0 cells overflow.
+
+#### A PAGE FUNCTION SILENTLY SHADOWED MY EXPORT
+
+The module exported `aerodromeAt(lat, lng, aerodromes)`. The page script
+already had `function aerodromeAt(wp)`, and a page-level function declaration
+REPLACES the bundle's global of the same name - nothing throws, the export just
+never runs. Every check came back "not at a published aerodrome" while the
+module passed its own tests in Node. The duplicate is deleted (one resolver, not
+two) and **a test now requires that no page function shares a name with any
+bundle export**: there were none before this, so it can demand zero. Its first
+mutation died in `tsc` (an untyped parameter) and proved nothing; the second,
+typed, fails by name.
+
+#### THE GUIDE HAD BEEN WRONG SINCE v16.95
+
+It still said "the Mass & Balance side of the form is not reproduced yet". Phase
+C shipped without updating it. It now describes the M&B page, the distance
+method, all four deliberate departures a pilot would notice, and what is not
+stored.
+
+#### MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+Importer: whole page instead of the section; columns by position; rowspan not
+carried; reciprocal check off (4). Engine: extrapolate above the table; headwind
+credit under 9 kt; VRB as calm; round to nearest; a deleted cell read as 0 (5).
+Wiring: take-off against ASDA (reports `2826 - TODA is 3119`); distances off
+the banner; an empty box read as 0; the banner with no tail; the distances left
+off the paper (5). Plus the shadowing guard (1).
 
 ## AIRAC updates: what re-importing actually costs (v16.42, 2026-09-03)
 

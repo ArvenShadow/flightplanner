@@ -343,6 +343,34 @@ await page.evaluate(() => {
   setMbReg('');
 });
 
+// THE DISTANCE TABLE (v16.96) HAS TO FIT ITS CELLS TOO, with real figures in
+// them. The fixtures above do not start or end at an aerodrome, so every row
+// there is a "not computed" sentence and no NUMBER column was ever measured.
+// This one departs ENDU from the longest-named take-off position on the sheet
+// and lands at ENTC, with every input typed so both rows compute.
+const perf = await page.evaluate(() => {
+  // @ts-ignore - page globals
+  flights = [{ id: 91, title: 'PERF', depElev: 254, waypoints: [
+    { lat: 69.05583, lng: 18.54, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.68306, lng: 18.91889, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 }]}];
+  // @ts-ignore
+  activeFlightIndex = 0; mbPrefs.reg = 'LN-TRA'; mbPrefs.view = 'sector';
+  // @ts-ignore
+  perfInputs = { '91:dep': { end: '10@RWY SFC start 10', windDir: '290', windKt: '8', qnh: '1003', oat: '-7', braking: '4' },
+                 '91:arr': { windDir: '180', windKt: '6', qnh: '1003', oat: '-7', braking: '5' } };
+  // @ts-ignore
+  refreshMap(); renderAllFlightTables();
+  const cells = [...document.querySelectorAll('#ofp-print .mb-perf-print td')];
+  const bad = cells.filter((td) => td.textContent.trim() && td.scrollWidth > td.clientWidth + 1)
+    .map((td) => `"${td.textContent.trim()}" needs ${td.scrollWidth} in ${td.clientWidth}px`);
+  const computed = [...document.querySelectorAll('#ofp-print .mb-perf-print td b')].map((b) => b.textContent);
+  const text = document.querySelector('#ofp-print .mb-perf-print') ? document.querySelector('#ofp-print .mb-perf-print').textContent : '';
+  return { n: cells.length, bad, computed, text };
+});
+check(perf.computed.length === 2, 'both ends of the sector print a computed distance: ' + JSON.stringify(perf.computed));
+check(/RWY SFC start 10/.test(perf.text), 'the take-off position is named on the paper');
+check(perf.bad.length === 0, perf.bad.length + ' distance cells overflow' + (perf.bad.length ? ': ' + perf.bad.slice(0, 4).join(' | ') : ''));
+
 check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''));
 await b.close();
 console.log(fails.length ? `\n${fails.length} check(s) FAILED` : '\nall OFP-print checks passed');
