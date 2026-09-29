@@ -6175,11 +6175,11 @@ T('every box the OFP writes into sits on the form\'s own measured rules', () => 
     if (!skip.includes('y1') && !hOn(pg, b.y1, b.x0, b.x1)) bad.push(name + '.y1 ' + b.y1);
   };
   // FREE PAPER, not form boxes - and the reason for each, so the list cannot
-  // quietly grow: the sheet number and the page-2 title sit in empty margin;
-  // the Reg value starts after the printed "A/C REG:" label, not at a rule.
+  // quietly grow: the sheet number, the page-2 title and the page-2 note strip
+  // beside it (v16.98) sit in empty margin; the Reg value starts after the printed "A/C REG:" label, not at a rule.
   // Its TOP is the underside of the black MASS & BALANCE bar, which is a fill,
   // not a rule, so the rule detector (rightly) does not record it.
-  const FREE = { sheetNo: ['x0', 'x1', 'y0', 'y1'], title: ['x0', 'x1', 'y0', 'y1'], reg2: ['x0', 'y1'] };
+  const FREE = { sheetNo: ['x0', 'x1', 'y0', 'y1'], title: ['x0', 'x1', 'y0', 'y1'], note: ['x0', 'x1', 'y0', 'y1'], reg2: ['x0', 'y1'] };
   for (const [k, b] of Object.entries(P.OFP_BOXES)) check(0, 'OFP_BOXES.' + k, b, FREE[k]);
   for (const [k, b] of Object.entries(P.MB_BOXES)) check(1, 'MB_BOXES.' + k, b, FREE[k === 'reg' ? 'reg2' : k]);
   P.OFP_COL_EDGES.forEach((x, i) => { if (!vOn(0, x, 254, 534)) bad.push('OFP_COL_EDGES[' + i + '] ' + x); });
@@ -12545,16 +12545,19 @@ T('the printed whole-mission sheet adds up, with a refuel in the middle', () => 
   const mbs = printDoc().sheets.filter((sh) => sh.kind === 'mb');
   assert(mbs.length === 1, 'the whole-mission view printed ' + mbs.length + ' M&B pages, not one master');
   const sheet = readMb(mbs[0]);
-  // The form has no "fuel at stops" line, so the net change goes on its Last
-  // Minute Change line - and the page title says so, or the figure is a mystery.
-  assert(sheet.mb.lmc && sheet.mb.lmc.w, 'the refuel is missing from the printed master: ' + sheet.text);
-  assert(/Last Minute Change = net fuel change at the stops/.test(sheet.box.title),
-    'the master does not say what its Last Minute Change line carries: ' + sheet.box.title);
+  // UPDATED DELIBERATELY AT v16.98. The form has no "fuel at stops" line, and
+  // v16.97 put the net change on its Last Minute Change line. That line is the
+  // preflight fuel against the planned now (the author), so the stop change is
+  // STATED beside the title, and the LMC line is left alone.
+  assert(!sheet.mb.lmc, 'the stop change is still on the Last Minute Change line: ' + JSON.stringify(sheet.mb.lmc));
+  const said = /Fuel change at the stops \+([\d,]+) US gal/.exec(sheet.box.title || '');
+  assert(said, 'the master does not state the fuel change at the stops: ' + sheet.box.title);
   const tom = numPt(sheet.mb.tom.w), burn = numPt(sheet.mb.enroute.w),
-        stop = numPt(sheet.mb.lmc.w), ldm = numPt(sheet.mb.ldg.w);
+        stop = numPt(said[1]) * 6, ldm = numPt(sheet.mb.ldg.w);
   assert([tom, burn, stop, ldm].every(Number.isFinite), 'a printed figure is not a number: ' + JSON.stringify(sheet.mb));
-  // Each is printed to 0.1 lb, so they may disagree by the rounding and no more.
-  assert(Math.abs(tom - burn + stop - ldm) <= 0.15,
+  // Each is printed to 0.1 lb and the stop change to 0.1 gal (0.6 lb), so they
+  // may disagree by the rounding and no more.
+  assert(Math.abs(tom - burn + stop - ldm) <= 0.15 + 0.3,
     'the printed master does not add up: ' + tom + ' - ' + burn + ' + ' + stop + ' != ' + ldm);
   // The old sheet printed the FIRST sector's burn under a whole-mission heading.
   const mission = w.eval('massBalanceMission');
@@ -12632,12 +12635,22 @@ T('the take-off is checked against TODA, not the ASDA column the workbook reads'
   assert(c.icao === 'ENBR' && c.opt.desig === '17', 'the ENBR 17 take-off was not checked: ' + c.icao + ' ' + (c.opt && c.opt.desig));
   assert(c.res.availableM === e17.toda && c.res.availableM !== e17.asda,
     'the take-off was checked against ' + c.res.availableM + ' - TODA is ' + e17.toda + ', ASDA ' + e17.asda);
-  // An intersection position is its own TODA, not the full runway's.
+  // UPDATED DELIBERATELY AT v16.98: this used to assert an intersection
+  // departure was checked against its own TODA. The school's policy is a
+  // stationary take-off at FULL LENGTH, always - so no intersection is offered,
+  // and one asked for (an old session's choice) falls back to a runway end.
   const psn = e17.positions && e17.positions[0];
-  if (psn) {
-    ev(`perfInputs['7:dep'].end = '17@${psn.name}'; renderAllFlightTables();`);
-    assert(ev('runwayChecks[0].res.availableM') === psn.toda, 'an intersection departure used the full-length TODA');
-  }
+  assert(psn, 'the fixture needs ENBR 17 to publish an intersection, or it proves nothing');
+  const ids = ev(`runwayChecks[0].options.map(o => o.id)`);
+  const ends = enbr.runways.flatMap((r) => r.ends.map((e) => e.desig));
+  assert(JSON.stringify(ids.slice().sort()) === JSON.stringify(ends.slice().sort()),
+    'a take-off offered something other than the runway ends at full length: ' + JSON.stringify(ids));
+  ev(`perfInputs['7:dep'].end = '17@${psn.name}'; renderAllFlightTables();`);
+  const opt = ev('runwayChecks[0].opt');
+  const chosen = enbr.runways.flatMap((r) => r.ends).find((e) => e.desig === opt.desig);
+  assert(ends.includes(opt.id) && ev('runwayChecks[0].res.availableM') === chosen.toda,
+    'an intersection departure was still priced: ' + opt.id + ' against ' + ev('runwayChecks[0].res.availableM') +
+    ' (intersection TODA ' + psn.toda + ')');
 });
 
 T('a runway that is too short, or a limit, reaches the banner and the paper - once a tail is chosen', () => {
@@ -13031,6 +13044,272 @@ T('the required distance is rounded UP, never to the nearest', () => {
       headKt: 0, braking: 6, surface: 'ASPH', availableM: 3000 });
     assert(r.requiredM >= r.correctedM * r.factor - 1e-9, 'required ' + r.requiredM + ' is below ' + (r.correctedM * r.factor));
     assert(r.requiredM - r.correctedM * r.factor < 1, 'required overshoots by a whole metre');
+  }
+});
+
+// =====================================================================
+// v16.98: endurance at 12 gal/h, take-off at full length, TEMPO wind, and
+// the Last Minute Change as the actual fuel against the planned.
+// =====================================================================
+/** Every one of these leaves the shared fixture as it found it: `T` runs at
+ *  once and the async tests are queued behind it (the v16.94 lesson). */
+const V1698_FIXTURE = { flights: ev('JSON.stringify(flights)'), active: ev('activeFlightIndex'),
+  fuel: doc.getElementById('fuel-dep').value };
+function resetV1698() {
+  ev(`actualFuelGal = null; mbPrefs.reg = null; mbPrefs.view = 'sector'; mbPrefs.loads = normaliseStationLoads({});
+      perfInputs = {}; lastWeather = null; flights = JSON.parse(${JSON.stringify(V1698_FIXTURE.flights)});
+      activeFlightIndex = ${V1698_FIXTURE.active}; refreshMap();`);
+  doc.getElementById('fuel-dep').value = V1698_FIXTURE.fuel;
+}
+
+T('endurance is fuel at 12 gal/h: 64 gal is 05:20, and nothing else times the fuel block', () => {
+  const M = moduleExports.mb, P = moduleExports.pdf;
+  assert(M.PLANNING_GPH === 12, 'the planning fuel flow is not the sheet\'s 12 gal/h (OFP!P4): ' + M.PLANNING_GPH);
+  assert(M.MIN_FLIGHT_GPH === M.PLANNING_GPH, 'Min FLT and endurance use two different planning rates');
+  assert(M.minutesAtPlanningRate(64) === 320 && P.hhmm(M.minutesAtPlanningRate(64)) === '05:20',
+    '64 gal is not 05:20: ' + M.minutesAtPlanningRate(64));
+  assert(P.hhmm(M.minutesAtPlanningRate(12)) === '01:00', '12 gal is not an hour');
+  for (const v of [NaN, -1, '', null, undefined]) {
+    assert(Number.isNaN(M.minutesAtPlanningRate(/** @type {any} */ (v))), 'an unknown fuel figure has an endurance: ' + v);
+  }
+});
+
+T('the printed endurance and final reserve are at 12 gal/h, not the cruise POH flow', () => {
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  const reserveWas = doc.getElementById('fuel-reserve').value;
+  doc.getElementById('fuel-reserve').value = '12';
+  ev(`mbPrefs.reg = "LN-TRB"; renderAllFlightTables();`);
+  const sheet = readMb(printDoc().sheets.filter((s) => s.kind === 'mb')[0]);
+  // The fixture has to be able to tell the two rates apart, or it proves nothing.
+  const ff = numPt(sheet.box.cruiseFf);
+  assert(Number.isFinite(ff) && Math.abs(ff - 12) > 0.2, 'the cruise POH flow is 12 here, so the fixture cannot discriminate: ' + ff);
+  assert(sheet.fuel.endurance.time === '05:20', 'endurance of 64 gal printed as ' + sheet.fuel.endurance.time);
+  assert(sheet.fuel.reserve.time === '01:00', 'a 12 gal final reserve printed as ' + sheet.fuel.reserve.time);
+  // And on the tab.
+  assert(/Endurance\s*05:20/.test(doc.getElementById('mb-body').textContent), 'the tab does not show 05:20');
+  doc.getElementById('fuel-reserve').value = reserveWas;
+  resetV1698();
+  w.renderAllFlightTables();
+});
+
+T('a take-off is a stationary start at full length - after a touch & go as well', () => {
+  const ads = aipDataset().aerodromes;
+  const endu = ads.find((a) => a.icao === 'ENDU');
+  const ends = endu.runways.flatMap((r) => r.ends.map((e) => e.desig)).sort();
+  assert(endu.runways.some((r) => r.ends.some((e) => (e.positions || []).length)),
+    'ENDU publishes no intersection any more, so this cannot show they are not offered');
+  ev(`flights = [
+    { id: 1, title: "A", depElev: 254, waypoints: [
+      { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12, stop: "touch-go", stopMin: 5 } ]},
+    { id: 2, title: "B", depElev: 32, waypoints: [
+      { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 },
+      { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 } ]}];
+    activeFlightIndex = 0; mbPrefs.reg = "LN-TRB";
+    perfInputs = { '1:dep': { windDir: '280', windKt: '5', qnh: '1013', oat: '10' },
+                   '2:dep': { windDir: '180', windKt: '5', qnh: '1013', oat: '10' } };
+    refreshMap(); renderAllFlightTables();`);
+  const deps = ev(`runwayChecks.filter(c => c.kind === 'takeoff')`);
+  assert(deps.length === 2, 'expected two take-offs: ' + deps.length);
+  assert(JSON.stringify(deps[0].options.map((o) => o.id).sort()) === JSON.stringify(ends),
+    'ENDU offered more than its runway ends: ' + JSON.stringify(deps[0].options.map((o) => o.id)));
+  for (const d of deps) {
+    assert(d.options.every((o) => !o.pos), d.icao + ' still offers an intersection');
+    assert(d.res && !d.res.refused && d.res.availableM === d.opt.end.toda,
+      d.icao + ' take-off is not priced from the threshold against TODA: ' + JSON.stringify(d.res).slice(0, 160));
+  }
+  assert(deps[1].icao === 'ENTC', 'the take-off after the touch & go is not at ENTC: ' + deps[1].icao);
+  const card = doc.getElementById('mb-perf').innerHTML;
+  assert(!/ from (TWY|RWY SFC|[A-Z]\d)/.test(card), 'the RWY list still names an intersection');
+  resetV1698();
+  w.renderAllFlightTables();
+});
+
+T('a METAR TEMPO group\'s wind is decoded, and only from the TEMPO group', () => {
+  const Mt = moduleExports.metar;
+  const p = Mt.parseReport('ENDU 290950Z 27008KT 9999 FEW030 08/02 Q1012 TEMPO 30018G28KT=');
+  assert(p.wind.dir === 270 && p.wind.speedKt === 8, 'the observed wind moved: ' + JSON.stringify(p.wind));
+  assert(p.tempoWind && p.tempoWind.dir === 300 && p.tempoWind.speedKt === 18 && p.tempoWind.gustKt === 28 && p.tempoWindCount === 1,
+    'the TEMPO wind was not read: ' + JSON.stringify(p.tempoWind));
+  assert(/TEMPO wind 300° 18 kt gusting 28/.test(Mt.summariseReport(p)), 'the card does not say the TEMPO wind: ' + Mt.summariseReport(p));
+  // A BECMG wind is not a TEMPO wind.
+  const b = Mt.parseReport('ENDU 290950Z 27008KT 9999 08/02 Q1012 TEMPO 4000 SHRA BECMG 32015KT');
+  assert(b.tempoWind === null && b.tempoWindCount === 0, 'a BECMG wind was read as TEMPO: ' + JSON.stringify(b.tempoWind));
+  // With no observed wind, the TEMPO forecast must not become the observation.
+  const n = Mt.parseReport('ENDU 290950Z /////KT 9999 08/02 Q1012 TEMPO 30018KT');
+  assert(n.wind === null && n.tempoWind && n.tempoWind.dir === 300, 'the TEMPO wind was reported as observed: ' + JSON.stringify(n.wind));
+  // Two TEMPO winds: the first, and the count says there were two.
+  const two = Mt.parseReport('ENDU 290950Z 27008KT 9999 08/02 Q1012 TEMPO 31015KT TEMPO 33020KT');
+  assert(two.tempoWind.dir === 310 && two.tempoWindCount === 2, 'two TEMPO winds: ' + JSON.stringify(two.tempoWind) + ' x' + two.tempoWindCount);
+  // A TAF's TEMPO groups each have their own time; they are left alone.
+  const taf = Mt.parseReport('TAF ENDU 290800Z 2909/2918 27008KT 9999 FEW030 TEMPO 2912/2916 30020G30KT');
+  assert(taf.isTaf && taf.tempoWind === null, 'a TAF TEMPO was taken: ' + JSON.stringify(taf.tempoWind));
+});
+
+T('the TEMPO wind is the wind the distances are worked with, unless one is typed', () => {
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev(`mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); perfInputs = {};
+      lastWeather = { icaos: ['ENDU', 'ENTC'], tafs: {}, metars: {
+        ENDU: 'ENDU 281150Z 29004KT 9999 FEW040 10/05 Q1005 TEMPO 11012KT',
+        ENTC: 'ENTC 281150Z 18008KT 9999 SCT030 08/04 Q1003' } };`);
+  w.renderAllFlightTables();
+  const dep = ev('runwayChecks[0]');
+  assert(dep.windDir === 110 && dep.windKt === 12 && dep.windTempo && dep.windTempo.text === '11012KT',
+    'the ENDU take-off did not use the TEMPO wind: ' + dep.windDir + '/' + dep.windKt + ' ' + JSON.stringify(dep.windTempo));
+  // It decides the runway too: 110/12 is down RWY 10, where the observed 290/04 was down 28.
+  assert(dep.opt.desig === '10' && dep.wind.headKt === 12, 'the default runway ignored the TEMPO wind: ' + dep.opt.desig);
+  assert(/TEMPO<\/b> group, 11012KT/.test(doc.getElementById('mb-perf').innerHTML), 'the card does not say the wind is the TEMPO group');
+  // The observed wind is what it was without a TEMPO, so the change is the TEMPO.
+  const arr = ev('runwayChecks[3]');
+  assert(arr.icao === 'ENDU' && arr.windKt === 12 && arr.windTempo, 'the ENDU landing did not use it too');
+  const noTempo = ev('runwayChecks[1]');
+  assert(noTempo.icao === 'ENTC' && noTempo.windKt === 8 && !noTempo.windTempo, 'ENTC has no TEMPO and still claims one');
+  // A typed wind wins, and then nothing claims to be the TEMPO.
+  ev(`perfInputs = { [runwayChecks[0].key]: { windDir: '290', windKt: '4' } };`);
+  w.renderAllFlightTables();
+  assert(ev('runwayChecks[0].windKt') === 4 && !ev('runwayChecks[0].windTempo'), 'a typed wind did not override the TEMPO');
+  // And the paper says where the wind came from.
+  ev(`perfInputs = {};`);
+  w.renderAllFlightTables();
+  const sheet = readMb(printDoc().sheets.filter((s) => s.kind === 'mb')[0]);
+  assert(sheet.box.depWspd === '12' && /TEMPO/.test(sheet.box.toNote || ''),
+    'the printed take-off block does not carry the TEMPO wind: ' + sheet.box.depWspd + ' / ' + sheet.box.toNote);
+  resetV1698();
+  w.renderAllFlightTables();
+});
+
+T('the actual fuel changes every sector flown on those tanks, and stops at a refuel', () => {
+  const M = moduleExports.mb;
+  assert(M.normaliseActualFuelGal('') === null && M.normaliseActualFuelGal(null) === null, 'an empty box is not "no change"');
+  assert(M.normaliseActualFuelGal('0') === 0, 'a typed 0 is a real figure, not no change');
+  assert(M.normaliseActualFuelGal('60.04') === 60, 'not rounded to 0.1');
+  for (const bad of ['-1', 'abc', '1001', 'NaN']) {
+    assert(Number.isNaN(M.normaliseActualFuelGal(bad)), 'an unreadable figure was accepted: ' + bad);
+  }
+  const plan = [
+    { fuelDepGal: 64, fuelArrGal: 50.3, label: 'A' },
+    { fuelDepGal: 49.5, fuelArrGal: 40.1, label: 'B' },         // a touch & go before it
+    { fuelDepGal: 64, fuelArrGal: 52, label: 'C', refuelled: true },
+    { fuelDepGal: 52, fuelArrGal: 40, label: 'D' }];
+  const a = M.applyActualFuel(plan, 60);
+  assert(a.deltaGal === -4 && a.plannedGal === 64 && a.reach === 2, 'delta/reach: ' + JSON.stringify([a.deltaGal, a.plannedGal, a.reach]));
+  assert(a.sectors[0].fuelDepGal === 60, 'the first departure is not EXACTLY the typed figure: ' + a.sectors[0].fuelDepGal);
+  assert(Math.abs(a.sectors[1].fuelDepGal - 45.5) < 1e-9 && Math.abs(a.sectors[1].fuelArrGal - 36.1) < 1e-9, 'not carried through the touch & go');
+  assert(a.sectors[2].fuelDepGal === 64 && a.sectors[3].fuelDepGal === 52 && a.sectors[2].lmcGal === 0,
+    'the change survived the refuel: ' + JSON.stringify(a.sectors[2]));
+  assert(plan[0].fuelDepGal === 64, 'applyActualFuel mutated its input');
+  const none = M.applyActualFuel(plan, null), bad = M.applyActualFuel(plan, NaN);
+  assert(none.deltaGal === null && bad.deltaGal === null && none.sectors[0].fuelDepGal === 64 && bad.sectors[1].fuelArrGal === 40.1,
+    'no change, or an unreadable one, still moved the fuel');
+  const eq = M.applyActualFuel(plan, 64);
+  assert(eq.deltaGal === 0 && eq.reach === 2, 'actual equal to planned is a change of 0, not no change');
+  // Running out is a finding; only on the sectors the change reached.
+  const dry = M.applyActualFuel(plan, 10);
+  const probs = M.actualFuelProblems(dry);
+  assert(probs.length === 2 && /on A \(-3\.7 gal\)/.test(probs[0]) && /NEGATIVE/.test(probs[0]),
+    'running out with the actual fuel is not a finding: ' + JSON.stringify(probs));
+  assert(M.actualFuelProblems(none).length === 0 && M.actualFuelProblems(a).length === 0, 'a finding with nothing wrong');
+});
+
+T('typing the actual fuel recalculates the M&B, prints the change on the LMC line, and leaves the OFP the plan', () => {
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev(`mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); renderAllFlightTables();`);
+  const before = ev('massBalanceMission.sectors.map(s => [s.takeoff.weightLb, s.landing.weightLb])');
+  const ofpBefore = ev('JSON.stringify(ofpPrintModel.map(s => s.fuelGal))');
+  // Through the real box, the way a pilot does it.
+  const box = doc.getElementById('mb-actual-fuel');
+  assert(box && box.placeholder === '64.0', 'the box does not show the planned figure: ' + (box && box.placeholder));
+  box.value = '60';
+  box.dispatchEvent(new w.Event('change'));
+  assert(ev('actualFuelGal') === 60, 'the box did not reach the planner: ' + ev('actualFuelGal'));
+  const after = ev('massBalanceMission.sectors.map(s => [s.takeoff.weightLb, s.landing.weightLb])');
+  assert(Math.abs(before[0][0] - after[0][0] - 24) < 1e-9 && Math.abs(before[0][1] - after[0][1] - 24) < 1e-9,
+    'the first sector is not 24 lb lighter at both ends: ' + JSON.stringify([before[0], after[0]]));
+  // SEED_STOP refuels to 50 gal at ENTC: the second sector is untouched.
+  assert(before[1][0] === after[1][0], 'the change reached past the refuel');
+  assert(ev('JSON.stringify(ofpPrintModel.map(s => s.fuelGal))') === ofpBefore, 'the OFP\'s own fuel moved - it is the plan');
+  assert(/-4\.0 gal/.test(doc.getElementById('mb-lmc-note').textContent) && /refuel before/.test(doc.getElementById('mb-lmc-note').textContent),
+    'the tab does not say what changed: ' + doc.getElementById('mb-lmc-note').textContent);
+  // The take-off distance is worked at the actual mass.
+  const pages = printDoc().sheets.filter((s) => s.kind === 'mb').map(readMb);
+  const p1 = pages[0], p2 = pages[1];
+  assert(p1.mb.fuel.w === '360,0' && p1.mb.lmc && p1.mb.lmc.w === '-24,0' && p1.mb.lmc.mom === '-1116,0',
+    'the first page does not print actual fuel and the change: ' + JSON.stringify([p1.mb.fuel, p1.mb.lmc]));
+  assert(p1.fuel.onboard.gal === '60,0' && p1.fuel.endurance.time === '05:00', 'fuel on board / endurance: ' + JSON.stringify(p1.fuel.onboard) + ' ' + p1.fuel.endurance.time);
+  assert(/Last Minute Change: planned 64,0 US gal, actual 60,0/.test(p1.box.note || ''), 'the page does not say it is the actual fuel: ' + p1.box.note);
+  assert(Math.abs(numPt(p1.mb.tom.w) - after[0][0]) <= 0.05, 'the printed take-off mass is not the actual: ' + p1.mb.tom.w);
+  assert(!p2.mb.lmc && !(p2.box.note || '').includes('Last Minute'), 'a sector after the refuel printed a change it was not flown with');
+  // A positive change carries its sign.
+  ev('actualFuelGal = 66; renderAllFlightTables();');
+  const up = readMb(printDoc().sheets.filter((s) => s.kind === 'mb')[0]);
+  assert(up.mb.lmc.w === '+12,0' && up.mb.lmc.mom === '+558,0', 'a positive change is unsigned: ' + JSON.stringify(up.mb.lmc));
+  // The whole-mission master carries it too.
+  ev(`mbPrefs.view = 'mission'; actualFuelGal = 60; renderAllFlightTables();`);
+  const master = readMb(printDoc().sheets.filter((s) => s.kind === 'mb')[0]);
+  assert(master.mb.lmc && master.mb.lmc.w === '-24,0' && /Last Minute Change/.test(master.box.note) && /Fuel change at the stops/.test(master.box.title),
+    'the master lost the change or the stop note: ' + master.box.note + ' / ' + master.box.title);
+  // Nothing typed: no LMC line, anywhere.
+  box.value = '';
+  box.dispatchEvent(new w.Event('change'));
+  assert(ev('actualFuelGal') === null && printDoc().sheets.filter((s) => s.kind === 'mb').every((s) => !readMb(s).mb.lmc),
+    'an empty box still printed a last minute change');
+  resetV1698();
+  w.renderAllFlightTables();
+});
+
+T('running out with the actual fuel raises the banner; the planned column alone would not', () => {
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev(`mbPrefs.reg = "LN-TRB"; actualFuelGal = 2; renderAllFlightTables();`);
+  const probs = ev('runIntegrityCheck()');
+  assert(probs.some((p) => /Last minute change: with 2\.0 gal actually on board the fuel remaining goes NEGATIVE/.test(p)),
+    'running dry on the actual fuel is not on the banner: ' + JSON.stringify(probs));
+  ev('actualFuelGal = null; renderAllFlightTables();');
+  assert(!ev('runIntegrityCheck()').some((p) => /Last minute change/.test(p)), 'the finding outlived the change');
+  // An unreadable figure changes nothing and says so.
+  ev('actualFuelGal = NaN; renderAllFlightTables();');
+  assert(/Not a readable fuel figure/.test(doc.getElementById('mb-lmc-note').textContent) &&
+    ev('massBalanceMission.sectors[0].fuelDepGal') === 64, 'an unreadable actual fuel was weighed');
+  resetV1698();
+  w.renderAllFlightTables();
+});
+
+T('actual fuel is never stored and never exported', () => {
+  ev(SEED_STOP);
+  ev(`mbPrefs.reg = "LN-TRB"; renderAllFlightTables();`);
+  // Through the real box, then a save of everything that IS stored.
+  const box = doc.getElementById('mb-actual-fuel');
+  box.value = '55';
+  box.dispatchEvent(new w.Event('change'));
+  assert(ev('actualFuelGal') === 55, 'the fixture did not type the fuel');
+  ev('saveMbPrefs(); savePlanningPrefs();');
+  assert(!/55/.test(w.localStorage.getItem('c182_mb_prefs') || '') && !/actual/i.test(w.localStorage.getItem('c182_mb_prefs') || ''),
+    'the actual fuel reached localStorage: ' + w.localStorage.getItem('c182_mb_prefs'));
+  const all = Object.keys(w.localStorage).map((k) => w.localStorage.getItem(k)).join('\n');
+  assert(!/actualFuel/i.test(all), 'something stored the actual fuel');
+  assert(!/actualFuel/.test(ev('JSON.stringify(PROFILE_KEYS)')), 'the actual fuel is in PROFILE_KEYS');
+  resetV1698();
+  w.renderAllFlightTables();
+});
+
+TA('the longest page-2 margin notes fit their free paper at no less than the smallest type', async () => {
+  const P = moduleExports.pdf;
+  const { PDFDocument, StandardFonts } = require('pdf-lib');
+  const font = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+  // The widest figures either can carry: the typo guard's 1000 gal, and the
+  // longest reporting-point names as the sector's ends.
+  const worst = {
+    note: 'Last Minute Change: planned 999,9 US gal, actual 1000,0 - every figure here is for the actual fuel',
+    title: 'Whole mission  KVALØYSLETTA → NORDKJOSBOTN   ·   Fuel change at the stops +999,9 US gal: T/O - consumed + that = landing'
+  };
+  for (const [k, text] of Object.entries(worst)) {
+    const b = P.MB_BOXES[k];
+    const fit = P.fitSize((t, sz) => font.widthOfTextAtSize(P.encodable(t, new Set(font.getCharacterSet())), sz),
+      text, b.x1 - b.x0 - 2 * P.PAD, 6);
+    assert(fit.fits, 'the ' + k + ' strip cannot hold its longest text even at ' + P.MIN_SIZE + ' pt');
   }
 });
 

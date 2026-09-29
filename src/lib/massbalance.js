@@ -150,14 +150,40 @@ export const AUTOPILOT_MIN_ARM_IN = 34;
 export const AUTOPILOT_LIMIT_MAX_LB = 2400;
 
 /**
+ * THE SHEET'S ONE PLANNING FUEL FLOW, US gallons per hour: `OFP!P4`, labelled
+ * "FUEL FLOW" and set to 12.
+ *
+ * Every TIME the fuel block states is gallons at this rate, and never at the
+ * cruise level's POH figure: endurance is `OFP!O9 = (M8/P4)/24` and the final
+ * reserve `OFP!M6 = (O6*24)*P4`. The author (v16.98): "make sure it always
+ * uses 12GPH. 64GAL should give endurance of 05:20". v16.97 had timed both at
+ * the cruise POH flow, which put 64 gal at ~05:23 at 4500 ft and moved with the
+ * cruise level - a second fuel flow on a page the school works with one.
+ * The per-leg burn on the OFP is still the POH's, per leg: that is a different
+ * figure answering a different question.
+ */
+export const PLANNING_GPH = 12;
+
+/**
  * The fuel flow used for the "Min FLT" figure, US gallons per hour.
  *
- * `OFP!P4` and the user's answer: "MinFLT keep 12gph for simplicity". It is
- * NOT the cruise fuel flow the OFP computes per leg - Min FLT answers a
- * different question (how long must I fly before I am light enough to land)
- * and the sheet answers it with one round rate.
+ * `OFP!N13` divides by the same `P4`, and the user's answer was "MinFLT keep
+ * 12gph for simplicity". It IS the planning rate above - one cell on the
+ * sheet - so it is defined as that rather than as a second 12.
  */
-export const MIN_FLIGHT_GPH = 12;
+export const MIN_FLIGHT_GPH = PLANNING_GPH;
+
+/**
+ * Minutes a quantity of fuel lasts at `PLANNING_GPH`. 64 gal is exactly 320
+ * (05:20). An unknown or negative figure has no endurance, so NaN - never 0,
+ * which would print as a planned 00:00.
+ * @param {number} gal
+ * @returns {number}
+ */
+export function minutesAtPlanningRate(gal) {
+  const g = num(gal);
+  return Number.isFinite(g) && g >= 0 ? g / PLANNING_GPH * 60 : NaN;
+}
 
 /**
  * Va against weight, `[weightLb, kt]`, from the POH table printed on the
@@ -770,6 +796,95 @@ export function missionMaster(m) {
     minFlightMin: minFlt,
     vaKt: vaKt(lightest.landing.weightLb)
   });
+}
+
+/**
+ * The typo guard on a typed actual fuel figure, US gallons. The same bound,
+ * and for the same reason, as a refuel's (`REFUEL_MAX_GAL`, anchors.js): the
+ * planner holds no published usable-fuel figure, so it cannot tell 87 gal from
+ * 90 and must not pretend to - but ~11x a C182's tanks is a slipped decimal.
+ */
+export const ACTUAL_FUEL_MAX_GAL = 1000;
+
+/**
+ * The actual fuel on board as the pilot typed it. `null` means nothing was
+ * typed - there is no last minute change - and that is a different answer
+ * from `0`, which is a real (if alarming) figure. Anything unreadable, below
+ * zero or past the typo guard is NaN: REFUSED, not clamped, because a clamped
+ * typo is a plausible wrong fuel load weighed as though it were right.
+ * @param {unknown} v
+ * @returns {number|null}
+ */
+export function normaliseActualFuelGal(v) {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > ACTUAL_FUEL_MAX_GAL) return NaN;
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * THE LAST MINUTE CHANGE: the fuel actually on board at preflight against the
+ * fuel the plan was made with (the author, v16.98: "Say i planned with 64GAL
+ * and actual fuel is 60, then i can type in 60GAL actual and it will do
+ * recalculations"). The form's LMC line exists for exactly this and nothing
+ * else - v16.97 had also parked the whole-mission stop change on it.
+ *
+ * It is a change at the FIRST engine start, and it follows the fuel from
+ * there: every sector flown on those tanks departs and arrives with the same
+ * difference, until a full stop REFUELS to a stated figure - after which the
+ * tanks hold what the refuel says, whatever was aboard before. A touch & go or
+ * a full stop without a refuel carries it on, because the fuel is still the
+ * fuel that was aboard.
+ *
+ * The first sector's departure is set to the typed figure EXACTLY rather than
+ * to planned + delta, so 64 - 4 cannot print as 59.99999.
+ *
+ * @template {{fuelDepGal: number, fuelArrGal: number, refuelled?: boolean}} S
+ * @param {S[]} sectors in flight order; `refuelled` marks a sector that
+ *   starts from a refuel at the stop before it.
+ * @param {number|null} actualGal from `normaliseActualFuelGal`
+ * @returns {{sectors: Array<S & {lmcGal: number}>, plannedGal: number,
+ *   actualGal: number|null, deltaGal: number|null, reach: number}}
+ *   `deltaGal` is null when no change applies; `reach` is how many sectors it
+ *   reached.
+ */
+export function applyActualFuel(sectors, actualGal) {
+  const list = (sectors || []).map((s) => Object.assign({}, s, { lmcGal: 0 }));
+  const planned = list.length ? num(list[0].fuelDepGal) : NaN;
+  const none = { sectors: list, plannedGal: planned, actualGal: null, deltaGal: null, reach: 0 };
+  if (actualGal === null || actualGal === undefined || !Number.isFinite(actualGal) || !Number.isFinite(planned)) return none;
+  const delta = actualGal - planned;
+  let reach = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (i > 0 && list[i].refuelled) break;
+    list[i].fuelDepGal = i === 0 ? actualGal : list[i].fuelDepGal + delta;
+    list[i].fuelArrGal = list[i].fuelArrGal + delta;
+    list[i].lmcGal = delta;
+    reach++;
+  }
+  return { sectors: list, plannedGal: planned, actualGal, deltaGal: delta, reach };
+}
+
+/**
+ * What the actual fuel makes wrong, for the red banner. The OFP's own
+ * negative-fuel rule reads the PLANNED fuel column, which a last minute change
+ * does not touch, so without this a pilot who typed 20 gal actual for a
+ * 34 gal trip would get a recalculated M&B sheet and no warning.
+ * @param {{sectors: Array<{fuelArrGal: number, label?: string, lmcGal: number}>,
+ *   actualGal: number|null, deltaGal: number|null, reach: number}} applied
+ * @returns {string[]}
+ */
+export function actualFuelProblems(applied) {
+  if (!applied || applied.deltaGal === null) return [];
+  /** @type {string[]} */
+  const out = [];
+  for (const s of applied.sectors.slice(0, applied.reach)) {
+    if (!Number.isFinite(s.fuelArrGal) || s.fuelArrGal >= 0) continue;
+    out.push('Last minute change: with ' + Number(applied.actualGal).toFixed(1) + ' gal actually on board the fuel ' +
+      'remaining goes NEGATIVE' + (s.label ? ' on ' + s.label : '') + ' (' + s.fuelArrGal.toFixed(1) + ' gal) - ' +
+      'the mission does not fit the fuel on board.');
+  }
+  return out;
 }
 
 export const STATION_MAX_LB = 1000;

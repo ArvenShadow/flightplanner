@@ -62,7 +62,10 @@ await page.waitForFunction(() => { try { return typeof renderAllFlightTables ===
 // figure with no bound short of the flight itself.
 // The aircraft is LN-TRE and both ends have a METAR, so page 2 is filled all
 // the way down: M&B, fuel, speeds, cruise, both aerodrome blocks and both
-// distance blocks.
+// distance blocks. Since v16.98 the ENDU METAR carries a TEMPO wind (its note
+// in the take-off block) and an actual fuel is typed, so the Last Minute
+// Change line and the top-margin note strip are written too - that strip is
+// free paper, and only the stray-pixel check below proves it stayed free.
 await page.evaluate(() => {
   // The first-run Feature Guide opens over everything on a fresh browser.
   try { closeHelpModal(); } catch (e) { /* not open */ }
@@ -84,11 +87,19 @@ await page.evaluate(() => {
   mbPrefs.reg = null; setMbReg('LN-TRE'); setMbLoad('pilotLb', 195); setMbLoad('rightLb', 180);
   mbPrefs.view = 'sector';
   lastWeather = { icaos: ['ENDU', 'ENEV'], tafs: {}, metars: {
-    ENDU: 'ENDU 291150Z 28012KT 9999 FEW040 11/05 Q0990',
+    ENDU: 'ENDU 291150Z 28012KT 9999 FEW040 11/05 Q0990 TEMPO 30018G28KT',
     ENEV: 'ENEV 291150Z 17014KT 9999 SCT030 08/04 Q1003' } };
-  renderAllFlightTables();
+  setActualFuel('100.5');
 });
 await page.waitForTimeout(300);
+const lmcSeen = await page.evaluate(() => {
+  const s = buildPrintDoc().sheets.find((sh) => sh.kind === 'mb');
+  const txt = s ? s.items.map((it) => it.text) : [];
+  return { lmc: txt.includes('+75,0'), note: txt.some((t) => /Last Minute Change: planned 88,0 US gal, actual 100,5/.test(t)),
+           tempo: txt.includes('Wind from the METAR TEMPO group') || txt.some((t) => /TEMPO/.test(t)) };
+});
+check(lmcSeen.lmc && lmcSeen.note, 'the worst case writes the Last Minute Change line and the note strip: ' + JSON.stringify(lmcSeen));
+check(lmcSeen.tempo, 'the worst case works the ENDU take-off with its TEMPO wind: ' + JSON.stringify(lmcSeen));
 
 // ---- 4. the real button opens a PDF --------------------------------------
 const [popup] = await Promise.all([ctx.waitForEvent('page'), page.click('#print-btn')]);
@@ -113,13 +124,33 @@ const res = await page.evaluate(async (b64) => {
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   const { PDFLib, form } = await loadPrintAssets();
   const docOf = (data) => pdfjs.getDocument({ data: data.slice() }).promise;
-  const pixels = async (d, n) => {
+  const render = async (d, n) => {
     const pg = await d.getPage(n);
     const vp = pg.getViewport({ scale: k });
     const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
     const g = c.getContext('2d');
     await pg.render({ canvasContext: g, viewport: vp, background: '#fff' }).promise;
     return { w: c.width, h: c.height, d: g.getImageData(0, 0, c.width, c.height).data, view: pg.view };
+  };
+  // A PAGE IS READ ONLY ONCE TWO CONSECUTIVE RENDERS AGREE. The FIRST pdf.js
+  // render of a freshly opened document is sometimes wrong - measured at
+  // v16.98: the blank form's page 1 rendered twice differed from ITSELF by
+  // 324 px while the second render matched our blank sheet exactly (0), and it
+  // struck 2 runs in 5 once the fixture grew. That is the renderer warming up
+  // (a font-load race), not the PDF, so it is measured and waited out rather
+  // than tolerated with a threshold - the verify-visual rule. A page that never
+  // settles is a failure in its own right, not a pass.
+  const same = (a, b2) => { for (let i = 0; i < a.d.length; i++) if (a.d[i] !== b2.d[i]) return false; return a.d.length === b2.d.length; };
+  const unsettled = [];
+  const pixels = async (d, n) => {
+    let prev = await render(d, n);
+    for (let k = 0; k < 4; k++) {
+      const next = await render(d, n);
+      if (same(prev, next)) return next;
+      prev = next;
+    }
+    unsettled.push(n);
+    return prev;
   };
   const diff = (a, b2) => { let n = 0; const at = [];
     for (let i = 0; i < a.d.length; i += 4) {
@@ -166,10 +197,11 @@ const res = await page.evaluate(async (b64) => {
   }
   const acc = Math.max(...model.sheets.filter((s) => s.kind === 'ofp')
     .flatMap((s) => s.items).filter((it) => /^\d+\.\d$/.test(it.text)).map((it) => Number(it.text)));
-  return { blankDiff, stray, changed, pages: real.numPages, sheets: model.sheets.length, sizes,
+  return { unsettled, blankDiff, stray, changed, pages: real.numPages, sheets: model.sheets.length, sizes,
            overflow: rebuilt.overflow, acc, band: model.band };
 }, fromButton.b64);
 
+check(res.unsettled.length === 0, 'every page rendered the same twice running (pdf.js had settled): ' + JSON.stringify(res.unsettled));
 check(res.blankDiff[0] === 0 && res.blankDiff[1] === 0,
   'a sheet with nothing written on it IS the form: ' + res.blankDiff.join(' / ') + ' pixels differ (page 1 / page 2) at 150 dpi');
 check(res.pages === res.sheets, 'one PDF page per sheet: ' + res.pages + ' for ' + res.sheets);

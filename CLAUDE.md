@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 54 shared mutable
+    decision, not unfinished work: it is one web of 56 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -2528,8 +2528,9 @@ of the GROUND ROLL; no grass runway exists in this edition).
 - Every sector's departure and arrival is resolved to an aerodrome by the
   PAGE's existing `aerodromeAt(wp)` - the one a full stop already uses (5 NM,
   nearest ARP) - and checked against the runway end the pilot picks. The
-  default is the end into wind; a take-off can pick any published intersection,
-  which carries its own TODA.
+  default is the end into wind. ~~A take-off can pick any published
+  intersection, which carries its own TODA~~ - REMOVED at v16.98: the school
+  takes off at full length, always, including after a touch & go.
 - **INPUTS ARE SESSION-ONLY.** Wind, QNH, OAT, braking and the runway choice are
   the day's; a QNH remembered from yesterday is a wrong QNH (the v16.3 date
   rule). They prefill from the fetched METAR - labelled with the report's time
@@ -2543,7 +2544,7 @@ of the GROUND ROLL; no grass runway exists in this edition).
   sector, or every sector on the whole-mission sheet; a figure that was not
   computed prints as a sentence saying why, never as a blank. `verify:ofp`
   measures a computed row with the longest position name ("RWY SFC start 10"):
-  0 cells overflow.
+  0 cells overflow. (Since v16.98 no position name is written - see there.)
 
 #### A PAGE FUNCTION SILENTLY SHADOWED MY EXPORT
 
@@ -2636,11 +2637,12 @@ drawn at identity on every sheet) and writes the figures on top.
   terrain), max crosswind (no published figure here), runway state, the minima
   tables, the signatures, and the station arms the form already prints (only the
   empty, take-off and landing arms are written). Trip fuel is the sector's burn
-  incl. taxi; final reserve and endurance are timed at the cruise level's POH
-  fuel flow; D. Alt is the workbook's own formula (`densityAltitudeFt`, OFP!P19).
+  incl. taxi; final reserve and endurance are timed at ~~the cruise level's POH
+  fuel flow~~ 12 gal/h since v16.98 (OFP!P4, the author); D. Alt is the workbook's own formula (`densityAltitudeFt`, OFP!P19).
 - **THE WHOLE-MISSION MASTER ADDS UP ON PAPER**: the form has no "fuel at stops"
-  line, so the net change goes on its **Last Minute Change** line and the page's
-  top margin says so. T/O − consumed + that = landing, asserted from the page.
+  line, so the net change ~~goes on its **Last Minute Change** line~~ is stated
+  beside the title (v16.98: the LMC line is the preflight fuel against the
+  planned, and nothing else). T/O − consumed + that = landing, asserted from the page.
 - **THE ORDER IS THE PAPER'S**: a sector's OFP sheet(s) then its M&B page, as the
   double-sided form is used; the mission view prints every OFP then one master.
 
@@ -2737,6 +2739,143 @@ shrink-to-fit type. Already here in another form: fail-closed performance
 their M&B has no CG envelope at all (only MTOM/MLM/baggage), and their nomogram
 digitisation is specific to the Z242L AFM - the C182 POH is tabulated, so
 interpolation of the table is the authoritative method here.
+
+## FOUR CORRECTIONS TO PAGE 2, FROM THE PERSON WHO FLIES IT (v16.98)
+
+The author, on the merged v16.97: *"check the endurance calculations and make
+sure it always uses 12GPH. 64GAL should give endurance of 05:20"*, *"Our policy
+is to always use the full length of the runway for takeoffs"* and then *"the
+OFP should always show the takeoff distance for a stationary takeoff even if its
+a touch and go!"*, *"If there is a TEMPO group for wind in the METAR, then that
+should be the wind applied in the calculations"*, and *"last minute changes are
+only for changing the amount of fuel actually on board at preflight VS the
+preplanned fuel. Say i planned with 64GAL and actual fuel is 60, then i can type
+in 60GAL actual and it will do recalculations."*
+
+### ENDURANCE AND RESERVE TIME ARE AT THE SHEET'S ONE PLANNING RATE
+
+`PLANNING_GPH = 12` (massbalance.js) is `OFP!P4`, and the workbook times BOTH
+from it: endurance `O9 = (M8/P4)/24`, final reserve `M6 = (O6*24)*P4`. v16.97
+timed them at the cruise level's POH fuel flow, which put 64 gal at ~05:23 at
+4500 ft and moved with the cruise level - a second fuel flow on a page the
+school works with one. `MIN_FLIGHT_GPH` is now DEFINED as `PLANNING_GPH`
+(`OFP!N13` divides by the same cell), so there is one 12 and not two.
+`minutesAtPlanningRate(64) === 320`. The per-leg burn on the OFP is untouched:
+that is the POH's, per leg, answering a different question. The tab gained an
+Endurance chip; the test first asserts the fixture's cruise POH flow is NOT 12,
+or 05:20 would prove nothing.
+
+### A TAKE-OFF IS A STATIONARY START AT FULL LENGTH - ALWAYS
+
+v16.96 offered every published intersection with its own TODA. The school's
+policy is the full length, so `buildRunwayChecks` offers the runway ends and
+nothing else, for a take-off as for a landing, and **that holds after a touch &
+go** - the author's second message settled the one ambiguity ("not including
+T&G" read either way until then). The intersections are STILL IMPORTED
+(`data/aip.js`, 120 positions, and the importer tests unchanged); they are
+simply not a take-off this planner plans. An old session's `'17@TWY A'` choice
+falls back to an end.
+
+### THE TEMPO WIND WINS, AND THE OBSERVED WIND COMES FROM THE BODY ONLY
+
+`parseReport` reads `tempoWind` from a METAR's TEMPO trend (the first, with
+`tempoWindCount` so the card can say "the first of 2"), and the runway checks
+use it over the observed wind; a typed wind still wins over both. The card and
+the printed take-off/landing note say the wind is the TEMPO group's, because a
+distance worked on a forecast gust group must not read as the observation.
+
+- **A TAF IS LEFT ALONE.** Its TEMPO groups each carry their own validity
+  period, and which applies is a question of time the decoder cannot answer.
+- **BECMG IS NOT TEMPO**, and a TEMPO group ends at the next trend group - a
+  test puts a BECMG wind right after a TEMPO group with none.
+- **FOUND ON THE WAY, A LATENT WRONG NUMBER**: the observed wind was the FIRST
+  wind anywhere in the line. Identical while the body carries one; with
+  `/////KT` in the body the TEMPO forecast would have been reported as the
+  observation. The body is now cut at the first `TEMPO|BECMG|NOSIG|RMK|FM|PROB`.
+
+### THE LAST MINUTE CHANGE IS THE ACTUAL FUEL, AND NOTHING ELSE
+
+A session-only `Actual fuel on board at preflight` box on the M&B tab (US gal;
+empty = no change, and never stored - it is today's fuel, the QNH rule).
+`applyActualFuel` (pure) shifts the plan's fuel by `actual - planned`:
+
+- **FROM THE FIRST ENGINE START UNTIL A REFUEL.** Every sector flown on those
+  tanks departs and arrives with the same difference; a full stop that refuels
+  to a stated figure ends it (`refuelled` now rides on `ofpPrintModel`). A touch
+  & go or an un-refuelled full stop carries it on. The first departure is set to
+  the typed figure EXACTLY, so 64 - 4 cannot print as 59.99999.
+- **EVERYTHING ON PAGE 2 IS THE ACTUAL** - the Fuel line, both masses, the CG
+  chart, fuel on board, endurance, and the take-off distance (worked at the
+  actual mass) - because "it will do recalculations" is the point of typing it.
+  The LMC line prints the difference WITH ITS SIGN (`-24,0` / `+75,0`, moment at
+  the fuel arm), and a new free-paper note strip in the top margin
+  (`MB_BOXES.note`, x 462-774 beside the title - the margin is empty down to
+  the tables' 581.75, measured off the rules snapshot) says "every figure here
+  is for the actual fuel", so the line is not added a second time.
+  - **THIS IS A DECISION, AND THE OTHER READING WAS WEIGHED.** The form's row
+    order (TOM, enroute, LMC, landing) also supports the airline-loadsheet
+    reading: print the PLANNED take-off and fold the LMC into the landing only.
+    That would print a take-off mass nobody flies and put a TO mark on the chart
+    that disagrees with the TOM line, which is the worse failure for a limit
+    check. Flipping it is local to `printMbSheet` if the author prefers it.
+- **THE OFP's FUEL COLUMN STAYS THE PLAN**, because the plan is what the change
+  is measured against, and the tab says so.
+- **RUNNING DRY ON THE ACTUAL FUEL IS A BANNER FINDING** (`actualFuelProblems`).
+  The OFP's own negative-fuel rule reads the planned column, which the change
+  does not touch - so without it a pilot typing 20 gal for a 34 gal trip got a
+  recalculated sheet and no warning. Landing below the final reserve is SAID on
+  the tab, not flagged, which is the rule the plan's own column already follows.
+- **AN UNREADABLE FIGURE IS REFUSED, NOT CLAMPED** (`normaliseActualFuelGal`):
+  a clamped typo is a plausible wrong fuel load weighed as though it were right.
+  That differs from the refuel box, which clamps, and on purpose.
+
+**THE WHOLE-MISSION STOP CHANGE MOVED OFF THE LMC LINE.** v16.97 parked the net
+fuel change at the stops there because the form has no line for it; it is
+stated beside the title now ("Fuel change at the stops +25,8 US gal: T/O -
+consumed + that = landing"), and the test that the master adds up reads it from
+there. **NOT IN THE NOTE STRIP, AND THAT WAS MEASURED**: the first version put
+both sentences in the strip, and at their widest figures they need 347.6 pt at
+the smallest type against 309.6. A test now fits the widest text of both boxes
+with pdf-lib's own Helvetica metrics.
+
+### `verify:ofp` HAD BEEN READING pdf.js's FIRST RENDER, AND IT IS SOMETIMES WRONG
+
+Growing the worst-case fixture (a TEMPO wind, an actual fuel) made the "a blank
+sheet IS the form" check fail 2 runs in 5 - with 1289, 324 and 30 pixels at
+different places on page 1, which no line of this change draws on. Main passed
+5 of 5 in the same browser, and the OLD verifier passed 5 of 5 against the NEW
+build, so the artifact was sound and the fixture was the trigger. Instrumented:
+in a failing run the FORM rendered twice differed from ITSELF by 324 px, and its
+second render matched our blank sheet exactly (0). The first pdf.js render of a
+freshly opened document is the defect (a font-load race is the likely cause),
+and a heavier page before it widens the window.
+
+- **A PAGE IS READ ONLY ONCE TWO CONSECUTIVE RENDERS AGREE**, up to five, and a
+  page that never settles FAILS by name. Measured and waited out, not tolerated
+  with a threshold - the v16.64 verify-visual rule. 8 of 8 clean afterwards.
+- **STILL DISCRIMINATING, PROVED BY MUTATION**: covering the pre-printed "0"
+  unconditionally fails it at 94 px on page 2.
+- **THE "0 DIFFERING PIXELS" CLAIM OF v16.97 STANDS**; it was measured on runs
+  that happened to render cleanly first time, and it is now measured on renders
+  that are known to have settled.
+
+### NINETEEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+Endurance back on the cruise POH flow (2 tests, printing `05:07`); the planning
+rate 11 (4); intersections offered again (2, listing `10@TWY A`); TEMPO ignored
+in the checks (1); the observed wind read from the whole line (1); a TAF TEMPO
+taken (1); BECMG not ending a TEMPO group (1); the actual fuel not applied (2);
+the change carried through a refuel (2 - and ESCAPED at first, dying only in
+`tsc` on a `boolean === 'never'` comparison, the v16.63 trap; rewritten so it
+typechecks); the first departure as planned + delta (2); an unreadable actual
+clamped instead of refused (1); the LMC line not printed (1); the change
+unsigned (1); the stop change back on the LMC line (2); the stop change not
+stated (2); running dry not on the banner (1); the actual fuel stored (2); and
+the refuel flag never set (1).
+
+**AND THE STORAGE TEST WAS VACUOUS BEFORE THE MUTATION RAN.** It assigned the
+global directly, so a mutation that stored the figure in the box's own handler
+could not reach it. It types into the real box now.
 
 ## AIRAC updates: what re-importing actually costs (v16.42, 2026-09-03)
 
