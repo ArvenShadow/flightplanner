@@ -609,6 +609,24 @@ export function anchorWaypoint(a, defaults) {
   };
 }
 
+/**
+ * IS THIS WAYPOINT FLOWN OVER, RATHER THAN LANDED ON OR DEPARTED FROM (v17.1)?
+ *
+ * The author: "flyby of an aerodrome does not count as landing". Two published
+ * facts say so, and nothing is inferred beyond them:
+ *   - `flyby: true`   - the pilot chose Fly-by when adding it, or marked it so;
+ *   - `anchor: 'AIP-RP'` - a VFR REPORTING POINT is a published place that is
+ *     not an aerodrome. One can sit 1.4 NM from the field (ÅSEN at ENDU), and
+ *     resolving it to the aerodrome by position turned the fix before a deleted
+ *     landing into a landing of its own, with the warning still attached.
+ * A plain clicked waypoint still resolves by position, as it always has: a
+ * sector ends where it lands, and a point the pilot put on the field is on it.
+ * @param {{flyby?: boolean, anchor?: string}|null|undefined} wp
+ */
+export function isOverflight(wp) {
+  return !!wp && (wp.flyby === true || wp.anchor === 'AIP-RP');
+}
+
 // ---------------------------------------------------------------------------
 // CIRCUIT (PATTERN) ALTITUDE
 // ---------------------------------------------------------------------------

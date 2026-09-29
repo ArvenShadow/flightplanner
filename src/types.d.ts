@@ -44,6 +44,11 @@ interface Waypoint {
   isPattern?: boolean;
   /** Number of circuits flown at a pattern stop. */
   laps?: number;
+  /** Flown over, not landed on or departed from (v17.1): no runway or ATS
+   *  opening-hours check applies here. Never set together with a stop. */
+  flyby?: boolean;
+  /** 'AIP-AD' or 'AIP-RP' when the coordinate came from the AIP layer. */
+  anchor?: string;
   /**
    * BOTTOM OF CLIMB pin for the leg ENDING here: hold the entry altitude for
    * this many NM along the flown path after the leg's START fix, then climb.

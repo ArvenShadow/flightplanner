@@ -204,6 +204,11 @@ function sanitiseWaypoint(/** @type {any} */ w) {
     if (gal !== null) out.fuelAfterGal = gal;
   }
   if (out.isPattern) out.laps = Math.max(1, Math.floor(num(w.laps)) || 1);
+  // A FLY-BY IS NOT A MOVEMENT (v17.1): the aircraft passes over the aerodrome
+  // and neither lands nor takes off, so no runway or opening-hours check
+  // applies there. It cannot coexist with a stop - a touch & go or a full stop
+  // IS a landing - nor with a circuit, which is flown on the runway.
+  if ((w.flyby === true || w.flyby === 'true') && !out.stop && !out.isPattern) out.flyby = true;
   // Pins: cleared is null, never 0, so a route saved before pins existed reads
   // identically to one made after.
   // ONE TARGET (v16.76): where the leg's altitude must be attained, from the
