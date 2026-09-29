@@ -331,6 +331,8 @@
             POH Figures 5-6 and the short-field landing table, worked the way the school's OFP sheet works
             them: to 50 ft, wind and braking action applied, then &times;1.25 take-off / &times;1.43 landing,
             against TODA and LDA from the AIP. Runway direction is TRUE, as a METAR wind is.
+            The drawn runway is the declared TODA or LDA with the distances to scale along it; its
+            width and markings are enlarged to be seen (markings per EASA CS ADR-DSN).
           </div>
           <div id="mb-perf"></div>
         </div>
@@ -485,6 +487,7 @@
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
                 <li><b>Choosing an aircraft loads its standard baggage</b> - 7.3 lb at A and 0.7 lb at C on every aircraft, and LN-TRE's 22.7 lb at B, as the school's workbook does. They are ordinary baggage lines you can see and type over; choosing a tail again resets them.</li>
                 <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, the wind correction (no headwind credit under 9 kt, +10% per 2 kt of tailwind, nothing past 10 kt), braking action, then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
+                <li><b>Each distance is drawn on a little runway.</b> The strip is the declared <b>TODA</b> (take-off) or <b>LDA</b> (landing) of the runway end you picked, and the POH distance and the factored requirement are measured along it <b>to scale</b> from where the run starts - a requirement longer than the strip runs off the end in red and says by how much. The width and the markings are enlarged so they can be seen. The markings are the EASA ones (CS ADR-DSN): <b>threshold stripes</b> counted by the published runway width (18 m: 4, 23 m: 6, 30 m: 8, 45 m: 12, 60 m: 16 - a width not in that table, such as ENRO's 40 m, gets none and says why), the <b>runway number</b> read from the approach, and the <b>centre line</b>. An unpaved strip is drawn without paint. The strip is not the physical runway: the AIP does not say where on the surface each declared distance begins, so the picture does not guess. The wind box beside it is the wind the figure was worked with, split into head/tail and cross; a tailwind is red. The figures in the text remain the authority.</li>
                 <li>Wind, QNH and temperature come from the latest METAR when you have fetched it, and you can type over any of them. <b>If the METAR has a TEMPO group with a wind, that wind is the one used</b>, and the card says so. <b>Type a tower or ATIS wind as TRUE</b> - those are magnetic. None of these values is saved: yesterday's QNH is a wrong QNH. The landing table exists for 2950 lb only, so it is used as published for every landing weight - a lighter aeroplane lands shorter, so it errs on the safe side. ENAS is gravel, and the POH has no gravel correction, so no distance is given there.</li>
               </ul>
             </li>
@@ -1226,6 +1229,7 @@
     //   which VAC chart is drawn    -> src/lib/vac.js
     //   mass & balance, the fleet -> src/lib/massbalance.js
     //   take-off / landing distance vs a runway -> src/lib/rwyperf.js
+    //   the little runway drawn on that card    -> src/lib/rwydiagram.js
     //   ATS opening hours, is it open?  -> src/lib/opshours.js
     //
     // What is left in THIS script is the part that talks to the browser -
@@ -9133,19 +9137,18 @@
         if (r.refused) {
           h += '<div class="perf-result ' + (r.refusedKind === 'limit' ? 'mb-bad' : '') + '">' +
             (r.refusedKind === 'limit' ? '⛔ ' : '') + 'Not computed: ' + esc(r.refused) + '.</div>';
+          h += runwayDiagramHtml(c);
         } else {
           const avail = c.kind === 'takeoff' ? 'TODA' : 'LDA';
           h += '<div class="perf-result' + (r.ok ? '' : ' mb-bad') + '">' + (r.ok ? '✓ ' : '⛔ ') +
             'Required <b>' + r.requiredM + ' m</b> · ' + avail + ' ' + esc(String(r.availableM)) + ' m · margin ' +
             f0(r.marginM) + ' m</div>';
-          // How much of the runway the requirement uses, as a bar: green, amber
-          // past 80 %, red past 100 %. The figure beside it is the authority.
-          const used = r.availableM > 0 ? r.requiredM / r.availableM : NaN;
-          if (isFinite(used)) {
-            h += '<div class="perf-bar" title="' + Math.round(used * 100) + ' % of ' + avail + '"><span class="' +
-              (used > 1 ? 'perf-bar-over' : (used > 0.8 ? 'perf-bar-warn' : '')) + '" style="width:' +
-              Math.min(100, used * 100).toFixed(1) + '%"></span></div>';
-          }
+          // THE RUNWAY, DRAWN (v17.6, the author), replacing the v16.96 usage
+          // bar: the declared distance as the strip, the POH figure and the
+          // factored requirement measured along it, the wind box beside it.
+          // Built by src/lib/rwydiagram.js; the figure line above stays the
+          // authority.
+          h += runwayDiagramHtml(c);
           const wtxt = c.wind.variable ? 'VRB, priced as a ' + (-c.wind.headKt) + ' kt tailwind'
             : (c.wind.headKt >= 0 ? c.wind.headKt + ' kt head' : (-c.wind.headKt) + ' kt tail') +
               (c.wind.crossKt ? ', ' + c.wind.crossKt + ' kt cross from the ' + (c.wind.crossFrom === 'L' ? 'left' : 'right') : '');
@@ -9157,6 +9160,20 @@
         h += '</div>';
       }
       host.innerHTML = h;
+    }
+
+    /** The drawing and the three figures for one check. A refused check draws
+     *  the runway and the wind with no distance on it, never a zero. */
+    function runwayDiagramHtml(c) {
+      const r = c.res || {};
+      const d = {
+        kind: c.kind, desig: c.opt.desig, widthM: c.opt.rw.width, surface: c.opt.rw.surface,
+        availableM: c.kind === 'takeoff' ? c.opt.end.toda : c.opt.end.lda,
+        correctedM: r.refused ? undefined : r.correctedM,
+        requiredM: r.refused ? undefined : r.requiredM,
+        factor: r.factor, windDir: c.windDir, windKt: c.windKt, wind: c.wind
+      };
+      return '<div class="rwyd-wrap">' + runwayDiagramSvg(d) + (r.refused ? '' : runwayFiguresHtml(d)) + '</div>';
     }
 
     /** ONE listener for every field in the card, bound once. No inline handler:

@@ -2793,6 +2793,8 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const rwyModule = require('./src/lib/rwyperf.js');
   assert(rwyModule.pressureAltitudeFt(254, 990) === 875, 'rwyperf: the school\'s pressure altitude moved');
   const pdfModule = require('./src/lib/ofppdf.js');
+  const rwydModule = require('./src/lib/rwydiagram.js');
+  assert(rwydModule.thresholdStripeCount(45) === 12, 'rwydiagram: a 45 m runway is not 12 stripes');
   const hoursModule = require('./src/lib/opshours.js');
   assert(hoursModule.parseAtsHours('H24').kind === 'h24', 'opshours: H24 is not decoded');
   assert(pdfModule.hhmm(125) === '02:05', 'ofppdf: hh:mm is not the form\'s time format');
@@ -2809,7 +2811,7 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
                     airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
                     vac: require('./src/lib/vac.js'),
                     keys: keysModule, corridor: corridorModule, rhumb: rhumbModule, skins: skinsModule,
-                    mb: mbModule, rwy: rwyModule, pdf: pdfModule, hours: hoursModule };
+                    mb: mbModule, rwy: rwyModule, rwyd: rwydModule, pdf: pdfModule, hours: hoursModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3068,6 +3070,11 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                          M.rwy.runwayDistance({ kind: 'takeoff', weightLb: 2600, elevFt: 254, qnhHpa: 1013,
                            tempC: 10, headKt: 0, braking: 6, surface: 'ASPH', availableM: 2443 }),
                          M.rwy.bestEnd([{ desig: '10', trueBrg: 109 }, { desig: '28', trueBrg: 289 }], 290, 10)],
+    'rwydiagram.js': () => [M.rwyd.thresholdStripeCount(30), M.rwyd.isPavedSurface('ASPH'),
+                            M.rwyd.runwayDiagramSvg({ kind: 'takeoff', desig: '10', widthM: 45, surface: 'ASPH',
+                              availableM: 2443, correctedM: 300, requiredM: 375, factor: 1.25, windDir: 290, windKt: 12,
+                              wind: M.rwy.windAlongRunway(109.01, 290, 12) }),
+                            M.rwyd.runwayFiguresHtml({ kind: 'landing', desig: '28', widthM: 45, surface: 'ASPH', availableM: 2443 })],
     'opshours.js': () => [M.hours.parseAtsHours('MON - FRI: 0700 - 1500 (0600 - 1400), SAT - SUN: NIL'),
                           M.hours.atsOpenAt(M.hours.parseAtsHours('H24'), Date.UTC(2026, 8, 27, 12)),
                           M.hours.norwaySeason(Date.UTC(2026, 0, 1)), M.hours.holidaysExcluded('Public HOL excluded')],
@@ -14235,6 +14242,95 @@ TA('clicking the row button or the menu\'s Delete removes the sector too (the co
     await new Promise((r) => setTimeout(r, 0));
     assert(ev('flights.length') === 1, 'the waypoint menu left the empty sector behind');
   } finally { ev(SEED); }
+});
+
+console.log('\n=== 62a000p. The runway, drawn (v17.6) ===');
+// The author: "draw a little runway with the correct markers and draw the
+// distances over the runway". THE MARKINGS ARE CS ADR-DSN's, checked against
+// the EASA text (L.525 / L.530 / L.535) before a stripe was drawn.
+T('the threshold stripe count is CS ADR-DSN L.535\'s table, exactly, and nothing is interpolated', () => {
+  const R = require('./src/lib/rwydiagram.js');
+  const want = { 18: 4, 23: 6, 30: 8, 45: 12, 60: 16 };
+  assert(JSON.stringify(R.THRESHOLD_STRIPES) === JSON.stringify(want), 'the L.535 table moved: ' + JSON.stringify(R.THRESHOLD_STRIPES));
+  for (const [w, n] of Object.entries(want)) assert(R.thresholdStripeCount(Number(w)) === n, w + ' m should have ' + n + ' stripes');
+  // ENRO 13/31 is 40 m: not in the table, so no count is invented
+  for (const w of [40, 25, 0, null, undefined, NaN]) assert(R.thresholdStripeCount(w) === null, w + ' m got a stripe count');
+  assert(R.isPavedSurface('ASPH') && R.isPavedSurface('asph/conc') && !R.isPavedSurface('GRAVEL') && !R.isPavedSurface(''),
+    'the paved test disagrees with rwyperf');
+});
+
+T('the drawing: stripes by width, a designation and a centre line on paint only, distances to one scale', () => {
+  const R = require('./src/lib/rwydiagram.js');
+  const base = { kind: 'landing', desig: '25L', widthM: 45, surface: 'ASPH', availableM: 2800, correctedM: 1500,
+    requiredM: 2146, factor: 1.43, windDir: 50, windKt: 15, wind: { headKt: 14, crossKt: 5, crossFrom: 'R', variable: false } };
+  const count = (svg, cls) => (svg.match(new RegExp('class="[^"]*\\b' + cls + '\\b', 'g')) || []).length;
+  for (const [w, n] of [[18, 4], [23, 6], [30, 8], [45, 12], [60, 16]]) {
+    const svg = R.runwayDiagramSvg(Object.assign({}, base, { widthM: w }));
+    assert(count(svg, 'rwyd-thr') === n, w + ' m runway drew ' + count(svg, 'rwyd-thr') + ' threshold stripes, not ' + n);
+  }
+  const svg = R.runwayDiagramSvg(base);
+  assert(/rotate\(90\)[^>]*>25L</.test(svg), 'the designation is not drawn, read from the approach');
+  assert(count(svg, 'rwyd-cl') > 5, 'no centre line');
+  // TO SCALE: each bar is its distance over the strip's own length
+  const num = (re) => Number((svg.match(re) || [])[1]);
+  const x0 = 78;
+  const strip = num(/<rect x="78" y="20" width="([\d.]+)"/);
+  const pohEnd = num(/class="rwyd-bar-poh"\/><line x1="78" y1="[\d.]+" x2="78" y2="[\d.]+" class="rwyd-bar-poh"\/><line x1="([\d.]+)"/);
+  assert(Math.abs((pohEnd - x0) / strip - 1500 / 2800) < 0.005, 'the POH bar is not to the strip\'s scale: ' + pohEnd + ' / ' + strip);
+  assert(/required 2 146 m/.test(svg) && !/short/.test(svg), 'a requirement that fits is drawn as short');
+  // a requirement past the LDA overruns the strip and says by how much
+  const over = R.runwayDiagramSvg(Object.assign({}, base, { availableM: 2000 }));
+  assert(/146 m short/.test(over) && /rwyd-bar-bad/.test(over), 'an overrun is not drawn as one');
+  assert(/rwyd-fig-bad/.test(R.runwayFiguresHtml(Object.assign({}, base, { availableM: 2000 }))), 'the figures do not flag the overrun');
+  // no L.535 count -> no stripes, and it says why rather than looking forgotten
+  const enro = R.runwayDiagramSvg(Object.assign({}, base, { widthM: 40 }));
+  assert(count(enro, 'rwyd-thr') === 0 && /L\.535 gives no count for 40 m/.test(enro), 'a 40 m runway got invented stripes, or no reason');
+  // unpaved: no paint at all
+  const gravel = R.runwayDiagramSvg(Object.assign({}, base, { surface: 'GRAVEL', widthM: 30 }));
+  assert(count(gravel, 'rwyd-thr') === 0 && count(gravel, 'rwyd-cl') === 0 && /Unpaved \(GRAVEL\)/.test(gravel),
+    'a gravel strip was painted');
+  // the wind box: a tailwind is red and says so; a wind not known is not calm
+  const tail = R.runwayDiagramSvg(Object.assign({}, base, { wind: { headKt: -3, crossKt: 0, crossFrom: null, variable: false } }));
+  assert(/class="rwyd-bad"[^>]*>TAILWIND</.test(tail), 'a tailwind is not called one');
+  const calm = R.runwayDiagramSvg(Object.assign({}, base, { windDir: null, windKt: null, wind: null }));
+  assert(/---\/--/.test(calm) && /not known/.test(calm) && !/000\/00/.test(calm), 'an unknown wind was drawn as calm');
+  // a refused check: the runway, never a zero distance
+  const refused = R.runwayDiagramSvg(Object.assign({}, base, { correctedM: undefined, requiredM: undefined }));
+  assert(!/rwyd-bar-/.test(refused) && /No distance worked out/.test(refused), 'a refused check drew a distance');
+  // every string is escaped
+  const hostile = R.runwayDiagramSvg(Object.assign({}, base, { desig: '<img src=x onerror=1>', surface: '<b>' }));
+  assert(!/<img/.test(hostile) && !/<b>/.test(hostile), 'the drawing let markup through');
+  assert(!/NaN|undefined/.test(svg + refused + calm + R.runwayFiguresHtml(Object.assign({}, base, { correctedM: undefined }))),
+    'NaN or undefined reached the drawing');
+});
+
+TA('the M&B distance card draws the runway for every worked check, from the same figures as its text', async () => {
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev(`mbPrefs.reg = "LN-TRB"; perfInputs = {}; lastWeather = {
+        icaos: ['ENDU', 'ENTC'],
+        metars: { ENDU: 'ENDU 281150Z 29012KT 9999 FEW040 10/05 Q1005', ENTC: 'ENTC 281150Z 18008KT 9999 SCT030 08/04 Q1003' },
+        tafs: {} }; renderAllFlightTables();`);
+  try {
+    const host = doc.getElementById('mb-perf');
+    // One drawing per check made at a runway, in the card's order.
+    const checks = ev(`runwayChecks.filter((c) => c.icao && !c.noRunways && !c.overflight).map((c) => ({
+      req: c.res && !c.res.refused ? c.res.requiredM : null, desig: c.opt.desig, w: c.opt.rw.width }))`);
+    assert(checks.filter((c) => c.req !== null).length >= 2, 'the fixture has no worked distances');
+    const svgs = [...host.querySelectorAll('svg.rwyd')];
+    assert(svgs.length === checks.length, 'drawings and runway checks do not pair up: ' + svgs.length + ' for ' + checks.length);
+    checks.forEach((c, i) => {
+      const svg = svgs[i], label = svg.getAttribute('aria-label') || '';
+      assert(label.includes('runway ' + c.desig + ','), 'drawing ' + i + ' is not runway ' + c.desig + ': ' + label);
+      assert(c.req === null ? !/required/.test(label) : label.includes('required ' + c.req + ' m'),
+        'the drawing and the text disagree on RWY ' + c.desig + ': ' + label);
+      assert(svg.querySelectorAll('.rwyd-thr').length === (moduleExports.rwyd.thresholdStripeCount(c.w) || 0),
+        'RWY ' + c.desig + ' (' + c.w + ' m) has the wrong stripe count');
+    });
+    assert(!host.querySelector('.perf-bar') && !/perf-bar/.test(fs.readFileSync('src/styles.css', 'utf8')),
+      'the v16.96 usage bar is back beside the drawing');
+    assert(/Required\s*\d+ m/.test(host.textContent), 'the figure line went - the drawing is not the authority');
+  } finally { ev('lastWeather = null;'); ev(SEED); }
 });
 
 runAsyncTests().then(() => {
