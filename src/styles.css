@@ -1615,6 +1615,17 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
 .mb-load td input:focus { outline: 2px solid var(--mb-to); outline-offset: -1px; border-color: transparent; }
 .mb-fixed td { color: var(--text-main); font-weight: 600; }
 .mb-note-cell { color: var(--text-muted); font-size: 10px; }
+/* the last minute change: the actual fuel aboard at preflight */
+.mb-lmc { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px;
+  padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--mb-tile-bg); }
+.mb-lmc-on { border-color: var(--mb-to); box-shadow: inset 0 0 0 1px var(--mb-to); }
+.mb-lmc-label { display: flex; flex-direction: column; gap: 1px; font-size: 11px; font-weight: 600; color: var(--text-main); }
+.mb-lmc-field { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.mb-lmc-field small { font-size: 9px; color: var(--text-muted); }
+.mb-lmc-field input { width: 64px; text-align: right; padding: 3px 5px; font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums; border: 1px solid var(--border-color); border-radius: 5px;
+  background: var(--bg-input); color: var(--text-main); }
+.mb-lmc-field input:focus { outline: 2px solid var(--mb-to); outline-offset: -1px; border-color: transparent; }
 .mb-zfm-row td { font-weight: 800; background: var(--mb-tile-bg); border-top: 2px solid var(--border-color); }
 
 /* segmented control */

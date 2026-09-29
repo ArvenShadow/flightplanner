@@ -178,7 +178,12 @@ export const MB_BOXES = {
   ldAvail:    { x0: 739.88, x1: 772.38, y0: 176.13, y1: 188.13 },
   /** Free paper in the top margin, between the tables (from 581.5) and the
    *  integrity band (593), for the sector this page weighs. Not a form box. */
-  title:     { x0: 30.25,  x1: 460,    y0: 583,    y1: 591.5 }
+  title:     { x0: 30.25,  x1: 460,    y0: 583,    y1: 591.5 },
+  /** The same free strip, right of the title: what this page's figures rest
+   *  on that the form has no line for - the last minute change it was worked
+   *  with, and on the whole-mission master the net fuel change at the stops.
+   *  Not a form box. */
+  note:      { x0: 462,    x1: 774,    y0: 583,    y1: 591.5 }
 };
 
 /**
@@ -304,14 +309,14 @@ export function ofpPageItems(sheet, columns, totalKeys) {
 }
 
 /**
- * @typedef {{w: number, arm?: number|null, mom: number}} MbLine
+ * @typedef {{w: number, arm?: number|null, mom: number, signed?: boolean}} MbLine
  * @typedef {{icao: string, rwy: string, elevFt: number, wdir: string, wspdKt: number,
  *   xwind: string, paFt: number, qnh: number, tempC: number, daFt: number,
  *   hwindKt: number, uncorrM: number, windCorrM: number, braking: number,
  *   brakingCorrM: number, correctedM: number, requiredM: number, availableM: number,
  *   note: string}} MbAerodrome
- * @typedef {{title: string, reg: string,
- *   lines: Partial<Record<'bem'|'pilot'|'right'|'rear'|'fuel'|'bagA'|'bagB'|'bagC'|'tom'|'enroute'|'ldg', MbLine>>,
+ * @typedef {{title: string, note?: string, reg: string,
+ *   lines: Partial<Record<'bem'|'pilot'|'right'|'rear'|'fuel'|'bagA'|'bagB'|'bagC'|'tom'|'enroute'|'lmc'|'ldg', MbLine>>,
  *   fuel: {tripGal: number, tripMin: number, reserveGal: number, reserveMin: number,
  *          onboardGal: number, enduranceMin: number},
  *   vaKt: number|null, vGlideKt: number|null,
@@ -335,12 +340,15 @@ export function mbPageItems(s) {
   };
   put(s.reg, MB_BOXES.reg, 'l');
   put(s.title, MB_BOXES.title, 'l', 6);
+  if (s.note) put(s.note, MB_BOXES.note, 'r', 6);
   for (const [key, row] of Object.entries(MB_ROWS)) {
     const line = /** @type {any} */ (s.lines)[key];
     if (!line) continue;
-    put(nb(line.w), bx(MB_W[0], MB_W[1], row[0], row[1]));
+    // A CHANGE is written with its sign, so +24,0 cannot be read as a load.
+    const sg = (/** @type {number} */ v) => (line.signed && v > 0 ? '+' : '') + nb(v);
+    put(sg(line.w), bx(MB_W[0], MB_W[1], row[0], row[1]));
     if (MB_ARM_WRITTEN.includes(key)) put(nb(line.arm, 2), bx(MB_A[0], MB_A[1], row[0], row[1]));
-    put(nb(line.mom), bx(MB_M[0], MB_M[1], row[0], row[1]));
+    put(sg(line.mom), bx(MB_M[0], MB_M[1], row[0], row[1]));
   }
 
   const f = s.fuel;

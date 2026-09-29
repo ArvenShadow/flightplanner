@@ -23,8 +23,9 @@
  * them wrong is exactly the plausible wrong answer this project refuses to
  * give. The RAW text is what a pilot is trained to read and is always shown
  * in full; only these unambiguous fields are pulled out, as a convenience:
- * report time, wind, temperature/dew point and QNH. Anything unrecognised
- * is left alone rather than guessed at.
+ * report time, wind, temperature/dew point and QNH - and, on a METAR, the
+ * wind of its TEMPO trend (v16.98). Anything unrecognised is left alone
+ * rather than guessed at.
  *
  * Pure: no DOM, no fetch. The page performs the request and renders.
  */
@@ -108,7 +109,7 @@ export function parseReport(raw) {
   const text = String(raw || '').trim();
   /** @type {WeatherReport} */
   const out = {
-    raw: text, icao: null, timeUTC: null, wind: null,
+    raw: text, icao: null, timeUTC: null, wind: null, tempoWind: null, tempoWindCount: 0,
     tempC: null, dewC: null, qnhHpa: null, isTaf: false
   };
   if (!text) return out;
@@ -126,16 +127,29 @@ export function parseReport(raw) {
   // Wind: dddffKT, dddffGggKT, VRBffKT, or 00000KT for calm. Norwegian
   // reports are in knots; anything in MPS is left undecoded rather than
   // silently converted.
-  const w = text.match(/\b(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT\b/);
-  if (w) {
-    const speedKt = +w[2];
-    out.wind = {
-      dir: w[1] === 'VRB' ? null : +w[1],
-      variable: w[1] === 'VRB',
-      calm: w[1] === '000' && speedKt === 0,
-      speedKt,
-      gustKt: w[3] ? +w[3] : null
-    };
+  //
+  // THE OBSERVED WIND IS READ FROM THE BODY ONLY - before the first trend or
+  // remark group. It used to be the first wind anywhere in the line, which is
+  // the same thing while the body carries one; a body whose wind is missing
+  // (/////KT) would have reported the TEMPO forecast as the observation.
+  const trendAt = text.search(/\s(?:TEMPO|BECMG|NOSIG|RMK|FM\d{6}|PROB\d{2})\b/);
+  out.wind = windIn(trendAt < 0 ? text : text.slice(0, trendAt));
+
+  // THE TEMPO TREND'S WIND, on a METAR (v16.98, the author: "If there is a
+  // TEMPO group for wind in the METAR, then that should be the wind applied in
+  // the calculations"). A group runs from TEMPO to the next trend group or the
+  // remarks. A TAF is left alone: its TEMPO groups each carry their own
+  // validity period, and which of them applies is a question of time the
+  // decoder cannot answer. If a METAR carries more than one TEMPO wind the
+  // FIRST is taken and the count says so, so the page can tell the pilot.
+  if (!out.isTaf) {
+    const re = /\bTEMPO\b(.*?)(?=\s(?:TEMPO|BECMG|NOSIG|RMK)\b|=|$)/g;
+    for (let g = re.exec(text); g; g = re.exec(text)) {
+      const tw = windIn(g[1]);
+      if (!tw) continue;
+      if (!out.tempoWind) out.tempoWind = tw;
+      out.tempoWindCount++;
+    }
   }
 
   // Temperature/dew point, M prefix for negative. Only on a METAR.
@@ -153,6 +167,24 @@ export function parseReport(raw) {
   if (q) out.qnhHpa = +q[1];
 
   return out;
+}
+
+/**
+ * The first knots wind group in a stretch of report text, or null.
+ * @param {string} str
+ * @returns {WeatherReport['wind']}
+ */
+function windIn(str) {
+  const w = str.match(/\b(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT\b/);
+  if (!w) return null;
+  const speedKt = +w[2];
+  return {
+    dir: w[1] === 'VRB' ? null : +w[1],
+    variable: w[1] === 'VRB',
+    calm: w[1] === '000' && speedKt === 0,
+    speedKt,
+    gustKt: w[3] ? +w[3] : null
+  };
 }
 
 /**
@@ -220,6 +252,11 @@ export function summariseReport(p) {
       bits.push('wind ' + dir + ' ' + p.wind.speedKt + ' kt' +
         (p.wind.gustKt ? ' gusting ' + p.wind.gustKt : ''));
     }
+  }
+  if (p.tempoWind) {
+    const t = p.tempoWind;
+    bits.push('TEMPO wind ' + (t.calm ? 'calm' : (t.variable ? 'VRB' : String(t.dir).padStart(3, '0') + '°') + ' ' +
+      t.speedKt + ' kt' + (t.gustKt ? ' gusting ' + t.gustKt : '')));
   }
   if (p.tempC !== null) bits.push(p.tempC + '°C' + (p.dewC !== null ? '/' + p.dewC + '°C dew' : ''));
   if (p.qnhHpa !== null) bits.push('QNH ' + p.qnhHpa);

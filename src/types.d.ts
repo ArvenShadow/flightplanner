@@ -458,6 +458,11 @@ interface WeatherReport {
     speedKt: number;
     gustKt: number | null;
   } | null;
+  /** A METAR's TEMPO trend wind, the first if several (v16.98). Null on a TAF
+   *  and when no TEMPO group carries a wind. */
+  tempoWind: WeatherReport['wind'];
+  /** How many TEMPO groups carried a wind. */
+  tempoWindCount: number;
   /** Null on a TAF, which carries no observed temperature. */
   tempC: number | null;
   dewC: number | null;
