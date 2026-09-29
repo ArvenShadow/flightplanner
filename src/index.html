@@ -1444,7 +1444,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.1';
+    const APP_VERSION = '17.2';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2149,8 +2149,12 @@
      *  Menu skin collapses the plan to a hover rail - resizing a panel that is
      *  about to slide away is not a gesture with a meaning. */
     function splitterActive() {
-      if (document.body.classList.contains('skin-menu')) return false;
-      return document.body.classList.contains('layout-split') || splitterVertical();
+      const layout = splitterVertical() ? 'stacked' : document.body.classList.contains('layout-split') ? 'split' : null;
+      if (!layout) return false;
+      // The skin says whether its panels are side by side in this layout
+      // (skinHasSplitter, v17.2): Menu never, Float not in Split.
+      const skin = SKIN_CLASSES.find((c) => document.body.classList.contains(c));
+      return skinHasSplitter(skin ? skin.slice(5) : 'default', layout);
     }
 
     /** @param {boolean} vertical @param {number|null} ratio */

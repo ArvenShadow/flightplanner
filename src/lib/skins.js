@@ -66,7 +66,10 @@ export function normalisePlacement(raw) {
   return out;
 }
 
-/** @typedef {{ id: string, label: string, note: string, place?: Record<string, string> }} Skin */
+/** @typedef {{ id: string, label: string, note: string, place?: Record<string, string>,
+ *              noSplitterIn?: string[] }} Skin
+ *  `noSplitterIn`: the layouts in which this skin has no panel divider, because
+ *  its panels are not side by side there (v17.2). */
 
 /**
  * The default is FIRST and has no CSS of its own on purpose: it is the shipped
@@ -84,9 +87,21 @@ export const SKINS = [
     // TIER 2 IN ANGER: with the plan collapsed, the three actions a pilot
     // reaches for most would be behind a hover. They are MOVED - the same
     // buttons, the same handlers, a different parent.
-    place: { 'undo-btn': 'map-controls', 'redo-btn': 'map-controls', 'settings-btn': 'map-controls' } },
+    place: { 'undo-btn': 'map-controls', 'redo-btn': 'map-controls', 'settings-btn': 'map-controls' },
+    // The plan is a hover rail in every layout, so it is never beside the map.
+    noSplitterIn: ['split', 'stacked'] },
   { id: 'bold', label: 'Bold',
-    note: 'Larger hit targets, heavier borders and bigger type - for a touchscreen, or reading at arm’s length.' }
+    note: 'Larger hit targets, heavier borders and bigger type - for a touchscreen, or reading at arm’s length.' },
+  // v17.2: three modern looks, one per question - colour and buttons, a
+  // palette borrowed from the chart, and a layout. See skins.css.
+  { id: 'slate', label: 'Slate',
+    note: 'A neutral, modern look: light surfaces, grey buttons and one indigo accent kept for the main action, so red only ever means delete.' },
+  { id: 'chart', label: 'Chart',
+    note: 'The ICAO 1:500 000 chart’s own colours: paper, chart blue and aerodrome magenta, squared corners and serif headings. Dark mode is a night-reading chart.' },
+  { id: 'float', label: 'Float',
+    note: 'The map fills the window and the plan floats over it as a frosted panel (Split view only; Stacked keeps its normal layout). Slate’s colours and buttons.',
+    // The panel is not beside the map in Split, so there is nothing to drag.
+    noSplitterIn: ['split'] }
 ];
 
 /** Every class this module can put on <body>, so the page can clear them all
@@ -107,6 +122,16 @@ export const SKIN_CLASSES = SKINS.map((s) => 'skin-' + s.id);
  */
 export function normaliseSkin(v) {
   return typeof v === 'string' && SKINS.some((s) => s.id === v) ? v : 'default';
+}
+
+/**
+ * Does this skin have a panel divider in this layout? (v17.2) One question the
+ * page asks, rather than a class name tested per skin in the page script.
+ * @param {string} skinId @param {string} layout 'split' | 'stacked' | 'plan' | 'map'
+ */
+export function skinHasSplitter(skinId, layout) {
+  const s = skinById(skinId);
+  return !(s.noSplitterIn || []).includes(layout);
 }
 
 /** @param {string} id @returns {Skin} */

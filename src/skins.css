@@ -143,3 +143,219 @@ body.skin-menu.layout-stacked #sidebar { flex: 0 0 26px; }
 body.skin-menu.layout-stacked #sidebar::before { writing-mode: horizontal-tb; }
 body.skin-menu.layout-stacked #sidebar:hover,
 body.skin-menu.layout-stacked #sidebar:focus-within { flex: 0 0 min(60vh, 420px); }
+
+/* ==========================================================================
+   v17.2 - THREE MODERN LOOKS, the roadmap item "check out modern website and
+   GUI designs and suggest some styles". Each one answers a different part of
+   that question, so they can be judged against each other rather than blended:
+
+     SLATE  colour and buttons: the neutral "modern tool" look (Linear, Vercel's
+            Geist, GitHub Primer, Radix). One accent, grey everywhere else.
+     CHART  colour and type from the thing a VFR pilot already reads: the ICAO
+            1:500 000 chart - paper, chart blue, aerodrome magenta.
+     FLOAT  layout: the map takes the whole window and the plan floats over it
+            as a panel, the way Google Maps, Mapbox Studio, ForeFlight and
+            SkyDemon lay out a map with a sheet of detail beside it.
+
+   THE RULE ALL THREE FOLLOW, and it is the one modern design systems agree on:
+   COLOUR MEANS SOMETHING. The shipped toolbar gives every button its own hue
+   (orange Wind, purple Settings, teal Ruler, green View Mode), so colour says
+   nothing - and a red that means "this deletes" has to compete with six other
+   loud colours. Here buttons are NEUTRAL, the ONE primary action per group
+   (Save, Print, Add a sector) carries the accent, DANGER stays red, and a STATE
+   (the amber "back to Edit" of View Mode) keeps its warning colour because it
+   is telling you something.
+
+   INLINE STYLES: the header's outline buttons carry `style="color:white"` in
+   the markup, which out-ranks any stylesheet rule without !important. That is
+   the only reason these blocks use it - a skin may not edit the markup.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   SLATE (and FLOAT, which wears the same surfaces)
+   -------------------------------------------------------------------------- */
+body.skin-slate.light-mode, body.skin-float.light-mode {
+  --bg-body: #f4f5f7; --bg-header: #ffffff; --bg-card: #ffffff; --bg-sidebar: #f4f5f7;
+  --bg-table-head: #f7f8fa; --bg-calc: #fafbfc; --bg-input: #ffffff;
+  --border-color: #e1e4ea; --text-main: #1d2129; --text-muted: #667085;
+  --highlight-bg: #eef0ff; --highlight-text: #4338ca; --accent-line: #4f46e5;
+  --sk-accent: #4f46e5; --sk-accent-hover: #4338ca; --sk-on-accent: #ffffff;
+  --sk-danger: #d92d20; --sk-hover: #f2f4f7; --sk-flight: #1f2430;
+  --sk-warn-bg: #fef3c7; --sk-warn-text: #92400e; --sk-warn-line: #fcd34d;
+  --sk-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.07);
+  --sk-glass: rgba(246, 247, 249, 0.80); --sk-glass-card: rgba(255, 255, 255, 0.86);
+  --sk-glass-line: rgba(255, 255, 255, 0.70);
+}
+body.skin-slate.dark-mode, body.skin-float.dark-mode {
+  --bg-body: #0e1015; --bg-header: #13161d; --bg-card: #181c24; --bg-sidebar: #0e1015;
+  --bg-table-head: #1d222c; --bg-calc: #151920; --bg-input: #11141a;
+  --border-color: #2a303c; --text-main: #e7e9ee; --text-muted: #98a1b0;
+  --highlight-bg: #23234a; --highlight-text: #a5b4fc; --accent-line: #6366f1;
+  --sk-accent: #6366f1; --sk-accent-hover: #818cf8; --sk-on-accent: #ffffff;
+  --sk-danger: #f97066; --sk-hover: #222733; --sk-flight: #252b38;
+  --sk-warn-bg: #3b2a0a; --sk-warn-text: #fcd34d; --sk-warn-line: #92400e;
+  --sk-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --sk-glass: rgba(16, 19, 25, 0.80); --sk-glass-card: rgba(26, 30, 39, 0.86);
+  --sk-glass-line: rgba(255, 255, 255, 0.08);
+}
+/* A light header with a hairline instead of a navy band: the chart is the
+   loudest thing on screen, and the chrome around it should not compete. */
+body.skin-slate #header, body.skin-float #header {
+  color: var(--text-main); border-bottom: 1px solid var(--border-color);
+}
+body.skin-slate #header h1, body.skin-float #header h1 { font-weight: 650; letter-spacing: -0.01em; }
+body.skin-slate .btn, body.skin-float .btn {
+  border-radius: 7px; padding: 5px 10px; font-weight: 600;
+  background: var(--bg-card); color: var(--text-main) !important;
+  border: 1px solid var(--border-color) !important; box-shadow: var(--sk-shadow);
+  transition: background 0.12s, border-color 0.12s;
+}
+body.skin-slate .btn-sm, body.skin-float .btn-sm { padding: 3px 9px; }
+body.skin-slate .btn:hover, body.skin-float .btn:hover { opacity: 1; background: var(--sk-hover); }
+body.skin-slate .btn-primary, body.skin-slate .btn-success,
+body.skin-float .btn-primary, body.skin-float .btn-success {
+  background: var(--sk-accent); color: var(--sk-on-accent) !important; border-color: transparent !important;
+}
+body.skin-slate .btn-primary:hover, body.skin-slate .btn-success:hover,
+body.skin-float .btn-primary:hover, body.skin-float .btn-success:hover {
+  background: var(--sk-accent-hover);
+}
+body.skin-slate .btn-danger, body.skin-float .btn-danger { color: var(--sk-danger) !important; }
+/* ADDING A SECTOR IS NOT THE PAGE'S MAIN ACTION, so it is not a full-width
+   slab of accent: a dashed outline is the modern "add another" affordance
+   (Notion, Linear, GitHub Projects), and it reads as a place, not a button
+   shouting to be pressed. */
+body.skin-slate .btn-add-flight, body.skin-float .btn-add-flight {
+  background: transparent; color: var(--sk-accent) !important;
+  border: 1.5px dashed var(--sk-accent) !important; box-shadow: none;
+}
+body.skin-slate .btn-add-flight:hover, body.skin-float .btn-add-flight:hover { background: var(--highlight-bg); }
+body.skin-slate .btn-edit-mode, body.skin-float .btn-edit-mode {
+  background: var(--sk-warn-bg); color: var(--sk-warn-text) !important; border-color: var(--sk-warn-line) !important;
+}
+body.skin-slate .route-select, body.skin-float .route-select,
+body.skin-slate .input-group input, body.skin-float .input-group input { border-radius: 7px; }
+body.skin-slate .card, body.skin-float .card {
+  border-radius: 10px; box-shadow: var(--sk-shadow); padding: 10px 12px;
+}
+body.skin-slate .card-title, body.skin-float .card-title { letter-spacing: 0.06em; }
+body.skin-slate .flight-section, body.skin-float .flight-section {
+  border-width: 1px; border-radius: 10px; box-shadow: var(--sk-shadow);
+}
+body.skin-slate .flight-header, body.skin-float .flight-header { background: var(--sk-flight); }
+body.skin-slate .flight-header-active, body.skin-float .flight-header-active {
+  background: var(--sk-flight); border-left: 4px solid var(--sk-accent);
+}
+body.skin-slate th, body.skin-float th { font-weight: 600; color: var(--text-muted); }
+body.skin-slate .side-tab, body.skin-float .side-tab { border-radius: 10px 10px 0 0; }
+body.skin-slate .map-ctl, body.skin-float .map-ctl {
+  border-radius: 8px; font-weight: 600; padding: 5px 10px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.16);
+}
+
+/* --------------------------------------------------------------------------
+   FLOAT - the map is the page; the plan is a panel over it.
+
+   ONLY IN THE SPLIT LAYOUT, deliberately. In Stacked the panel would have to
+   be a bottom sheet across the map, and the map's own control stack sits in
+   the top-right corner with nothing to say it may not reach down into it -
+   so Stacked keeps its normal flow and just wears Float's surfaces. Plan-only
+   and Map-only have one panel and nothing to float.
+
+   WHAT THE MAP DOES NOT KNOW: Leaflet sizes itself to the whole window, so
+   "fit the route" can put part of it under the panel. The control stack and
+   the attribution are moved clear of the panel (the attribution has to stay
+   visible - the chart and AIP licences require it); the route is one pan
+   away. The divider is off in this layout, because the panel is not beside
+   the map any more and there is nothing between them to drag.
+   -------------------------------------------------------------------------- */
+/* The panel's width, ONCE, so the panel and everything moved clear of it
+   cannot disagree. 920 px is what the OFP table needs to show every column
+   without scrolling; 60vw keeps a map worth the name on a narrower window. */
+body.skin-float { --sk-panel: min(920px, 60vw); }
+body.skin-float.layout-split #main { position: relative; }
+body.skin-float.layout-split #map-container { flex: 1 1 auto; border-right: none; }
+body.skin-float.layout-split #splitter { display: none; }
+body.skin-float.layout-split #sidebar {
+  position: absolute; top: 12px; right: 12px; bottom: 12px;
+  width: var(--sk-panel); z-index: 800;
+  border-radius: 16px; background: var(--sk-glass);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid var(--sk-glass-line);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.30), 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+body.skin-float.layout-split .card, body.skin-float.layout-split .flight-section { background: var(--sk-glass-card); }
+body.skin-float.layout-split #map-controls,
+body.skin-float.layout-split #map-container .leaflet-bottom.leaflet-right { right: calc(var(--sk-panel) + 24px); }
+/* The offline-tiles notice centres itself on the map with inline styles, and
+   the map is the whole window here - so it landed across the panel's tabs.
+   It goes to the foot of the VISIBLE map instead: the top is where the map's
+   control stack is, and centred there it covered the Declutter button. */
+body.skin-float.layout-split #offline-tile-note {
+  top: auto !important; bottom: 36px;
+  left: calc((100% - var(--sk-panel) - 24px) / 2) !important;
+  max-width: calc(100% - var(--sk-panel) - 80px) !important;
+}
+
+/* --------------------------------------------------------------------------
+   CHART - the ICAO 1:500 000 chart's own palette, for a pilot who spends the
+   planning session reading one. Paper, chart blue for controlled airspace and
+   the ink, magenta (the chart's colour for aerodromes and uncontrolled detail)
+   for what matters most, squared corners and hairline rules like a printed
+   sheet. The dark version is a night-reading chart: navy paper, cream ink.
+
+   The serif is a SYSTEM font stack - the planner works offline and loads no
+   web fonts, so it falls back to Georgia where Iowan or Palatino is absent.
+   -------------------------------------------------------------------------- */
+body.skin-chart.light-mode {
+  --bg-body: #ece5d3; --bg-header: #f6f1e3; --bg-card: #fbf8ef; --bg-sidebar: #ece5d3;
+  --bg-table-head: #f1ead8; --bg-calc: #f6f1e4; --bg-input: #fffdf7;
+  --border-color: #d3c8ab; --text-main: #1b2740; --text-muted: #6b6250;
+  --highlight-bg: #e3ebf7; --highlight-text: #1c4f9c; --accent-line: #1c4f9c;
+  --sk-blue: #1c4f9c; --sk-magenta: #a3195b; --sk-flight: #1c4f9c; --sk-on-ink: #fbf8ef;
+}
+body.skin-chart.dark-mode {
+  --bg-body: #10151f; --bg-header: #141a26; --bg-card: #171e2b; --bg-sidebar: #10151f;
+  --bg-table-head: #1c2433; --bg-calc: #151c28; --bg-input: #0f141d;
+  --border-color: #2f3a4e; --text-main: #ece5d3; --text-muted: #a89f8a;
+  --highlight-bg: #1d2d4a; --highlight-text: #9dbcf0; --accent-line: #6f9be0;
+  --sk-blue: #7ea6e6; --sk-magenta: #e36aa4; --sk-flight: #1f3b6b; --sk-on-ink: #10151f;
+}
+body.skin-chart #header { color: var(--text-main); border-bottom: 3px double var(--sk-blue); }
+body.skin-chart #header h1, body.skin-chart .card-title {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}
+body.skin-chart #header h1 { font-size: 16px; letter-spacing: 0.01em; }
+body.skin-chart .card-title {
+  color: var(--sk-blue); font-size: 12px; letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--border-color); padding-bottom: 3px;
+}
+body.skin-chart .card, body.skin-chart .flight-section { border-radius: 2px; box-shadow: none; }
+body.skin-chart .btn {
+  border-radius: 2px; background: transparent; color: var(--sk-blue) !important;
+  border: 1px solid var(--sk-blue) !important; letter-spacing: 0.03em; font-weight: 700;
+}
+body.skin-chart .btn:hover { opacity: 1; background: var(--highlight-bg); }
+body.skin-chart .btn-primary, body.skin-chart .btn-success, body.skin-chart .btn-add-flight {
+  background: var(--sk-blue); color: var(--sk-on-ink) !important;
+}
+body.skin-chart .btn-primary:hover, body.skin-chart .btn-success:hover, body.skin-chart .btn-add-flight:hover {
+  background: var(--sk-blue); opacity: 0.88;
+}
+body.skin-chart .btn-danger { color: var(--sk-magenta) !important; border-color: var(--sk-magenta) !important; }
+body.skin-chart .btn-edit-mode {
+  background: var(--sk-magenta); color: var(--sk-on-ink) !important; border-color: var(--sk-magenta) !important;
+}
+body.skin-chart .flight-header { background: var(--sk-flight); }
+body.skin-chart .flight-header-active { background: var(--sk-flight); border-left: 5px solid var(--sk-magenta); }
+/* The flight header is chart blue in both themes, so its buttons are ink on
+   blue there - a blue outline on a blue bar would vanish. */
+body.skin-chart .flight-header .btn { color: #ffffff !important; border-color: rgba(255, 255, 255, 0.65) !important; }
+body.skin-chart .flight-header .btn:hover { background: rgba(255, 255, 255, 0.14); }
+body.skin-chart th { color: var(--sk-blue); letter-spacing: 0.03em; }
+body.skin-chart .side-tab { border-radius: 2px 2px 0 0; }
+body.skin-chart .side-tab-on { color: var(--sk-blue); }
+body.skin-chart .map-ctl {
+  border-radius: 2px; color: var(--sk-blue); border: 1px solid var(--sk-blue);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
