@@ -2673,6 +2673,28 @@ of the new tab.
   exactly the two, a real PDF and a real pdf-lib header, and no app identifier
   in either.
 
+### AND THE WORKER HAD NEVER BEEN VERSION-STAMPED (found wiring the print cache)
+
+`verify:hosted` printed the shell cache as **`c182-shell-vdev`** - and so did the
+v16.96 reference build. The build stamped `sw.__APP_VERSION__ || 'dev'` with
+`String.replace`, which swaps the FIRST match only, and that literal is quoted in
+the comment at the top of `sw.js` that explains the stamp. So the comment was
+stamped and the code never was: every build shared one shell cache name, and no
+release ever retired the previous shell (network-first kept content fresh, which
+is why nothing looked wrong). The build now replaces every occurrence and FAILS
+unless the declaration itself reads `const APP_VERSION = "<version>";`, and a
+test reads the built worker. It is the "a check the wrong line satisfies is no
+check" lesson - the placeholder-present test had been passing on the comment.
+
+**THE MUTATIONS, 12, ALL CAUGHT BY NAME, NONE IN `tsc`**: baggage not defaulted
+(2), the old entry not migrated (1), B counted in the empty mass (1), an arm
+written over a printed one (1 - and it ESCAPED at first, because the fixture gave
+those stations no arm to write; it carries them now), the band not drawn (1, on
+the real PDF), the "0" always covered (1), printable before the render completes
+(1), no shrink-to-fit (1), alternate fuel written (1), the chart's minor grid
+dropped (1), a column edge moved 2 pt (1, by the rules snapshot), and M&B pages
+after all OFPs (1).
+
 ### THE STANDARD BAGGAGE IS A LOAD, NOT PART OF THE EMPTY MASS
 
 **THIS SUPERSEDES "LN-TRE's 22.7 lb IS AIRFRAME, NOT BAGGAGE" (v16.93).** The

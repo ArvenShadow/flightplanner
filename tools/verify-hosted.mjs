@@ -107,6 +107,19 @@ else for (const want of ['/index.html', '/app.js', '/aip.js', '/vac-index.js'])
 if (shell && shell.urls.some((u) => /\/vac\/[^/]+\.webp$/.test(u))) {
   fails.push('SHELL BROKEN: a VAC raster is in the shell cache - it will fill the quota and evict the app');
 }
+// THE PRINT ASSETS ARE PRECACHED, IN A CACHE OF THEIR OWN (v16.97): the form
+// PDF and pdf-lib, so the OFP prints offline - and NOT in the shell, which
+// every release discards, because 3 MB that changes only with the form or the
+// library has no business being re-downloaded per app version.
+const print = await page.evaluate(async () => {
+  const c = await caches.open('c182-print');
+  return (await c.keys()).map((r) => r.url.replace(/^https?:\/\/[^/]+/, ''));
+});
+console.log('print cache          :', print.join(', ') || 'EMPTY');
+if (!print.some((u) => /\/print\/ofp-form-[0-9a-f]{8}\.pdf$/.test(u)) || !print.some((u) => /\/print\/pdf-lib-[0-9a-f]{8}\.min\.js$/.test(u)))
+  fails.push('PRINT BROKEN: the form and pdf-lib are not both precached - the OFP could not print offline');
+if (shell && shell.urls.some((u) => /\/print\//.test(u)))
+  fails.push('SHELL BROKEN: a print asset is in the shell cache - every release would re-fetch 3 MB');
 if (unknownCaches.length) fails.push('RULE 1 BROKEN: a tile was cached before the AIRAC edition was known');
 if (!knownCaches.includes('c182-tiles-AIRAC19MAR26')) fails.push('RULE 2 BROKEN: tiles are not cached under the reported cycle');
 if (heldTiles !== 3) fails.push('RULE 2 BROKEN: expected 3 held tiles, got ' + heldTiles);

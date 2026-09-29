@@ -306,8 +306,16 @@ function lintCss(css) {
   }
   const SW_PRINT_TOKEN = 'sw.__PRINT_ASSETS__ || []';
   if (!swSrc.includes(SW_PRINT_TOKEN)) fail('src/sw.js no longer contains ' + SW_PRINT_TOKEN);
-  const sw = swSrc.replace(SW_VERSION_TOKEN, JSON.stringify(version))
-    .replace(SW_PRINT_TOKEN, JSON.stringify(['./' + printAssets.lib, './' + printAssets.form]));
+  // EVERY OCCURRENCE, and then PROVE the declaration was stamped. The token is
+  // also quoted in a comment at the top of sw.js, and String.replace swaps only
+  // the FIRST match - so until v16.97 the comment was stamped and the code was
+  // not: every build shipped `c182-shell-vdev`, and a release never retired the
+  // previous shell. A placeholder check that the comment satisfies is no check.
+  const sw = swSrc.split(SW_VERSION_TOKEN).join(JSON.stringify(version))
+    .split(SW_PRINT_TOKEN).join(JSON.stringify(['./' + printAssets.lib, './' + printAssets.form]));
+  if (!sw.includes('const APP_VERSION = ' + JSON.stringify(version) + ';'))
+    fail('the service worker\'s APP_VERSION declaration was not stamped with ' + version);
+  if (!/const PRINT_ASSETS = \["\.\/print\//.test(sw)) fail('the service worker\'s PRINT_ASSETS were not stamped');
   checkSyntax(sw, 'service worker (src/sw.js)');
   mkdirSync(SITE_DIR, { recursive: true });
   writeFileSync(join(SITE_DIR, 'index.html'), lf(siteHtml));

@@ -6475,6 +6475,15 @@ T('the build ships the form and pdf-lib as content-named print assets, outside t
     'the print assets are not held cache-first in their own cache');
   assert(!/SHELL_ASSETS = \[[^\]]*print\//.test(sw), 'the print assets are in the SHELL - every release would re-fetch 3 MB');
 });
+T('the service worker is stamped with THIS version, in the code and not only in a comment', () => {
+  // String.replace swaps the first match only, and the token is quoted in a
+  // comment above the declaration - so every build until v16.97 shipped the
+  // shell cache as "c182-shell-vdev" and no release ever retired the last one.
+  const sw = require('fs').readFileSync('./site/sw.js', 'utf8');
+  const v = /const APP_VERSION = "([^"]+)";/.exec(sw);
+  assert(v && v[1] === ev('APP_VERSION'), 'the worker is not stamped with this build\'s version: ' + (v && v[1]));
+  assert(!/const APP_VERSION = sw\.__APP_VERSION__/.test(sw), 'the placeholder survived in the code');
+});
 T('fitSize shrinks in quarter points and reports what does not fit', () => {
   const P = moduleExports.pdf;
   const width = (t, s) => t.length * s * 0.5;
