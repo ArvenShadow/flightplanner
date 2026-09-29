@@ -210,6 +210,13 @@
         <div id="daylight-body" style="font-size:11px; line-height:1.7;"></div>
       </div>
 
+      <!-- ATS OPERATIONAL HOURS (v17.0): every take-off and landing against its
+           aerodrome's published ATS hours. Rendered by renderAtsHours. -->
+      <div class="card" style="margin-top:4px;" id="hours-card">
+        <div class="card-title">🕐 ATS opening hours</div>
+        <div id="hours-body" style="font-size:11px; line-height:1.6;"></div>
+      </div>
+
       <div class="card" style="margin-top:4px;" id="metar-card">
         <div class="card-title">
           📡 METAR &amp; TAF
@@ -1205,6 +1212,7 @@
     //   which VAC chart is drawn    -> src/lib/vac.js
     //   mass & balance, the fleet -> src/lib/massbalance.js
     //   take-off / landing distance vs a runway -> src/lib/rwyperf.js
+    //   ATS opening hours, is it open?  -> src/lib/opshours.js
     //
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
@@ -1435,7 +1443,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.101';
+    const APP_VERSION = '17.0';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6813,6 +6821,9 @@
       // with no distance check on it and nothing saying why (v16.43).
       try { runwayChecks = buildRunwayChecks(); runwayChecksError = null; }
       catch (e) { runwayChecks = []; runwayChecksError = (e && e.message) || String(e); }
+      // THE OPENING HOURS, ON THE SAME PASS AND UNDER THE SAME RULE (v17.0).
+      try { atsHoursChecks = buildAtsHoursChecks(sectorTimeWindows); atsHoursError = null; }
+      catch (e) { atsHoursChecks = []; atsHoursError = (e && e.message) || String(e); }
 
       // THE SAFETY NET RUNS FIRST, AND NOTHING BEFORE IT MAY SKIP IT (v16.43).
       //
@@ -6841,6 +6852,12 @@
       catch (e) {
         problems = problems.concat('The take-off and landing card failed to render: ' +
           (e && e.message) + '. Work the distances from the POH.');
+        showIntegrityProblems(problems);
+      }
+      try { renderAtsHours(); }
+      catch (e) {
+        problems = problems.concat('The ATS opening-hours card failed to render: ' + (e && e.message) +
+          '. Check the hours in the AIS Portal.');
         showIntegrityProblems(problems);
       }
       // LAST, so every finding above - including a card that failed to render -
@@ -7390,8 +7407,12 @@
 
       // The runway distances join the SAME list, under the same rule.
       const rwProblems = runwayProblems();
-      showIntegrityProblems(problems.concat(mbProblems, rwProblems));
-      return problems.concat(mbProblems, rwProblems);
+      // And a take-off or landing outside its aerodrome's ATS hours (v17.0,
+      // the author: "If a closed airport is in the flight plan, a warning shall
+      // be issued").
+      const hrProblems = atsHoursProblems();
+      showIntegrityProblems(problems.concat(mbProblems, rwProblems, hrProblems));
+      return problems.concat(mbProblems, rwProblems, hrProblems);
     }
 
     /** Paint the red banner. Split out so a failure discovered AFTER the check
@@ -8917,6 +8938,127 @@
       });
     }
     initRunwayPerf();
+
+    /* ===================================================================
+       2j. ATS OPERATIONAL HOURS (v17.0)
+       The reader of the published notation is src/lib/opshours.js; the text
+       is data/aip.js (aerodrome.ats), imported by tools/build-hours.mjs from
+       Avinor's Operational Hours publication - the table AD 2.3 points at.
+       =================================================================== */
+
+    /** Rebuilt on every render: one entry per take-off and landing. @type {any[]} */
+    let atsHoursChecks = [];
+    /** Why the last build failed, if it did. @type {string|null} */
+    let atsHoursError = null;
+
+    /**
+     * The ETD as an absolute instant, built EXACTLY as the daylight card builds
+     * it (local clock time on the flight date), so the two cards judge the same
+     * moment. Null without an ETD: without one there is no time to check.
+     */
+    function planEtdMs() {
+      const etdStr = (document.getElementById('def-etd') || {}).value || '';
+      const dateEl = document.getElementById('def-date');
+      const dateStr = dateEl && dateEl.value ? dateEl.value : localDateStrOf(Date.now());
+      if (!/^\d{1,2}:\d{2}$/.test(etdStr)) return null;
+      const dp = dateStr.split('-').map(Number), tp = etdStr.split(':').map(Number);
+      return new Date(dp[0], dp[1] - 1, dp[2], tp[0], tp[1]).getTime();
+    }
+
+    /**
+     * Every take-off and landing of the flight, at its aerodrome and instant.
+     * The aerodrome is resolved the way the runway checks resolve it
+     * (aerodromeAt, by position), and the instants are the daylight card's
+     * (sectorTimeWindows: minutes after the ETD at each take-off and landing).
+     * A fly-by is not a movement at that aerodrome and is not checked.
+     */
+    function buildAtsHoursChecks(sectorTimeWindows) {
+      const etd = planEtdMs();
+      const out = [];
+      for (const sw of sectorTimeWindows || []) {
+        const fl = flights[sw.fIdx];
+        const s = fl && ofpPrintModel.find((m) => m.flightId === fl.id);
+        if (!s) continue;
+        for (const [kind, at, min] of [['takeoff', s.depAt, sw.startMin], ['landing', s.arrAt, sw.endMin]]) {
+          if (!at) continue;
+          const ad = aerodromeAt(at);
+          if (!ad) continue;
+          const ms = etd === null ? null : etd + Math.round(min) * 60000;
+          const hours = ad.ats ? parseAtsHours(ad.ats.hours) : null;
+          const res = hours && ms !== null ? atsOpenAt(hours, ms) : null;
+          out.push({ kind, icao: ad.icao, name: ad.name, sectorLabel: (s.meta.dep || '?') + ' → ' + (s.meta.dest || '?'),
+                     ms, ats: ad.ats || null, hours, res });
+        }
+      }
+      return out;
+    }
+
+    /** "0915 local (0715Z)" for an instant. */
+    function localAndUtc(ms) {
+      const d = new Date(ms), p = (n) => String(n).padStart(2, '0');
+      return p(d.getHours()) + p(d.getMinutes()) + ' local (' + p(d.getUTCHours()) + p(d.getUTCMinutes()) + 'Z)';
+    }
+
+    /**
+     * For the red banner: a take-off or landing the published hours say is
+     * OUTSIDE them. Only a DECODED "closed" is a finding - "no ATS", "on
+     * request" and a text that could not be read are said on the card, because
+     * treating them as closed would be a guess, and as open a worse one.
+     */
+    function atsHoursProblems() {
+      if (atsHoursError) return ['The ATS opening-hours check failed to run: ' + atsHoursError + '. Check the hours in the AIS Portal.'];
+      const out = [];
+      for (const c of atsHoursChecks) {
+        if (!c.res || c.res.open !== false) continue;
+        out.push(c.icao + ' ' + (c.kind === 'takeoff' ? 'take-off' : 'landing') + ' at ' + localAndUtc(c.ms) +
+          ' is OUTSIDE the published ATS hours (' + c.res.window + ', ' + c.res.season + ' time).');
+      }
+      return out;
+    }
+
+    /** The card on the plan pane. */
+    function renderAtsHours() {
+      const host = document.getElementById('hours-body');
+      if (!host) return;
+      if (!atsHoursChecks.length) {
+        host.innerHTML = '<span style="color:var(--text-muted);">No take-off or landing at a published aerodrome yet.</span>';
+        return;
+      }
+      const src = window.C182_AIP && window.C182_AIP.atsHoursSource;
+      const noEtd = atsHoursChecks.every((c) => c.ms === null);
+      let h = '<table class="hours-table" style="width:100%;">';
+      for (const c of atsHoursChecks) {
+        const what = c.kind === 'takeoff' ? 'DEP' : 'ARR';
+        let verdict, cls = '';
+        if (!c.ats) { verdict = 'no hours in the imported table'; cls = 'hours-unknown'; }
+        else if (c.ms === null) { verdict = 'set an ETD to check'; cls = 'hours-unknown'; }
+        else if (!c.res || c.res.open === null) { verdict = (c.res ? c.res.why : 'not checked'); cls = 'hours-unknown'; }
+        else if (c.res.open) { verdict = '✓ open · ' + c.res.window; cls = 'hours-open'; }
+        else { verdict = '⛔ CLOSED · ' + c.res.window; cls = 'hours-closed'; }
+        h += '<tr class="' + cls + '"><td style="font-weight:700; white-space:nowrap;">' + what + ' ' + esc(c.icao) + '</td>' +
+          '<td style="white-space:nowrap;">' + (c.ms === null ? '' : esc(localAndUtc(c.ms))) + '</td>' +
+          '<td>' + esc(verdict) + '</td></tr>';
+        // THE PUBLISHED TEXT IS ALWAYS SHOWN, decoded or not, and so is the
+        // remark - "core hours, REF NOTAM for possible adjustments" is the part
+        // a pilot most needs to read.
+        if (c.ats) {
+          h += '<tr class="hours-raw"><td></td><td colspan="2"><span class="hours-src">' + esc(c.ats.hours) + '</span>' +
+            (c.ats.rmk ? '<br><span class="hours-rmk">RMK: ' + esc(c.ats.rmk) + '</span>' : '') +
+            (c.hours && c.hours.kind === 'unparsed' ? '<br><span class="hours-rmk">Not decoded (' + esc(c.hours.reason) + ') - read it yourself.</span>' : '') +
+            (holidaysExcluded(c.ats.rmk) || /EXC hol/i.test(c.ats.hours) ? '<br><span class="hours-rmk">Public holidays are excluded - if your date is one, ATS is not staffed.</span>' : '') +
+            '</td></tr>';
+        }
+      }
+      h += '</table>';
+      h += '<div style="font-size:9px; color:var(--text-muted); margin-top:4px;">' +
+        (noEtd ? '<b>Set an ETD</b> to check each take-off and landing against its hours. ' : '') +
+        'Published hours are UTC, winter time with summer time in brackets; the one in force on the date is used. ' +
+        'Extended or extraordinary openings (AD 1.1) and NOTAMs can change them - <b>NOTAMs are not fetched</b>: ' +
+        'ippc.no cannot be read by a browser page. Check ippc.no before flight.' +
+        (src ? ' Source: ' + esc(src.source) + ', revised per AIRAC ' + esc(src.revisedAirac) + '. ' + esc(src.attribution) : '') +
+        '</div>';
+      host.innerHTML = h;
+    }
 
     function savePlanningPrefs() {
       localStorage.setItem('c182_planning_prefs', JSON.stringify({

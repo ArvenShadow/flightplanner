@@ -1625,6 +1625,15 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
 .mb-load td input:focus { outline: 2px solid var(--mb-to); outline-offset: -1px; border-color: transparent; }
 .mb-fixed td { color: var(--text-main); font-weight: 600; }
 .mb-note-cell { color: var(--text-muted); font-size: 10px; }
+/* ATS opening hours (v17.0) */
+.hours-table td { padding: 1px 4px; vertical-align: top; }
+.hours-open td:last-child { color: var(--mb-ok-text); font-weight: 700; }
+.hours-closed td { color: var(--mb-bad); font-weight: 800; }
+.hours-unknown td:last-child { color: var(--wx-outdated); }
+.hours-raw td { font-size: 10px; color: var(--text-muted); padding-bottom: 4px; text-align: left; }
+.hours-src { font-family: monospace; word-break: break-word; }
+.hours-rmk { font-style: italic; }
+
 /* a METAR or TAF older than its routine interval (v16.99) */
 .wx-outdated { color: var(--wx-outdated); }
 .wx-outdated-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 999px; font-size: 9px;

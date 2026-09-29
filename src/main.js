@@ -34,11 +34,12 @@ import * as skins from './lib/skins.js';
 import * as massbalance from './lib/massbalance.js';
 import * as rwyperf from './lib/rwyperf.js';
 import * as ofppdf from './lib/ofppdf.js';
+import * as opshours from './lib/opshours.js';
 
 const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs,
     ...airspace, ...vac, ...anchors,
               ...daylight, ...winds, ...integrity, ...exchange, ...plotting, ...metar,
-              ...ofpform, ...keys, ...corridor, ...skins, ...massbalance, ...rwyperf, ...ofppdf };
+              ...ofpform, ...keys, ...corridor, ...skins, ...massbalance, ...rwyperf, ...ofppdf, ...opshours };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {

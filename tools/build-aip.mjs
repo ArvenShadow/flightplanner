@@ -41,6 +41,7 @@ const OUT_DATA = 'data/aip.js';
 const OUT_REPORT = 'data/aip-report.json';
 const BORDER_FILE = 'tools/prepared/norway-border.json';
 const VAC_FILE = 'tools/prepared/vac-points.json';
+const HOURS_FILE = 'tools/prepared/ats-hours.json';
 const VAC_CHARTS_FILE = 'tools/prepared/vac-charts.json';
 const VAC_INDEX_FILE = 'data/vac-index.js';
 const ROOT = 'https://aim-prod.avinor.no';
@@ -819,6 +820,10 @@ async function main() {
    * tools/aip-vac.mjs for how they are read and what is refused.
    */
   const vac = await readFile(VAC_FILE, 'utf8').then(JSON.parse).catch(() => null);
+  // ATS operational hours (v17.0), from `npm run build:hours`'s snapshot -
+  // attached ONLY when they were revised for this same AIRAC cycle. Hours from
+  // another cycle are left off with a warning rather than shipped beside it.
+  const hoursSnap = await readFile(HOURS_FILE, 'utf8').then(JSON.parse).catch(() => null);
   if (vac) {
     if (vac.editionLabel !== edition.editionLabel) {
       // A mismatch is not fatal, but it MUST be said: reporting points from a
@@ -945,6 +950,11 @@ async function main() {
     callsign: x.callsign, mhz: x.mhz, ring: x.ring, borderSegments: x.borderSegments
   }));
 
+  const hoursOk = !!hoursSnap && hoursSnap.revisedAirac === String(edition.editionLabel).slice(0, 10);
+  if (hoursSnap && !hoursOk) {
+    console.warn(`WARNING: ${HOURS_FILE} is revised per AIRAC ${hoursSnap.revisedAirac}, this edition is ` +
+      `${edition.editionLabel} - the hours are LEFT OFF. Run \`npm run build:hours\` after this.`);
+  }
   const dataset = {
     schema: 1,
     provider: 'Avinor',
@@ -965,7 +975,10 @@ async function main() {
     // guessed runway - a distance check against a misread TODA is worse than
     // no check.
     aerodromes: vac ? vac.data.map((/** @type {any} */ a) =>
-      Object.assign({}, a, { runways: runwaysByIcao.get(a.icao) || [] })) : [],
+      Object.assign({}, a, { runways: runwaysByIcao.get(a.icao) || [] },
+        hoursOk ? { ats: hoursSnap.entries[a.icao] ? { hours: hoursSnap.entries[a.icao].hours, rmk: hoursSnap.entries[a.icao].rmk } : null } : {})) : [],
+    atsHoursSource: hoursOk ? { source: hoursSnap.source, url: hoursSnap.url, revisedAirac: hoursSnap.revisedAirac,
+      attribution: hoursSnap.attribution } : null,
     aerodromeSource: vac ? {
       source: vac.source, attribution: vac.attribution,
       editionLabel: vac.editionLabel, effectiveFrom: vac.effectiveFrom,
