@@ -2852,6 +2852,47 @@ reading the Admin table (1); the raw text not shown (1 - and the first version
 of that test passed with the mutation, because the refusal REASON quotes the
 same text; it reads the text's own element now); the arrival never checked (1).
 
+## DELETING A STOP DELETES THE SECTOR IT OPENED (v17.4)
+
+The author: *"whenever a waypoint that created a new flight plan (landing, t&g)
+is deleted, make sure the subsequent flightplan is also deleted so that empty
+flight plans wont pile up while editing the flight"*.
+
+- **THE SECTOR IS FOUND, NOT REMEMBERED.** `sectorOpenedByStop` (exchange.js,
+  pure) finds it from the plan: a stop opens the next plan DIRECTLY AFTER its
+  own (`addNewFlightPlan(afterIdx)`, v16.59) and seeds its departure with the
+  stop's own coordinates, or its circuit's, which sit on the same fix (v16.84).
+  So it is the NEXT plan, starting EXACTLY on the stop, and only while the stop
+  still ends its plan (only circuits after it). A plan added by hand somewhere
+  else, or a stop with flying after it, is not reached. Storing a link would
+  have been a second record of the same relation, and one more field for
+  undo, import and the sanitiser to keep true.
+- **AN EMPTY SECTOR GOES SILENTLY; A PLANNED ONE IS ASKED ABOUT.** "Empty" is
+  `isStubSector`, the v17.1 test (at most one non-circuit waypoint). A sector
+  where the pilot has already planned legs is their work, so they get **Delete
+  both** / **Delete only <stop>** / Cancel. **Delete both** is the primary
+  because it is what was asked for, and it is recoverable: either way the whole
+  gesture is ONE undo step. That is the difference from v16.81's import
+  collision, where the destructive answer was NOT the primary: that write could
+  not be undone.
+- **RULE 7 AFTER THE QUESTION**: both plans are found again by id, and the
+  delete is refused if the waypoint at that index is no longer the one that was
+  asked about.
+- **DELETING ONLY THE CIRCUITS AFTER A TOUCH & GO LEAVES THE SECTOR ALONE**,
+  because the touch & go that opened it is still there.
+- **EVERY DELETE PATH IS THE SAME FUNCTION**: the row's x button, the right-click
+  menu and the Delete key all go through `deleteWaypointFromFlight`, which is
+  async now and returns what it removed, so the Delete key's own toast is not
+  said twice. Tests CLICK the row button and answer the real menu (the v16.53
+  rule), and `verify:fixes` does it in Chromium after a real Full stop click,
+  then presses a real Ctrl+Z.
+- **SIX MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`**: stubs not deleted,
+  a planned sector deleted with no question, any next plan claimed, flying after
+  the stop ignored, circuits counted as a leg, and the focus left on the
+  deleted plan. Two of those ended the run early - one left a dialog open,
+  one crashed the render - which the harness reports as `NO RESULT` rather than
+  a pass.
+
 ## A FLY-BY IS NOT A MOVEMENT, AND A CLOSED CTR IS CLASS G RMZ (v17.1)
 
 The author, on v17.0: *"remember that flyby of an aerodrome does not count as

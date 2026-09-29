@@ -221,6 +221,20 @@ check(wp.anchor === 'AIP-RP', 'the waypoint is stamped as an AIP reporting point
   check(fuelled.gal === 80, `typing in the box stored the figure in gallons (${fuelled.gal})`);
   check(parseFloat(fuelled.rem) > parseFloat(remBefore),
     `refuelling raised the final remaining (${remBefore} -> ${fuelled.rem})`);
+
+  // DELETING THE STOP TAKES THE SECTOR IT OPENED (v17.4). Clicked for real: the
+  // row's own x button on ENDU -> ENTC, then a real Ctrl+Z to bring both back.
+  await page.locator('#flight-plans-container button[onclick*="deleteWaypointFromFlight(0, 1)"]').first().click();
+  await page.waitForTimeout(400);
+  const gone = await page.evaluate(() => ({ plans: flights.length, dlg: !!document.getElementById('app-dialog'),
+    wps: flights[0].waypoints.map((w) => w.name).join() }));
+  check(gone.plans === 1 && !gone.dlg && gone.wps === 'ENDU',
+    `deleting the full stop took the empty sector it opened with it (${gone.plans} plan(s), ${gone.wps}, dialog ${gone.dlg})`);
+  await page.mouse.click(5, 5);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(400);
+  const back = await page.evaluate(() => ({ plans: flights.length, stop: flights[0].waypoints[1] && flights[0].waypoints[1].stop }));
+  check(back.plans === 2 && back.stop === 'full-stop', `one Ctrl+Z put the stop and its sector back (${back.plans}, ${back.stop})`);
 }
 
 // THE FIRST WAYPOINT OF A PLAN IS ASKED A DIFFERENT QUESTION (v16.58), and it

@@ -400,3 +400,43 @@ export function importScopeOf(parsed) {
   return { routeKinds, settingKinds,
            hasRoutes: routeKinds.length > 0, hasSettings: settingKinds.length > 0 };
 }
+
+/**
+ * THE SECTOR A STOP OPENED (v17.4, the author: "whenever a waypoint that
+ * created a new flight plan (landing, t&g) is deleted, make sure the subsequent
+ * flightplan is also deleted so that empty flight plans wont pile up while
+ * editing the flight").
+ *
+ * Derived, not stored: a touch & go or a full stop opens the next plan
+ * DIRECTLY AFTER its own (addNewFlightPlan(afterIdx)) and seeds its departure
+ * with the stop's own coordinates - or its circuit's, which sit on the same
+ * fix (v16.84). So the plan a stop opened is the NEXT plan, starting exactly
+ * where the stop is. Anything else - a plan the pilot added by hand somewhere
+ * else, a stop that no longer ends its plan - is not this stop's, and deleting
+ * the stop must not reach it.
+ *
+ * @param {{waypoints: any[]}[]} flights
+ * @param {number} fIdx the plan the stop is on
+ * @param {number} wpIdx the stop waypoint
+ * @returns {number} the index of the plan it opened, or -1
+ */
+export function sectorOpenedByStop(flights, fIdx, wpIdx) {
+  const fl = flights && flights[fIdx];
+  const wp = fl && fl.waypoints && fl.waypoints[wpIdx];
+  const next = flights && flights[fIdx + 1];
+  if (!wp || !wp.stop || !next || !Array.isArray(next.waypoints) || !next.waypoints.length) return -1;
+  // The stop must still END its plan: only circuits may follow it (they are
+  // flown at the fix). A stop with flying after it no longer opened anything.
+  if (fl.waypoints.slice(wpIdx + 1).some((w) => !w.isPattern)) return -1;
+  const dep = next.waypoints[0];
+  return dep.lat === wp.lat && dep.lng === wp.lng ? fIdx + 1 : -1;
+}
+
+/**
+ * A plan with no leg yet - the departure a stop seeded and nothing flown from
+ * it. The same test as the v17.1 rule that such a plan is no take-off.
+ * @param {{waypoints: any[]}} fl
+ */
+export function isStubSector(fl) {
+  return !!fl && Array.isArray(fl.waypoints) && fl.waypoints.filter((w) => !w.isPattern).length <= 1;
+}

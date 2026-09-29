@@ -13982,6 +13982,117 @@ T('a profile saved with the old Bold or Compact skin keeps its size (the author 
   assert(boot > 0 && src.indexOf('applyDensity(aircraftProfile.density)', boot) > boot, 'the boot does not migrate and apply the size');
 });
 
+// v17.4: deleting a touch & go or a full stop takes the sector it opened with it.
+
+T('the sector a stop opened is found from the plan, not remembered', () => {
+  const E = moduleExports.exch;
+  const W = (name, lat, lng, extra) => Object.assign({ name, lat, lng, alt: 2500 }, extra || {});
+  const plans = (a, b) => [{ id: 1, waypoints: a }, { id: 2, waypoints: b }];
+  const endu = W('ENDU', 69.05, 18.54), entc = W('ENTC', 69.68, 18.91, { stop: 'full-stop' });
+  assert(E.sectorOpenedByStop(plans([endu, entc], [W('ENTC', 69.68, 18.91)]), 0, 1) === 1, 'the stub the full stop opened was not found');
+  // A touch & go with circuits: the circuit sits on the fix and is what seeds the next plan.
+  const tg = W('ENTC', 69.68, 18.91, { stop: 'touch-go' });
+  assert(E.sectorOpenedByStop(plans([endu, tg, W('PATTERN', 69.68, 18.91, { isPattern: true })], [W('PATTERN', 69.68, 18.91)]), 0, 1) === 1,
+    'circuits after the touch & go hid the sector it opened');
+  assert(E.sectorOpenedByStop(plans([endu, entc], [W('ENEV', 68.49, 16.68)]), 0, 1) === -1, 'a plan starting somewhere else was claimed');
+  assert(E.sectorOpenedByStop(plans([endu, entc, W('X', 69.9, 19.0)], [W('ENTC', 69.68, 18.91)]), 0, 1) === -1,
+    'a stop with flying after it still claims the next plan');
+  assert(E.sectorOpenedByStop(plans([endu, W('ENTC', 69.68, 18.91)], [W('ENTC', 69.68, 18.91)]), 0, 1) === -1, 'a waypoint with no stop claimed a plan');
+  assert(E.sectorOpenedByStop([{ id: 1, waypoints: [endu, entc] }], 0, 1) === -1, 'the last plan claimed a plan that does not exist');
+  assert(E.isStubSector({ waypoints: [W('ENTC', 1, 1)] }) && E.isStubSector({ waypoints: [] })
+    && !E.isStubSector({ waypoints: [W('ENTC', 1, 1), W('X', 2, 2)] }), 'the stub test is wrong');
+  assert(E.isStubSector({ waypoints: [W('ENTC', 1, 1), W('PATTERN', 1, 1, { isPattern: true })] }), 'circuits alone made a plan a flight');
+});
+
+/** ENDU -> ENTC with a stop, and the plan it opened. */
+const SEED_OPENED = (stop, nextWps) => `flights = [
+  { id: 1, title: "F1", depElev: 254, waypoints: [
+    { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12, stop: "${stop}", stopMin: 10 }
+  ]},
+  { id: 2, title: "F2", depElev: 32, waypoints: [
+    { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12 }${nextWps || ''}
+  ]}
+]; activeFlightIndex = 1; refreshMap(); renderAllFlightTables();`;
+const LEG_ON = `, { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 }`;
+
+TA('deleting a full stop removes the empty sector it opened, and one undo puts both back', async () => {
+  try {
+    ev(SEED_OPENED('full-stop'));
+    await w.deleteWaypointFromFlight(0, 1);
+    assert(ev('flights.length') === 1, 'the empty sector piled up: ' + ev('flights.length') + ' plans');
+    assert(ev('flights[0].waypoints.map(w => w.name).join()') === 'ENDU', 'the wrong waypoint went');
+    assert(ev('activeFlightIndex') === 0, 'the focus was left on a plan that is gone: ' + ev('activeFlightIndex'));
+    assert(!openDlg(), 'an empty sector asked a question');
+    w.undoLast();
+    assert(ev('flights.length') === 2 && ev('flights[0].waypoints[1].stop') === 'full-stop',
+      'one Ctrl+Z did not put back the stop and its sector together');
+  } finally { ev(SEED); }
+});
+
+TA('a touch & go takes its sector too; its circuits alone do not', async () => {
+  try {
+    const tgWithLaps = SEED_OPENED('touch-go').replace('stop: "touch-go", stopMin: 10 }',
+      'stop: "touch-go", stopMin: 5 }, { lat: 69.67895054, lng: 18.91143033, name: "PATTERN", alt: 1000, oat: 10, wdir: 0, wspd: 0, var: -12, isPattern: true, laps: 3 }');
+    ev(tgWithLaps);
+    await w.deleteWaypointFromFlight(0, 2);            // the circuits
+    assert(ev('flights.length') === 2, 'deleting the circuits took the sector - the touch & go is still there');
+    ev(tgWithLaps);
+    await w.deleteWaypointFromFlight(0, 1);            // the touch & go itself
+    assert(ev('flights.length') === 1, 'the sector the touch & go opened piled up');
+  } finally { ev(SEED); }
+});
+
+TA('a sector with legs already planned is the pilot\'s work, so they are asked', async () => {
+  try {
+    ev(SEED_OPENED('full-stop', LEG_ON));
+    let pr = w.deleteWaypointFromFlight(0, 1);
+    assert(openDlg() && /already has 1 leg/.test(dialogText()), 'no question for a sector with a leg: ' + dialogText());
+    answerDialog('Cancel'); await pr;
+    assert(ev('flights.length') === 2 && ev('flights[0].waypoints.length') === 2, 'Cancel deleted something');
+    pr = w.deleteWaypointFromFlight(0, 1);
+    answerDialog('Delete only ENTC'); await pr;
+    assert(ev('flights.length') === 2 && ev('flights[0].waypoints.length') === 1, '"Delete only" did the wrong thing');
+    ev(SEED_OPENED('full-stop', LEG_ON));
+    pr = w.deleteWaypointFromFlight(0, 1);
+    answerDialog('Delete both'); await pr;
+    assert(ev('flights.length') === 1 && ev('flights[0].waypoints.length') === 1, '"Delete both" left something behind');
+    w.undoLast();
+    assert(ev('flights.length') === 2 && ev('flights[1].waypoints.length') === 2, 'undo did not restore the planned sector');
+  } finally { ev(SEED); }
+});
+
+TA('the Delete key and the row button take the same path, and an unrelated plan is never touched', async () => {
+  try {
+    ev(SEED_OPENED('full-stop'));
+    ev('highlightedWaypoint = { fIdx: 0, wpIdx: 1 }');
+    await w.deleteHighlightedWaypoint();
+    assert(ev('flights.length') === 1, 'the Delete key left the empty sector behind');
+    // The next plan starts somewhere else, so this stop did not open it.
+    ev(SEED_OPENED('full-stop').replace('{ lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 32',
+      '{ lat: 68.49, lng: 16.68, name: "ENEV", alt: 95'));
+    await w.deleteWaypointFromFlight(0, 1);
+    assert(ev('flights.length') === 2, 'a plan the stop did not open was deleted');
+  } finally { ev(SEED); }
+});
+
+TA('clicking the row button or the menu\'s Delete removes the sector too (the controls, not just the function)', async () => {
+  try {
+    ev(SEED_OPENED('full-stop'));
+    const btn = [...doc.querySelectorAll('#flight-plans-container button')].find((b) =>
+      /deleteWaypointFromFlight\(0, 1\)/.test(b.getAttribute('onclick') || ''));
+    assert(btn, 'the ENDU -> ENTC row has no delete button');
+    btn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    assert(ev('flights.length') === 1, 'the row button left the empty sector behind');
+    ev(SEED_OPENED('full-stop'));
+    const pr = w.openWaypointMenu(0, 1);
+    answerDialog('Delete this waypoint'); await pr;
+    await new Promise((r) => setTimeout(r, 0));
+    assert(ev('flights.length') === 1, 'the waypoint menu left the empty sector behind');
+  } finally { ev(SEED); }
+});
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');
