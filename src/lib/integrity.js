@@ -134,7 +134,7 @@ export function collectIntegrityProblems(flights, signals) {
 
   // --- fuel, as actually totalled on screen ----------------------------
   if (typeof sig.fuelRemaining === 'number' && isFinite(sig.fuelRemaining) && sig.fuelRemaining < 0)
-    add('Planned fuel remaining goes NEGATIVE - the mission does not fit the fuel on board.');
+    add('Planned fuel remaining goes NEGATIVE - the flight does not fit the fuel on board.');
 
   return problems;
 }

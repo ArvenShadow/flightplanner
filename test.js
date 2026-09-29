@@ -10435,7 +10435,8 @@ TA('a colliding MISSION prompts too, with its plans side by side', async () => {
   await tick();
   const dlg = openDlg();
   assert(dlg, 'a colliding mission did not prompt');
-  assert(/mission/.test(dlg.textContent), 'the prompt does not say it is a mission');
+  // v16.101: a saved multi-sector plan is a "flight" on screen (the author).
+  assert(/You already have a flight called/.test(dlg.textContent), 'the prompt does not say it is a saved flight');
   assert(/MINE-1/.test(dlg.textContent) && /THEIRS-1/.test(dlg.textContent),
     'the mission preview does not show both sides: ' + dlg.textContent.slice(0, 300));
   answerDialog('Keep mine');
@@ -13515,14 +13516,21 @@ TA('Enter in the save dialog saves the whole flight - and never overwrites a loa
   ev(SEED);
 });
 
-T('nothing on screen calls it "the whole mission" any more', () => {
-  // The author: "Dont call it whole mission rather call it the whole flight."
-  // Comments may still say it; what a pilot READS may not.
-  const visible = doc.body.innerHTML.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<!--[\s\S]*?-->/g, '');
-  assert(!/whole[ -]mission/i.test(visible), 'the page still says whole mission: ' +
-    (visible.match(/.{0,60}whole[ -]mission.{0,40}/i) || [''])[0]);
-  const strings = (APP_SRC.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || []).filter((q) => /whole[ -]mission/i.test(q));
-  assert(strings.length === 0, 'a string literal still says whole mission: ' + strings.slice(0, 3).join(' | '));
+T('nothing on screen says "mission" any more - it is a flight', () => {
+  // The author: "Dont call it whole mission rather call it the whole flight"
+  // (v16.100), then "rename all of them to flight" (v16.101). Comments may
+  // still say it; what a pilot READS may not. "permission" is not the word.
+  const word = /(?<!per)mission/i;
+  const visible = doc.body.innerHTML.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\s(onclick|onchange|id|for)="[^"]*"/g, '');
+  assert(!word.test(visible), 'the page still says mission: ' + (visible.match(/.{0,60}(?<!per)mission.{0,40}/i) || [''])[0]);
+  // STORAGE KEYS AND IDS ARE NOT WORDS: renaming them would orphan every
+  // flight saved before this. They are the only literals allowed to say it.
+  const ALLOWED = /^(['"`])(c182_custom_missions|c182_active_mission|mb-view-mission|rd-mission|mission|mission:|load(SelectedRouteOrMission)?\(\)|(save|delete)CurrentMission\(\)|exportMissionFile\(\)|importMissionFile\(event\)|setMbView\('mission'\))\1$/;
+  const code = APP_SRC.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  const strings = (code.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || [])
+    .filter((q) => word.test(q) && !ALLOWED.test(q) && !/^(['"`])\s*\/\//.test(q));
+  assert(strings.length === 0, 'a string literal still says mission: ' + strings.slice(0, 4).join(' | '));
   ev(`mbPrefs.reg = 'LN-TRB'; mbPrefs.view = 'mission'; renderAllFlightTables();`);
   assert(/Whole flight ·/.test(doc.getElementById('mb-body').textContent), 'the M&B master is not called the whole flight');
   const master = readMb(printDoc().sheets.filter((sh) => sh.kind === 'mb')[0]);
