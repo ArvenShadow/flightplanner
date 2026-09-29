@@ -194,12 +194,11 @@ export function vacLabel(drawn, set, airacEdition, inView) {
 }
 
 /**
- * The attribution line. The permission is NON-COMMERCIAL and says so wherever
- * the data appears - see the licence constraint in CLAUDE.md.
+ * The attribution line, crediting Avinor as the source.
  * @param {{attribution?: string, editionLabel?: string}|null} set @returns {string}
  */
 export function vacAttribution(set) {
   if (!set) return '';
-  return set.attribution || ('Visual Approach Charts: AIP Norge © Avinor AS, used with permission ' +
-    'for non-commercial use' + (set.editionLabel ? ` (${set.editionLabel})` : ''));
+  return set.attribution || ('Visual Approach Charts: AIP Norge © Avinor AS' +
+    (set.editionLabel ? ` (${set.editionLabel})` : ''));
 }

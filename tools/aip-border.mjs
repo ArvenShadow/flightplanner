@@ -14,9 +14,8 @@
  * 329 LineString fragments, 18 763 points, which stitch by shared endpoints
  * into exactly ONE continuous chain of 18 435 points spanning lng 11.45-30.95
  * and lat 58.88-70.09 - the whole land border with Sweden, Finland and Russia.
- * Kartverket is NLOD; Avinor's AIP is used by permission. Two separate
- * grants, and this file is where they meet, so neither is assumed to cover
- * the other.
+ * Kartverket is NLOD; the AIP is Avinor's. Two separate sources, and this
+ * file is where they meet.
  *
  * THE RESOLUTION RULE, and why it has no free choices in it:
  *   - the chain is a single OPEN polyline, so between the point nearest A and

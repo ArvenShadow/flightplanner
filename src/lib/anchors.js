@@ -10,8 +10,7 @@
  * DATA: `window.C182_AIP.aerodromes`, built by tools/build-vac.mjs from the
  * official Avinor eAIP - the aerodrome ARP, elevation and variation from the
  * tagged AD 2 fields, the reporting points from the VAC's printed coordinate
- * table. Used with permission from Avinor AS, NON-COMMERCIALLY (see CLAUDE.md;
- * the condition binds the whole project).
+ * table. Source: AIP Norge, © Avinor AS.
  *
  * WHAT IS NOT HERE, and it is reported rather than filled in: 24 aerodromes
  * publish their reporting points GRAPHICALLY ONLY - there is no coordinate
@@ -757,9 +756,8 @@ export function patternAltitudeAt(lat, lng, anchors) {
 /**
  * The attribution the anchor layer must show whenever it is on.
  *
- * One grant only - this is Avinor's, by permission and non-commercially.
- * Kartverket is not involved in the reporting points, and saying so keeps the
- * three licences in this project from being conflated.
+ * One source only - this is Avinor's. Kartverket is not involved in the
+ * reporting points.
  *
  * @param {{aerodromeSource?: {editionLabel?: string, effectiveFrom?: string,
  *          points?: number, aerodromesWithPoints?: number}|null}|null} dataset
@@ -770,7 +768,7 @@ export function anchorAttribution(dataset) {
   if (!s) return '';
   const ed = s.editionLabel ? ` ${s.editionLabel}` : '';
   const eff = s.effectiveFrom ? `, effective ${s.effectiveFrom}` : '';
-  return `Fixes: AIP Norge${ed}${eff} — © Avinor, used with permission, non-commercial. ` +
+  return `Fixes: AIP Norge${ed}${eff} — © Avinor AS. ` +
     `${s.points} reporting points at ${s.aerodromesWithPoints} aerodromes, read from the ` +
     `published VAC tables. Not for navigation; verify against the current AIP and NOTAM.`;
 }

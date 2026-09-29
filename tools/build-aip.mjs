@@ -2,13 +2,8 @@
 /**
  * Build the AIP airspace dataset - `npm run build:aip`.
  *
- * PERMISSION. Avinor's eAIP is copyright Avinor AS and its GEN 0.1 states
- * that any use outside copyright law is inadmissible without permission. The
- * project owner HOLDS that permission from Avinor, conditional on the
- * software not being used commercially. That condition is a project-level
- * constraint now, not a footnote: it is recorded in CLAUDE.md, stated in the
- * generated dataset, and shown in the app's guide and attribution line. If
- * this planner is ever commercialised, this dataset must be removed first.
+ * SOURCE. Avinor's eAIP, copyright Avinor AS. The dataset and the app's
+ * attribution line credit it.
  *
  * WHAT IT DOES. Fetches the current eAIP edition once, at BUILD time, and
  * emits a normalized sidecar. The browser never contacts Avinor and never
@@ -45,7 +40,7 @@ const HOURS_FILE = 'tools/prepared/ats-hours.json';
 const VAC_CHARTS_FILE = 'tools/prepared/vac-charts.json';
 const VAC_INDEX_FILE = 'data/vac-index.js';
 const ROOT = 'https://aim-prod.avinor.no';
-const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning; permission held)';
+const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning)';
 
 /** Follow /no/AIP to whichever index Avinor currently publishes, rather than
  *  hardcoding one: a hardcoded index silently serves a superseded edition. */
@@ -867,7 +862,6 @@ async function main() {
     revision: edition.revision,
     indexUrl: edition.indexUrl,
     retrievedAtUtc: new Date().toISOString(),
-    permission: 'Used with permission from Avinor AS. Non-commercial use only.',
     border: border ? {
       provider: border.provider, attribution: border.attribution,
       retrievedAtUtc: border.retrievedAtUtc, points: border.points,
@@ -962,7 +956,7 @@ async function main() {
     editionLabel: edition.editionLabel,
     effectiveFrom: edition.effectiveFrom,
     revision: edition.revision,
-    attribution: 'Airspace data © Avinor eAIP, used with permission. Non-commercial use only.' +
+    attribution: 'Airspace data © Avinor eAIP.' +
       (border ? ' National border © Kartverket (NLOD).' : ''),
     features,
     sectors,

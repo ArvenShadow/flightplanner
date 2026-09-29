@@ -2,7 +2,7 @@
  "schema": 1,
  "provider": "Avinor AS",
  "source": "AIP Norge eAIP, AD 2 <ICAO> 6-1 Visual Approach Chart - ICAO",
- "attribution": "Visual Approach Charts: AIP Norge (c) Avinor AS, used with permission for NON-COMMERCIAL use. Display only - not for navigation. Verify against the current AIP and NOTAM.",
+ "attribution": "Visual Approach Charts: AIP Norge (c) Avinor AS. Display only - not for navigation. Verify against the current AIP and NOTAM.",
  "editionLabel": "2026-09-03-AIRAC",
  "preparationRevision": 1,
  "renderDpi": 600,

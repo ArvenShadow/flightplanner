@@ -3321,13 +3321,13 @@ T('a malformed coordinate yields null, never a plausible position', () => {
     assert(aip.parseDms(bad) === null, 'accepted a malformed coordinate: ' + bad);
   }
 });
-T('the generated dataset is present, current, and states its permission', () => {
+T('the generated dataset is present, current, and credits Avinor', () => {
   assert(fs.existsSync('data/aip.js'), 'data/aip.js is missing - run npm run build:aip');
   const src = fs.readFileSync('data/aip.js', 'utf8');
   const set = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(';')));
   assert(set.provider === 'Avinor' && set.source === 'eAIP', 'provenance lost');
-  assert(/permission/i.test(set.attribution) && /non-commercial/i.test(set.attribution),
-    'the dataset does not carry the permission it depends on: ' + set.attribution);
+  assert(/Avinor/.test(set.attribution), 'the dataset does not credit its source: ' + set.attribution);
+  assert(!/permission|non-commercial/i.test(set.attribution), 'the removed permission wording is back: ' + set.attribution);
   assert(/^\d{4}-\d{2}-\d{2}$/.test(set.effectiveFrom), 'no effective date: ' + set.effectiveFrom);
 
   // Every feature must carry a published class or an explicit null, published
@@ -4503,11 +4503,11 @@ T('the hover card is content-sized, not collapsed to its minimum width', () => {
   assert(/width:\s*max-content/.test(rule), 'the card will collapse to its minimum width');
   assert(/max-width:\s*\d+px/.test(rule), 'the card has no maximum width');
 });
-T('the attribution names BOTH grants and warns it is not for navigation', () => {
+T('the attribution credits BOTH sources and warns it is not for navigation', () => {
   const A = moduleExports.airspace;
   const txt = A.airspaceAttribution({ attribution: 'x', editionLabel: '2026-06-11-AIRAC', effectiveFrom: '2026-06-11' });
-  assert(/Avinor/.test(txt) && /permission/i.test(txt) && /non-commercial/i.test(txt),
-    'the Avinor permission is not stated: ' + txt);
+  assert(/Avinor/.test(txt), 'Avinor is not credited: ' + txt);
+  assert(!/permission|non-commercial/i.test(txt), 'the removed permission wording is back: ' + txt);
   assert(/Kartverket/.test(txt) && /NLOD/.test(txt), 'the Kartverket NLOD grant is not stated: ' + txt);
   assert(/2026-06-11-AIRAC/.test(txt), 'the edition is not stated: ' + txt);
   assert(/[Nn]ot for navigation/.test(txt) && /NOTAM/.test(txt), 'no verify-the-AIP caution: ' + txt);
@@ -4713,7 +4713,7 @@ T('an aerodrome with no published table has NO points, and that is said', () => 
   // And the attribution names the ONE grant that applies - Kartverket is not
   // involved in the reporting points and must not be implied.
   const attr = A.anchorAttribution(set);
-  assert(/Avinor/.test(attr) && /non-commercial/i.test(attr), attr);
+  assert(/Avinor/.test(attr) && !/permission|non-commercial/i.test(attr), attr);
   assert(!/Kartverket/.test(attr), 'the fixes attribution wrongly credits Kartverket: ' + attr);
   assert(/[Nn]ot for navigation/.test(attr), attr);
 });
@@ -4806,7 +4806,7 @@ T('the fixes layer draws clickable markers and keeps its own attribution', () =>
     'fixes are drawn above the route markers - the plan must stay on top');
   const attr = doc.getElementById('fixes-attribution');
   assert(attr && attr.style.display !== 'none', 'the fixes attribution is hidden while the layer is on');
-  assert(/Avinor/.test(attr.textContent) && /non-commercial/i.test(attr.textContent), attr.textContent);
+  assert(/Avinor/.test(attr.textContent) && !/permission|non-commercial/i.test(attr.textContent), attr.textContent);
 
   // Clicking one adds a waypoint AT THE PUBLISHED COORDINATE - no dialog,
   // because the fix already has its published name.
@@ -7667,6 +7667,29 @@ T('the project memory and docs are intact (guards against truncation)', () => {
   }
   const readme = fs.readFileSync('README.md', 'utf8');
   assert(readme.includes('npm run build') && readme.includes('dist/'), 'README lost the build instructions');
+  // v17.5: the long form moved to docs/HISTORY.md, verbatim. It is the same
+  // record, so it gets the same truncation guard.
+  const history = fs.readFileSync('docs/HISTORY.md', 'utf8');
+  assert(history.split('\n').length > 5000, 'docs/HISTORY.md looks truncated: ' + history.split('\n').length + ' lines');
+  for (const anchor of ['PINNED CLIMB AND DESCENT CORNERS', 'Offline chart download', 'THE VAC IS DRAWN ON THE MAP']) {
+    assert(history.includes(anchor), 'docs/HISTORY.md lost its "' + anchor + '" section');
+  }
+});
+
+T('every CLAUDE.md pointer names exactly one heading in docs/HISTORY.md', () => {
+  // CLAUDE.md keeps one line per decision and points at the full entry with
+  // a section-sign pointer followed by the exact heading in braces. A pointer
+  // that names no heading - or two - sends the next reader nowhere, which is
+  // the same drift as a stale index. The literal placeholder in the
+  // how-this-file-works note is not a pointer.
+  const md = fs.readFileSync('CLAUDE.md', 'utf8');
+  const hist = fs.readFileSync('docs/HISTORY.md', 'utf8');
+  const heads = hist.split('\n').filter((l) => /^#{1,4} /.test(l)).map((l) => l.replace(/^#+\s+/, '').trim());
+  const ptrs = [...md.matchAll(/\u00a7\{([^}]*)\}/g)].map((m) => m[1]).filter((p) => p !== 'heading');
+  assert(ptrs.length >= 90, 'CLAUDE.md carries only ' + ptrs.length + ' history pointers');
+  const bad = ptrs.filter((p) => heads.filter((h) => h === p).length !== 1);
+  assert(!bad.length, 'pointers that do not name exactly one heading: ' + bad.join(' | '));
+  assert(md.split(/\s+/).length < 12000, 'CLAUDE.md is growing the long form back: ' + md.split(/\s+/).length + ' words');
 });
 
 console.log('\n=== 60. Saved routes: fresh magvar on load, update-in-place on save ===');
@@ -11045,10 +11068,9 @@ T('four points in one corner is not a fit', () => {
     'a well-spread pair was rejected');
 });
 
-T('the dataset carries its attribution and the non-commercial condition', () => {
+T('the VAC fixture credits Avinor', () => {
   const f = require('fs').readFileSync('./test-fixtures/endu-vac-geometry.json', 'utf8');
-  assert(/Avinor/.test(f) && /NON-COMMERCIAL/i.test(f),
-    'the VAC fixture does not carry the Avinor attribution and the non-commercial condition');
+  assert(/Avinor/.test(f), 'the VAC fixture does not credit Avinor');
 });
 
 
@@ -11214,10 +11236,10 @@ T('the planner never fetches a chart from Avinor at runtime', () => {
   assert(/window\.C182_VAC\s*=/.test(idx), 'the index does not assign window.C182_VAC');
 });
 
-T('the VAC index carries its attribution and the non-commercial condition', () => {
+T('the VAC index credits Avinor', () => {
   const idx = fs.readFileSync('data/vac-index.js', 'utf8');
   assert(/Avinor/.test(idx), 'no attribution to Avinor');
-  assert(/NON-COMMERCIAL/i.test(idx), 'the non-commercial condition is not stated');
+  assert(!/permission|non-commercial/i.test(idx), 'the removed permission wording is back');
   const set = JSON.parse(idx.slice(idx.indexOf('{'), idx.lastIndexOf('}') + 1));
   assert(VACM.vacAttribution(set).includes('Avinor'), 'the runtime attribution line is empty');
 });
@@ -13615,8 +13637,8 @@ T('the imported table: every aerodrome, the same AIRAC cycle, 49 decoded and exa
   const src = set.atsHoursSource;
   assert(src && src.revisedAirac === String(set.editionLabel).slice(0, 10),
     'the hours are not for the dataset\'s own cycle: ' + (src && src.revisedAirac) + ' vs ' + set.editionLabel);
-  assert(/Avinor/.test(src.attribution) && /Non-commercial/i.test(src.attribution) && /aim-prod\.avinor\.no/.test(src.url),
-    'the hours do not carry their source and the non-commercial condition');
+  assert(/Avinor/.test(src.attribution) && !/non-commercial/i.test(src.attribution) && /aim-prod\.avinor\.no/.test(src.url),
+    'the hours do not credit their source');
   assert(set.aerodromes.length === 53 && set.aerodromes.every((a) => a.ats && typeof a.ats.hours === 'string' && a.ats.hours),
     'an aerodrome has no ATS hours entry');
   const kinds = {}, refused = [];
@@ -13680,7 +13702,7 @@ T('a take-off outside the published ATS hours reaches the banner; one inside the
     const card = doc.getElementById('hours-body');
     assert(card.querySelector('tr.hours-closed') && /CLOSED · SUN 0750-2130 UTC/.test(card.textContent), 'the card does not show it closed');
     assert(/NOTAMs are not fetched/.test(card.textContent) && /ippc\.no/.test(card.textContent), 'the card does not say NOTAMs are not fetched');
-    assert(/revised per AIRAC 2026-09-03/.test(card.textContent) && /Non-commercial/.test(card.textContent), 'the card does not name its source');
+    assert(/revised per AIRAC 2026-09-03/.test(card.textContent) && /Operational hours © Avinor AS/.test(card.textContent), 'the card does not name its source');
     // No ETD: nothing to check, nothing on the banner, and the card says why.
     doc.getElementById('def-etd').value = '';
     w.renderAllFlightTables();

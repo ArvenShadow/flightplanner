@@ -420,7 +420,7 @@ const attr = await page.evaluate(() => {
   return { y: Math.round(r.y), w: Math.round(r.width), shown: getComputedStyle(el).display !== 'none', text: el.textContent };
 });
 check(attr.shown && attr.w > 0 && attr.y > 0 && attr.y < 900, 'the attribution is on screen at y=' + attr.y);
-check(/Avinor/.test(attr.text) && /non-commercial/.test(attr.text), 'it names the grant');
+check(/Avinor/.test(attr.text) && !/permission|non-commercial/i.test(attr.text), 'it credits Avinor');
 
 // Below the point zoom, reporting points must be gone but aerodromes stay -
 // otherwise the country view is a spatter that hides the aerodromes.

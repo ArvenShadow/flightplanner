@@ -3,9 +3,8 @@
  * Georeferenced VAC rasters - `npm run build:vac-raster`.
  *
  * SOURCE AND LICENCE. The Visual Approach Charts are part of Avinor's eAIP:
- * (c) Avinor AS, used with permission, NON-COMMERCIALLY. Same grant as the
- * airspace data and the reporting points, and the same condition - see
- * CLAUDE.md. Nothing here is Kartverket's.
+ * (c) Avinor AS, the same source as the airspace data and the reporting
+ * points. Nothing here is Kartverket's.
  *
  * THE RASTER IS DISPLAYED, NEVER READ. No coordinate in this project comes off
  * a chart image: the 243 reporting points still come from the printed
@@ -60,7 +59,7 @@ const SNAPSHOT = 'tools/prepared/vac-charts.json';
 const INDEX = 'data/vac-index.js';
 const REPORT = 'data/vac-raster-report.json';
 const ROOT = 'https://aim-prod.avinor.no';
-const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning; permission held)';
+const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning)';
 
 /** Bump when the pipeline changes what it produces. Asset paths carry it, so a
  *  new revision is a NEW file rather than an overwrite of an approved one. */
@@ -444,8 +443,8 @@ async function main() {
     schema: 1,
     provider: 'Avinor AS',
     source: 'AIP Norge eAIP, AD 2 <ICAO> 6-1 Visual Approach Chart - ICAO',
-    attribution: 'Visual Approach Charts: AIP Norge (c) Avinor AS, used with permission for ' +
-      'NON-COMMERCIAL use. Display only - not for navigation. Verify against the current AIP and NOTAM.',
+    attribution: 'Visual Approach Charts: AIP Norge (c) Avinor AS. ' +
+      'Display only - not for navigation. Verify against the current AIP and NOTAM.',
     editionLabel: edition,
     preparationRevision: PREPARATION_REVISION,
     renderDpi: RENDER_DPI,

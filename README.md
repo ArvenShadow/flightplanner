@@ -164,10 +164,8 @@ limits, callsigns and frequencies, imported from the **official Avinor eAIP**
 by `npm run build:aip`. The import runs at build time only: the planner never
 contacts Avinor, never parses eAIP HTML and never opens a PDF.
 
-**Used with permission from Avinor AS, for non-commercial use only.** That is
-a permission granted to this project, not an open licence — it does not travel
-to a fork, and the planner must not be commercialised while this dataset ships
-with it.
+Source: AIP Norge, © Avinor AS. The dataset and the app's attribution lines
+credit it.
 
 Where a published boundary **follows the national border**, the real border is
 used: `npm run build:border` takes it from Kartverket's official

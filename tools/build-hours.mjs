@@ -31,7 +31,7 @@ import { parseOpsHoursPage } from './aip-hours.mjs';
 import { parseAtsHours } from '../src/lib/opshours.js';
 
 const ROOT = 'https://aim-prod.avinor.no';
-const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning; permission held)';
+const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning)';
 const CACHE = '.aip-cache';
 const SNAPSHOT = 'tools/prepared/ats-hours.json';
 const DATA = 'data/aip.js';
@@ -82,7 +82,7 @@ async function main() {
     source: 'Avinor Operational Hours (AD 2.3), ATS table',
     url,
     revisedAirac,
-    attribution: 'Operational hours © Avinor AS, used with permission. Non-commercial use only.'
+    attribution: 'Operational hours © Avinor AS.'
   };
   await mkdir('tools/prepared', { recursive: true });
   await writeFile(SNAPSHOT, JSON.stringify({ ...source, entries }, null, 1) + '\n', 'utf8');

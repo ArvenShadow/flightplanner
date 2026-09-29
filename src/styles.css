@@ -967,17 +967,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
     #chart-label { position: absolute; bottom: 2px; left: 6px; z-index: 1000; font-size: 9px;
       color: #333; background: rgba(255,255,255,0.65); padding: 1px 6px; border-radius: 3px;
       pointer-events: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    /* The airspace overlay's attribution. It names BOTH grants because both are
-   load-bearing and different: the AIP is used by permission and
-   non-commercially, the national border in it is Kartverket's open data. It
+    /* The airspace overlay's attribution. It credits BOTH sources: the AIP is
+   Avinor's, the national border in it is Kartverket's open data. It
    sits above the chart label so neither covers the other. */
     #airspace-attribution { position: absolute; bottom: 18px; left: 6px; z-index: 1000; font-size: 9px;
       color: var(--attrib-text); background: var(--attrib-bg); padding: 1px 6px; border-radius: 3px;
       max-width: 74%; line-height: 1.35; pointer-events: none; }
         /* The fixes layer's attribution. Stacked ABOVE the airspace one so both
-   are readable when both layers are on; one grant only here (Avinor, by
-   permission, non-commercial) - Kartverket is not involved in the reporting
-   points, and the three licences in this project must not be conflated. */
+   are readable when both layers are on; one source only here (Avinor) -
+   Kartverket is not involved in the reporting points. */
     #fixes-attribution { position: absolute; bottom: 32px; left: 6px; z-index: 1000; font-size: 9px;
       color: var(--attrib-text); background: var(--attrib-bg); padding: 1px 6px; border-radius: 3px;
       max-width: 74%; line-height: 1.35; pointer-events: none; }
