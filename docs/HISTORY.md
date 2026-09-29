@@ -10,6 +10,128 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## FIVE REQUESTS FROM THE AUTHOR, ONE VERSION (v17.6)
+
+Asked together: *"I want the flight defaults tab changed..."*, *"the Airport
+METAR/TAF fetch button should be more prominent and centralized when there is
+no data"*, *"There is no way to deselect it and remove the highlight"*, *"Draw a
+little runway with the correct markers and draw the distances over the runway"*
+(with a screenshot of an EFB-style landing card) and *"Whenever an UNDO or REDO
+is performed, a text-box should appear explaining which action was undone or
+redone."* Also in this version: the plan for roadmap item 18 (measured, nothing
+moved - see that item) and two CLAUDE.md corrections (below).
+
+### FLIGHT DEFAULTS HOLD NO DEPARTURE ELEVATION AND NO WIND (v17.6)
+
+The author: *"No departure altitude as thats automatically set upon choosing a
+departure airport, wind dir and wind speed does not need to be there, all new
+waypoints automatically have 000/00 preselected and the wind fetcher will update
+the waypoints accordingly."*
+
+- `#def-dep-elev`, `#def-wdir` and `#def-wspd` are gone, with every read and
+  write of them (the undo snapshot's `PLAN_FIELDS` among them). The
+  departure elevation still comes from the departure aerodrome
+  (`addAnchorWaypoint`, v16.54) and is still editable in each plan's header -
+  the header input was always the per-plan authority; the removed field only
+  mirrored plan 1.
+- A new waypoint is born at `NEW_WP_WIND` (000/00) in all three places one is
+  born: a map click, a published fix, and the first fix of a new sector.
+- **Apply Bulk no longer writes a wind.** With no wind field it could only have
+  written 000/00 - over a fetched forecast. It sets cruise altitude and OAT and
+  its dialog says the winds are not changed.
+- Where a new plan has nothing to continue from it departs at 0 ft until an
+  aerodrome is chosen: the removed field's own starting value, not an invented
+  elevation (the "no house default" rule of v16.44 stands).
+- The "never assume calm wind" rule (v16.20) is not reversed: it governs a wind
+  that is MISSING (a fetch that returned nothing is NaN and named on the
+  banner). 000/00 on a new fix is a value the pilot can see in the wind column
+  and that the fetch replaces - the author's decision, and the guide says it.
+- The page's quoted handler count moved 153 -> 151 across the version (four
+  handlers left with the fields, the Deselect button and the big Fetch button
+  added two); the L3 test caught each step.
+
+### EVERY UNDO AND REDO SAYS WHICH STEP IT TOOK (v17.6)
+
+The toast already named the step - but only from the Undo/Redo BUTTONS. The
+keyboard path calls `undoLast(true)`, and `quiet` suppressed everything, so the
+Ctrl+Z a pilot actually uses was the one that said nothing. Now `#undo-notice`
+(bottom centre, one box REWRITTEN per step so holding the key does not stack a
+toast per press) shows "Undone: <label>" / "Redone: <label>" and how many steps
+remain; `quiet` only silences "Nothing to undo" at the end of the stack, which
+is what it was added for. The label is the one each step was pushed with - the
+v16.49 rule that every `pushUndoState` names its step is what makes this
+possible, and its test still guards it. The hide timer lives on the element so
+the page's shared-global count (58) did not move.
+
+### A SELECTION CAN BE PUT DOWN (v17.6)
+
+Escape already cleared it (keys.js, "clear the selection"), which nothing on
+screen said. Now four ways, all through one `clearWaypointSelection()`: a
+second click on the selected waypoint, Escape, a **✕ Deselect <n>. <name>**
+control in the map stack that exists only while something is selected, and in
+View Mode a click on the empty map (View Mode adds nothing there, so the click
+is free). A selection whose waypoint no longer exists is dropped on the next
+redraw instead of dangling.
+
+### THE WEATHER CARD IS ITS FETCH BUTTON UNTIL IT HAS WEATHER (v17.6)
+
+Before the first fetch the M&B weather card said "Not fetched yet" beside a
+small corner button. Now its body is one large centred **Fetch METAR & TAF**
+naming the fields it will ask for (the same list `fetchMetarTaf` builds), and
+the corner button appears only once there is weather to refresh. The fetch
+status ("Fetching...", or why it failed) is mirrored into the card, because the
+status line lives on the flight-plan pane and the pilot pressed the button on
+this one; the big button follows the plan pane's disabled state during a fetch
+and is re-enabled after a failure.
+
+### THE DISTANCES ARE DRAWN ON A RUNWAY (v17.6)
+
+`src/lib/rwydiagram.js` (a new pure module: in the standalone-run guard, the
+WHERE-TO-EDIT index and the bundle) draws each take-off and landing check as an
+SVG, replacing the v16.96 usage bar. The figure line stays and stays the
+authority; the drawing carries no number the text does not.
+
+- **THE STRIP IS THE DECLARED DISTANCE, not the physical runway.** The AIP gives
+  length, width and TORA / TODA / LDA per end, but not where on the surface each
+  declared distance begins (ENDU 10: 2 995 m of surface, TORA 2 443, LDA 2 001),
+  so placing them would be a guess. The strip is TODA (take-off) or LDA
+  (landing), and the POH distance and the factored requirement are measured
+  along it to one scale from the start of the run; a requirement past the end
+  runs off it in red and says "N m short".
+- **THE MARKINGS WERE VERIFIED BEFORE ONE WAS DRAWN**, against the text of EASA
+  CS ADR-DSN (read from ENAC's published comparison of Chapter L, which quotes
+  the CS verbatim): L.535 threshold stripes starting 6 m in, counted by runway
+  WIDTH - 18 m: 4, 23 m: 6, 30 m: 8, 45 m: 12, 60 m: 16; L.525 the designation
+  at every threshold, read from the approach; L.530 the centre line, stripe at
+  least 30 m and at least the gap, stripe plus gap 50-75 m (drawn 30 + 20).
+  Markings are for a paved runway (L.530 (a)).
+- **WHAT THE TABLE DOES NOT COVER IS NOT INVENTED.** The dataset has 30, 40, 45
+  and 60 m runways; ENRO 13/31 is 40 m, which L.535 gives no count for, so it
+  gets no stripes and a caption saying why. ENAS 12/30 is gravel: drawn plain,
+  no paint, "Unpaved (GRAVEL)". A missing wind is "---/--, not known", never
+  000/00.
+- Width and markings are ENLARGED (a 30 m stripe on a 2 400 m strip is three
+  pixels at card size); widths keep their proportions to each other (0.8 px/m).
+  The card's intro and the guide say both.
+- The wind box shows the wind the figure was worked with, split into head/tail
+  and cross; arrows are relative to the drawn strip (run left to right, so a
+  headwind blows from the right and a cross "from the left" blows down); a
+  tailwind is red and labelled, a VRB wind says it was priced as a tail.
+- Checked in Chromium at sidebar width, light and dark, and on five synthetic
+  cases (overrun, 40 m, gravel, VRB at 60 m, unknown wind at 18 m).
+
+### TWO CORRECTIONS TO CLAUDE.md (v17.6)
+
+- "140 tests pass at v16.2" and "the 4 100-line page script" were both years
+  stale (700+ and ~8 800). The test count is no longer pinned - the L3 lesson.
+- **THE eAIP IS NOT REPUBLISHED EVERY 28 DAYS.** At the start of this session
+  Claude suggested an AIRAC re-import because 2026-10-01 is an AIRAC date; the
+  author: *"The AIP only updates if there is a change in it. So it does not
+  follow AIRAC 28 day cycles."* This file already said so (v16.29: "an eAIP
+  edition is republished per AIP AMDT, not per 28-day cycle"), but CLAUDE.md did
+  not, and the suggestion was made from CLAUDE.md. It does now. (For the record:
+  on 2026-09-29 the index was 155 and no 2026-10-01 edition existed under it.)
+
 ## The permission wording came out, and CLAUDE.md was split (v17.5)
 
 The author: *"you can remove that 'explicit non-commercial permission' completely
@@ -1776,6 +1898,71 @@ comparison is sharper than the comparison itself, and it is cheap:
   5 451-line `test.js` is worth doing for navigability, but it would not have
   caught anything - the real test-quality gap is M5, asserts looser than the
   measurements that justified them.
+
+#### THE PLAN, MEASURED (v17.6) - staged, nothing built yet
+
+Written before any code moves, from a measurement rather than the estimate
+above: the page script (the last `<script>` of `src/index.html`) was extracted
+to a scratch `page.js` and run through the project's own `tsc`, with
+`src/types.d.ts` and a generated declaration of every bundle export as a global
+(336 names, from the `import * as` lines of `src/main.js`), `L` and `PDFLib`
+declared `any`.
+
+**What the checker says today (8 762 lines):**
+
+| mode | errors | what they are |
+|---|---|---|
+| `checkJs`, `strict: false` | **260** | 241 TS2339 (`.value` / `.checked` / `.disabled` on a plain `HTMLElement`), 19 others |
+| `checkJs`, `strict: true` (the modules' standard) | **1 210** | 430 TS2339, 333 implicit-any parameters, 146 implicit-any variables, 208 possibly-null, 28 untyped index, 21 assignability, the rest small |
+| `noUnusedLocals` on top | +3 | `distUnit`, `tasRef`, `mk` - genuinely dead locals. Page GLOBALS are not flagged (a classic script's top level is global), so the functions reached only from inline `on*=` handlers are safe |
+
+The 19 non-DOM errors in loose mode were read one by one: JSDoc that is
+narrower than the call (`normaliseStopMinutes(kind)` relies on its second
+parameter defaulting, so its `@param` wants `[min]`; a dialog button type that
+makes `hint` required), not runtime bugs. The value of the exercise is in the
+STRICT half - the 208 possibly-null sites are exactly the H1 shape (a lookup
+that throws when an element is missing) - and in keeping new code checked.
+
+**Stage 0 - move, change nothing (one version).**
+- `src/page.js` holds the script; `src/index.html` keeps `<!-- @PAGE: ... -->`
+  where it was, and `tools/build.mjs` inlines it the way it already inlines
+  `@STYLES`, `@AIPDATA` and `@BUNDLE`, failing when the marker is left over.
+- PROOF OF "NOTHING CHANGED": the built `site/index.html` is byte-identical
+  before and after the move. Build both in the same commit and compare hashes;
+  that is the whole acceptance test for this stage.
+- The suite: 10 tests read `src/index.html` directly with `readFileSync`
+  (lines 3291-12876 at v17.6) and some of them mean the SCRIPT - each is
+  re-pointed to `src/page.js` or to `APP_SRC`, one by one, never by a blanket
+  replace (four guards once went green for the wrong reason exactly that way).
+  The L3 count test (handlers, globals) and the WHERE-TO-EDIT index test move
+  with the script. CLAUDE.md's editing discipline step 2 becomes
+  `node --check src/page.js`.
+
+**Stage 1 - declare the globals truthfully.** `tools/build.mjs` writes
+`src/page-globals.d.ts` from the bundle's real exports (so the page sees each
+bundle function with its REAL signature, not `any`), and a test fails when the
+file is stale. `L` stays `any` unless the author accepts `@types/leaflet` as a
+dev dependency - a decision, not a default.
+
+**Stage 2 - loose checking on, 260 -> 0.** A second config
+(`tsconfig.page.json`, `checkJs`, `strict: false`) joins `npm run typecheck`.
+The 241 DOM errors are one idiom: `document.getElementById('x').value`. Two
+ways to clear them, and choosing is the author's call because it changes how
+the page reads: a JSDoc cast at each site (`/** @type {HTMLInputElement} */`,
+the idiom the modules already use), or one typed helper (`inputById(id)`). The
+test that says the checker cannot be quietly dropped is extended to this file.
+
+**Stage 3 - strict, as a ratchet, one WHERE-TO-EDIT section per version.**
+`noImplicitAny` first (JSDoc on the ~480 untyped parameters and variables),
+then `strictNullChecks` (the 208 null sites - each is a real question, "what if
+this element is not there?", and the answer is sometimes a bug). A committed
+error count that a test only lets go DOWN keeps the work from sliding back.
+Only when it reaches 0 does `page.js` join the main `tsconfig.json`, at the
+modules' standard.
+
+**Not in this item:** `noUncheckedIndexedAccess` and
+`exactOptionalPropertyTypes` (above) are measured on the MODULES separately -
+turning them on across the page at the same time would bury the signal.
 
 ### 19. SPLIT `test.js` (5 451 lines, 352 tests, 75 sections)
 

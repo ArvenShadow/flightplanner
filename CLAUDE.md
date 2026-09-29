@@ -54,7 +54,8 @@ reasoning live in **`docs/HISTORY.md`**, moved there verbatim at v17.5.
 2. After every edit: syntax-check the main script block
    (`node --check` on the extracted last <script>), then `npm test`.
 3. Every feature ships with tests in `test.js` (jsdom + Leaflet stub).
-   140 tests pass at v16.2. Never ship with failures. Add tests for new
+   Over 700 pass at v17.6 (it said "140 at v16.2" until then - the L3 drift
+   again, so no exact count is kept here). Never ship with failures. Add tests for new
    behavior AND for removals (guard that removed features stay removed).
 4. Check for duplicate DOM ids before shipping.
 5. **BUMP THE VERSION ON EVERY SHIPPED CHANGE - `package.json` AND
@@ -77,8 +78,8 @@ reasoning live in **`docs/HISTORY.md`**, moved there verbatim at v17.5.
 
 An outside review of v16.41 put it exactly right: *"a well-engineered core with
 a thin shell"*. The pure modules take what they need as arguments, are checked by
-the real compiler and are proved to have no hidden globals; the 4 100-line page
-script is the least tested surface, and EVERY high finding in `AUDIT.md` lives
+the real compiler and are proved to have no hidden globals; the page script
+(4 100 lines then, about 8 800 at v17.6) is the least tested surface, and EVERY high finding in `AUDIT.md` lives
 there. The answer is NOT the module refactor this file rightly declined - it is
 three cheap disciplines applied every time the page is touched:
 
@@ -229,6 +230,11 @@ three cheap disciplines applied every time the page is touched:
   leg. MET Nordic has no pressure levels. **Never assume calm wind**: a
   missing wind or OAT is NaN and named on the banner.
   → §{Winds aloft}
+- **Flight Defaults hold no departure elevation and no wind** (v17.6, the
+  author): the elevation comes from the departure aerodrome (editable in the
+  plan header), a new waypoint starts at `NEW_WP_WIND` 000/00 for the fetch to
+  replace, and Apply Bulk never writes a wind.
+  → §{FLIGHT DEFAULTS HOLD NO DEPARTURE ELEVATION AND NO WIND (v17.6)}
 - **Flight altitude schedule**: legs are NOT independent. Forward pass
   (climb spillover), backward pass (TOD backs up so fixes are crossed at
   their planned altitude). A circuit stop breaks the chain BOTH ways.
@@ -297,6 +303,11 @@ three cheap disciplines applied every time the page is touched:
   Edition discovered by redirect, never hardcoded. Three structural traps
   (self-closing spans, nested sdParams, untagged type text).
   → §{AIP airspace (v16.29, roadmap item 4 — the DATA half is built)}
+- **Avinor republishes the eAIP only when an AMDT changes it** (the author,
+  v17.6, restating what the v16.29 entry found): editions fall on AIRAC dates
+  but NOT every 28 days, so no new edition on an AIRAC date is normal, not
+  stale. Never suggest a re-import just because a cycle date passed; check
+  whether Avinor published one. → §{AIP airspace (v16.29, roadmap item 4 — the DATA half is built)}
 - **A re-import is a multiset diff**; the ACC sector count is pinned per
   edition; a frequency without a unit is prose and dropped.
   → §{AIRAC updates: what re-importing actually costs (v16.42, 2026-09-03)}
@@ -358,6 +369,8 @@ three cheap disciplines applied every time the page is touched:
   decoded, never cached, one request per kind. → §{METAR & TAF (v16.21)}
   Fetch re-renders the plan; outdated = past the report's own routine
   interval (METAR 30 min; TAF by its length). → §{THE WEATHER FEEDS THE DISTANCES, AND SAYS WHEN IT IS OLD (v16.99)}
+  Before the first fetch the M&B weather card IS a large centred Fetch button.
+  → §{THE WEATHER CARD IS ITS FETCH BUTTON UNTIL IT HAS WEATHER (v17.6)}
 
 ### The OFP, Mass & Balance and performance
 
@@ -387,7 +400,11 @@ three cheap disciplines applied every time the page is touched:
   five stated departures (TRUE runway direction, TODA, VRB is a tailwind,
   above the table refused, rounds up). → §{PHASE D (v16.96): RUNWAYS FROM THE AIP, AND THE DISTANCE AGAINST THEM}
   POH tables are PA 0-8000 (the workbook stops at 5000); three deleted cells
-  stay refused; landing is at MLW only. → §{THE PERFORMANCE TABLES: THE WORKBOOK IS SHORT OF THE POH, NOT THE OTHER WAY ROUND}
+  stay refused; landing is at MLW only.
+  Each check is DRAWN (`rwydiagram.js`): the strip is the declared TODA/LDA,
+  distances to scale along it, markings per CS ADR-DSN L.525/530/535 (stripes
+  by width; a width not in the table gets none; unpaved gets no paint).
+  → §{THE DISTANCES ARE DRAWN ON A RUNWAY (v17.6)} → §{THE PERFORMANCE TABLES: THE WORKBOOK IS SHORT OF THE POH, NOT THE OTHER WAY ROUND}
 - **Page 2 corrections**: endurance and reserve at 12 gal/h; take-off always
   full length, stationary, even after a touch & go; the METAR TEMPO wind
   wins; the LMC line is the actual fuel at preflight, applied until a refuel.
@@ -420,6 +437,10 @@ three cheap disciplines applied every time the page is touched:
 - **QoL batch**: Edit mode has a selection; undo covers plan fields and
   names its step; short-window layout; search hits give true bearing.
   → §{Quality of life, one batch (v16.49, item 16 - AUDIT.md section 4)}
+- **Every undo/redo, keyboard included, shows `#undo-notice`** naming the
+  step (one box, rewritten). → §{EVERY UNDO AND REDO SAYS WHICH STEP IT TOOK (v17.6)}
+  A selection is put down by a second click, Escape, the ✕ Deselect map
+  control, or a View-Mode map click. → §{A SELECTION CAN BE PUT DOWN (v17.6)}
 - **Track and map-only view**: no dashed track; track weight is a setting;
   New plan and active-plan controls on the map; 1-9 and , . pick plans.
   → §{The track, and reaching a plan from the map (v16.50-v16.51, roadmap 7 - 9)}
@@ -471,7 +492,10 @@ download (quota eviction). → §{Not planned}
 
 ### Roadmap still open → §{Roadmap (the user's list, v16.28, extended v16.41 - NOT yet agreed in detail)}
 
-- 18. Put the page script under the compiler (`src/page.js`). → §{18. PUT THE PAGE SCRIPT UNDER THE COMPILER (`src/page.js`)}
+- 18. Put the page script under the compiler (`src/page.js`). PLANNED and
+  measured at v17.6 (strict: 1 210 errors, loose: 260), four stages, nothing
+  moved yet; stage 2's DOM idiom is the author's call.
+  → §{THE PLAN, MEASURED (v17.6) - staged, nothing built yet}
 - 19. Split `test.js` for navigability (closes no quality gap). → §{19. SPLIT `test.js` (5 451 lines, 352 tests, 75 sections)}
 - 21. Modern looks: three offered (Slate, Chart, Float); choosing is the
   author's call; Tier 3 not attempted. → §{THREE MODERN LOOKS (v17.2, roadmap item 21)}
