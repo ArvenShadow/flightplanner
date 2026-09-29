@@ -480,10 +480,11 @@ function atisLabel(f, callsign, n) {
  * into markup; this module stays DOM-free.
  *
  * @param {AirspaceFeature} f
- * @param {{sectors?: AirspaceSector[], at?: [number, number]|null}} [opts]
+ * @param {{sectors?: AirspaceSector[], at?: [number, number]|null, atsHours?: string|null}} [opts]
  *        the ACC sector dataset and the cursor position. Needed only for an
  *        airspace that publishes many area-control frequencies - see
- *        accSectorRows for why the position is the question.
+ *        accSectorRows for why the position is the question. `atsHours` is the
+ *        published ATS hours text of a CTR's aerodrome (v17.1).
  * @returns {{name: string, kindLabel: string, cls: string|null, band: string,
  *            services: {tag: string, freqs: string[], callsign: string|null}[],
  *            notes: string[], color: string}}
@@ -502,6 +503,15 @@ export function airspaceInfo(f, opts) {
   // list is worth saying, because it is the one part of the shape the AIP did
   // not state directly.
   if (f.borderSegments) notes.push('boundary follows the national border');
+  // A CTR IS ONLY ITS PUBLISHED CLASS WHILE ITS ATC UNIT IS OPEN (v17.1, the
+  // author: "When a CTR is outside operating hours, it is defined as class G
+  // RMZ"). AIP ENR 1.4 lists "CTR outside the opening hours of the ATC unit"
+  // among the RMZs, in its Class G paragraph. Said on the card because the
+  // class chip above it is what a pilot reads first; left off where the ATC
+  // unit is published H24, because there the rule never applies.
+  if (f.kind === 'CTR' && String((opts && opts.atsHours) || '').trim() !== 'H24') {
+    notes.push('outside ATS hours: class G, RMZ (ENR 1.4)');
+  }
   return {
     name: f.name,
     kindLabel: style.label,

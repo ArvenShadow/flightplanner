@@ -2844,6 +2844,108 @@ reading the Admin table (1); the raw text not shown (1 - and the first version
 of that test passed with the mutation, because the refusal REASON quotes the
 same text; it reads the text's own element now); the arrival never checked (1).
 
+## A FLY-BY IS NOT A MOVEMENT, AND A CLOSED CTR IS CLASS G RMZ (v17.1)
+
+The author, on v17.0: *"remember that flyby of an aerodrome does not count as
+landing and should therefore not issue warning when flying over the aerodrome.
+When a CTR is outside operating hours, it is defined as class G RMZ. If i delete
+a landing that issued a warning flag, the warning flag still persists after
+deletion."*
+
+### THE PERSISTING WARNING WAS TWO BUGS, BOTH REPRODUCED BEFORE ANYTHING CHANGED
+
+1. **A SECTOR WITH NO LEG WAS A TAKE-OFF.** A full stop opens the next sector
+   with its departure already in it, one waypoint and nowhere to go, and
+   `depAt` was set for `real.length >= 1`. So the stub was checked as a take-off
+   at the landing's own instant. Measured: ENTC -> ENDU full stop on a Sunday at
+   22:10 raised TWO lines, the landing and the stub's take-off. Deleting the
+   landing left `ENDU take-off at 2210 ... OUTSIDE`, which is exactly the
+   reported symptom. `depAt` now needs a leg, same as `arrAt` always did. The
+   runway checks read the same field, so the stub's phantom distance check went
+   with it.
+2. **THE FIX BEFORE A DELETED LANDING BECAME A LANDING OF ITS OWN.** The ends
+   resolve to an aerodrome by position (`aerodromeAt`, 5 NM), and **56 of the
+   243 reporting points are within 5 NM of their own ARP** (measured; ÅSEN is
+   1.4 NM from ENDU). Delete ENDU after ÅSEN, and ÅSEN was the ENDU landing,
+   warning included.
+
+### WHAT IS FLOWN OVER, AND ONLY WHAT IS STATED
+
+`isOverflight(wp)` (anchors.js) is exactly two published facts: `flyby: true`,
+or `anchor: 'AIP-RP'` (a reporting point is a published place that is NOT the
+aerodrome). An end flown over is no take-off and no landing, for the opening
+hours and the runway distance alike (`depAt.over` / `arrAt.over`).
+
+- **A CLICKED POINT STILL RESOLVES BY POSITION.** A sector ends where it lands,
+  and a point put on the field by hand is on it. No distance threshold was
+  invented to tell "on the runway" from "a mile out"; the waypoint menu offers
+  **Fly-by (no landing)** / **Take off / land here** on any non-stop, non-circuit
+  waypoint on an aerodrome instead, which is also how a fly-by added BEFORE the
+  flag existed is corrected. No migration guesses it from the name or the
+  altitude.
+- **THE FLAG IS STORED, AND IT CANNOT SIT ON A STOP OR A CIRCUIT.** A touch & go
+  and a full stop ARE landings; the sanitiser drops `flyby` beside either, so a
+  hand-edited file cannot make one both.
+- **A FLY-BY IS STILL LISTED (`OVR` on the card) AND NEVER REACHES THE BANNER.**
+  It is judged at the time over it (the start of the leg that leaves it, from
+  `legStartTimes`), because what the airspace is then is worth knowing.
+
+### A CTR OUTSIDE ITS ATC UNIT'S HOURS IS CLASS G, RMZ - VERIFIED IN ENR 1.4
+
+AD 2.17 says only "Hours of applicability REF AIS Portal". **ENR 1.4 section 1**
+(2026-09-03, fetched to check) states it: the Class G paragraph ends *"The
+following airspaces are classified as RMZ: TIA, TIZ, CTR outside the opening
+hours of the ATC unit, Ekofisk and Tampen HTZ"*, and Note 2 repeats it with the
+requirement: *"Pilots shall maintain continuous air-ground voice communication
+watch and establish two-way communication, as necessary, on the appropriate
+communication channel in RMZ."* That the CTR is then class **G** follows from
+where ENR 1.4 lists it (inside the Class G paragraph) and is what the author
+stated; ENR 2.1 says it in so many words for Salen CTR.
+
+- The hours card says `<CTR> is class G, RMZ while ATS is closed (ENR 1.4)` on
+  every row where ATS is closed, and nothing while it is open. The first
+  version also wrote `<CTR> is class D` on open rows; `verify:visual` showed it
+  adding a line to every row of the seed plan, and a line on every row buries
+  the one that matters. A closed LANDING is still a banner finding. The author's v16.93 rule is unchanged, and a
+  closed aerodrome is not the same thing as closed airspace.
+- The CTR hover card carries `outside ATS hours: class G, RMZ (ENR 1.4)`,
+  except where the aerodrome's ATS is published H24 (ENTC, ENEV...), where the
+  rule never applies. `airspaceInfo` takes the hours text as `opts.atsHours`.
+- **NO FREQUENCY IS NAMED FOR THE RMZ.** "The appropriate communication channel"
+  is per aerodrome (ENDU's AD 2.18 says Polaris 126.455 outside TWR/APP hours),
+  and picking one generically would be a guess.
+
+### AN OPEN QUESTION FOR THE AUTHOR, FOUND ON THE WAY AND NOT ACTED ON
+
+**AD 1.1 section 1.2** lets Avinor aerodromes be USED outside published hours,
+0600-2200 (0500-2100) UTC, for non-commercial VFR-by-day flights at MTOM 2730 kg or
+less, with PPR through myppr.no at least an hour before, except at a listed set
+of aerodromes. A C182 is well inside that. So a "closed" landing on the banner
+may be one the school is allowed to make. It is still flagged, because the
+author asked for that and PPR is a step the pilot has to take. Whether the
+finding should say so is the author's call.
+
+### MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+The stub as a take-off; a reporting point not flown over; the sanitiser
+dropping the flag, or allowing it on a stop; a fly-by on the banner; the
+overflight ignored at either end of the hours check and in the runway check;
+Fly-by not setting the flag; the closed CTR keeping its class; the hover note
+on an H24 CTR, or missing; the menu toggle on a stop or a reporting point; the
+fly-by timed at the sector start; the fly-by painted as closed.
+
+- **ONE ESCAPED AT FIRST**: ignoring `over` at the TAKE-OFF end passed, because
+  no test started a plan on a fly-by. One does now.
+- **AND THREE "ESCAPES" WERE THE HARNESS.** A re-run in a copy of the tree that
+  was missing the version bump failed the BUILD, ran no test, and reported
+  `FAIL=0` three times. It looked exactly like three guards that do not fire. The
+  harness now says `NO RESULT` when the run has no RESULT line: the v16.75
+  lesson, *a suite that exits with no RESULT line has not passed*, applied to
+  the mutation run itself.
+- **`verify:locked` HAD BEEN FAILING SINCE v17.0.** It asserted the version badge
+  matched `/16\./`, a premise that expired with the major version. It reads
+  `package.json` now.
+
 ## "THE WHOLE FLIGHT", AND IT IS WHAT SAVE DOES FIRST (v16.100)
 
 The author: *"Dont call it whole mission rather call it the whole flight. Also

@@ -3442,7 +3442,13 @@ T('the hover card is structured, and states class, limits and services', () => {
   // a border-derived boundary says so; a normal one gains no note
   assert(/national border/i.test(A.airspaceInfo(Object.assign({}, f, { borderSegments: 1 })).notes.join(' ')),
     'a border-derived shape does not say so');
-  assert(A.airspaceInfo(f).notes.length === 0, 'a normal airspace gained a note');
+  // (v17.1: this fixture is a CTR, which now says what it is outside ATS
+  // hours - so "no note" is asserted where that rule does not reach: a CTR
+  // whose ATC unit is H24, and a TMA.)
+  assert(A.airspaceInfo(f, { atsHours: 'H24' }).notes.length === 0, 'a normal airspace gained a note');
+  assert(A.airspaceInfo(Object.assign({}, f, { kind: 'TMA' })).notes.length === 0, 'a TMA gained the CTR note');
+  assert(A.airspaceInfo(f).notes.join(' ') === 'outside ATS hours: class G, RMZ (ENR 1.4)',
+    'a CTR does not say it is class G, RMZ outside ATS hours: ' + JSON.stringify(A.airspaceInfo(f).notes));
 });
 T('ATIS is labelled by ICAO; "Information" is reserved for AFIS', () => {
   const A = moduleExports.airspace;
@@ -13726,6 +13732,166 @@ T('the ATS day and hours are read in UTC in the pilot\'s own zone too (TZ=Europe
   assert(r.localDay === 1, 'the fixture is no longer across local midnight - check it (local day ' + r.localDay + ')');
   assert(r.window === 'SUN 0750-2130 UTC' && r.open === false && r.season === 'summer',
     'in Norway the day was read locally: ' + JSON.stringify(r));
+});
+
+// v17.1: a fly-by is not a movement, a sector with no leg flies nowhere, and a
+// CTR outside its ATC unit's hours is class G, RMZ (AIP ENR 1.4).
+
+T('the fly-by flag survives the sanitiser, and cannot sit on a stop or a circuit', () => {
+  const E = moduleExports.exch, A = moduleExports.anchors;
+  const one = (w) => E.sanitiseFlights([{ id: 1, waypoints: [Object.assign({ lat: 69, lng: 18, name: 'X', alt: 3000 }, w)] }])[0].waypoints[0];
+  assert(one({ flyby: true }).flyby === true && one({ flyby: 'true' }).flyby === true, 'a fly-by was dropped on load');
+  assert(!('flyby' in one({})) && !('flyby' in one({ flyby: false })), 'an ordinary waypoint gained a fly-by key');
+  assert(!('flyby' in one({ flyby: true, stop: 'full-stop' })), 'a full stop was also a fly-by');
+  assert(!('flyby' in one({ flyby: true, stop: 'touch-go' })), 'a touch & go was also a fly-by');
+  assert(!('flyby' in one({ flyby: true, isPattern: true, laps: 3 })), 'a circuit was also a fly-by');
+  assert(A.isOverflight({ flyby: true }) && A.isOverflight({ anchor: 'AIP-RP' }), 'a fly-by or a reporting point is not flown over');
+  assert(!A.isOverflight({ anchor: 'AIP-AD' }) && !A.isOverflight({}) && !A.isOverflight(null), 'an aerodrome or a plain point is flown over');
+});
+
+/** A Sunday late enough that ENDU (SUN 0750-2130 UTC) is closed and ENTC (H24) open. */
+function lateSunday(etd, body) {
+  const dateWas = doc.getElementById('def-date').value, etdWas = doc.getElementById('def-etd').value;
+  try {
+    doc.getElementById('def-date').value = '2026-09-27';
+    doc.getElementById('def-etd').value = etd;
+    body();
+  } finally {
+    doc.getElementById('def-date').value = dateWas;
+    doc.getElementById('def-etd').value = etdWas;
+    ev(SEED);
+  }
+}
+const hourLines = () => ev('runIntegrityCheck()').filter((p) => /ATS hours/.test(p));
+const adWp = (icao, extra) => {
+  const a = aipDataset().aerodromes.find((x) => x.icao === icao);
+  return JSON.stringify(Object.assign({ lat: a.lat, lng: a.lng, name: icao, alt: a.elevFt, oat: 10, wdir: 0, wspd: 0, var: -11 }, extra || {}));
+};
+
+T('the sector a full stop opens is not a take-off until it has a leg - and deleting the landing clears the warning (the author\'s report)', () => {
+  lateSunday('22:10', () => {
+    // ENTC -> ENDU full stop, and the one-waypoint sector the stop opened.
+    ev(`flights = [
+      { id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENTC')}, ${adWp('ENDU', { stop: 'full-stop', stopMin: 10 })}] },
+      { id: 2, title: "F2", depElev: 254, waypoints: [${adWp('ENDU')}] }
+    ]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    const kinds = ev('atsHoursChecks.map(c => c.kind + " " + c.icao)');
+    assert(kinds.join() === 'takeoff ENTC,landing ENDU', 'the one-waypoint sector was checked as a take-off: ' + kinds);
+    assert(hourLines().length === 1 && /ENDU landing/.test(hourLines()[0]), 'the closed landing: ' + JSON.stringify(hourLines()));
+    assert(ev('runwayChecks.length') === 2, 'the stub still has a runway check: ' + ev('runwayChecks.length'));
+    // The author: "If i delete a landing that issued a warning flag, the
+    // warning flag still persists after deletion."
+    w.deleteWaypointFromFlight(0, 1);
+    assert(hourLines().length === 0, 'the warning outlived the landing it was about: ' + JSON.stringify(hourLines()));
+    assert(ev('atsHoursChecks.length') === 0, 'a plan with no leg still has movements: ' + ev('atsHoursChecks.map(c => c.kind + " " + c.icao)'));
+    assert(!/ATS hours/.test(doc.getElementById('integrity-banner').textContent), 'the banner still shows it');
+  });
+});
+
+T('a reporting point beside an aerodrome is not a landing there once the real landing is deleted', () => {
+  lateSunday('23:10', () => {
+    // ÅSEN is 1.4 NM from ENDU's ARP - inside the 5 NM that resolves a point
+    // to an aerodrome, which is how the fix before a deleted landing became a
+    // landing of its own.
+    const p = aipDataset().aerodromes.find((x) => x.icao === 'ENDU').points.find((q) => q.name === 'ÅSEN');
+    const asen = (extra) => JSON.stringify(Object.assign({ lat: p.lat, lng: p.lng, name: 'ÅSEN', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }, extra));
+    ev(`flights = [{ id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENTC')}, ${asen({ anchor: 'AIP-RP' })}, ${adWp('ENDU')}] }];
+        activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    assert(hourLines().length === 1, 'the fixture no longer lands at ENDU after it closes: ' + JSON.stringify(hourLines()));
+    w.deleteWaypointFromFlight(0, 2);
+    assert(hourLines().length === 0, 'the reporting point became an ENDU landing: ' + JSON.stringify(hourLines()));
+    assert(ev('runwayChecks[1].overflight') === true && ev('runwayChecks[1].icao') === null,
+      'the reporting point still has a runway check: ' + JSON.stringify(ev('runwayChecks[1]')));
+    // A point CLICKED onto the map carries no anchor, so it still resolves by
+    // position - a sector ends where it lands. The pilot says otherwise with
+    // the waypoint menu's fly-by toggle, and nothing guesses for them.
+    ev(`flights = [{ id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENTC')}, ${asen({})}] }];
+        activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    assert(hourLines().length === 1, 'a clicked point on the field is no longer a landing there');
+    w.toggleFlyby(0, 1);
+    assert(ev('flights[0].waypoints[1].flyby') === true && hourLines().length === 0, 'marking it a fly-by did not clear the warning');
+    w.toggleFlyby(0, 1);
+    assert(!ev('"flyby" in flights[0].waypoints[1]') && hourLines().length === 1, 'marking it a landing again did not bring the check back');
+  });
+});
+
+T('a fly-by of a closed aerodrome is listed, is no finding, and says the CTR is class G, RMZ', () => {
+  lateSunday('22:30', () => {
+    ev(`flights = [{ id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENTC')},
+        ${adWp('ENDU', { name: 'Bardufoss', alt: 3500, flyby: true, anchor: 'AIP-AD' })}, ${adWp('ENTC', { alt: 32 })}] }];
+        activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    const c = ev('atsHoursChecks');
+    assert(c.map((x) => x.kind + ' ' + x.icao).join() === 'takeoff ENTC,flyby ENDU,landing ENTC', 'the order: ' + c.map((x) => x.kind + ' ' + x.icao));
+    const fb = c[1];
+    assert(fb.res.open === false && fb.ms === ev('planEtdMs()') + Math.round(ev('legStartTimes["0-1"]')) * 60000,
+      'the fly-by is not judged at the time over it: ' + JSON.stringify(fb.res));
+    assert(hourLines().length === 0, 'a fly-by of a closed aerodrome reached the banner: ' + JSON.stringify(hourLines()));
+    const card = doc.getElementById('hours-body');
+    assert(!card.querySelector('tr.hours-closed'), 'the fly-by was painted as a closed aerodrome');
+    assert(/OVR ENDU/.test(card.textContent) && /fly-by, no landing/.test(card.textContent), 'the card does not list the fly-by');
+    assert(/Bardufoss CTR is class G, RMZ while ATS is closed \(ENR 1\.4\)/.test(card.textContent), 'the card does not say the CTR is class G, RMZ');
+    // The same aerodrome as a LANDING is still a finding - the author's
+    // v16.93 rule is unchanged - and its row says what the CTR is too.
+    ev(`flights = [{ id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENTC')}, ${adWp('ENDU')}] }];
+        activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    assert(hourLines().length === 1, 'the closed landing is no longer a finding');
+    assert(doc.getElementById('hours-body').querySelector('tr.hours-closed .hours-ctr'), 'the closed landing row does not say what the CTR is');
+    // A plan that ENDS on a fly-by lands nowhere: no landing check, no runway.
+    ev(`flights = [{ id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENTC')}, ${adWp('ENDU', { alt: 3500, flyby: true })}] }];
+        activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    assert(ev('atsHoursChecks.map(c => c.kind).join()') === 'takeoff,flyby' && hourLines().length === 0,
+      'a plan ending on a fly-by was checked as a landing: ' + ev('atsHoursChecks.map(c => c.kind).join()'));
+    assert(ev('runwayChecks[1].overflight') === true, 'a fly-by end kept its runway check');
+    // And one that STARTS on a fly-by (a fresh plan offers Fly-by: you are
+    // already airborne) takes off nowhere.
+    ev(`flights = [{ id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENDU', { alt: 3500, flyby: true })}, ${adWp('ENTC')}] }];
+        activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    assert(ev('atsHoursChecks.map(c => c.kind).join()') === 'flyby,landing' && hourLines().length === 0,
+      'a plan starting on a fly-by was checked as a take-off: ' + ev('atsHoursChecks.map(c => c.kind + " " + c.icao).join()'));
+    assert(ev('runwayChecks[0].overflight') === true, 'a fly-by start kept its runway check');
+    // An H24 CTR is never called class G - its ATC unit is always open - and
+    // an open one gets no line at all: it is its published class.
+    ev(`flights = [{ id: 1, title: "F1", depElev: 254, waypoints: [${adWp('ENDU')}, ${adWp('ENTC', { alt: 3500, flyby: true })}] }];
+        activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    assert(!/Tromsø CTR is class G/.test(doc.getElementById('hours-body').textContent), 'an H24 CTR was called class G');
+    doc.getElementById('def-etd').value = '12:00';
+    w.renderAllFlightTables();
+    assert(!doc.getElementById('hours-body').querySelector('.hours-ctr'), 'an open CTR gained a line on the card');
+  });
+});
+
+T('choosing Fly-by on an aerodrome marks it, and the waypoint menu toggles it only where it means something', () => {
+  lateSunday('12:00', () => {
+    ev(`flights = [{ id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENTC')}] }]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    const a = ev('AIP_ANCHORS.find(x => x.kind === "AD" && x.icao === "ENDU")');
+    w.addAnchorWaypoint(a, { flyby: true });
+    assert(ev('flights[0].waypoints[1].flyby') === true, 'the Fly-by choice did not mark the waypoint');
+    w.addAnchorWaypoint(a, { stop: 'full-stop' });
+    assert(!ev('"flyby" in flights[0].waypoints[2]'), 'a full stop was marked a fly-by');
+  });
+});
+
+TA('the waypoint menu offers the fly-by toggle on an aerodrome, and not on a stop or a reporting point', async () => {
+  const labels = async (i) => {
+    const pr = w.openWaypointMenu(0, i);
+    const got = [...openDlg().querySelectorAll('.dlg-btn')].map((b) => b.textContent);
+    answerDialog('Cancel'); await pr;
+    return got.join(' | ');
+  };
+  try {
+    const p = aipDataset().aerodromes.find((x) => x.icao === 'ENDU').points.find((q) => q.name === 'ÅSEN');
+    ev(`flights = [{ id: 1, title: "F1", depElev: 32, waypoints: [${adWp('ENTC')},
+        { lat: ${p.lat}, lng: ${p.lng}, name: "ÅSEN", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11, anchor: "AIP-RP" },
+        ${adWp('ENDU', { stop: 'touch-go', stopMin: 5 })}, ${adWp('ENTC', { alt: 3000 })}] }];
+        activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    assert(/Fly-by ENTC \(no landing\)/.test(await labels(0)), 'an aerodrome waypoint has no fly-by toggle: ' + await labels(0));
+    assert(!/Fly-by|not a fly-by/.test(await labels(1)), 'a reporting point was offered the toggle');
+    assert(!/Fly-by|not a fly-by/.test(await labels(2)), 'a touch & go was offered the toggle');
+    const pr = w.openWaypointMenu(0, 3);
+    answerDialog('Fly-by ENTC'); await pr;
+    assert(ev('flights[0].waypoints[3].flyby') === true, 'the toggle did not mark the waypoint');
+    assert(/Take off \/ land at ENTC \(not a fly-by\)/.test(await labels(3)), 'the toggle does not offer the way back');
+  } finally { ev(SEED); }
 });
 
 runAsyncTests().then(() => {

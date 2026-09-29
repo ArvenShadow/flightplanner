@@ -362,12 +362,13 @@
             <li><b>Click a published aerodrome and say what happens there.</b> Three things mean three different plans, so the planner asks rather than guessing:
               <b>🔁 Touch &amp; go</b> — the aircraft never stops. It costs <b>5 minutes</b> of circuit time (priced at your <i>pattern</i> fuel flow, since that is what it is), then you are asked whether to fly <b>circuits</b> here; say yes and the laps are added at the derived circuit altitude.
               <b>🛩 Full stop</b> — <b>10 minutes</b> on the ground, and the next sector pays a fresh <b>start-up and taxi</b>, because the engine was shut down and started again. If you refuel there, put the fuel on board into the <b>⛽ Fuel after</b> box in the next plan's header and that sector departs with it; leave it empty and whatever is left carries over. It is <b>not</b> checked against tank capacity — the planner holds no published usable-fuel figure for the aircraft, so what fits in the tanks is your call. (A touch & go gets no such box: the engine never stops.)
-              <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing.
+              <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing. <b>A fly-by is not a take-off or a landing</b>, so there is no runway distance and no opening-hours finding for it — the 🕐 ATS opening hours card lists it as <b>OVR</b> and says whether ATS is open as you pass, and where it is closed that the <b>CTR is class G, RMZ</b> (AIP ENR 1.4: a CTR outside the opening hours of its ATC unit is an RMZ): keep a listening watch and call as necessary. A <b>reporting point</b> is never a landing either, even one a mile from the runway. A point you <b>clicked</b> onto the field has no such marker, so it counts as landing where it lies — <b>right-click it</b> and choose <b>Fly-by (no landing)</b> to say otherwise, or <b>Take off / land here</b> to undo it.
               <br><b>The first waypoint of a plan is asked a different question</b>, because you cannot touch down or shut down before you have taken off: a fresh plan offers <b>🛫 Departure</b> (on the field, at its published elevation, and it sets the plan's departure elevation to match) and <b>➡ Fly-by</b> (you are already airborne and pass overhead — it stays at your planned altitude and leaves the departure elevation alone). Nothing is guessed from the position in the plan: whichever you pick is what you get.
               <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type.
               <br><b>The ground time belongs to the sector it delays</b>, which is the one whose header you edit it in: it opens that plan's total and moves every ETO in it, and it is <i>not</i> added to the sector you just landed from. So a plan that <b>ends</b> in a full stop — nothing after it, or you deleted the sector it opened — is charged <b>no ground time and no circuit fuel at all</b>: a landing is the end of the flight, and there is no off-block left for it to delay. Add a sector after it and the figures appear on that one. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
+            <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> (ippc.no cannot be read by a browser page): check them before flight.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
             <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only.
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
@@ -1443,7 +1444,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.0';
+    const APP_VERSION = '17.1';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4143,6 +4144,13 @@
           ? 'Applies here and to the ' + onward + ' fix' + (onward === 1 ? '' : 'es') +
             ' after it \u2014 ' + fl.waypoints[fl.waypoints.length - 1].name + ' keeps its own'
           : 'Applies to this fix';
+      // FLY-BY OR MOVEMENT (v17.1). Offered only where the answer changes
+      // something: a waypoint on a published aerodrome that is not already a
+      // stop (a touch & go or a full stop IS a landing), not a circuit, and not
+      // a reporting point (which is never a movement). It is how a fly-by added
+      // before the flag existed, or a point clicked onto the field by hand, is
+      // told apart from a landing - the planner does not guess which it is.
+      const flybyAd = !isPat && !wp.stop && wp.anchor !== 'AIP-RP' ? aerodromeAt(wp) : null;
       const r = await ask({
         title: (isPat ? 'Circuit stop' : 'Waypoint ' + (wpIdx + 1)) + ': ' + wp.name,
         message: isPat
@@ -4155,13 +4163,32 @@
         ],
         buttons: [
           { id: 'apply', label: 'Apply', variant: 'primary' },
+          ...(flybyAd ? [{ id: 'flyby', label: wp.flyby
+            ? '\u2708 Take off / land at ' + flybyAd.icao + ' (not a fly-by)'
+            : '\u27a1 Fly-by ' + flybyAd.icao + ' (no landing)' }] : []),
           { id: 'delete', label: isPat ? 'Delete this circuit stop' : 'Delete this waypoint', variant: 'danger' },
           { id: 'cancel', label: 'Cancel', variant: 'ghost' }
         ]
       });
       if (r.id === 'delete') { deleteWaypointFromFlight(fIdx, wpIdx); return; }
+      if (r.id === 'flyby') { toggleFlyby(fIdx, wpIdx); return; }
       if (r.id !== 'apply') return;
       applyWaypointEdit(fIdx, wpIdx, r.values || {});
+    }
+
+    /** Mark a waypoint as flown over, or back as a take-off / landing (v17.1).
+     *  Nothing else about it changes - the altitude column is the pilot's. */
+    function toggleFlyby(fIdx, wpIdx) {
+      // RE-READ AFTER THE AWAIT (discipline rule 7).
+      const wp = flights[fIdx] && flights[fIdx].waypoints[wpIdx];
+      if (!wp || wp.isPattern || wp.stop) return;
+      pushUndoState(wp.flyby ? 'mark a fly-by as a landing' : 'mark a waypoint as a fly-by');
+      if (wp.flyby) delete wp.flyby; else wp.flyby = true;
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
+      say(wp.flyby ? wp.name + ' is flown over: no runway or opening-hours check there.'
+                   : wp.name + ' is a take-off or landing again.', 'info');
     }
 
     /** Commit whatever the waypoint dialog changed - the name, the altitude, or
@@ -4877,7 +4904,9 @@
      * the airspace next to the one under the cursor.
      */
     function airspaceCardHTML(f, at) {
-      const i = airspaceInfo(f, { sectors: (AIP && AIP.sectors) || [], at: at || null });
+      const ad = f.kind === 'CTR' && f.icao && AIP && AIP.aerodromes ? AIP.aerodromes.find((x) => x.icao === f.icao) : null;
+      const i = airspaceInfo(f, { sectors: (AIP && AIP.sectors) || [], at: at || null,
+                                  atsHours: ad && ad.ats ? ad.ats.hours : null });
       let h = '<div class="as-card" style="--as-accent:' + i.color + ';">';
       h += '<div class="as-head"><span class="as-name">' + esc(i.name) + '</span>';
       h += i.cls ? '<span class="as-class">' + esc(i.cls) + '</span>' : '';
@@ -5478,7 +5507,7 @@
       wp.laps = 3;
       // A FLY-BY IS NAMED AFTER THE PLACE, not the ICAO code: nothing happens
       // at the aerodrome, so the code would be misleading on the OFP.
-      if (o.flyby) { const c = civilName(a); if (c) wp.name = c; }
+      if (o.flyby) { const c = civilName(a); if (c) wp.name = c; wp.flyby = true; }
       if (o.stop) { wp.stop = normaliseStopKind(o.stop); wp.stopMin = normaliseStopMinutes(o.stop); }
       // An AERODROME DEPARTED FROM also sets the flight's departure elevation:
       // the published field elevation IS that number, and leaving the two
@@ -6740,9 +6769,21 @@
           // WHERE the sector starts and ends, for the take-off and landing
           // distance (v16.96). The same `real` waypoints the form's DEP and
           // DEST come from, so the runway checked is the aerodrome printed.
+          //
+          // A SECTOR WITH NO LEG IS NOT A FLIGHT (v17.1, the author: "If i
+          // delete a landing that issued a warning flag, the warning flag
+          // still persists"). A full stop opens the next sector with its
+          // departure already in it - one waypoint, nowhere to go - and that
+          // stub used to be checked as a take-off at the landing's own
+          // instant. Delete the landing and the stub's take-off warning was
+          // what stayed on the banner. No leg, no take-off and no landing.
+          //
+          // `over` says the end is flown OVER (isOverflight: a fly-by, or a
+          // reporting point), so it is no movement at the aerodrome nearby.
           flightId: fl.id,
-          depAt: real.length ? { lat: real[0].lat, lng: real[0].lng } : null,
-          arrAt: real.length > 1 ? { lat: real[real.length - 1].lat, lng: real[real.length - 1].lng } : null
+          depAt: real.length > 1 ? { lat: real[0].lat, lng: real[0].lng, over: isOverflight(real[0]) } : null,
+          arrAt: real.length > 1 ? { lat: real[real.length - 1].lat, lng: real[real.length - 1].lng,
+                                     over: isOverflight(real[real.length - 1]) } : null
         });
 
         grandTotalDist += sectorDist;
@@ -7534,6 +7575,7 @@
       const blank = { icao: '', rwy: '', elevFt: NaN, wdir: '', wspdKt: NaN, xwind: '', paFt: NaN, qnh: NaN,
         tempC: NaN, daFt: NaN, hwindKt: NaN, uncorrM: NaN, windCorrM: NaN, braking: NaN, brakingCorrM: NaN,
         correctedM: NaN, requiredM: NaN, availableM: NaN, note: '' };
+      if (c.overflight) return Object.assign(blank, { note: 'Flown over, not a ' + (c.kind === 'takeoff' ? 'take-off' : 'landing') + ' - nothing to check.' });
       if (!c.icao) return Object.assign(blank, { note: 'Not at a published aerodrome - work it from the POH.' });
       if (c.noRunways) return Object.assign(blank, { icao: c.icao, note: 'No runway data in the AIP dataset - work it from the AIP.' });
       const r = c.res, w = c.wind;
@@ -8722,6 +8764,10 @@
           // nearest ARP) - so "which aerodrome is this" has one answer.
           const ad = aerodromeAt(at);
           const base = { i, key, role, kind, sectorLabel: (s.meta.dep || '?') + ' → ' + (s.meta.dest || '?') };
+          // FLOWN OVER, NOT USED (v17.1): a fly-by or a reporting point is no
+          // take-off and no landing, so there is no runway to check and no
+          // METAR to fetch for it. `icao` stays null for exactly that reason.
+          if (at.over) { out.push(Object.assign(base, { icao: null, overflight: true, overIcao: ad ? ad.icao : null })); continue; }
           if (!ad) { out.push(Object.assign(base, { icao: null })); continue; }
           if (!ad.runways || !ad.runways.length) {
             out.push(Object.assign(base, { icao: ad.icao, noRunways: true }));
@@ -8841,6 +8887,12 @@
         const what = c.kind === 'takeoff' ? 'Take-off' : 'Landing';
         h += '<div class="perf-row">';
         h += '<div class="perf-head"><span class="mb-eyebrow">' + esc(what) + '</span> · <b>' + esc(c.sectorLabel) + '</b></div>';
+        if (c.overflight) {
+          h += '<div class="perf-note">' + (c.overIcao ? esc(c.overIcao) + ' is flown over' : 'This end is flown over') +
+            ' (a fly-by or a reporting point), not a ' + (c.kind === 'takeoff' ? 'take-off' : 'landing') +
+            ' - there is no runway to check.</div></div>';
+          continue;
+        }
         if (!c.icao) {
           h += '<div class="perf-note">Not at a published aerodrome, so there is no runway to check.</div></div>';
           continue;
@@ -8970,27 +9022,70 @@
      * The aerodrome is resolved the way the runway checks resolve it
      * (aerodromeAt, by position), and the instants are the daylight card's
      * (sectorTimeWindows: minutes after the ETD at each take-off and landing).
-     * A fly-by is not a movement at that aerodrome and is not checked.
+     *
+     * A FLY-BY IS NOT A MOVEMENT (v17.1, the author: "flyby of an aerodrome
+     * does not count as landing and should therefore not issue warning when
+     * flying over the aerodrome"). A sector end flown over - a fly-by or a
+     * reporting point (isOverflight) - is no take-off and no landing, and a
+     * sector with no leg has neither (see depAt). A waypoint the pilot marked
+     * as a fly-by is still LISTED, as kind 'flyby', because what happens to the
+     * airspace is worth knowing: a CTR outside the opening hours of its ATC
+     * unit is class G, RMZ (AIP ENR 1.4). It never reaches the banner.
      */
     function buildAtsHoursChecks(sectorTimeWindows) {
       const etd = planEtdMs();
       const out = [];
+      const check = (kind, ad, min, sectorLabel) => {
+        const ms = etd === null || !isFinite(min) ? null : etd + Math.round(min) * 60000;
+        const hours = ad.ats ? parseAtsHours(ad.ats.hours) : null;
+        const res = hours && ms !== null ? atsOpenAt(hours, ms) : null;
+        return { kind, icao: ad.icao, name: ad.name, sectorLabel, ms, ats: ad.ats || null, hours, res, ctr: ctrOf(ad.icao) };
+      };
       for (const sw of sectorTimeWindows || []) {
         const fl = flights[sw.fIdx];
         const s = fl && ofpPrintModel.find((m) => m.flightId === fl.id);
         if (!s) continue;
-        for (const [kind, at, min] of [['takeoff', s.depAt, sw.startMin], ['landing', s.arrAt, sw.endMin]]) {
-          if (!at) continue;
-          const ad = aerodromeAt(at);
-          if (!ad) continue;
-          const ms = etd === null ? null : etd + Math.round(min) * 60000;
-          const hours = ad.ats ? parseAtsHours(ad.ats.hours) : null;
-          const res = hours && ms !== null ? atsOpenAt(hours, ms) : null;
-          out.push({ kind, icao: ad.icao, name: ad.name, sectorLabel: (s.meta.dep || '?') + ' → ' + (s.meta.dest || '?'),
-                     ms, ats: ad.ats || null, hours, res });
-        }
+        const label = (s.meta.dep || '?') + ' → ' + (s.meta.dest || '?');
+        /** @type {{kind: string, ad: any, min: number, j: number}[]} */
+        const here = [];
+        const wps = fl.waypoints;
+        const firstReal = wps.findIndex((w) => !w.isPattern);
+        let lastReal = -1;
+        wps.forEach((w, j) => { if (!w.isPattern) lastReal = j; });
+        if (s.depAt && !s.depAt.over) { const ad = aerodromeAt(s.depAt); if (ad) here.push({ kind: 'takeoff', ad, min: sw.startMin, j: firstReal }); }
+        // The fly-bys, in flight order between the two ends. The time over one
+        // is the start of the leg that leaves it; the last waypoint has no such
+        // leg, so it is the sector's own end.
+        wps.forEach((w, j) => {
+          if (w.flyby !== true) return;
+          const ad = aerodromeAt(w);
+          if (!ad) return;
+          const min = j === lastReal ? sw.endMin : legStartTimes[sw.fIdx + '-' + j];
+          here.push({ kind: 'flyby', ad, min: Number(min), j });
+        });
+        if (s.arrAt && !s.arrAt.over) { const ad = aerodromeAt(s.arrAt); if (ad) here.push({ kind: 'landing', ad, min: sw.endMin, j: lastReal + 0.5 }); }
+        here.sort((a, b) => a.j - b.j);
+        for (const x of here) out.push(check(x.kind, x.ad, x.min, label));
       }
       return out;
+    }
+
+    /** The CTR an aerodrome's ATC unit works, from the airspace data (each AD 2.17
+     *  CTR carries its aerodrome's ICAO). Null where there is none - an AFIS
+     *  aerodrome's TIZ is class G and an RMZ at all hours. */
+    function ctrOf(icao) {
+      const f = AIP && AIP.features ? AIP.features.find((x) => x.kind === 'CTR' && x.icao === icao) : null;
+      return f ? { name: f.name, cls: f.class } : null;
+    }
+
+    /** What the CTR is while ATS is closed, for the card. ENR 1.4 lists "CTR
+     *  outside the opening hours of the ATC unit" among the RMZs, in its Class G
+     *  paragraph - so then the CTR is class G, RMZ. Nothing is said while ATS
+     *  is open: the CTR is its published class, which the chart already shows,
+     *  and a line on every row would bury the one that matters. */
+    function ctrStatusText(c) {
+      if (!c.ctr || !c.res || c.res.open !== false) return '';
+      return c.ctr.name + ' is class G, RMZ while ATS is closed (ENR 1.4): keep a listening watch and call as necessary on the appropriate channel';
     }
 
     /** "0915 local (0715Z)" for an instant. */
@@ -9009,7 +9104,7 @@
       if (atsHoursError) return ['The ATS opening-hours check failed to run: ' + atsHoursError + '. Check the hours in the AIS Portal.'];
       const out = [];
       for (const c of atsHoursChecks) {
-        if (!c.res || c.res.open !== false) continue;
+        if (c.kind === 'flyby' || !c.res || c.res.open !== false) continue;
         out.push(c.icao + ' ' + (c.kind === 'takeoff' ? 'take-off' : 'landing') + ' at ' + localAndUtc(c.ms) +
           ' is OUTSIDE the published ATS hours (' + c.res.window + ', ' + c.res.season + ' time).');
       }
@@ -9021,23 +9116,28 @@
       const host = document.getElementById('hours-body');
       if (!host) return;
       if (!atsHoursChecks.length) {
-        host.innerHTML = '<span style="color:var(--text-muted);">No take-off or landing at a published aerodrome yet.</span>';
+        host.innerHTML = '<span style="color:var(--text-muted);">No take-off, landing or fly-by at a published aerodrome yet.</span>';
         return;
       }
       const src = window.C182_AIP && window.C182_AIP.atsHoursSource;
       const noEtd = atsHoursChecks.every((c) => c.ms === null);
       let h = '<table class="hours-table" style="width:100%;">';
       for (const c of atsHoursChecks) {
-        const what = c.kind === 'takeoff' ? 'DEP' : 'ARR';
+        const what = c.kind === 'takeoff' ? 'DEP' : c.kind === 'landing' ? 'ARR' : 'OVR';
+        const flyby = c.kind === 'flyby';
         let verdict, cls = '';
         if (!c.ats) { verdict = 'no hours in the imported table'; cls = 'hours-unknown'; }
         else if (c.ms === null) { verdict = 'set an ETD to check'; cls = 'hours-unknown'; }
         else if (!c.res || c.res.open === null) { verdict = (c.res ? c.res.why : 'not checked'); cls = 'hours-unknown'; }
         else if (c.res.open) { verdict = '✓ open · ' + c.res.window; cls = 'hours-open'; }
+        // A FLY-BY OF A CLOSED AERODROME IS NOT A FINDING - nothing is used
+        // there - so it is not painted as one either.
+        else if (flyby) { verdict = 'ATS closed · ' + c.res.window + ' · fly-by, no landing'; cls = 'hours-flyby'; }
         else { verdict = '⛔ CLOSED · ' + c.res.window; cls = 'hours-closed'; }
+        const ctrText = ctrStatusText(c);
         h += '<tr class="' + cls + '"><td style="font-weight:700; white-space:nowrap;">' + what + ' ' + esc(c.icao) + '</td>' +
           '<td style="white-space:nowrap;">' + (c.ms === null ? '' : esc(localAndUtc(c.ms))) + '</td>' +
-          '<td>' + esc(verdict) + '</td></tr>';
+          '<td>' + esc(verdict) + (ctrText ? '<br><span class="hours-ctr">' + esc(ctrText) + '</span>' : '') + '</td></tr>';
         // THE PUBLISHED TEXT IS ALWAYS SHOWN, decoded or not, and so is the
         // remark - "core hours, REF NOTAM for possible adjustments" is the part
         // a pilot most needs to read.

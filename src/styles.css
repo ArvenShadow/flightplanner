@@ -1633,6 +1633,8 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
 .hours-raw td { font-size: 10px; color: var(--text-muted); padding-bottom: 4px; text-align: left; }
 .hours-src { font-family: monospace; word-break: break-word; }
 .hours-rmk { font-style: italic; }
+/* What the CTR is at that moment (v17.1): class D or, with ATS closed, class G RMZ. */
+.hours-ctr { font-size: 9px; font-weight: 600; color: var(--text-muted); }
 
 /* a METAR or TAF older than its routine interval (v16.99) */
 .wx-outdated { color: var(--wx-outdated); }

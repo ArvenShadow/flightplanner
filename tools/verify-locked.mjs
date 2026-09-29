@@ -173,7 +173,11 @@ let storageState = null;
   check(globals.sched === 'function', 'the bundle is at global scope: ' + globals.sched);
   check(globals.c182 === 'object', 'window.C182 is present: ' + globals.c182);
   check(globals.aip, 'the AIP dataset decrypted and loaded');
-  check(/16\./.test(globals.version), 'the version badge rendered: ' + JSON.stringify(globals.version));
+  // The version is READ, not written here: this asserted /16\./ until v17.0
+  // made it a check that could only fail - a premise that expired (v16.56).
+  const shipped = JSON.parse((await import('node:fs')).readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    .version.split('.').slice(0, 2).join('.');
+  check(globals.version.startsWith('v' + shipped), 'the version badge rendered v' + shipped + ': ' + JSON.stringify(globals.version));
 
   // THE PAGE SCRIPT RAN, and its top level is what seeds the plan. A relaunch
   // that skipped it would leave every bundle global defined and no flight.
