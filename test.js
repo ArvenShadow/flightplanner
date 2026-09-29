@@ -308,9 +308,10 @@ T('unit change converts initial fuel & relabels', () => {
 });
 
 console.log('\n=== 5. Bulk apply ===');
-TA('applyBulkDefaultsToActive sets winds, keeps dep elevation', async () => {
-  doc.getElementById('def-wdir').value = '310';
-  doc.getElementById('def-wspd').value = '22';
+TA('applyBulkDefaultsToActive sets alt and OAT, keeps dep elevation AND every wind (v17.6)', async () => {
+  // The winds the later sections rely on are put on the legs directly: there is
+  // no default-wind field to carry them any more.
+  ev(`flights[0].waypoints.forEach((wp, i) => { wp.wdir = 310 + i; wp.wspd = 22; });`);
   doc.getElementById('def-oat').value = '-4';
   doc.getElementById('def-alt').value = '3500';
   const depAltBefore = ev('flights[0].waypoints[0].alt');
@@ -319,19 +320,41 @@ TA('applyBulkDefaultsToActive sets winds, keeps dep elevation', async () => {
   answerDialog('Apply to all legs');
   await p;
   const wps = ev('flights[0].waypoints');
-  assert(wps.every(x => x.wdir === 310 && x.wspd === 22 && x.oat === -4), 'winds not applied');
+  assert(wps.every(x => x.oat === -4), 'OAT not applied');
+  assert(wps.every((x, i) => x.wdir === 310 + i && x.wspd === 22), 'bulk apply overwrote a leg wind');
   assert(wps[0].alt === depAltBefore, 'departure elevation was overwritten');
   assert(wps[1].alt === 3500, 'cruise alt not applied');
+  ev(`flights[0].waypoints.forEach((wp) => { wp.wdir = 310; }); renderAllFlightTables();`);
+});
+
+TA('Flight Defaults has no departure elevation and no wind field; new waypoints start at 000/00 (v17.6)', async () => {
+  for (const id of ['def-dep-elev', 'def-wdir', 'def-wspd'])
+    assert(!doc.getElementById(id), '#' + id + ' is back in Flight Defaults');
+  assert(!/def-dep-elev|def-wdir|def-wspd|updateActiveFlightDepElev/.test(APP_SRC),
+    'code still reads a removed Flight Defaults field');
+  assert(ev('NEW_WP_WIND.wdir') === 0 && ev('NEW_WP_WIND.wspd') === 0, 'a new waypoint no longer starts at 000/00');
+  // a waypoint born by a map click carries 000/00, whatever the legs around it say
+  ev(`pushUndoState('test'); flights.push({ id: 99, title: 'T', depElev: 0, waypoints: [] });
+      activeFlightIndex = flights.length - 1;`);
+  for (const latlng of [{ lat: 69.5, lng: 19.0 }, { lat: 69.7, lng: 19.4 }]) {
+    const p = w.__mapHandlers.click({ latlng });
+    await tick();
+    answerDialog('Add waypoint');
+    await p;
+  }
+  const wps = ev('flights[activeFlightIndex].waypoints');
+  assert(wps.length === 2, 'map clicks did not add two waypoints: ' + wps.length);
+  assert(wps.every((x) => x.wdir === 0 && x.wspd === 0), 'a new waypoint did not start at 000/00: ' +
+    JSON.stringify(wps.map((x) => [x.wdir, x.wspd])));
+  ev(`flights.pop(); activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
 });
 
 console.log('\n=== 6. Wind stronger than TAS (old NaN crash) ===');
 TA('gale-force wind does not produce NaN', async () => {
-  doc.getElementById('def-wspd').value = '400';
-  await (async () => { const p = w.applyBulkDefaultsToActive(); await tick(); answerDialog('Apply to all legs'); await p; })();
+  ev(`flights[0].waypoints.forEach((wp) => { wp.wspd = 400; }); renderAllFlightTables();`);
   const txt = doc.getElementById('flight-plans-container').textContent;
   assert(!txt.includes('NaN'), 'NaN leaked into table with wspd > TAS');
-  doc.getElementById('def-wspd').value = '15';
-  const q = w.applyBulkDefaultsToActive(); await tick(); answerDialog('Apply to all legs'); await q;
+  ev(`flights[0].waypoints.forEach((wp) => { wp.wspd = 15; }); renderAllFlightTables();`);
 });
 
 console.log('\n=== 7. PATTERN waypoint (old showDelete ReferenceError) ===');
@@ -9060,6 +9083,33 @@ T('undo and redo name the step they will take back', () => {
   assert(undoBtn.disabled === (ev('undoStack.length') === 0), 'the button state does not follow the stack');
   // every call site names its step, or the buttons fall back to "the last change"
   assert(!/pushUndoState\(\)/.test(APP_SRC), 'an unlabelled pushUndoState() call came back');
+  ev(SEED);
+});
+
+T('every undo and redo - keyboard included - shows a box naming the step (v17.6)', () => {
+  ev(SEED);
+  ev(`pushUndoState('rename a waypoint'); flights[0].waypoints[1].name = 'X'; renderAllFlightTables();`);
+  const box = doc.getElementById('undo-notice');
+  assert(box, 'no #undo-notice element');
+  assert(box.className.includes('no-print'), 'the undo notice would print');
+  box.style.display = 'none';
+  ev('undoLast(true)');   // the KEYBOARD path, which used to say nothing
+  assert(box.style.display === 'block', 'a keyboard undo showed no notice');
+  assert(/Undone:/.test(box.textContent) && /rename a waypoint/.test(box.textContent),
+    'the notice does not name the undone step: ' + box.textContent);
+  ev('redoLast(true)');
+  assert(/Redone:/.test(box.textContent) && /rename a waypoint/.test(box.textContent),
+    'the notice does not name the redone step: ' + box.textContent);
+  // ONE box, rewritten - holding the key must not stack notices
+  assert(doc.querySelectorAll('#undo-notice').length === 1, 'more than one undo notice');
+  // a hostile label is text, not markup
+  ev(`pushUndoState('<img src=x onerror=alert(1)>'); undoLast(true);`);
+  assert(!box.querySelector('img'), 'an undo label reached innerHTML unescaped');
+  // at the end of the stack the key stays silent and the notice is not rewritten as a step
+  ev('undoStack.length = 0; updateUndoButtons();');
+  const before = box.textContent;
+  ev('undoLast(true)');
+  assert(box.textContent === before, 'an empty-stack undo rewrote the notice');
   ev(SEED);
 });
 

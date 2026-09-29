@@ -1402,6 +1402,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .toast { font-size: 11.5px; font-weight: 600; padding: 8px 12px; border-radius: 6px; cursor: pointer;
       max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); background: #2d3748; color: #fff; }
     .toast-good { background: #276749; } .toast-warn { background: #c05621; } .toast-bad { background: #c53030; }
+    /* The undo/redo notice (v17.6): bottom centre, above the toasts, one box
+       rewritten per step. Literal colours like the toasts beside it, so it
+       reads the same on every skin. */
+    #undo-notice { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 10003;
+      min-width: 220px; max-width: min(460px, calc(100vw - 32px)); padding: 9px 14px; border-radius: 8px;
+      background: #1a202c; color: #fff; border-left: 4px solid #ecc94b; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+      font-size: 12.5px; line-height: 1.4; pointer-events: none; }
+    #undo-notice.undo-notice-redo { border-left-color: #63b3ed; }
+    .undo-notice-sub { font-size: 11px; opacity: 0.75; margin-top: 2px; }
     .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
     .modal { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 8px; width: 520px; max-width: 95vw; padding: 18px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); max-height: 90vh; display: flex; flex-direction: column; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }

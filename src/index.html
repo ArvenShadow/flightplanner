@@ -13,6 +13,12 @@
   <!-- @STYLES: build inlines src/styles.css here -->
 </head>
 <body class="light-mode">
+  <!-- WHAT AN UNDO OR REDO TOOK BACK (v17.6, the author). One box that is
+       rewritten on every step, not a toast per step: holding Ctrl+Z walks the
+       stack, and a pile of toasts would bury the one that says where you are.
+       It says the step, not just "Undone" - the label is the one the step was
+       pushed with, the same text the Undo/Redo buttons show as their title. -->
+  <div id="undo-notice" class="no-print" role="status" aria-live="polite" style="display:none;"></div>
 
   <div id="header">
     <h1>C182 Multi-Leg VFR Flight Planner <span id="app-version-badge" style="font-size:11px; font-weight:600; color:#a0aec0; margin-left:8px; vertical-align:middle; white-space:nowrap;"></span></h1>
@@ -130,11 +136,12 @@
             <button class="btn btn-primary btn-sm" onclick="applyBulkDefaultsToActive()">Apply Bulk to Active</button>
           </div>
         </div>
+        <!-- NO DEPARTURE ELEVATION AND NO WIND HERE (v17.6, the author). The
+             departure elevation is set by choosing the departure aerodrome
+             (and stays editable in each plan's header); a new waypoint's wind
+             starts at 000/00 and the wind fetch fills it. A default wind typed
+             here only ever meant a guess copied onto every new fix. -->
         <div class="global-inputs">
-          <div class="input-group">
-            <label>Dep. Elev (ft)</label>
-            <input type="number" id="def-dep-elev" value="0" step="50" onfocus="this.select()" onchange="updateActiveFlightDepElev(this.value)">
-          </div>
           <div class="input-group">
             <label>Cruise Alt (ft)</label>
             <input type="number" id="def-alt" value="2500" step="500" onfocus="this.select()" onchange="syncDefaultOatToIsa()">
@@ -142,14 +149,6 @@
           <div class="input-group">
             <label title="Defaults to ISA for the cruise altitude (15°C - 2°C/1000ft) and follows altitude changes until you type your own OAT.">Def. OAT (°C · ISA auto)</label>
             <input type="number" id="def-oat" value="10" onfocus="this.select()" onchange="defaultOatTouched = true;">
-          </div>
-          <div class="input-group">
-            <label>Wind Dir (°)</label>
-            <input type="number" id="def-wdir" value="0" onfocus="this.select()">
-          </div>
-          <div class="input-group">
-            <label>Wind Spd (kt)</label>
-            <input type="number" id="def-wspd" value="0" onfocus="this.select()">
           </div>
           <div class="input-group">
             <label id="fuel-dep-label">Initial Fuel (gal)</label>
@@ -387,14 +386,15 @@
             <li><b>Right-click a waypoint</b> to edit its <b>name and altitude in one box</b> — press <b>Enter</b> to apply. The altitude carries forward to every later fix, so you set a whole phase of flight in one go. The <b>destination keeps its own altitude</b> so your descent survives, and <b>circuit stops keep their circuit altitude</b>, which is derived from the field rather than inherited. One Ctrl+Z takes the whole edit back.</li>
             <li><b>TOC and TOD are drawn as a short tick across the track</b>, the way you would mark them on the paper chart, with a small <b>TOC</b> / <b>TOD</b> chip beside it — <b>hover the chip</b> for the full sentence (which altitude, how far from which fix, and for a TOD the aerodrome being descended to). The distances are also in the leg's ↳ sub-line and the plotting list, which is what you copy from and what prints. A descent that fills a whole leg starts <b>at</b> the previous fix, and the mark is drawn there and says so.</li>
             <li>Press <b>👁 View Mode</b> to lock all editing for in-flight use; tapping a map waypoint then highlights its OFP row. The button flips to <b>✏ Edit Mode</b> to switch back.</li>
-            <li><b>Undo / Redo</b> cover every change. <b>Esc</b> closes any window like this one.</li>
+            <li><b>Undo / Redo</b> cover every change, and every undo or redo - keyboard or button - puts up a box at the bottom of the screen saying <b>which step</b> it took back or put back. <b>Esc</b> closes any window like this one.</li>
           </ul>
         </div>
 
         <div class="setting-section">
           <h3>⛽ Flight Defaults &amp; Fuel</h3>
           <ul style="margin-left:16px;">
-            <li>New waypoints inherit the defaults: wind starts at <b>000/00</b>, OAT follows <b>ISA automatically</b> for your cruise altitude until you type a real temperature.</li>
+            <li>New waypoints inherit the defaults: wind starts at <b>000/00</b> on every new waypoint (there is no default-wind field) and <b>🌐 Fetch Forecast Winds</b> replaces it with the forecast; OAT follows <b>ISA automatically</b> for your cruise altitude until you type a real temperature. <b>Apply Bulk to Active</b> sets the cruise altitude and OAT on every leg and leaves the winds alone.</li>
+            <li><b>The departure elevation is set by the departure aerodrome</b>: choose a published aerodrome as your first waypoint and the plan departs from its field elevation. Each plan's header still shows it and lets you change it, for a departure that is not a published field.</li>
             <li><b>Initial Fuel</b> starts the Rem column; startup/taxi/takeoff burn (POH 1.7 gal) is charged at every departure - once at the start, and again after each full stop.</li>
             <li>Set a <b>Reserve</b> — any leg landing below it turns the Rem cell <span style="color:#e53e3e; font-weight:700;">red</span>.</li>
             <li>Enter an <b>ETD</b> to get an ETO clock time on every leg and an ETA for the whole flight.</li>
@@ -1221,7 +1221,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 153 inline on*= handlers - 123 written
+    // map, markers, undoStack...) plus 149 inline on*= handlers - 119 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1884,6 +1884,11 @@
 
     let isDoneMode = false;
     let highlightedWaypoint = null;
+    // EVERY NEW WAYPOINT STARTS AT 000/00 (v17.6, the author). There is no
+    // default-wind field any more: the wind fetch writes the real wind onto
+    // each fix, and until it has, the wind column shows 000/00 for the pilot
+    // to see. One constant, so the three places a waypoint is born agree.
+    const NEW_WP_WIND = Object.freeze({ wdir: 0, wspd: 0 });
 
     let isRulerMode = false;
     let rulerPoints = [];
@@ -2800,7 +2805,7 @@
     // by id here. The flight DATE goes in the snapshot too, and only here: it
     // is still never persisted to storage (v16.3 - a stale date must never show
     // wrong sun times), but undoing a change made this session should undo it.
-    const PLAN_FIELDS = ['fuel-dep', 'fuel-reserve', 'def-etd', 'def-date', 'def-dep-elev'];
+    const PLAN_FIELDS = ['fuel-dep', 'fuel-reserve', 'def-etd', 'def-date'];
     function planFieldState() {
       /** @type {Record<string, string>} */
       const out = {};
@@ -2903,7 +2908,7 @@
       renderAllFlightTables();
       saveActiveState();
       updateUndoButtons();
-      if (!quiet) say(what ? 'Undone: ' + what + '.' : 'Undone.', 'info', 3000);
+      showUndoNotice('undo', what);
     }
 
     function redoLast(quiet) {
@@ -2921,7 +2926,37 @@
       renderAllFlightTables();
       saveActiveState();
       updateUndoButtons();
-      if (!quiet) say(what ? 'Redone: ' + what + '.' : 'Redone.', 'info', 3000);
+      showUndoNotice('redo', what);
+    }
+
+    /**
+     * Say which step an undo or redo just took, EVERY time (v17.6).
+     *
+     * The keyboard path passed `quiet` and so said nothing at all - the Ctrl+Z
+     * a pilot actually uses was the one that left them guessing what changed.
+     * `quiet` now only silences the "Nothing to undo" at the end of the stack,
+     * which is what it was introduced for (holding the key down).
+     * @param {'undo'|'redo'} kind
+     * @param {string|null} what the label the step was pushed with
+     */
+    function showUndoNotice(kind, what) {
+      const box = document.getElementById('undo-notice');
+      if (!box) return;
+      const verb = kind === 'undo' ? 'Undone' : 'Redone';
+      const icon = kind === 'undo' ? '\u21B6' : '\u21B7';
+      const left = kind === 'undo' ? undoStack.length : redoStack.length;
+      box.innerHTML = '<div class="undo-notice-main">' + icon + ' <b>' + verb + ':</b> ' +
+        esc(what || 'the last change') + '</div>' +
+        '<div class="undo-notice-sub">' +
+        (kind === 'undo' ? 'Redo puts it back' : 'Undo takes it back again') +
+        (left ? ' \u00B7 ' + left + ' more step' + (left === 1 ? '' : 's') + ' to ' + kind : '') +
+        '</div>';
+      box.className = 'no-print undo-notice-' + kind;
+      box.style.display = 'block';
+      // The hide timer lives on the element, not in another page global.
+      const b = /** @type {any} */ (box);
+      if (b.__hideTimer) clearTimeout(b.__hideTimer);
+      b.__hideTimer = setTimeout(() => { box.style.display = 'none'; b.__hideTimer = null; }, 4000);
     }
 
     function toggleRulerMode() {
@@ -3269,8 +3304,8 @@
           ? (patAlt ? patAlt.alt : (activeFlight.waypoints[activeFlight.waypoints.length-1]?.alt || activeFlight.depElev))
           : initialAlt,
         oat: Number(document.getElementById('def-oat').value),
-        wdir: Number(document.getElementById('def-wdir').value),
-        wspd: Number(document.getElementById('def-wspd').value),
+        wdir: NEW_WP_WIND.wdir,
+        wspd: NEW_WP_WIND.wspd,
         var: magData.val,
         varSource: magData.source,
         isPattern: isPattern,
@@ -3307,16 +3342,9 @@
       if (flights[fIdx].waypoints.length > 0) {
         flights[fIdx].waypoints[0].alt = newElev;
       }
-      if (fIdx === activeFlightIndex) {
-        document.getElementById('def-dep-elev').value = newElev;
-      }
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
-    }
-
-    function updateActiveFlightDepElev(val) {
-      setFlightDepElevation(activeFlightIndex, val);
     }
 
     /**
@@ -3340,7 +3368,10 @@
       const srcIdx = (typeof afterIdx === 'number' && flights[afterIdx])
         ? afterIdx : flights.length - 1;
       const lastFlight = flights[srcIdx];
-      let newDepElev = Number(document.getElementById('def-dep-elev').value);
+      // With nothing to continue from, the new plan departs from 0 ft until a
+      // departure aerodrome is chosen - the same starting value the removed
+      // Flight Defaults field had (v17.6), not an invented field elevation.
+      let newDepElev = 0;
       let initialWPs = [];
 
       if (lastFlight && lastFlight.waypoints.length > 0) {
@@ -3362,8 +3393,8 @@
           name: lastWP.name === "PATTERN" ? (lastFlight.waypoints[lastFlight.waypoints.length - 2]?.name || "DEP") : lastWP.name,
           alt: newDepElev,
           oat: Number(document.getElementById('def-oat').value),
-          wdir: Number(document.getElementById('def-wdir').value),
-          wspd: Number(document.getElementById('def-wspd').value),
+          wdir: NEW_WP_WIND.wdir,
+          wspd: NEW_WP_WIND.wspd,
           var: lastWP.var,
           varSource: lastWP.varSource || "WMM-2026",
           isPattern: false,
@@ -3383,7 +3414,6 @@
       });
 
       activeFlightIndex = insertAt;
-      document.getElementById('def-dep-elev').value = newDepElev;
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
@@ -3420,7 +3450,6 @@
         if (activeFlightIndex >= flights.length) activeFlightIndex = flights.length - 1;
         if (activeFlightIndex < 0) activeFlightIndex = 0;
         if (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx) highlightedWaypoint = null;
-        document.getElementById('def-dep-elev').value = flights[activeFlightIndex].depElev;
         refreshMap();
         renderAllFlightTables();
         saveActiveState();
@@ -3430,7 +3459,6 @@
     function setActiveFlight(fIdx) {
       if (!flights[fIdx]) return;
       activeFlightIndex = fIdx;
-      document.getElementById('def-dep-elev').value = flights[activeFlightIndex].depElev;
       refreshMap();   // dimming of inactive flights follows the active selection
       renderAllFlightTables();
     }
@@ -4299,7 +4327,6 @@
           if (highlightedWaypoint.fIdx === nextIdx) highlightedWaypoint = null;
           else if (highlightedWaypoint.fIdx > nextIdx) highlightedWaypoint.fIdx--;
         }
-        document.getElementById('def-dep-elev').value = flights[activeFlightIndex].depElev;
       }
       refreshMap();
       renderAllFlightTables();
@@ -5585,8 +5612,8 @@
         atField,
         alt: first && !o.flyby ? fl.depElev : Number(document.getElementById('def-alt').value),
         oat: Number(document.getElementById('def-oat').value),
-        wdir: Number(document.getElementById('def-wdir').value),
-        wspd: Number(document.getElementById('def-wspd').value)
+        wdir: NEW_WP_WIND.wdir,
+        wspd: NEW_WP_WIND.wspd
       });
       const magData = resolveMagVar(wp.lat, wp.lng);
       wp.var = magData.val;
@@ -5604,8 +5631,6 @@
       // nothing about where the climb starts.
       if (first && atField && a.kind === 'AD' && typeof a.elevFt === 'number') {
         fl.depElev = a.elevFt;
-        const el = document.getElementById('def-dep-elev');
-        if (el && activeFlightIndex === 0) el.value = a.elevFt;
       }
       fl.waypoints.push(wp);
       refreshMap();
@@ -7234,12 +7259,13 @@
 
       const alt  = Number(document.getElementById('def-alt').value);
       const oat  = Number(document.getElementById('def-oat').value);
-      const wdir = Number(document.getElementById('def-wdir').value);
-      const wspd = Number(document.getElementById('def-wspd').value);
 
+      // THE WIND IS NOT A DEFAULT ANY MORE (v17.6), so bulk-apply leaves every
+      // leg's wind alone - writing 000/00 over a fetched wind would throw the
+      // forecast away for a number nobody chose.
       const ok = await confirmDialog(`Apply defaults to every leg of "${flightTitle(fl)}"?`,
-        `Cruise Alt: ${alt} ft\nOAT: ${oat} °C\nWind: ${wdir}° / ${wspd} kt\n\n` +
-        `The departure waypoint keeps its field elevation.`,
+        `Cruise Alt: ${alt} ft\nOAT: ${oat} °C\n\n` +
+        `The departure waypoint keeps its field elevation. Winds are not changed.`,
         { okLabel: 'Apply to all legs' });
       if (!ok) return;
 
@@ -7255,8 +7281,6 @@
       pushUndoState('apply defaults to every leg');
       live.waypoints.forEach((wp, idx) => {
         wp.oat  = oat;
-        wp.wdir = wdir;
-        wp.wspd = wspd;
         // Leave WP 1 at field elevation, and never re-level a pattern entry.
         if (idx > 0 && !wp.isPattern) wp.alt = alt;
       });
@@ -7275,7 +7299,7 @@
       flights = [{
         id: 1,
         title: "Flight Plan 1",
-        depElev: Number(document.getElementById('def-dep-elev').value) || 0,
+        depElev: 0,
         waypoints: []
       }];
       activeFlightIndex = 0;
@@ -8160,7 +8184,6 @@
           // elevation is a wrong climb datum on every leg.
           if (wps.length > 0 && isFinite(wps[0].alt)) {
             flights[activeFlightIndex].depElev = wps[0].alt;
-            document.getElementById('def-dep-elev').value = wps[0].alt;
           }
           refreshMap();
           renderAllFlightTables();
@@ -8174,9 +8197,6 @@
           activeFlightIndex = 0;
           loadedRouteRef = { type: 'mission', name };
           reportMagVarRefresh(refreshMagVarOnLoad(flights), `Flight "${name}"`);
-          if (flights[0] && flights[0].depElev !== undefined) {
-            document.getElementById('def-dep-elev').value = flights[0].depElev;
-          }
           refreshMap();
           renderAllFlightTables();
           saveActiveState();
@@ -9763,8 +9783,6 @@
 
       populateRouteDropdown();
       activeFlightIndex = 0;
-      if (isFinite(flights[0].depElev))
-        document.getElementById('def-dep-elev').value = flights[0].depElev;
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
@@ -9831,9 +9849,6 @@
       flights = restored || defaultFlights();
     }
     if (activeFlightIndex >= flights.length) activeFlightIndex = 0;
-    if (flights[0] && flights[0].depElev !== undefined) {
-      document.getElementById('def-dep-elev').value = flights[0].depElev;
-    }
     loadViewPrefs();
     loadKeybinds();
     // THE FLIGHT DATE IS SET BEFORE THE FIRST RENDER, not by the daylight card
