@@ -14304,6 +14304,33 @@ T('the drawing: stripes by width, a designation and a centre line on paint only,
     'NaN or undefined reached the drawing');
 });
 
+T('the wind box has as much room below its last line as above its first (v17.7)', () => {
+  // The author: "the bottom text is just a bit too close to the edge of the
+  // box". The box was a fixed 84 high and ended ONE unit under the last
+  // baseline. Every wind the box can show is checked, because the last line's
+  // wording (head / TAILWIND / VRB = tail) is what changes.
+  const R = require('./src/lib/rwydiagram.js');
+  const base = { kind: 'landing', desig: '28', widthM: 45, surface: 'ASPH', availableM: 2443, correctedM: 400,
+    requiredM: 572, factor: 1.43, windDir: 280, windKt: 10 };
+  const winds = [{ headKt: 6, crossKt: 8, crossFrom: 'L', variable: false },
+    { headKt: -2, crossKt: 2, crossFrom: null, variable: true },
+    { headKt: -4, crossKt: 0, crossFrom: null, variable: false }];
+  for (const [i, wind] of winds.entries()) for (const widthM of [18, 30, 45, 60]) {
+    const svg = R.runwayDiagramSvg(Object.assign({}, base, { wind, widthM }));
+    const box = svg.match(/<rect x="1" y="([\d.]+)" width="64" height="([\d.]+)"[^>]*class="rwyd-box"/);
+    assert(box, 'no wind box');
+    const top = Number(box[1]), bottom = top + Number(box[2]);
+    const ys = [...svg.matchAll(/<text x="33\.0" y="([\d.]+)"/g)].map((m) => Number(m[1]));
+    const first = Math.min(...ys), last = Math.max(...ys);
+    // the first line's CAP sits about 5.5 units above its baseline (7.5 px type)
+    const above = first - 5.5 - top, below = bottom - last;
+    assert(below >= 8, 'wind ' + i + ', ' + widthM + ' m: only ' + below.toFixed(1) + ' below the last line');
+    assert(Math.abs(below - above) <= 1.5, 'wind ' + i + ': the padding is lopsided, ' + above.toFixed(1) + ' above vs ' + below.toFixed(1) + ' below');
+    const vb = Number(svg.match(/viewBox="0 0 360 ([\d.]+)"/)[1]);
+    assert(vb >= bottom + 1, 'the box is cut off by the drawing\'s own edge: ' + bottom + ' vs ' + vb);
+  }
+});
+
 TA('the M&B distance card draws the runway for every worked check, from the same figures as its text', async () => {
   ev(SEED_STOP);
   doc.getElementById('fuel-dep').value = '64';
