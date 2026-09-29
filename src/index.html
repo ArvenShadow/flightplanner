@@ -365,6 +365,7 @@
               <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing. <b>A fly-by is not a take-off or a landing</b>, so there is no runway distance and no opening-hours finding for it — the 🕐 ATS opening hours card lists it as <b>OVR</b> and says whether ATS is open as you pass, and where it is closed that the <b>CTR is class G, RMZ</b> (AIP ENR 1.4: a CTR outside the opening hours of its ATC unit is an RMZ): keep a listening watch and call as necessary. A <b>reporting point</b> is never a landing either, even one a mile from the runway. A point you <b>clicked</b> onto the field has no such marker, so it counts as landing where it lies — <b>right-click it</b> and choose <b>Fly-by (no landing)</b> to say otherwise, or <b>Take off / land here</b> to undo it.
               <br><b>The first waypoint of a plan is asked a different question</b>, because you cannot touch down or shut down before you have taken off: a fresh plan offers <b>🛫 Departure</b> (on the field, at its published elevation, and it sets the plan's departure elevation to match) and <b>➡ Fly-by</b> (you are already airborne and pass overhead — it stays at your planned altitude and leaves the departure elevation alone). Nothing is guessed from the position in the plan: whichever you pick is what you get.
               <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type.
+              <br><b>Deleting the stop deletes the sector it opened</b>, so empty plans do not pile up while you edit: a sector with nothing flown in it yet goes with it at once, and one where you have already planned legs asks first (<b>Delete both</b>, <b>Delete only</b> the stop, or Cancel). Either way one <b>Ctrl+Z</b> puts both back. Deleting only the circuits after a touch &amp; go leaves the sector alone — the touch &amp; go is still there.
               <br><b>The ground time belongs to the sector it delays</b>, which is the one whose header you edit it in: it opens that plan's total and moves every ETO in it, and it is <i>not</i> added to the sector you just landed from. So a plan that <b>ends</b> in a full stop — nothing after it, or you deleted the sector it opened — is charged <b>no ground time and no circuit fuel at all</b>: a landing is the end of the flight, and there is no off-block left for it to delay. Add a sector after it and the figures appear on that one. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
@@ -1447,7 +1448,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.3';
+    const APP_VERSION = '17.4';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4239,12 +4240,74 @@
       }
     }
 
-    function deleteWaypointFromFlight(fIdx, wpIdx) {
-      pushUndoState('delete a waypoint');
+    /**
+     * Delete a waypoint - and, when it is a touch & go or a full stop, the
+     * sector that stop opened (v17.4, the author: "make sure the subsequent
+     * flightplan is also deleted so that empty flight plans wont pile up while
+     * editing the flight").
+     *
+     * THE SECTOR IS FOUND, NOT REMEMBERED (sectorOpenedByStop): the next plan,
+     * starting exactly on the stop. A sector with nothing flown in it yet is
+     * the stub the stop seeded and goes with it silently. One the pilot has
+     * already planned legs in is THEIR work, so they are asked - deleting
+     * planned legs because a landing was removed would be a surprise, not a
+     * tidy-up. Either way it is ONE undo step, so Ctrl+Z puts back both.
+     */
+    async function deleteWaypointFromFlight(fIdx, wpIdx) {
+      const fl = flights[fIdx];
+      const wp = fl && fl.waypoints[wpIdx];
+      if (!wp) return;
+      let nextIdx = sectorOpenedByStop(flights, fIdx, wpIdx);
+      let dropNext = nextIdx >= 0 && isStubSector(flights[nextIdx]);
+      if (nextIdx >= 0 && !dropNext) {
+        const next = flights[nextIdx];
+        const legs = next.waypoints.filter((w) => !w.isPattern).length - 1;
+        const ids = { fl: fl.id, next: next.id, name: wp.name, lat: wp.lat, lng: wp.lng };
+        const r = await ask({
+          title: 'Delete the sector ' + wp.name + ' opened too?',
+          message: (wp.stop === 'touch-go' ? 'The touch & go' : 'The full stop') + ' at ' + wp.name +
+            ' opened ' + flightTitle(next) + ', which already has ' + legs + ' leg' + (legs === 1 ? '' : 's') +
+            ' planned. Without the landing it departs from nowhere. Ctrl+Z puts back whatever you delete.',
+          buttons: [
+            { id: 'both', label: 'Delete both', variant: 'primary' },
+            { id: 'stop', label: 'Delete only ' + wp.name },
+            { id: 'cancel', label: 'Cancel', variant: 'ghost' }
+          ]
+        });
+        if (r.id !== 'both' && r.id !== 'stop') return;
+        // RE-READ AFTER THE AWAIT (discipline rule 7): find both plans by id
+        // and refuse if the waypoint is no longer the one that was asked about.
+        fIdx = flights.findIndex((f) => f.id === ids.fl);
+        const again = fIdx >= 0 ? flights[fIdx].waypoints[wpIdx] : null;
+        if (!again || again.name !== ids.name || again.lat !== ids.lat || again.lng !== ids.lng) {
+          say('The plan changed while the question was open - nothing was deleted.', 'warn');
+          return;
+        }
+        nextIdx = flights.findIndex((f) => f.id === ids.next);
+        dropNext = r.id === 'both' && nextIdx >= 0;
+      }
+      pushUndoState(dropNext ? 'delete a stop and the sector it opened' : 'delete a waypoint');
       flights[fIdx].waypoints.splice(wpIdx, 1);
+      let dropped = null;
+      if (dropNext && flights.length > 1) {
+        dropped = flightTitle(flights[nextIdx]);
+        flights.splice(nextIdx, 1);
+        // Keep pointing at the same plan, the way removeFlightPlan does; the
+        // plan that was deleted hands the focus back to the one it followed.
+        if (activeFlightIndex > nextIdx) activeFlightIndex--;
+        else if (activeFlightIndex === nextIdx) activeFlightIndex = fIdx;
+        if (highlightedWaypoint) {
+          if (highlightedWaypoint.fIdx === nextIdx) highlightedWaypoint = null;
+          else if (highlightedWaypoint.fIdx > nextIdx) highlightedWaypoint.fIdx--;
+        }
+        document.getElementById('def-dep-elev').value = flights[activeFlightIndex].depElev;
+      }
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
+      if (dropped) say('Removed ' + wp.name + ' and ' + dropped + ', the sector it opened. Ctrl+Z puts both back.', 'info');
+      // What was removed, so a caller that has its own toast does not say it twice.
+      return dropped ? 'both' : 'one';
     }
 
     // =========================================================================
@@ -7433,15 +7496,15 @@
     /** Delete acts on the SELECTED waypoint, and only where editing is allowed.
      *  View Mode is locked and read-only by its own definition, so removing a
      *  waypoint there would contradict the mode rather than serve it. */
-    function deleteHighlightedWaypoint() {
+    async function deleteHighlightedWaypoint() {
       if (isDoneMode || !highlightedWaypoint) return;
       const { fIdx, wpIdx } = highlightedWaypoint;
       const fl = flights[fIdx];
       if (!fl || !fl.waypoints[wpIdx]) { highlightedWaypoint = null; return; }
       const name = fl.waypoints[wpIdx].name;
       highlightedWaypoint = null;
-      deleteWaypointFromFlight(fIdx, wpIdx);
-      say('Removed ' + name + '. Ctrl+Z puts it back.', 'info');
+      // A stop that took its sector with it has already said so.
+      if (await deleteWaypointFromFlight(fIdx, wpIdx) === 'one') say('Removed ' + name + '. Ctrl+Z puts it back.', 'info');
     }
 
     // The leg panel is a modal like the others and closes the same way. It was
