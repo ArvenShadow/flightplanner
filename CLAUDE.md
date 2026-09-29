@@ -5734,6 +5734,48 @@ Two causes, and the divider only made the second one obvious.
 
 ## SKINS, and the plan for restyling the whole shell (v16.65)
 
+### SIZE IS ITS OWN SETTING: BOLD AND COMPACT GO WITH ANY STYLE (v17.3)
+
+The author: *"I would like the bold option to be available to the different
+colour styles."* A body carries ONE `skin-*` class, so while Bold was a skin it
+could never be worn with Slate, Chart or Float. Compact and Bold change how BIG
+things are, not how they LOOK, so they became a second axis: `DENSITIES`
+(normal / compact / bold) in skins.js, a `density-*` body class beside the
+skin's, `density` in PROFILE_KEYS, and a **Size** select under the style in
+Settings -> Map -> Look. The style list is now Default, Menu, Slate, Chart and Float.
+
+- **THE CSS IS LAYERED BY SOURCE ORDER**, because a size rule and a style rule
+  have the same specificity (`body.x .btn`):
+  1. **SHAPE** (radius, edge weight) comes BEFORE every style, so a style with
+     its own shape wins. Bold Chart keeps its squared corners.
+  2. **SIZE** (padding, type, targets) comes AFTER every style and wins
+     everywhere. A big target is big whatever colour it is.
+  Both halves were proved by mutation: shape moved after the styles gives Chart
+  8 px corners; size moved before them leaves Bold Slate one pixel taller than
+  Slate. `verify:skins` measures both, for every style.
+- **`.btn` HAS `transition: 0.1s` ON EVERY PROPERTY**, so a style read straight
+  after switching returns the previous combination mid-animation. The first
+  version of that check reported Chart with Slate's corners and Default as not
+  growing in Bold. It waits out the transition now.
+- **BOLD ON THE DEFAULT STYLE IS THE OLD BOLD SKIN, PIXEL FOR PIXEL**. It was
+  compared against a v17.2 build in light and dark: computed styles identical,
+  and the only differing pixels (1 for Bold, up to 11 for Compact, varying run to run) are the
+  `<select>` rendering noise that also differs between two shots of the old
+  build.
+- **THE AUTHOR USES BOLD, SO THE MIGRATION IS NOT OPTIONAL.** A stored
+  `skin: 'bold'` would otherwise normalise to the default style and silently
+  lose the size. `splitLegacyLook` turns it into Default + Bold at boot, and it
+  wins even over a size already set. Nothing since v17.3 writes `skin: 'bold'`,
+  so the value is always an old statement, most often a settings file exported
+  before the split and imported into a profile that already says `normal`.
+- **EVERY COMBINATION IS CHECKED**: `verify:skins` runs 5 styles x 3 sizes at
+  two window sizes, and `verify:layout`'s number-cell check (the v16.71 Bold
+  failure) runs all 15. Menu is measured OPEN, by hovering the rail with the
+  mouse. `focus()` cannot open it, because the cells are `display: none` until
+  it opens.
+- One more inline handler (the Size select): the page's stated count went 152 -> 153,
+  and the L3 test caught it.
+
 ### THREE MODERN LOOKS (v17.2, roadmap item 21)
 
 Each one answers a DIFFERENT part of the request, so they can be compared

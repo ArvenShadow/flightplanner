@@ -79,8 +79,13 @@ const SURVEY = () => {
 // until v17.2, so three new skins would have shipped with not one of these
 // checks run against them - the same drift the WHERE TO EDIT WHAT guard had at
 // v16.86, where a list of eleven modules sat under a directory of twenty.
-const SKINS = (await import(new URL('../src/lib/skins.js', import.meta.url).href)).SKINS.map((s) => s.id);
-check(SKINS.length >= 7 && SKINS[0] === 'default', 'the skin list was read from src/lib/skins.js (' + SKINS.join(', ') + ')');
+const SKINS_MOD = await import(new URL('../src/lib/skins.js', import.meta.url).href);
+const SKINS = SKINS_MOD.SKINS.map((s) => s.id);
+// THE SIZE IS A SECOND AXIS (v17.3), so every style is checked at every size:
+// Bold Float and Compact Chart are combinations nobody would otherwise look at.
+const DENSITIES = SKINS_MOD.DENSITIES.map((d) => d.id);
+check(DENSITIES.join() === 'normal,compact,bold', 'the sizes were read from src/lib/skins.js (' + DENSITIES.join(', ') + ')');
+check(SKINS.length >= 5 && SKINS[0] === 'default', 'the skin list was read from src/lib/skins.js (' + SKINS.join(', ') + ')');
 for (const [w, h] of [[1500, 950], [1280, 720]]) {
   const ctx = await b.newContext({ viewport: { width: w, height: h } });
   const page = await ctx.newPage();
@@ -96,11 +101,12 @@ for (const [w, h] of [[1500, 950], [1280, 720]]) {
   console.log(`\n### ${w}x${h}`);
   /** @type {string[]|null} */
   let baseline = null;
-  for (const skin of SKINS) {
-    await page.evaluate((s) => { applySkin(s); }, skin);
+  for (const skinId of SKINS) for (const den of DENSITIES) {
+    await page.evaluate(([s, d]) => { applySkin(s); applyDensity(d); }, [skinId, den]);
     await page.waitForTimeout(220);
     const r = await page.evaluate(SURVEY);
-    if (skin === 'default') baseline = r.controls;
+    if (skinId === 'default' && den === 'normal') baseline = r.controls;
+    const skin = den === 'normal' ? skinId : skinId + '+' + den;
     // THE SET, NOT THE ORDER. A skin may MOVE a control into another panel
     // (v16.66), which legitimately changes its position in document order -
     // comparing the sequence called a correct skin broken. What must never
@@ -108,14 +114,44 @@ for (const [w, h] of [[1500, 950], [1280, 720]]) {
     const sorted = (a) => [...a].sort().join('\u0000');
     const lost = baseline.filter((c) => !r.controls.includes(c));
     check(sorted(r.controls) === sorted(baseline),
-      `${skin.padEnd(8)} keeps every control the default has (${r.controls.length} of ${baseline.length})` +
+      `${skin.padEnd(14)} keeps every control the default has (${r.controls.length} of ${baseline.length})` +
       (lost.length ? ' - MISSING: ' + lost.slice(0, 4).join(', ') : ''));
     check(r.offscreen.length === 0,
-      `${skin.padEnd(8)} puts no visible control off the screen${r.offscreen.length ? ': ' + r.offscreen.slice(0, 4).join(', ') : ''}`);
+      `${skin.padEnd(14)} puts no visible control off the screen${r.offscreen.length ? ': ' + r.offscreen.slice(0, 4).join(', ') : ''}`);
     check(r.zero.length === 0,
-      `${skin.padEnd(8)} collapses no visible control to nothing${r.zero.length ? ': ' + r.zero.slice(0, 4).join(', ') : ''}`);
+      `${skin.padEnd(14)} collapses no visible control to nothing${r.zero.length ? ': ' + r.zero.slice(0, 4).join(', ') : ''}`);
     check(r.overflowX === 0,
-      `${skin.padEnd(8)} does not scroll sideways (${r.overflowX} px of overflow)`);
+      `${skin.padEnd(14)} does not scroll sideways (${r.overflowX} px of overflow)`);
+  }
+  await page.evaluate(() => { applySkin('default'); applyDensity('normal'); });
+  // THE LAYERING (v17.3), measured rather than read: SIZE rules sit after every
+  // style so they win, and SHAPE rules sit before so a style keeps its own.
+  // Put either half in the wrong place and the combination silently becomes
+  // "the style, not bold" or "bold, not the style" - both look deliberate.
+  const measure = await page.evaluate(async ([skins, dens]) => {
+    const out = {};
+    for (const k of skins) for (const d of dens) {
+      applySkin(k); applyDensity(d);
+      // `.btn` has `transition: 0.1s` on EVERY property, so a read straight
+      // after the switch returns the PREVIOUS combination's padding and radius
+      // mid-animation. The first run of this check reported Chart with Slate's
+      // corners for exactly that reason.
+      await new Promise((r) => setTimeout(r, 180));
+      const btn = document.getElementById('print-btn');
+      const cs = getComputedStyle(btn);
+      out[k + '+' + d] = { h: btn.getBoundingClientRect().height, radius: cs.borderTopLeftRadius };
+    }
+    applySkin('default'); applyDensity('normal');
+    return out;
+  }, [SKINS, DENSITIES]);
+  for (const k of SKINS) {
+    const n = measure[k + '+normal'], bo = measure[k + '+bold'], c = measure[k + '+compact'];
+    check(bo.h >= n.h + 6 && c.h < n.h,
+      `${k.padEnd(8)} gets bigger in Bold and smaller in Compact (${c.h} < ${n.h} < ${bo.h} px)`);
+    if (k === 'slate' || k === 'chart' || k === 'float') {
+      check(bo.radius === n.radius && c.radius === n.radius,
+        `${k.padEnd(8)} keeps its own corner shape at every size (${c.radius} / ${n.radius} / ${bo.radius})`);
+    }
   }
   // ...and the skin really changed something, or the CSS never arrived.
   const boxes = {};

@@ -39,40 +39,32 @@
    =========================================================================== */
 
 /* --------------------------------------------------------------------------
-   COMPACT - the same arrangement, less of everything. For a 13" laptop where
-   the constraint is vertical space (see the v16.49 measurements).
-   -------------------------------------------------------------------------- */
-body.skin-compact #header { padding: 3px 10px; gap: 3px 8px; }
-body.skin-compact #header h1 { font-size: 13px; }
-body.skin-compact #sidebar { --sb-pad: 5px; --sb-gap: 5px; }
-body.skin-compact .card { padding: 6px 8px; }
-body.skin-compact .btn { padding: 3px 7px; font-size: 10px; border-radius: 3px; }
-body.skin-compact .btn-sm { padding: 2px 5px; font-size: 9px; }
-body.skin-compact table { font-size: 9.5px; }
-body.skin-compact th, body.skin-compact td { padding: 1px 3px; }
-body.skin-compact .map-ctl { padding: 2px 6px; font-size: 10px; }
-body.skin-compact h2, body.skin-compact h3 { font-size: 11px; margin: 2px 0; }
+   SIZES (v17.3): COMPACT AND BOLD ARE A SECOND AXIS, NOT SKINS.
 
-/* --------------------------------------------------------------------------
-   BOLD - bigger hit targets and heavier edges, for a touchscreen or a cockpit
-   bag tablet at a desk. Sizes stay inside the bounds the rest of the project
-   argues for: nothing here shrinks a control below the 6 px the fix symbols
-   are capped at, and nothing grows the track beyond what covers chart ink.
+   The author: "I would like the bold option to be available to the different
+   colour styles". A body carries one `skin-*` class, so while Bold was a skin
+   it could never be worn with Slate or Chart. Now it is a `density-*` class
+   beside the skin's, and the rules are LAYERED BY SOURCE ORDER - both halves
+   have the same specificity as a skin's own rules, so position decides:
+
+     1. SHAPE (here, before every style): corner radius and edge weight. A
+        style that has its own shape - Chart's squared corners, Slate's
+        hairlines - comes LATER and wins, so Bold Chart is still a chart.
+        On the default style nothing overrides them, so Bold looks exactly as
+        the Bold skin did (checked pixel for pixel against v17.2).
+     2. SIZE (at the end of this file, after every style): padding, type size,
+        hit targets. It comes LAST and wins everywhere, which is the point -
+        a big target is big whatever colour it is.
+
+   `density-normal` has no rules, like the default skin: it is the shipped
+   sizing.
    -------------------------------------------------------------------------- */
-body.skin-bold #header { padding: 12px 20px; border-bottom: 3px solid var(--accent-line); }
-body.skin-bold #header h1 { font-size: 20px; letter-spacing: 0.3px; }
-body.skin-bold #sidebar { --sb-pad: 14px; --sb-gap: 14px; }
-body.skin-bold .card { padding: 14px 16px; border-width: 2px; border-radius: 8px; }
-body.skin-bold .btn {
-  padding: 9px 16px; font-size: 13px; font-weight: 700;
-  border-radius: 8px; border-width: 2px; letter-spacing: 0.2px;
-}
-body.skin-bold .btn-sm { padding: 6px 11px; font-size: 11px; }
-body.skin-bold .map-ctl { padding: 8px 12px; font-size: 12px; font-weight: 700; border-radius: 8px; }
-body.skin-bold table { font-size: 12px; }
-body.skin-bold th, body.skin-bold td { padding: 6px 7px; }
-body.skin-bold th { letter-spacing: 0.4px; }
-body.skin-bold input, body.skin-bold select { font-size: 12px; padding: 4px 6px; }
+body.density-compact .btn { border-radius: 3px; }
+
+body.density-bold #header { border-bottom: 3px solid var(--accent-line); }
+body.density-bold .card { border-width: 2px; border-radius: 8px; }
+body.density-bold .btn { border-radius: 8px; border-width: 2px; }
+body.density-bold .map-ctl { border-radius: 8px; }
 
 /* --------------------------------------------------------------------------
    MENU - the sidebar collapses to a narrow rail and opens on hover or focus.
@@ -359,3 +351,36 @@ body.skin-chart .map-ctl {
   border-radius: 2px; color: var(--sk-blue); border: 1px solid var(--sk-blue);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
 }
+
+
+/* --------------------------------------------------------------------------
+   SIZES, PART 2 - the sizes themselves, LAST so they win over every style.
+   See "SIZES (v17.3)" above for why the file is split in two.
+   -------------------------------------------------------------------------- */
+/* COMPACT - less of everything. For a 13" laptop where the constraint is
+   vertical space (see the v16.49 measurements). */
+body.density-compact #header { padding: 3px 10px; gap: 3px 8px; }
+body.density-compact #header h1 { font-size: 13px; }
+body.density-compact #sidebar { --sb-pad: 5px; --sb-gap: 5px; }
+body.density-compact .card { padding: 6px 8px; }
+body.density-compact .btn { padding: 3px 7px; font-size: 10px; }
+body.density-compact .btn-sm { padding: 2px 5px; font-size: 9px; }
+body.density-compact table { font-size: 9.5px; }
+body.density-compact th, body.density-compact td { padding: 1px 3px; }
+body.density-compact .map-ctl { padding: 2px 6px; font-size: 10px; }
+body.density-compact h2, body.density-compact h3 { font-size: 11px; margin: 2px 0; }
+
+/* BOLD - bigger hit targets and heavier type, for a touchscreen or reading at
+   arm's length. Sizes stay inside the bounds the rest of the project argues
+   for: nothing grows the track beyond what covers chart ink. */
+body.density-bold #header { padding: 12px 20px; }
+body.density-bold #header h1 { font-size: 20px; letter-spacing: 0.3px; }
+body.density-bold #sidebar { --sb-pad: 14px; --sb-gap: 14px; }
+body.density-bold .card { padding: 14px 16px; }
+body.density-bold .btn { padding: 9px 16px; font-size: 13px; font-weight: 700; letter-spacing: 0.2px; }
+body.density-bold .btn-sm { padding: 6px 11px; font-size: 11px; }
+body.density-bold .map-ctl { padding: 8px 12px; font-size: 12px; font-weight: 700; }
+body.density-bold table { font-size: 12px; }
+body.density-bold th, body.density-bold td { padding: 6px 7px; }
+body.density-bold th { letter-spacing: 0.4px; }
+body.density-bold input, body.density-bold select { font-size: 12px; padding: 4px 6px; }
