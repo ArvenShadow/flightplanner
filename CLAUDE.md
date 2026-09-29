@@ -1677,6 +1677,14 @@ and H2 all hold exactly as described.
    altitude - which is why C1's mechanical fix (no stale cursor) and its
    semantics are separable, and the mechanical one should not wait for this.
 
+### 21. MODERN LOOKS (v17.2, the author: "check out modern website and GUI designs and suggest some styles... experimenting with different colour matching, different button styles and layout configurations")
+
+**FIRST ROUND DONE at v17.2**: three skins, Slate, Chart and Float. See
+"THREE MODERN LOOKS" under the SKINS section. They are OFFERS to try, not a
+redesign: the default is pixel-identical, and choosing between them (or asking
+for a mix) is the author's call. Tier 3 (reordering the OFP columns) is still
+not attempted.
+
 ### 20. AERODROME OPENING HOURS, AND NOTAMs (v16.93, the author's request)
 
 **v17.0: THE HOURS ARE BUILT; THE NOTAMs ARE REFUSED, AND BOTH VERDICTS WERE
@@ -5725,6 +5733,58 @@ Two causes, and the divider only made the second one obvious.
   A mutation that does not actually restore the old behaviour proves nothing.
 
 ## SKINS, and the plan for restyling the whole shell (v16.65)
+
+### THREE MODERN LOOKS (v17.2, roadmap item 21)
+
+Each one answers a DIFFERENT part of the request, so they can be compared
+rather than blended:
+
+| skin | answers | modelled on |
+|---|---|---|
+| **Slate** | colour and buttons | the neutral "modern tool" look - Linear, Vercel Geist, GitHub Primer, Radix |
+| **Chart** | colour and type | the ICAO 1:500 000 chart itself - paper, chart blue, aerodrome magenta |
+| **Float** | layout | map-first apps - Google Maps, Mapbox Studio, ForeFlight, SkyDemon |
+
+- **THE ONE RULE ALL THREE FOLLOW: COLOUR MEANS SOMETHING.** The shipped
+  toolbar gives every button its own hue, so colour says nothing and the red of
+  Delete competes with six other loud colours. Here buttons are neutral, the one
+  primary action per group (Save, Print) carries the accent, danger stays red,
+  and a STATE (View Mode's amber "back to Edit") keeps its warning colour.
+  "Add a sector" is a dashed outline, the modern "add another" affordance,
+  rather than a full-width slab of accent.
+- **EVERY SKIN THAT TINTS ONE THEME TINTS BOTH**, and a test holds it: light
+  tokens without dark ones would put light surfaces under the dark theme's pale
+  text. Chart's dark theme is a night-reading chart (navy paper, cream ink).
+- **`!important` IS THERE BECAUSE OF THE MARKUP, NOT TASTE.** The header's
+  outline buttons carry `style="color:white"`, which out-ranks any stylesheet
+  rule without it, and a skin may not edit markup.
+- **CHART'S SERIF IS A SYSTEM STACK** (Iowan, Palatino, Georgia): the planner is
+  offline-capable and loads no web fonts.
+- **FLOAT FLOATS ONLY IN SPLIT.** In Stacked the panel would have to be a bottom
+  sheet under the map's control stack, which has nothing to stop it reaching
+  down into the sheet, so Stacked keeps its normal flow. The panel width is ONE
+  custom property (`--sk-panel`, `min(920px, 60vw)`; 920 px is what the OFP
+  table needs to show every column without scrolling), and the control stack,
+  the licence attribution and the offline-tiles notice are all moved clear of
+  it. The first draft was 54vw, and the Rem column scrolled out of sight; the
+  notice centred on the whole window and covered the panel's tabs. Both were
+  found by looking at screenshots, which is why they exist.
+  - **WHAT THE MAP DOES NOT KNOW**: Leaflet sizes itself to the whole window, so
+    "fit the route" can leave part of it under the panel. One pan fixes it.
+    Teaching `fitBounds` a right-hand padding is the next step if Float is kept.
+  - **THE DIVIDER IS A QUESTION THE SKIN ANSWERS** (`noSplitterIn`,
+    `skinHasSplitter`), replacing a `skin-menu` class test in the page. Menu has
+    none in any layout, and Float has none in Split.
+- **`verify:skins` HAD A HARDCODED LIST OF FOUR SKINS**, so all three new ones
+  would have shipped with none of its checks run on them - the v16.86 index
+  drift again. It reads `SKINS` from the module now, and gained Float's own
+  checks: the map takes the whole width, the panel sits over it, nothing on the
+  map is under the panel, and there is no divider. Seven mutations (panel not
+  floating, controls or attribution under it, the divider back, the skin's
+  divider answer ignored or emptied, the dark tokens missing) are all caught by
+  name. The first attempt at one died only in `tsc` and was rewritten.
+- **THE DEFAULT IS UNTOUCHED**: `verify:visual` against main shows 54 px, all
+  inside the 7x8 version badge, in light and in dark.
 
 The author wants to try WHOLE DIFFERENT LOOKS - "sidebar becoming top bar",
 "sidebar becoming a menu if I want it minimalistic", different button styles and

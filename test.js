@@ -13894,6 +13894,50 @@ TA('the waypoint menu offers the fly-by toggle on an aerodrome, and not on a sto
   } finally { ev(SEED); }
 });
 
+// v17.2: three modern looks (Slate, Chart, Float) - see src/skins.css.
+
+T('every skin that re-tints the theme does it for BOTH themes', () => {
+  // A skin that set light-mode tokens and not dark-mode ones would put its
+  // light surfaces under the dark theme's pale text - unreadable, and only in
+  // the theme nobody checked.
+  const css = require('fs').readFileSync('src/skins.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const tinted = (theme) => new Set([...css.matchAll(new RegExp('body\\.skin-([a-z0-9-]+)\\.' + theme, 'g'))].map((m) => m[1]));
+  const light = tinted('light-mode'), dark = tinted('dark-mode');
+  assert(light.size >= 3, 'the new skins no longer tint the theme: ' + [...light]);
+  for (const id of light) assert(dark.has(id), id + ' re-tints the light theme and not the dark one');
+  for (const id of dark) assert(light.has(id), id + ' re-tints the dark theme and not the light one');
+});
+
+T('a skin says in which layouts it has no panel divider, and the page asks it', () => {
+  const S = moduleExports.skins;
+  assert(S.skinHasSplitter('default', 'split') && S.skinHasSplitter('default', 'stacked'), 'the default lost its divider');
+  assert(!S.skinHasSplitter('menu', 'split') && !S.skinHasSplitter('menu', 'stacked'), 'the Menu rail gained a divider');
+  assert(!S.skinHasSplitter('float', 'split') && S.skinHasSplitter('float', 'stacked'),
+    'Float: no divider when the panel floats (Split), the normal one in Stacked');
+  assert(S.skinHasSplitter('no-such-skin', 'split'), 'an unknown skin is not the default');
+  const was = ev('[...document.body.classList].join(" ")');
+  try {
+    ev(`setLayoutMode('split'); applySkin('float')`);
+    assert(ev('splitterActive()') === false, 'the page offers a divider under a floating panel');
+    ev(`applySkin('slate')`);
+    assert(ev('splitterActive()') === true, 'Slate lost the divider');
+    ev(`applySkin('menu')`);
+    assert(ev('splitterActive()') === false, 'the Menu rail gained a divider');
+  } finally {
+    ev(`applySkin('default')`);
+    doc.body.className = was;
+  }
+});
+
+T('the new skins only restyle: no markup, no handler, and the default stays untouched', () => {
+  const S = moduleExports.skins;
+  for (const id of ['slate', 'chart', 'float']) {
+    const k = S.skinById(id);
+    assert(k.id === id && k.note.length > 40, id + ' is not listed with a note saying what it is');
+    assert(!k.place, id + ' moves controls - these three are meant to be CSS only');
+  }
+});
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');

@@ -75,7 +75,12 @@ const SURVEY = () => {
   return out;
 };
 
-const SKINS = ['default', 'compact', 'bold', 'menu'];
+// READ FROM THE MODULE, never listed here. This was a hardcoded list of four
+// until v17.2, so three new skins would have shipped with not one of these
+// checks run against them - the same drift the WHERE TO EDIT WHAT guard had at
+// v16.86, where a list of eleven modules sat under a directory of twenty.
+const SKINS = (await import(new URL('../src/lib/skins.js', import.meta.url).href)).SKINS.map((s) => s.id);
+check(SKINS.length >= 7 && SKINS[0] === 'default', 'the skin list was read from src/lib/skins.js (' + SKINS.join(', ') + ')');
 for (const [w, h] of [[1500, 950], [1280, 720]]) {
   const ctx = await b.newContext({ viewport: { width: w, height: h } });
   const page = await ctx.newPage();
@@ -129,6 +134,30 @@ for (const [w, h] of [[1500, 950], [1280, 720]]) {
   const area = (bx) => bx[2] * bx[3];
   check(area(boxes.menu) < area(boxes.default) / 2,
     `menu really collapses the plan panel (${boxes.default[2]}x${boxes.default[3]} -> ${boxes.menu[2]}x${boxes.menu[3]})`);
+  // FLOAT (v17.2): the plan panel floats OVER the map in Split, so the map
+  // must really take the whole width, and nothing the pilot needs on the map -
+  // the control stack, the licence attribution - may sit under the panel.
+  const fl = await page.evaluate(async () => {
+    const was = [...document.body.classList].find((c) => c.startsWith('layout-'));
+    setLayoutMode('split'); applySkin('float');
+    await new Promise((r) => setTimeout(r, 250));
+    const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
+    const sb = R(document.getElementById('sidebar'));
+    const map = R(document.getElementById('map-container'));
+    const hit = (a) => !(a.r <= sb.l || a.l >= sb.r || a.b <= sb.t || a.t >= sb.b);
+    const under = [...document.querySelectorAll('#map-controls > *, #map-container .leaflet-control-attribution')]
+      .filter((el) => getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0)
+      .filter((el) => hit(R(el))).map((el) => el.id || el.className);
+    const splitter = getComputedStyle(document.getElementById('splitter')).display;
+    const active = splitterActive();
+    applySkin('default'); setLayoutMode(was ? was.slice(7) : 'split');
+    return { sb, map, under, splitter, active, pos: getComputedStyle(document.getElementById('sidebar')).position };
+  });
+  check(fl.map.w >= w - 4, `float lets the map take the whole width in Split (${Math.round(fl.map.w)} of ${w})`);
+  check(fl.sb.l > w * 0.3 && fl.sb.r <= w, `float puts the plan panel over the map (${Math.round(fl.sb.l)}-${Math.round(fl.sb.r)})`);
+  check(fl.under.length === 0, 'float leaves no map control or the attribution under the panel' + (fl.under.length ? ': ' + fl.under.join(', ') : ''));
+  check(fl.splitter === 'none' && fl.active === false, `float has no divider in Split (display ${fl.splitter}, active ${fl.active})`);
+
   // TIER 2: A MOVED CONTROL MUST STILL BE THE SAME CONTROL (v16.66).
   // appendChild moves the live node, so the handler comes with it - but that is
   // the sort of claim that has to be demonstrated by CLICKING, not asserted.
