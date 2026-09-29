@@ -751,6 +751,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
       --mb-grid-minor: #eef2f7;
       --mb-tile-bg: #f8fafc;
       --mb-track: #e5eaf1;
+      /* the runway on the distance card (v17.6) */
+      --rwy-paved: #3f4650;
+      --rwy-unpaved: #a08f73;
+      --rwy-edge: #1f2937;
+      --rwy-paint: #ffffff;
       --mb-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
     }
     body.dark-mode {
@@ -823,6 +828,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
       --mb-grid-minor: #1e293b;
       --mb-tile-bg: #172033;
       --mb-track: #2a3649;
+      --rwy-paved: #4b5563;
+      --rwy-unpaved: #7c6c55;
+      --rwy-edge: #9ca3af;
+      --rwy-paint: #f9fafb;
       --mb-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     }
 
@@ -848,6 +857,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
       --mb-grid-minor: #eef2f7;
       --mb-tile-bg: #f8fafc;
       --mb-track: #e5eaf1;
+      /* the runway on the distance card (v17.6) */
+      --rwy-paved: #3f4650;
+      --rwy-unpaved: #a08f73;
+      --rwy-edge: #1f2937;
+      --rwy-paint: #ffffff;
       --mb-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
       --bg-body: #f4f6f9;
       --bg-header: #1a365d;
@@ -1402,6 +1416,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .toast { font-size: 11.5px; font-weight: 600; padding: 8px 12px; border-radius: 6px; cursor: pointer;
       max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); background: #2d3748; color: #fff; }
     .toast-good { background: #276749; } .toast-warn { background: #c05621; } .toast-bad { background: #c53030; }
+    /* The undo/redo notice (v17.6): bottom centre, above the toasts, one box
+       rewritten per step. Literal colours like the toasts beside it, so it
+       reads the same on every skin. */
+    #undo-notice { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 10003;
+      min-width: 220px; max-width: min(460px, calc(100vw - 32px)); padding: 9px 14px; border-radius: 8px;
+      background: #1a202c; color: #fff; border-left: 4px solid #ecc94b; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+      font-size: 12.5px; line-height: 1.4; pointer-events: none; }
+    #undo-notice.undo-notice-redo { border-left-color: #63b3ed; }
+    .undo-notice-sub { font-size: 11px; opacity: 0.75; margin-top: 2px; }
     .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
     .modal { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 8px; width: 520px; max-width: 95vw; padding: 18px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); max-height: 90vh; display: flex; flex-direction: column; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
@@ -1660,6 +1683,12 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
   font-weight: 700; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
 .mb-seg-on { background: var(--bg-card); color: var(--text-main); box-shadow: var(--mb-shadow); }
 .mb-ghost-btn { flex-shrink: 0; }
+/* the weather card before its first fetch (v17.6): the fetch, big and centred */
+.mb-wx-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  text-align: center; padding: 18px 8px; border: 1px dashed var(--border-color); border-radius: 8px;
+  background: var(--mb-tile-bg); }
+.mb-wx-fetch-big { font-size: 13px; font-weight: 800; padding: 10px 22px; border-radius: 8px; }
+.mb-wx-empty-sub { font-size: 10px; color: var(--text-muted); line-height: 1.5; max-width: 320px; }
 
 /* a sector's results */
 .mb-sector-bad { border-color: var(--mb-bad); }
@@ -1757,8 +1786,39 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
   padding: 3px 4px; border: 1px solid var(--border-color); border-radius: 5px; background: var(--bg-input); color: var(--text-main); }
 .perf-result { font-size: 11px; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .perf-note { font-size: 10px; color: var(--text-muted); line-height: 1.5; }
-.perf-bar { height: 5px; border-radius: 999px; background: var(--mb-track); margin: 4px 0 2px; overflow: hidden; }
-.perf-bar span { display: block; height: 100%; border-radius: 999px; background: var(--mb-ldg); }
-.perf-bar .perf-bar-warn { background: var(--mb-zfm); }
-.perf-bar .perf-bar-over { background: var(--mb-bad); }
+/* THE RUNWAY, DRAWN (v17.6) - src/lib/rwydiagram.js. The strip and its paint
+   are tokens so a theme can tone them; the distance bars reuse the M&B
+   colours: take-off blue for the POH figure, landing green for a requirement
+   that fits, the bad red for one that does not. */
+.rwyd-wrap { margin: 6px 0 4px; }
+.rwyd { display: block; width: 100%; max-width: 520px; height: auto; font-family: inherit; }
+.rwyd text { font-size: 8.5px; font-variant-numeric: tabular-nums; }
+.rwyd-paved { fill: var(--rwy-paved); stroke: var(--rwy-edge); stroke-width: 0.8; }
+.rwyd-unpaved { fill: var(--rwy-unpaved); stroke: var(--rwy-edge); stroke-width: 0.8; stroke-dasharray: 3 2; }
+.rwyd-paint { fill: var(--rwy-paint); }
+.rwyd .rwyd-desig { fill: var(--rwy-paint); font-weight: 800; }
+.rwyd .rwyd-desig-plain { fill: var(--text-main); font-weight: 800; }
+.rwyd-endline { stroke: var(--text-muted); stroke-width: 0.8; stroke-dasharray: 2 2; }
+.rwyd-bar-poh { stroke: var(--mb-to); stroke-width: 2; }
+.rwyd-bar-req { stroke: var(--mb-ldg); stroke-width: 2.4; }
+.rwyd-bar-bad { stroke: var(--mb-bad); stroke-width: 2.4; }
+.rwyd .rwyd-bar-poh-txt { fill: var(--mb-to); font-weight: 700; }
+.rwyd .rwyd-bar-req-txt { fill: var(--mb-ok-text); font-weight: 800; }
+.rwyd .rwyd-bar-bad-txt { fill: var(--mb-bad); font-weight: 800; }
+.rwyd-box { fill: var(--bg-card); stroke: var(--border-color); stroke-width: 0.8; }
+.rwyd-rule { stroke: var(--border-color); stroke-width: 0.8; }
+.rwyd .rwyd-lbl { fill: var(--text-main); font-weight: 700; }
+.rwyd .rwyd-muted { fill: var(--text-muted); font-size: 7.5px; }
+.rwyd .rwyd-txt { fill: var(--text-main); font-weight: 700; }
+.rwyd .rwyd-strong { fill: var(--text-main); font-weight: 800; font-size: 11px; }
+.rwyd .rwyd-bad { fill: var(--mb-bad); font-weight: 800; }
+.rwyd-figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 4px;
+  border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; font-variant-numeric: tabular-nums; }
+.rwyd-fig { text-align: center; padding: 3px 4px; border-left: 1px solid var(--border-color); }
+.rwyd-fig:first-child { border-left: 0; }
+.rwyd-fig-h { font-size: 8.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.rwyd-fig-v { font-size: 12px; font-weight: 800; color: var(--text-main); }
+.rwyd-fig-req .rwyd-fig-v { color: var(--mb-ok-text); }
+.rwyd-fig-bad { background: var(--mb-bad-bg); }
+.rwyd-fig-bad .rwyd-fig-v { color: var(--mb-bad-text); }
 

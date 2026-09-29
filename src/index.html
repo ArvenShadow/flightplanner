@@ -13,6 +13,12 @@
   <!-- @STYLES: build inlines src/styles.css here -->
 </head>
 <body class="light-mode">
+  <!-- WHAT AN UNDO OR REDO TOOK BACK (v17.6, the author). One box that is
+       rewritten on every step, not a toast per step: holding Ctrl+Z walks the
+       stack, and a pile of toasts would bury the one that says where you are.
+       It says the step, not just "Undone" - the label is the one the step was
+       pushed with, the same text the Undo/Redo buttons show as their title. -->
+  <div id="undo-notice" class="no-print" role="status" aria-live="polite" style="display:none;"></div>
 
   <div id="header">
     <h1>C182 Multi-Leg VFR Flight Planner <span id="app-version-badge" style="font-size:11px; font-weight:600; color:#a0aec0; margin-left:8px; vertical-align:middle; white-space:nowrap;"></span></h1>
@@ -95,6 +101,11 @@
              It needs no CSS of its own: #map-controls has been a flex column
              since v16.24, precisely so a new control cannot fall off screen. -->
         <button id="active-flight-btn" class="map-ctl" title="Which flight plan new waypoints are added to. Click to cycle through your plans (it wraps at the end, because this is the only way to switch without a keyboard). The keys , and . step back and forward without wrapping, and 1-9 jump straight to a plan. The full list is in the sidebar." onclick="cycleActiveFlight()">✈ Plan 1</button>
+        <!-- THE WAY OUT OF A SELECTION (v17.6, the author: "there is no way to
+             deselect it"). Only on screen while a waypoint IS selected, and it
+             names the one it will clear. Clicking the selected waypoint again,
+             Escape, and (in View Mode) a click on the empty map do the same. -->
+        <button id="deselect-btn" class="map-ctl" style="display:none;" title="Clear the selected waypoint and its highlight in the flight plan. Clicking the selected waypoint again, or pressing Escape, does the same." onclick="clearWaypointSelection()">✕ Deselect</button>
         <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector) at the end of the flight. It begins at the last waypoint of the LAST plan, so a multi-sector flight joins up. (A touch &amp; go or a full stop opens its next sector right after the plan it was made on instead.) Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
       </div>
       <div id="chart-label"></div>
@@ -130,11 +141,12 @@
             <button class="btn btn-primary btn-sm" onclick="applyBulkDefaultsToActive()">Apply Bulk to Active</button>
           </div>
         </div>
+        <!-- NO DEPARTURE ELEVATION AND NO WIND HERE (v17.6, the author). The
+             departure elevation is set by choosing the departure aerodrome
+             (and stays editable in each plan's header); a new waypoint's wind
+             starts at 000/00 and the wind fetch fills it. A default wind typed
+             here only ever meant a guess copied onto every new fix. -->
         <div class="global-inputs">
-          <div class="input-group">
-            <label>Dep. Elev (ft)</label>
-            <input type="number" id="def-dep-elev" value="0" step="50" onfocus="this.select()" onchange="updateActiveFlightDepElev(this.value)">
-          </div>
           <div class="input-group">
             <label>Cruise Alt (ft)</label>
             <input type="number" id="def-alt" value="2500" step="500" onfocus="this.select()" onchange="syncDefaultOatToIsa()">
@@ -142,14 +154,6 @@
           <div class="input-group">
             <label title="Defaults to ISA for the cruise altitude (15°C - 2°C/1000ft) and follows altitude changes until you type your own OAT.">Def. OAT (°C · ISA auto)</label>
             <input type="number" id="def-oat" value="10" onfocus="this.select()" onchange="defaultOatTouched = true;">
-          </div>
-          <div class="input-group">
-            <label>Wind Dir (°)</label>
-            <input type="number" id="def-wdir" value="0" onfocus="this.select()">
-          </div>
-          <div class="input-group">
-            <label>Wind Spd (kt)</label>
-            <input type="number" id="def-wspd" value="0" onfocus="this.select()">
           </div>
           <div class="input-group">
             <label id="fuel-dep-label">Initial Fuel (gal)</label>
@@ -304,7 +308,12 @@
               <div class="mb-eyebrow">Weather</div>
               <div class="mb-card-title">Departure &amp; destination</div>
             </div>
-            <button class="btn btn-sm mb-ghost-btn" onclick="fetchMetarTaf()">Fetch</button>
+            <!-- THE SMALL BUTTON IS FOR A REFRESH (v17.6, the author). Before
+                 the first fetch the card has nothing else in it, so the fetch
+                 is the one thing to do there: renderMbWeather draws a large
+                 centred button in the body instead, and this one only appears
+                 once there is weather to refresh. -->
+            <button id="mb-wx-fetch-btn" class="btn btn-sm mb-ghost-btn" style="display:none;" onclick="fetchMetarTaf()">Fetch</button>
           </div>
           <div id="mb-wx" style="font-size:11px; line-height:1.6;"></div>
         </div>
@@ -322,6 +331,8 @@
             POH Figures 5-6 and the short-field landing table, worked the way the school's OFP sheet works
             them: to 50 ft, wind and braking action applied, then &times;1.25 take-off / &times;1.43 landing,
             against TODA and LDA from the AIP. Runway direction is TRUE, as a METAR wind is.
+            The drawn runway is the declared TODA or LDA with the distances to scale along it; its
+            width and markings are enlarged to be seen (markings per EASA CS ADR-DSN).
           </div>
           <div id="mb-perf"></div>
         </div>
@@ -371,7 +382,7 @@
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
             <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> (ippc.no cannot be read by a browser page): check them before flight.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
-            <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only.
+            <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only. <b>To deselect</b>, click the selected waypoint again, press <b>Escape</b>, or use the <b>✕ Deselect</b> button that appears in the map controls while something is selected (in View Mode a click on the empty map does it too).
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
               <br><b>Four rules apply to every binding.</b> <b>Ctrl</b> means Ctrl <i>or</i> ⌘, so one binding works on either keyboard. While a dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing fires behind it. Inside a text field the keys keep their normal text-editing meaning (<b>Ctrl+S</b> is the deliberate exception: the browser's own Ctrl+S saves the web page, which is never what you want here). And <b>Escape cannot be rebound</b> — it is the way out of a dialog, out of a half-finished line drag and out of the ruler, so moving it could leave you with no way back. (Whatever you bind <b>undo</b> to follows the ruler too: while the ruler is running that key removes the last ruler point.)
               <br>Two things the menu will refuse, and it says why: a chord the <b>browser owns</b> (Ctrl+W, Ctrl+T, F5 …), because <i>preventDefault</i> cannot stop those and the binding would look like it worked and then not; and a chord <b>already used by another action</b>, because whichever came second would silently never fire. Your bindings are saved with your settings and <b>travel in the exported JSON</b>.</li>
@@ -387,14 +398,15 @@
             <li><b>Right-click a waypoint</b> to edit its <b>name and altitude in one box</b> — press <b>Enter</b> to apply. The altitude carries forward to every later fix, so you set a whole phase of flight in one go. The <b>destination keeps its own altitude</b> so your descent survives, and <b>circuit stops keep their circuit altitude</b>, which is derived from the field rather than inherited. One Ctrl+Z takes the whole edit back.</li>
             <li><b>TOC and TOD are drawn as a short tick across the track</b>, the way you would mark them on the paper chart, with a small <b>TOC</b> / <b>TOD</b> chip beside it — <b>hover the chip</b> for the full sentence (which altitude, how far from which fix, and for a TOD the aerodrome being descended to). The distances are also in the leg's ↳ sub-line and the plotting list, which is what you copy from and what prints. A descent that fills a whole leg starts <b>at</b> the previous fix, and the mark is drawn there and says so.</li>
             <li>Press <b>👁 View Mode</b> to lock all editing for in-flight use; tapping a map waypoint then highlights its OFP row. The button flips to <b>✏ Edit Mode</b> to switch back.</li>
-            <li><b>Undo / Redo</b> cover every change. <b>Esc</b> closes any window like this one.</li>
+            <li><b>Undo / Redo</b> cover every change, and every undo or redo - keyboard or button - puts up a box at the bottom of the screen saying <b>which step</b> it took back or put back. <b>Esc</b> closes any window like this one.</li>
           </ul>
         </div>
 
         <div class="setting-section">
           <h3>⛽ Flight Defaults &amp; Fuel</h3>
           <ul style="margin-left:16px;">
-            <li>New waypoints inherit the defaults: wind starts at <b>000/00</b>, OAT follows <b>ISA automatically</b> for your cruise altitude until you type a real temperature.</li>
+            <li>New waypoints inherit the defaults: wind starts at <b>000/00</b> on every new waypoint (there is no default-wind field) and <b>🌐 Fetch Forecast Winds</b> replaces it with the forecast; OAT follows <b>ISA automatically</b> for your cruise altitude until you type a real temperature. <b>Apply Bulk to Active</b> sets the cruise altitude and OAT on every leg and leaves the winds alone.</li>
+            <li><b>The departure elevation is set by the departure aerodrome</b>: choose a published aerodrome as your first waypoint and the plan departs from its field elevation. Each plan's header still shows it and lets you change it, for a departure that is not a published field.</li>
             <li><b>Initial Fuel</b> starts the Rem column; startup/taxi/takeoff burn (POH 1.7 gal) is charged at every departure - once at the start, and again after each full stop.</li>
             <li>Set a <b>Reserve</b> — any leg landing below it turns the Rem cell <span style="color:#e53e3e; font-weight:700;">red</span>.</li>
             <li>Enter an <b>ETD</b> to get an ETO clock time on every leg and an ETA for the whole flight.</li>
@@ -475,6 +487,7 @@
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
                 <li><b>Choosing an aircraft loads its standard baggage</b> - 7.3 lb at A and 0.7 lb at C on every aircraft, and LN-TRE's 22.7 lb at B, as the school's workbook does. They are ordinary baggage lines you can see and type over; choosing a tail again resets them.</li>
                 <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, the wind correction (no headwind credit under 9 kt, +10% per 2 kt of tailwind, nothing past 10 kt), braking action, then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
+                <li><b>Each distance is drawn on a little runway.</b> The strip is the declared <b>TODA</b> (take-off) or <b>LDA</b> (landing) of the runway end you picked, and the POH distance and the factored requirement are measured along it <b>to scale</b> from where the run starts - a requirement longer than the strip runs off the end in red and says by how much. The width and the markings are enlarged so they can be seen. The markings are the EASA ones (CS ADR-DSN): <b>threshold stripes</b> counted by the published runway width (18 m: 4, 23 m: 6, 30 m: 8, 45 m: 12, 60 m: 16 - a width not in that table, such as ENRO's 40 m, gets none and says why), the <b>runway number</b> read from the approach, and the <b>centre line</b>. An unpaved strip is drawn without paint. The strip is not the physical runway: the AIP does not say where on the surface each declared distance begins, so the picture does not guess. The wind box beside it is the wind the figure was worked with, split into head/tail and cross; a tailwind is red. The figures in the text remain the authority.</li>
                 <li>Wind, QNH and temperature come from the latest METAR when you have fetched it, and you can type over any of them. <b>If the METAR has a TEMPO group with a wind, that wind is the one used</b>, and the card says so. <b>Type a tower or ATIS wind as TRUE</b> - those are magnetic. None of these values is saved: yesterday's QNH is a wrong QNH. The landing table exists for 2950 lb only, so it is used as published for every landing weight - a lighter aeroplane lands shorter, so it errs on the safe side. ENAS is gravel, and the POH has no gravel correction, so no distance is given there.</li>
               </ul>
             </li>
@@ -1216,13 +1229,14 @@
     //   which VAC chart is drawn    -> src/lib/vac.js
     //   mass & balance, the fleet -> src/lib/massbalance.js
     //   take-off / landing distance vs a runway -> src/lib/rwyperf.js
+    //   the little runway drawn on that card    -> src/lib/rwydiagram.js
     //   ATS opening hours, is it open?  -> src/lib/opshours.js
     //
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 153 inline on*= handlers - 123 written
-    // into the markup and 30 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 151 inline on*= handlers - 120 written
+    // into the markup and 31 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -1447,7 +1461,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.5';
+    const APP_VERSION = '17.6';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -1884,6 +1898,11 @@
 
     let isDoneMode = false;
     let highlightedWaypoint = null;
+    // EVERY NEW WAYPOINT STARTS AT 000/00 (v17.6, the author). There is no
+    // default-wind field any more: the wind fetch writes the real wind onto
+    // each fix, and until it has, the wind column shows 000/00 for the pilot
+    // to see. One constant, so the three places a waypoint is born agree.
+    const NEW_WP_WIND = Object.freeze({ wdir: 0, wspd: 0 });
 
     let isRulerMode = false;
     let rulerPoints = [];
@@ -2800,7 +2819,7 @@
     // by id here. The flight DATE goes in the snapshot too, and only here: it
     // is still never persisted to storage (v16.3 - a stale date must never show
     // wrong sun times), but undoing a change made this session should undo it.
-    const PLAN_FIELDS = ['fuel-dep', 'fuel-reserve', 'def-etd', 'def-date', 'def-dep-elev'];
+    const PLAN_FIELDS = ['fuel-dep', 'fuel-reserve', 'def-etd', 'def-date'];
     function planFieldState() {
       /** @type {Record<string, string>} */
       const out = {};
@@ -2903,7 +2922,7 @@
       renderAllFlightTables();
       saveActiveState();
       updateUndoButtons();
-      if (!quiet) say(what ? 'Undone: ' + what + '.' : 'Undone.', 'info', 3000);
+      showUndoNotice('undo', what);
     }
 
     function redoLast(quiet) {
@@ -2921,7 +2940,37 @@
       renderAllFlightTables();
       saveActiveState();
       updateUndoButtons();
-      if (!quiet) say(what ? 'Redone: ' + what + '.' : 'Redone.', 'info', 3000);
+      showUndoNotice('redo', what);
+    }
+
+    /**
+     * Say which step an undo or redo just took, EVERY time (v17.6).
+     *
+     * The keyboard path passed `quiet` and so said nothing at all - the Ctrl+Z
+     * a pilot actually uses was the one that left them guessing what changed.
+     * `quiet` now only silences the "Nothing to undo" at the end of the stack,
+     * which is what it was introduced for (holding the key down).
+     * @param {'undo'|'redo'} kind
+     * @param {string|null} what the label the step was pushed with
+     */
+    function showUndoNotice(kind, what) {
+      const box = document.getElementById('undo-notice');
+      if (!box) return;
+      const verb = kind === 'undo' ? 'Undone' : 'Redone';
+      const icon = kind === 'undo' ? '\u21B6' : '\u21B7';
+      const left = kind === 'undo' ? undoStack.length : redoStack.length;
+      box.innerHTML = '<div class="undo-notice-main">' + icon + ' <b>' + verb + ':</b> ' +
+        esc(what || 'the last change') + '</div>' +
+        '<div class="undo-notice-sub">' +
+        (kind === 'undo' ? 'Redo puts it back' : 'Undo takes it back again') +
+        (left ? ' \u00B7 ' + left + ' more step' + (left === 1 ? '' : 's') + ' to ' + kind : '') +
+        '</div>';
+      box.className = 'no-print undo-notice-' + kind;
+      box.style.display = 'block';
+      // The hide timer lives on the element, not in another page global.
+      const b = /** @type {any} */ (box);
+      if (b.__hideTimer) clearTimeout(b.__hideTimer);
+      b.__hideTimer = setTimeout(() => { box.style.display = 'none'; b.__hideTimer = null; }, 4000);
     }
 
     function toggleRulerMode() {
@@ -3205,6 +3254,9 @@
       }
 
       if (isDoneMode) {
+        // View Mode adds nothing, so a click on the empty chart is free to
+        // mean "put the selection down" - the gesture every map app uses.
+        if (highlightedWaypoint) clearWaypointSelection();
         return;
       }
 
@@ -3269,8 +3321,8 @@
           ? (patAlt ? patAlt.alt : (activeFlight.waypoints[activeFlight.waypoints.length-1]?.alt || activeFlight.depElev))
           : initialAlt,
         oat: Number(document.getElementById('def-oat').value),
-        wdir: Number(document.getElementById('def-wdir').value),
-        wspd: Number(document.getElementById('def-wspd').value),
+        wdir: NEW_WP_WIND.wdir,
+        wspd: NEW_WP_WIND.wspd,
         var: magData.val,
         varSource: magData.source,
         isPattern: isPattern,
@@ -3307,16 +3359,9 @@
       if (flights[fIdx].waypoints.length > 0) {
         flights[fIdx].waypoints[0].alt = newElev;
       }
-      if (fIdx === activeFlightIndex) {
-        document.getElementById('def-dep-elev').value = newElev;
-      }
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
-    }
-
-    function updateActiveFlightDepElev(val) {
-      setFlightDepElevation(activeFlightIndex, val);
     }
 
     /**
@@ -3340,7 +3385,10 @@
       const srcIdx = (typeof afterIdx === 'number' && flights[afterIdx])
         ? afterIdx : flights.length - 1;
       const lastFlight = flights[srcIdx];
-      let newDepElev = Number(document.getElementById('def-dep-elev').value);
+      // With nothing to continue from, the new plan departs from 0 ft until a
+      // departure aerodrome is chosen - the same starting value the removed
+      // Flight Defaults field had (v17.6), not an invented field elevation.
+      let newDepElev = 0;
       let initialWPs = [];
 
       if (lastFlight && lastFlight.waypoints.length > 0) {
@@ -3362,8 +3410,8 @@
           name: lastWP.name === "PATTERN" ? (lastFlight.waypoints[lastFlight.waypoints.length - 2]?.name || "DEP") : lastWP.name,
           alt: newDepElev,
           oat: Number(document.getElementById('def-oat').value),
-          wdir: Number(document.getElementById('def-wdir').value),
-          wspd: Number(document.getElementById('def-wspd').value),
+          wdir: NEW_WP_WIND.wdir,
+          wspd: NEW_WP_WIND.wspd,
           var: lastWP.var,
           varSource: lastWP.varSource || "WMM-2026",
           isPattern: false,
@@ -3383,7 +3431,6 @@
       });
 
       activeFlightIndex = insertAt;
-      document.getElementById('def-dep-elev').value = newDepElev;
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
@@ -3420,7 +3467,6 @@
         if (activeFlightIndex >= flights.length) activeFlightIndex = flights.length - 1;
         if (activeFlightIndex < 0) activeFlightIndex = 0;
         if (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx) highlightedWaypoint = null;
-        document.getElementById('def-dep-elev').value = flights[activeFlightIndex].depElev;
         refreshMap();
         renderAllFlightTables();
         saveActiveState();
@@ -3430,7 +3476,6 @@
     function setActiveFlight(fIdx) {
       if (!flights[fIdx]) return;
       activeFlightIndex = fIdx;
-      document.getElementById('def-dep-elev').value = flights[activeFlightIndex].depElev;
       refreshMap();   // dimming of inactive flights follows the active selection
       renderAllFlightTables();
     }
@@ -3469,8 +3514,33 @@
       btn.style.borderLeft = '4px solid ' + ROUTE_COLORS[activeFlightIndex % ROUTE_COLORS.length];
     }
 
+    /** Put the selection down: no waypoint highlighted on the map or in the
+     *  plan (v17.6). One function, so the button, a second click on the
+     *  waypoint, Escape and the View-Mode map click cannot disagree. */
+    function clearWaypointSelection() {
+      if (!highlightedWaypoint) return;
+      highlightedWaypoint = null;
+      refreshMap();
+      renderAllFlightTables();
+    }
+
+    /** Show the Deselect control only while there is something to deselect,
+     *  and name it. A selection pointing at a waypoint that no longer exists
+     *  (deleted, undone away) is dropped here rather than left dangling. */
+    function updateSelectionControl() {
+      const hw = highlightedWaypoint;
+      const wp = hw && flights[hw.fIdx] && flights[hw.fIdx].waypoints[hw.wpIdx];
+      if (hw && !wp) highlightedWaypoint = null;
+      const btn = document.getElementById('deselect-btn');
+      if (!btn) return;
+      if (!wp) { btn.style.display = 'none'; return; }
+      btn.style.display = '';
+      btn.textContent = '\u2715 Deselect ' + (hw.wpIdx + 1) + '. ' + wp.name;
+    }
+
     function refreshMap() {
       syncPatternPositions();
+      updateSelectionControl();
       markers.forEach(m => map.removeLayer(m));
       profileMarkers.forEach(m => map.removeLayer(m));
       polylines.forEach(p => map.removeLayer(p));
@@ -3563,6 +3633,11 @@
           // marker was not dragged, so this cannot fire at the end of a drag,
           // and markers do not bubble to the map, so no waypoint is added.
           marker.on('click', function() {
+            // A SECOND CLICK ON THE SELECTED WAYPOINT PUTS IT DOWN (v17.6).
+            if (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === idx) {
+              clearWaypointSelection();
+              return;
+            }
             highlightedWaypoint = { fIdx: fIdx, wpIdx: idx };
             refreshMap();
             renderAllFlightTables();
@@ -4299,7 +4374,6 @@
           if (highlightedWaypoint.fIdx === nextIdx) highlightedWaypoint = null;
           else if (highlightedWaypoint.fIdx > nextIdx) highlightedWaypoint.fIdx--;
         }
-        document.getElementById('def-dep-elev').value = flights[activeFlightIndex].depElev;
       }
       refreshMap();
       renderAllFlightTables();
@@ -5585,8 +5659,8 @@
         atField,
         alt: first && !o.flyby ? fl.depElev : Number(document.getElementById('def-alt').value),
         oat: Number(document.getElementById('def-oat').value),
-        wdir: Number(document.getElementById('def-wdir').value),
-        wspd: Number(document.getElementById('def-wspd').value)
+        wdir: NEW_WP_WIND.wdir,
+        wspd: NEW_WP_WIND.wspd
       });
       const magData = resolveMagVar(wp.lat, wp.lng);
       wp.var = magData.val;
@@ -5604,8 +5678,6 @@
       // nothing about where the climb starts.
       if (first && atField && a.kind === 'AD' && typeof a.elevFt === 'number') {
         fl.depElev = a.elevFt;
-        const el = document.getElementById('def-dep-elev');
-        if (el && activeFlightIndex === 0) el.value = a.elevFt;
       }
       fl.waypoints.push(wp);
       refreshMap();
@@ -6298,6 +6370,9 @@
       if (!el) return;
       el.innerHTML = msg;
       el.style.color = isError ? '#e53e3e' : 'var(--text-muted)';
+      // The M&B card's empty state shows the same line, so a fetch pressed
+      // there says "Fetching..." or why it failed where the pilot is looking.
+      if (!lastWeather) { try { renderMbWeather(); } catch (e) { /* a convenience */ } }
     }
 
     async function fetchMetarTaf() {
@@ -6339,6 +6414,8 @@
                     '. Check the official source before flight.', true);
       } finally {
         if (btn) btn.disabled = false;
+        // re-enable the M&B card's big button after a failed fetch, too
+        if (!lastWeather) { try { renderMbWeather(); } catch (e) { /* a convenience */ } }
       }
       // THE DISTANCES READ THE METAR, SO A NEW METAR IS A NEW PLAN (v16.99, the
       // author: "the takeoff and landing distances arent calculated before i
@@ -7011,8 +7088,28 @@
     function renderMbWeather() {
       const host = document.getElementById('mb-wx');
       if (!host) return;
+      const headBtn = document.getElementById('mb-wx-fetch-btn');
+      if (headBtn) headBtn.style.display = lastWeather ? '' : 'none';
       if (!lastWeather) {
-        host.innerHTML = '<span style="color:var(--text-muted);">Not fetched yet.</span>';
+        // NOTHING FETCHED YET: the fetch is the card's whole job, so it is the
+        // big thing in the middle of it, and it says which fields it will ask
+        // for - the same list fetchMetarTaf builds, so the promise is kept.
+        const icaos = routeAerodromes(flights);
+        for (const c of runwayChecks) if (c.icao && !icaos.includes(c.icao)) icaos.push(c.icao);
+        const status = document.getElementById('metar-status');
+        const statusText = status ? status.textContent : '';
+        // A fetch in flight has disabled the plan pane's button; this one follows it.
+        const mainBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('metar-fetch-btn'));
+        const busy = !!(mainBtn && mainBtn.disabled);
+        host.innerHTML = '<div class="mb-wx-empty">' +
+          '<button id="mb-wx-fetch-big" class="btn btn-primary mb-wx-fetch-big" onclick="fetchMetarTaf()"' +
+          (icaos.length && !busy ? '' : ' disabled') + '>\uD83C\uDF26 Fetch METAR &amp; TAF</button>' +
+          '<div class="mb-wx-empty-sub">' + (icaos.length
+            ? 'For ' + esc(icaos.join(', ')) + ' \u00B7 MET Norway, never cached'
+            : 'No ICAO aerodromes on the route yet - choose a published aerodrome, or name a waypoint with its four-letter code.') +
+          '</div>' +
+          (statusText ? '<div id="mb-wx-empty-status" class="mb-wx-empty-sub">' + esc(statusText) + '</div>' : '') +
+          '</div>';
         return;
       }
       // EVERY AERODROME A DISTANCE IS WORKED AT, in flight order (v16.99, the
@@ -7234,12 +7331,13 @@
 
       const alt  = Number(document.getElementById('def-alt').value);
       const oat  = Number(document.getElementById('def-oat').value);
-      const wdir = Number(document.getElementById('def-wdir').value);
-      const wspd = Number(document.getElementById('def-wspd').value);
 
+      // THE WIND IS NOT A DEFAULT ANY MORE (v17.6), so bulk-apply leaves every
+      // leg's wind alone - writing 000/00 over a fetched wind would throw the
+      // forecast away for a number nobody chose.
       const ok = await confirmDialog(`Apply defaults to every leg of "${flightTitle(fl)}"?`,
-        `Cruise Alt: ${alt} ft\nOAT: ${oat} °C\nWind: ${wdir}° / ${wspd} kt\n\n` +
-        `The departure waypoint keeps its field elevation.`,
+        `Cruise Alt: ${alt} ft\nOAT: ${oat} °C\n\n` +
+        `The departure waypoint keeps its field elevation. Winds are not changed.`,
         { okLabel: 'Apply to all legs' });
       if (!ok) return;
 
@@ -7255,8 +7353,6 @@
       pushUndoState('apply defaults to every leg');
       live.waypoints.forEach((wp, idx) => {
         wp.oat  = oat;
-        wp.wdir = wdir;
-        wp.wspd = wspd;
         // Leave WP 1 at field elevation, and never re-level a pattern entry.
         if (idx > 0 && !wp.isPattern) wp.alt = alt;
       });
@@ -7275,7 +7371,7 @@
       flights = [{
         id: 1,
         title: "Flight Plan 1",
-        depElev: Number(document.getElementById('def-dep-elev').value) || 0,
+        depElev: 0,
         waypoints: []
       }];
       activeFlightIndex = 0;
@@ -7379,7 +7475,7 @@
         case 'close-overlays':
           OVERLAY_IDS.forEach(closeModal);
           closeLegModal();
-          if (highlightedWaypoint) { highlightedWaypoint = null; refreshMap(); renderAllFlightTables(); }
+          clearWaypointSelection();
           break;
         case 'undo': undoLast(true); break;
         case 'redo': redoLast(true); break;
@@ -8160,7 +8256,6 @@
           // elevation is a wrong climb datum on every leg.
           if (wps.length > 0 && isFinite(wps[0].alt)) {
             flights[activeFlightIndex].depElev = wps[0].alt;
-            document.getElementById('def-dep-elev').value = wps[0].alt;
           }
           refreshMap();
           renderAllFlightTables();
@@ -8174,9 +8269,6 @@
           activeFlightIndex = 0;
           loadedRouteRef = { type: 'mission', name };
           reportMagVarRefresh(refreshMagVarOnLoad(flights), `Flight "${name}"`);
-          if (flights[0] && flights[0].depElev !== undefined) {
-            document.getElementById('def-dep-elev').value = flights[0].depElev;
-          }
           refreshMap();
           renderAllFlightTables();
           saveActiveState();
@@ -9045,19 +9137,18 @@
         if (r.refused) {
           h += '<div class="perf-result ' + (r.refusedKind === 'limit' ? 'mb-bad' : '') + '">' +
             (r.refusedKind === 'limit' ? '⛔ ' : '') + 'Not computed: ' + esc(r.refused) + '.</div>';
+          h += runwayDiagramHtml(c);
         } else {
           const avail = c.kind === 'takeoff' ? 'TODA' : 'LDA';
           h += '<div class="perf-result' + (r.ok ? '' : ' mb-bad') + '">' + (r.ok ? '✓ ' : '⛔ ') +
             'Required <b>' + r.requiredM + ' m</b> · ' + avail + ' ' + esc(String(r.availableM)) + ' m · margin ' +
             f0(r.marginM) + ' m</div>';
-          // How much of the runway the requirement uses, as a bar: green, amber
-          // past 80 %, red past 100 %. The figure beside it is the authority.
-          const used = r.availableM > 0 ? r.requiredM / r.availableM : NaN;
-          if (isFinite(used)) {
-            h += '<div class="perf-bar" title="' + Math.round(used * 100) + ' % of ' + avail + '"><span class="' +
-              (used > 1 ? 'perf-bar-over' : (used > 0.8 ? 'perf-bar-warn' : '')) + '" style="width:' +
-              Math.min(100, used * 100).toFixed(1) + '%"></span></div>';
-          }
+          // THE RUNWAY, DRAWN (v17.6, the author), replacing the v16.96 usage
+          // bar: the declared distance as the strip, the POH figure and the
+          // factored requirement measured along it, the wind box beside it.
+          // Built by src/lib/rwydiagram.js; the figure line above stays the
+          // authority.
+          h += runwayDiagramHtml(c);
           const wtxt = c.wind.variable ? 'VRB, priced as a ' + (-c.wind.headKt) + ' kt tailwind'
             : (c.wind.headKt >= 0 ? c.wind.headKt + ' kt head' : (-c.wind.headKt) + ' kt tail') +
               (c.wind.crossKt ? ', ' + c.wind.crossKt + ' kt cross from the ' + (c.wind.crossFrom === 'L' ? 'left' : 'right') : '');
@@ -9069,6 +9160,20 @@
         h += '</div>';
       }
       host.innerHTML = h;
+    }
+
+    /** The drawing and the three figures for one check. A refused check draws
+     *  the runway and the wind with no distance on it, never a zero. */
+    function runwayDiagramHtml(c) {
+      const r = c.res || {};
+      const d = {
+        kind: c.kind, desig: c.opt.desig, widthM: c.opt.rw.width, surface: c.opt.rw.surface,
+        availableM: c.kind === 'takeoff' ? c.opt.end.toda : c.opt.end.lda,
+        correctedM: r.refused ? undefined : r.correctedM,
+        requiredM: r.refused ? undefined : r.requiredM,
+        factor: r.factor, windDir: c.windDir, windKt: c.windKt, wind: c.wind
+      };
+      return '<div class="rwyd-wrap">' + runwayDiagramSvg(d) + (r.refused ? '' : runwayFiguresHtml(d)) + '</div>';
     }
 
     /** ONE listener for every field in the card, bound once. No inline handler:
@@ -9763,8 +9868,6 @@
 
       populateRouteDropdown();
       activeFlightIndex = 0;
-      if (isFinite(flights[0].depElev))
-        document.getElementById('def-dep-elev').value = flights[0].depElev;
       refreshMap();
       renderAllFlightTables();
       saveActiveState();
@@ -9831,9 +9934,6 @@
       flights = restored || defaultFlights();
     }
     if (activeFlightIndex >= flights.length) activeFlightIndex = 0;
-    if (flights[0] && flights[0].depElev !== undefined) {
-      document.getElementById('def-dep-elev').value = flights[0].depElev;
-    }
     loadViewPrefs();
     loadKeybinds();
     // THE FLIGHT DATE IS SET BEFORE THE FIRST RENDER, not by the daylight card

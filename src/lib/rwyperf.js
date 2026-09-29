@@ -59,7 +59,7 @@ export const GRASS_TAKEOFF_SHARE = 0.15;
 export const GRASS_LANDING_SHARE = 0.45;
 
 /** Surfaces the POH's figures apply to as published, and the one it corrects. */
-const PAVED = /^(ASPH|CONC|ASPH\/CONC|CONC\/ASPH|BITUM)$/;
+export const PAVED = /^(ASPH|CONC|ASPH\/CONC|CONC\/ASPH|BITUM)$/;
 const GRASS = /^GRASS$/;
 
 const M_PER_FT = 0.3048;
