@@ -13313,6 +13313,173 @@ TA('the longest page-2 margin notes fit their free paper at no less than the sma
   }
 });
 
+TA('pressing Fetch works out the take-off and landing distances at once - no runway cycling', async () => {
+  // v16.99, the author: "when the fetch button is pressed, the takeoff and
+  // landing distances arent calculated before i cycle the runways once". The
+  // fetch repainted the weather cards and never re-ran the render pass the
+  // runway checks are built in. CLICKED, not called: the button is the control.
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev(`mbPrefs.reg = "LN-TRB"; perfInputs = {}; lastWeather = null; renderAllFlightTables();`);
+  const before = ev('runwayChecks[0].res');
+  assert(before && before.refused, 'the fixture already has a distance before any weather: ' + JSON.stringify(before).slice(0, 120));
+  const realFetch = w.fetch;
+  const reports = {
+    metar: 'ENDU 281150Z 29012KT 9999 FEW040 10/05 Q1005\nENTC 281150Z 18008KT 9999 SCT030 08/04 Q1003\n',
+    taf: 'TAF ENDU 281100Z 2812/2821 29010KT 9999 FEW040\nTAF ENTC 281100Z 2812/2821 18008KT 9999 SCT030\n'
+  };
+  w.fetch = async (url) => ({ ok: true, status: 200, text: async () => (/\/taf\?/.test(String(url)) ? reports.taf : reports.metar) });
+  try {
+    doc.getElementById('metar-fetch-btn').click();
+    for (let i = 0; i < 50 && ev('!lastWeather || document.getElementById("metar-fetch-btn").disabled'); i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    await new Promise((r) => setTimeout(r, 0));
+    assert(ev('!!lastWeather'), 'the fetch never completed');
+    const dep = ev('runwayChecks[0]'), arr = ev('runwayChecks[1]');
+    assert(dep.icao === 'ENDU' && dep.qnh === 1005 && dep.windKt === 12 && dep.res && !dep.res.refused && dep.res.requiredM > 0,
+      'the ENDU take-off was not worked from the fetched METAR: ' + JSON.stringify({ qnh: dep.qnh, wind: dep.windKt, res: dep.res }).slice(0, 200));
+    assert(arr.icao === 'ENTC' && arr.res && !arr.res.refused && arr.res.requiredM > 0, 'the ENTC landing was not worked from the fetched METAR');
+    assert(/Required\s*\d+ m/.test(doc.getElementById('mb-perf').textContent), 'the tab still shows no distance after the fetch');
+    // A failed fetch keeps the reports it had and says so.
+    w.fetch = async () => { throw new Error('offline'); };
+    doc.getElementById('metar-fetch-btn').click();
+    for (let i = 0; i < 50 && ev('document.getElementById("metar-fetch-btn").disabled'); i++) await new Promise((r) => setTimeout(r, 10));
+    assert(/Could not fetch/.test(doc.getElementById('metar-status').textContent) && ev('runwayChecks[0].qnh') === 1005,
+      'a failed fetch lost the reports or did not say so');
+  } finally {
+    w.fetch = realFetch;
+    resetV1698();
+    w.renderAllFlightTables();
+  }
+});
+
+TA('the M&B weather card shows every aerodrome a distance is worked at, in flight order', async () => {
+  // v16.99, the author: on ENDU-ENEV-ENTC-ENDU the M&B page "only shows ENDU
+  // and ENEV, not ENTC". It took the first and last of a list already
+  // deduplicated, so a round trip lost its middle.
+  const ad = (i) => aipDataset().aerodromes.find((a) => a.icao === i);
+  const wp = (i, alt) => `{ lat: ${ad(i).lat}, lng: ${ad(i).lng}, name: "${i}", alt: ${alt}, oat: 10, wdir: 0, wspd: 0, var: -11 }`;
+  ev(`flights = [
+    { id: 1, title: "A", depElev: 254, waypoints: [${wp('ENDU', 254)}, Object.assign(${wp('ENEV', 84)}, { stop: 'full-stop' })] },
+    { id: 2, title: "B", depElev: 84, waypoints: [${wp('ENEV', 84)}, Object.assign(${wp('ENTC', 32)}, { stop: 'full-stop' })] },
+    { id: 3, title: "C", depElev: 32, waypoints: [${wp('ENTC', 32)}, ${wp('ENDU', 254)}] }];
+    activeFlightIndex = 0; mbPrefs.reg = "LN-TRB"; refreshMap(); renderAllFlightTables();`);
+  const realFetch = w.fetch;
+  w.fetch = async (url) => ({ ok: true, status: 200, text: async () => /\/taf\?/.test(String(url)) ? '' :
+    'ENDU 281150Z 29012KT 9999 10/05 Q1005\nENEV 281150Z 18008KT 9999 08/04 Q1003\nENTC 281150Z 18008KT 9999 08/04 Q1003\n' });
+  await w.fetchMetarTaf();
+  w.fetch = realFetch;
+  const shown = (id) => [...doc.getElementById(id).querySelectorAll('b')].map((e) => e.textContent).filter((t) => /^EN[A-Z]{2}$/.test(t));
+  assert(JSON.stringify(shown('mb-wx')) === '["ENDU","ENEV","ENTC"]', 'the M&B card shows ' + JSON.stringify(shown('mb-wx')));
+  assert(JSON.stringify(shown('metar-body')) === '["ENDU","ENEV","ENTC"]', 'the plan card changed: ' + JSON.stringify(shown('metar-body')));
+  // Every distance got its METAR - the whole point of showing them.
+  assert(ev('runwayChecks.every(c => c.qnh === 1005 || c.qnh === 1003)'), 'a distance check has no METAR QNH');
+  // A sector added after the fetch is said to be missing, not "no reports published".
+  ev(`flights.push({ id: 4, title: "D", depElev: 254, waypoints: [${wp('ENDU', 254)}, ${wp('ENBO', 42)}] }); renderAllFlightTables();`);
+  const txt = doc.getElementById('mb-wx').textContent;
+  assert(/ENBO was not in the last fetch - press Fetch again/.test(txt) && !/ENBO - no reports published/.test(txt),
+    'an aerodrome added after the fetch is not reported as missing: ' + txt.slice(-160));
+  resetV1698(); w.renderAllFlightTables();
+});
+
+/** A report time DDHHMMZ that many minutes ago, and a validity DDHH/DDHH of so many hours from then. */
+function zAgo(min) {
+  const d = new Date(Date.now() - min * 60000), p = (n) => String(n).padStart(2, '0');
+  return p(d.getUTCDate()) + p(d.getUTCHours()) + p(d.getUTCMinutes()) + 'Z';
+}
+function validFrom(min, hours) {
+  const a = new Date(Date.now() - min * 60000), b = new Date(a.getTime() + hours * 3600000), p = (n) => String(n).padStart(2, '0');
+  return p(a.getUTCDate()) + p(a.getUTCHours()) + '/' + p(b.getUTCDate()) + p(b.getUTCHours() === 0 && hours ? 24 : b.getUTCHours());
+}
+
+T('a METAR is outdated past 30 min, a TAF past 3 h or 6 h by its own length - measured, not quoted', () => {
+  const Mt = moduleExports.metar;
+  assert(Mt.METAR_ROUTINE_MIN === 30 && Mt.TAF_SHORT_ROUTINE_MIN === 180 && Mt.TAF_LONG_ROUTINE_MIN === 360,
+    'the routine intervals moved: ' + [Mt.METAR_ROUTINE_MIN, Mt.TAF_SHORT_ROUTINE_MIN, Mt.TAF_LONG_ROUTINE_MIN]);
+  const m = Mt.parseReport('ENDU 291150Z 29012KT 9999 FEW040 10/05 Q1005');
+  assert(!Mt.isOutdated(m, 30) && Mt.isOutdated(m, 31), 'the METAR boundary is not 30 min');
+  const long = Mt.parseReport('ENDU 291100Z 2912/3012 23009KT 9999 -SHRA FEW025 BKN035 TEMPO 2912/2920 23015G25KT');
+  assert(long.isTaf && long.validHours === 24 && Mt.routineIntervalMin(long) === 360, 'a 24 h TAF: ' + long.validHours);
+  assert(!Mt.isOutdated(long, 360) && Mt.isOutdated(long, 361), 'the 24 h TAF boundary is not 6 h');
+  const thirty = Mt.parseReport('ENGM 290500Z 2906/3012 23009KT 9999');
+  assert(thirty.validHours === 30 && Mt.routineIntervalMin(thirty) === 360, 'a 30 h TAF: ' + thirty.validHours);
+  const short = Mt.parseReport('ENAT 281400Z 2815/2824 18009KT 9999 BKN025 TEMPO 2815/2817 18018G28KT=');
+  assert(short.validHours === 9 && Mt.routineIntervalMin(short) === 180 && Mt.isOutdated(short, 181) && !Mt.isOutdated(short, 180),
+    'a 9 h TAF is not on a 3 h cycle: ' + short.validHours);
+  // Across a month end the span is still "the next day".
+  assert(Mt.parseReport('ENAT 302000Z 3021/0106 18009KT').validHours === 9, 'a month-end validity misread');
+  // Unknown age or unreadable validity: never flagged, never guessed.
+  assert(!Mt.isOutdated(m, null) && Mt.routineIntervalMin(Mt.parseReport('')) === null, 'an unknown was flagged');
+  // A real MET Norway METAR from the measurement: the TEMPO wind is read, the
+  // remark's upper wind is not.
+  const entc = Mt.parseReport('ENTC 291120Z 22019KT 9999 -RA SCT036 BKN042 11/05 Q1016 TEMPO 22020G30KT SHRA SCT020CB BKN030 RMK WIND 2600FT 21021KT=');
+  assert(entc.wind.speedKt === 19 && entc.tempoWind.speedKt === 20 && entc.tempoWind.gustKt === 30 && entc.tempoWindCount === 1,
+    'the ENTC report was misread: ' + JSON.stringify([entc.wind, entc.tempoWind, entc.tempoWindCount]));
+});
+
+T('an outdated METAR or TAF is shown in yellow with a label to fetch again - on both weather cards', () => {
+  try {
+    ev(SEED_STOP);
+    ev(`mbPrefs.reg = "LN-TRB";
+        lastWeather = { icaos: ['ENDU', 'ENTC'], metars: {
+          ENDU: 'ENDU ${zAgo(45)} 29012KT 9999 FEW040 10/05 Q1005',
+          ENTC: 'ENTC ${zAgo(10)} 18008KT 9999 SCT030 08/04 Q1003' }, tafs: {
+          ENDU: 'ENDU ${zAgo(420)} ${validFrom(360, 24)} 29010KT 9999 FEW040',
+          ENTC: 'ENTC ${zAgo(300)} ${validFrom(240, 24)} 18008KT 9999 SCT030' } };
+        renderMetarCard(lastWeather.icaos, lastWeather.metars, lastWeather.tafs); renderAllFlightTables();`);
+    for (const id of ['metar-body', 'mb-wx']) {
+      const host = doc.getElementById(id);
+      const blocks = [...host.children].filter((d) => d.querySelector('b'));
+      const byIcao = Object.fromEntries(blocks.map((d) => [d.querySelector('b').textContent, d]));
+      const du = byIcao.ENDU, tc = byIcao.ENTC;
+      assert(du && tc, id + ' lost an aerodrome');
+      const raws = (d) => [...d.querySelectorAll('.wx-raw')];
+      // ENDU: METAR 45 min old (past 30), TAF 7 h old (past 6) - both outdated.
+      assert(raws(du).length === 2 && raws(du).every((r) => r.classList.contains('wx-outdated')), id + ': ENDU reports are not yellow');
+      assert(du.querySelectorAll('.wx-outdated-tag').length === 2 && /Outdated · fetch again/.test(du.textContent), id + ': ENDU has no outdated label');
+      // ENTC: METAR 10 min, TAF 5 h - both current.
+      assert(raws(tc).length === 2 && raws(tc).every((r) => !r.classList.contains('wx-outdated')) && !tc.querySelector('.wx-outdated-tag'),
+        id + ': a current ENTC report is flagged');
+      // The report time has no seconds, so the age may read one minute more.
+      assert(/TAF · 5 h 0[01] min ago/.test(tc.textContent), id + ': the TAF age is not shown: ' + tc.textContent.slice(0, 200));
+    }
+    // The distance card says the same about the METAR it read.
+    assert(/4[56] min old - OUTDATED, fetch again/.test(doc.getElementById('mb-perf').textContent), 'the distance card did not call the METAR outdated');
+    assert(!/1[01] min old - OUTDATED/.test(doc.getElementById('mb-perf').textContent), 'the distance card called a 10 min METAR outdated');
+    // The label is yellow in light and dark, from tokens - never a literal.
+    const css = require('fs').readFileSync(require('path').join(__dirname, 'src', 'styles.css'), 'utf8');
+    assert((css.match(/--wx-outdated:/g) || []).length === 3 && /\.wx-outdated \{ color: var\(--wx-outdated\); \}/.test(css),
+      'the outdated colour is not a token in every theme block');
+  } finally {
+    resetV1698();
+    w.renderAllFlightTables();
+  }
+});
+
+TA('Fetch asks for every aerodrome a distance is worked at, even one not named by its ICAO', async () => {
+  // A departure waypoint called BARDUFOSS is still ENDU to the runway check
+  // (aerodromeAt resolves by position), so its METAR has to be fetched too.
+  ev(`flights = [{ id: 1, title: "N", depElev: 254, waypoints: [
+      { lat: 69.05505349, lng: 18.54466865, name: "BARDUFOSS", alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 } ]}];
+      activeFlightIndex = 0; mbPrefs.reg = "LN-TRB"; lastWeather = null; perfInputs = {}; refreshMap(); renderAllFlightTables();`);
+  assert(ev('runwayChecks[0].icao') === 'ENDU', 'the fixture\'s departure did not resolve to ENDU');
+  const asked = [];
+  const realFetch = w.fetch;
+  w.fetch = async (url) => { asked.push(String(url)); return { ok: true, status: 200, text: async () =>
+    (/\/taf\?/.test(String(url)) ? '' : 'ENDU 281150Z 29012KT 9999 10/05 Q1005\nENTC 281150Z 18008KT 9999 08/04 Q1003\n') }; };
+  try {
+    await w.fetchMetarTaf();
+    assert(asked.length === 2 && asked.every((u) => /icao=[^&]*ENDU/.test(u) && /ENTC/.test(u)), 'ENDU was not asked for: ' + asked.join(' | '));
+    assert(ev('runwayChecks[0].qnh') === 1005, 'the BARDUFOSS take-off did not get the ENDU METAR');
+  } finally {
+    w.fetch = realFetch;
+    resetV1698();
+    w.renderAllFlightTables();
+  }
+});
+
 runAsyncTests().then(() => {
   console.log('\n=== Uncaught page errors ===');
   console.log(errors.length ? errors : '  none');

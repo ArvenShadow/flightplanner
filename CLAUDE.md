@@ -2740,6 +2740,96 @@ their M&B has no CG envelope at all (only MTOM/MLM/baggage), and their nomogram
 digitisation is specific to the Z242L AFM - the C182 POH is tabulated, so
 interpolation of the table is the authoritative method here.
 
+## THE WEATHER FEEDS THE DISTANCES, AND SAYS WHEN IT IS OLD (v16.99)
+
+Three reports from the author, the same afternoon v16.98 merged.
+
+### PRESSING FETCH NEVER RE-RAN THE PLAN (a v16.96 bug)
+
+*"when the fetch button is pressed, the takeoff and landing distances arent
+calculated before i cycle the runways once."* `fetchMetarTaf` repainted the two
+weather cards and nothing else. The runway checks are built inside
+`renderAllFlightTables`, so the wind/QNH/OAT prefills, the distances, the banner
+and the printed sheet all kept the figures from BEFORE the fetch. Cycling a
+runway fired the card's change listener, which renders, and that is why it
+"fixed" itself. A successful fetch now ends with one render, OUTSIDE the `try`:
+a render problem is not a failed fetch and must not be reported as one.
+
+- **NOTHING IN THE SUITE HAD EVER DRIVEN A FETCH.** Every weather test assigned
+  `lastWeather` by hand, which is exactly the path that renders. The new test
+  CLICKS the real button against a stubbed `fetch` (the v16.53 rule: driving
+  the function proves the function).
+- **MY OWN STUB MATCHED THE WRONG URL FIRST.** `/taf/` is inside `tafmetar`, so
+  both requests got the TAF body and every station read "no reports published".
+  It matches `/\/taf\?/` now. A stub that answers everything the same way
+  proves nothing about which request was which.
+
+### THE M&B WEATHER CARD TOOK THE FIRST AND LAST OF A DEDUPLICATED LIST
+
+*"for my (ENDU-ENEV-ENTC-ENDU) flight plan only shows ENDU and ENEV, not ENTC
+in the M&B page"*. `routeAerodromes` deduplicates, so a round trip's return to
+ENDU is gone before the card takes "first and last" - and every intermediate
+stop but one falls out. Which one survives depends on how the sectors are laid
+out (reproduced as ENDU + ENTC on a three-full-stop layout; the author's showed
+ENDU + ENEV): the same cause either way.
+
+- **THE CARD NOW SHOWS WHAT THE DISTANCE CARD BELOW IT CHECKS**: every
+  `runwayChecks` aerodrome, in flight order, from the same array, so the two
+  cannot disagree about which fields count. The daylight card's own first/last
+  rule is unrelated and unchanged.
+- **FETCH ASKS FOR THOSE AERODROMES TOO.** The route list comes from waypoint
+  NAMES; the runway checks resolve by POSITION (`aerodromeAt`). A departure
+  waypoint named "BARDUFOSS" was ENDU to the distance and never got its METAR.
+- **"NOT IN THE LAST FETCH" IS NOT "NO REPORTS PUBLISHED".** An aerodrome added
+  after the fetch is said to be missing, in its own words, because the card's
+  existing phrase is what it says about a station that files nothing.
+
+### OUTDATED IS PAST THE REPORT'S OWN ROUTINE INTERVAL - MEASURED
+
+*"when a METAR or TAF is outdated (they should update every 30 minutes, and 6
+hours respectively, check local rules) the metar / taf could be displayed in
+yellow text with a little label"*. Checked, and the local rule is not one
+number, so it was measured:
+
+- **AIP Norge GEN 3.5 section 3** lists each station's observation interval -
+  41 of 62 half-hourly, 16 hourly, several by time of day (ENDU `H, h` with the
+  half-hourly window footnoted as 0330-1630), a few in prose ("parts of night")
+  - and publishes NO TAF issue schedule. The table is untagged, and reading
+  footnoted prose would be the sentence-parsing the importer refuses.
+- **MET Norway's own last 24 h, 2026-09-29, eight stations** (ENDU ENTC ENEV
+  ENAT ENGM ENBO ENNA ENSR): METAR every **30 min at all eight** - including
+  ENAT, which GEN 3.5 lists as hourly, so practice is the author's figure. TAF
+  by its OWN LENGTH: the 24/30 h TAFs every **6 h**, the 9 h TAFs (ENAT, ENSR)
+  every **3 h**; the shorter gaps are amendments. That is ICAO Annex 3's split
+  at 12 h of validity.
+- `routineIntervalMin(p)` reads it off each report (`validHours` is parsed from
+  the TAF's first DDHH/DDHH, the next day across a month end); `isOutdated` is
+  "older than that". A TAF whose validity cannot be read is never flagged -
+  null, not a guess.
+- The raw text turns yellow (`--wx-outdated`, a token in all three theme
+  blocks, `#a16207` on white so it can be read) with an **"Outdated · fetch
+  again"** label on both weather cards. The TAF now shows its age too; it never
+  did. The distance card used 90 min for "NOT CURRENT" and now uses the same
+  30 - the first named failure shape, an old rule not moved with a new one.
+- **THE REPORT IS STILL SHOWN IN FULL.** Outdated means a newer one is due, not
+  that this one is wrong; it is still the last report there is.
+- **THE AGE ASSERTS ALLOW ONE MINUTE.** A report time has no seconds, so a
+  report made "10 min ago" reads 11 half the time. The first version asserted
+  the exact text, flaked under the mutation run, and - because it failed before
+  its reset - cascaded into an unrelated plan-count test. It reads 10-or-11 now
+  and resets in a `finally`.
+
+### ELEVEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+No re-render after Fetch (3, the first reproducing the author's symptom:
+`qnh null, wind null`); the card back to first-and-last (1, `["ENDU","ENTC"]`);
+the missing aerodrome not reported (1); position-resolved aerodromes not
+fetched (1); METAR outdated at 90 min (2); every TAF on a 6 h cycle (1); the
+boundary inclusive (1); a month-end validity misread (1); the raw text not
+yellow (1); a TAF never flagged (1); the distance card back at 90 min (1 - which
+the flaky age assert had MASKED on the first run: it failed before reaching the
+distance-card check, so the mutation looked caught for the wrong reason).
+
 ## FOUR CORRECTIONS TO PAGE 2, FROM THE PERSON WHO FLIES IT (v16.98)
 
 The author, on the merged v16.97: *"check the endurance calculations and make
