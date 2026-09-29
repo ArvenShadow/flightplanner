@@ -3843,13 +3843,20 @@ T('a skin is CSS only - it can never take a control away', () => {
     const sel = m[2].trim();
     if (!sel || sel.startsWith('@')) continue;
     for (const one of sel.split(',')) {
-      assert(/body\.skin-/.test(one),
-        'a skins.css rule is not scoped to a skin class, so it leaks into every look: ' + one.trim());
+      // (v17.3: or to a SIZE class - Compact and Bold are a second axis now.)
+      assert(/body\.(skin|density)-/.test(one),
+        'a skins.css rule is not scoped to a skin or size class, so it leaks into every look: ' + one.trim());
     }
   }
   // The DEFAULT skin has no rules at all: it IS the shipped design.
   assert(!/body\.skin-default/.test(rules),
     'the default skin has grown CSS of its own - it must stay the untouched shipped design');
+  assert(!/body\.density-normal/.test(rules),
+    'the Normal size has grown CSS of its own - it must stay the shipped sizing');
+  const sized = new Set([...rules.matchAll(/body\.density-([a-z0-9-]+)/g)].map((m) => m[1]));
+  const sizes = new Set(S.DENSITIES.map((x) => x.id));
+  for (const id of sized) assert(sizes.has(id), 'skins.css sizes "' + id + '", which is not in DENSITIES');
+  for (const id of sizes) if (id !== 'normal') assert(sized.has(id), 'DENSITIES offers "' + id + '", which has no CSS');
 
   // The list and the stylesheet must agree, or a skin is unreachable (in the
   // list, no CSS) or invisible (CSS, not in the list).
@@ -3942,11 +3949,11 @@ T('a moved control keeps its wiring, and goes home exactly', () => {
 T('choosing a skin swaps one body class and nothing else', () => {
   ev(SEED);
   const before = ev('flights[0].waypoints.length');
-  ev(`applySkin('compact');`);
-  assert(ev(`document.body.classList.contains('skin-compact')`), 'the class was not applied');
+  ev(`applySkin('slate');`);
+  assert(ev(`document.body.classList.contains('skin-slate')`), 'the class was not applied');
   ev(`applySkin('menu');`);
   assert(ev(`document.body.classList.contains('skin-menu')`), 'the second skin was not applied');
-  assert(!ev(`document.body.classList.contains('skin-compact')`),
+  assert(!ev(`document.body.classList.contains('skin-slate')`),
     'the previous skin class was left behind - two skins would fight in the cascade');
   ev(`applySkin('rubbish');`);
   assert(ev(`document.body.classList.contains('skin-default')`), 'an unknown skin did not fall back');
@@ -3954,7 +3961,7 @@ T('choosing a skin swaps one body class and nothing else', () => {
   // reach the data at all.
   assert(ev('flights[0].waypoints.length') === before, 'choosing a skin changed the flight plan');
   // The layout classes are a SEPARATE axis and must survive a skin change.
-  ev(`setLayoutMode('stacked'); applySkin('bold');`);
+  ev(`setLayoutMode('stacked'); applySkin('chart');`);
   assert(ev(`document.body.classList.contains('layout-stacked')`),
     'choosing a skin cleared the layout choice');
   ev(`applySkin('default'); setLayoutMode('split');`);
@@ -13936,6 +13943,43 @@ T('the new skins only restyle: no markup, no handler, and the default stays unto
     assert(k.id === id && k.note.length > 40, id + ' is not listed with a note saying what it is');
     assert(!k.place, id + ' moves controls - these three are meant to be CSS only');
   }
+});
+
+// v17.3: the SIZE is its own setting, so Bold (and Compact) go with any style.
+
+T('any size goes with any style: two classes, and choosing one never clears the other', () => {
+  const S = moduleExports.skins;
+  assert(S.DENSITIES.map((d) => d.id).join() === 'normal,compact,bold', 'the sizes: ' + S.DENSITIES.map((d) => d.id));
+  assert(!S.SKINS.some((k) => k.id === 'bold' || k.id === 'compact'), 'Bold or Compact is still a skin, so it cannot be worn with a style');
+  assert(S.normaliseDensity('bold') === 'bold' && S.normaliseDensity('huge') === 'normal' && S.normaliseDensity(undefined) === 'normal',
+    'the size is not re-validated');
+  try {
+    ev(`applySkin('chart'); applyDensity('bold');`);
+    const cls = ev('[...document.body.classList].join(" ")');
+    assert(/\bskin-chart\b/.test(cls) && /\bdensity-bold\b/.test(cls), 'Bold Chart is not both: ' + cls);
+    ev(`applySkin('slate');`);
+    assert(ev(`document.body.classList.contains('density-bold')`), 'changing the style dropped the size');
+    ev(`applyDensity('compact');`);
+    assert(ev(`document.body.classList.contains('skin-slate')`) && !ev(`document.body.classList.contains('density-bold')`),
+      'changing the size dropped the style, or left the old size behind');
+  } finally { ev(`applySkin('default'); applyDensity('normal');`); }
+});
+
+T('a profile saved with the old Bold or Compact skin keeps its size (the author uses Bold)', () => {
+  const S = moduleExports.skins;
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  assert(eq(S.splitLegacyLook('bold', undefined), { skin: 'default', density: 'bold' }), 'an old Bold profile lost its Bold');
+  assert(eq(S.splitLegacyLook('compact', undefined), { skin: 'default', density: 'compact' }), 'an old Compact profile lost its size');
+  // An old settings FILE imported into a profile that already has a size:
+  // nothing since v17.3 writes skin 'bold', so it is the file's intent.
+  assert(eq(S.splitLegacyLook('bold', 'normal'), { skin: 'default', density: 'bold' }), 'an imported old Bold file lost its Bold');
+  assert(eq(S.splitLegacyLook('slate', 'bold'), { skin: 'slate', density: 'bold' }), 'a current look was rewritten');
+  assert(eq(S.splitLegacyLook('rubbish', 'huge'), { skin: 'default', density: 'normal' }), 'junk was not normalised');
+  assert(moduleExports.exch.PROFILE_KEYS.includes('density'), 'the size does not travel with the settings');
+  // The boot path, in the page: a stored Bold profile boots as Bold.
+  const src = APP_SRC;
+  const boot = src.indexOf('splitLegacyLook(aircraftProfile.skin, aircraftProfile.density)');
+  assert(boot > 0 && src.indexOf('applyDensity(aircraftProfile.density)', boot) > boot, 'the boot does not migrate and apply the size');
 });
 
 runAsyncTests().then(() => {

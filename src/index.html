@@ -1014,21 +1014,24 @@
           <div class="setting-section">
             <h3>Look</h3>
             <div class="setting-row">
-              <label for="map-skin">Shell layout &amp; style</label>
+              <label for="map-skin">Style &amp; layout</label>
               <select id="map-skin" onchange="updateSkin()" style="width:210px;"></select>
             </div>
             <div id="map-skin-note" style="font-size:10px; color:var(--text-muted); margin-top:2px;"></div>
+            <div class="setting-row">
+              <label for="map-density">Size</label>
+              <select id="map-density" onchange="updateDensity()" style="width:210px;"></select>
+            </div>
+            <div id="map-density-note" style="font-size:10px; color:var(--text-muted); margin-top:2px;"></div>
             <details class="setting-help">
               <summary>What a skin changes, and what it never touches</summary>
               <div>
-              A skin is a different <b>arrangement and style of the same planner</b> — where the
-              panels sit, how big the controls are, how heavy the type is. Every button does
-              exactly what it did before: a skin is pure CSS, nothing moves in the page, so no
-              action can be lost or rewired by choosing one.
-              <br>What a skin <b>cannot</b> do is lift one control out of its panel and put it in
-              another — CSS places a box inside its own container and no further. Moving a whole
-              panel is fine (that is what <b>Top bar</b> and <b>Menu</b> do); moving a single
-              button between panels is not, yet.
+              A <b>style</b> is a different <b>arrangement and look of the same planner</b> — its
+              colours, its buttons, where the panels sit. The <b>size</b> is separate, so
+              <b>Compact</b> and <b>Bold</b> go with any style: Bold Slate, Compact Chart, Bold Float.
+              Every button does exactly what it did before: styles and sizes are CSS, so no action
+              can be lost or rewired by choosing one. (Menu also moves Undo, Redo and Settings onto
+              the map, as the same buttons — the plan is behind a hover there.)
               <br><b>Default</b> is the shipped design and is left exactly as it was — every
               restyling change is checked against it pixel for pixel.
               </div>
@@ -1218,7 +1221,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 152 inline on*= handlers - 122 written
+    // map, markers, undoStack...) plus 153 inline on*= handlers - 123 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1444,7 +1447,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.2';
+    const APP_VERSION = '17.3';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4794,6 +4797,26 @@
       return want;
     }
 
+    /** The size (v17.3), a second body class beside the skin's, so any size is
+     *  worn with any style. @param {unknown} id @returns {string} */
+    function applyDensity(id) {
+      const want = normaliseDensity(id);
+      DENSITY_CLASSES.forEach((c) => document.body.classList.remove(c));
+      document.body.classList.add('density-' + want);
+      const note = document.getElementById('map-density-note');
+      const d = DENSITIES.find((x) => x.id === want);
+      if (note && d) note.textContent = d.note;
+      return want;
+    }
+
+    function updateDensity() {
+      const el = document.getElementById('map-density');
+      if (!el) return;
+      aircraftProfile.density = applyDensity(el.value);
+      localStorage.setItem('c182_perf_profile', JSON.stringify(aircraftProfile));
+      if (map && typeof map.invalidateSize === 'function') setTimeout(() => map.invalidateSize(), 180);
+    }
+
     function updateSkin() {
       const el = document.getElementById('map-skin');
       if (!el) return;
@@ -6078,6 +6101,18 @@
         });
       }
       if (skinSel) skinSel.value = normaliseSkin(aircraftProfile.skin);
+      const denSel = document.getElementById('map-density');
+      if (denSel && !denSel.options.length) {
+        DENSITIES.forEach((d) => {
+          const o = document.createElement('option');
+          o.value = d.id; o.textContent = d.label;
+          denSel.appendChild(o);
+        });
+      }
+      if (denSel) denSel.value = normaliseDensity(aircraftProfile.density);
+      const denNote = document.getElementById('map-density-note');
+      const den = DENSITIES.find((x) => x.id === normaliseDensity(aircraftProfile.density));
+      if (denNote && den) denNote.textContent = den.note;
       const skinNote = document.getElementById('map-skin-note');
       if (skinNote) skinNote.textContent = skinById(aircraftProfile.skin).note;
       document.getElementById('map-nav-path').value = normaliseNavPath(aircraftProfile.navPath);
@@ -9706,7 +9741,15 @@
     drawVac();
     updateFixesBtn();
     drawFixes();
+    // A profile from before v17.3 may carry skin 'bold' or 'compact', which are
+    // SIZES now (splitLegacyLook): the pilot who chose Bold keeps Bold.
+    {
+      const look = splitLegacyLook(aircraftProfile.skin, aircraftProfile.density);
+      aircraftProfile.skin = look.skin;
+      aircraftProfile.density = look.density;
+    }
     applySkin(aircraftProfile.skin);   // before the first paint, so nothing flashes
+    applyDensity(aircraftProfile.density);
     // THE PATH MODEL IS INJECTED BEFORE ANYTHING IS DRAWN OR COMPUTED, because
     // every distance and track in the first render depends on it.
     setNavPath(aircraftProfile.navPath);

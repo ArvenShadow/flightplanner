@@ -659,10 +659,24 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
   // scrollWidth === clientWidth, so the old comparison could only ever say
   // "not clipped" and never "cramped". The text is measured in the input's own
   // font and must leave a character of room inside the content box.
-  for (const skin of ['default', 'compact', 'bold']) {
-    const m = await page.evaluate(async (skin) => {
-      applySkin(skin);
+  // (v17.3: Compact and Bold are SIZES now, worn with any style - so the
+  // check runs every style at every size. Bold's 14 px of input chrome was the
+  // v16.71 failure, and it now arrives on top of Slate and Chart too.)
+  const LOOKS = (await import(new URL('../src/lib/skins.js', import.meta.url).href));
+  const combos = LOOKS.SKINS.flatMap((k) => LOOKS.DENSITIES.map((d) => k.id + '+' + d.id));
+  for (const skin of combos) {
+    await page.evaluate((combo) => {
+      const [skin, den] = combo.split('+');
+      applySkin(skin); applyDensity(den);
       applyPaneRatio(false, 0.8);
+    }, skin);
+    // MENU's plan is a collapsed rail until it is reached for, and a rail has
+    // no cells to measure (they are display:none, so not even focus reaches
+    // them). It is opened the way a pilot opens it - the mouse over it - and
+    // measured open.
+    if (skin.startsWith('menu+')) await page.hover('#sidebar', { position: { x: 12, y: 200 } });
+    else await page.mouse.move(5, 5);
+    const m = await page.evaluate(async () => {
       await new Promise((x) => setTimeout(x, 320));
       const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('#flight-plans-container td'));
       const c = document.createElement('canvas').getContext('2d');
@@ -674,15 +688,15 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
         return { v: i.value, slack: +(room - text).toFixed(1), ch: +c.measureText('0').width.toFixed(2),
                  clipped: i.scrollWidth > i.clientWidth };
       });
-      applySkin('default'); applyPaneRatio(false, null);
       return out;
-    }, skin);
+    });
+    await page.evaluate(() => { applySkin('default'); applyDensity('normal'); applyPaneRatio(false, null); });
     const clipped = m.filter((x) => x.clipped);
     const tight = m.filter((x) => x.slack < x.ch);
     check(clipped.length === 0,
-      `${skin.padEnd(8)} clips no number cell` + (clipped.length ? ': ' + clipped.map((x) => x.v).join(', ') : ''));
+      `${skin.padEnd(15)} clips no number cell` + (clipped.length ? ': ' + clipped.map((x) => x.v).join(', ') : ''));
     check(tight.length === 0,
-      `${skin.padEnd(8)} leaves a character of room in every number cell` +
+      `${skin.padEnd(15)} leaves a character of room in every number cell` +
       (tight.length ? ': ' + tight.map((x) => x.v + ' has ' + x.slack + 'px, needs ' + x.ch).join(', ') : ''));
   }
   // THE TABLE SCROLLS RATHER THAN SQUEEZING. `.table-container` was always set

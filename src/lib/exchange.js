@@ -47,6 +47,8 @@ export const PROFILE_KEYS = [
   'corridorNM',
   'corridorFillPct',
   'skin',
+  // The size (v17.3): Normal / Compact / Bold, worn with any skin.
+  'density',
   'splitRatio',
   'stackRatio',
   'navPath',
