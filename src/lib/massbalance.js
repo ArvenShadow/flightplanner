@@ -778,7 +778,7 @@ export function missionMaster(m) {
     if (r.minFlightMin > minFlt) minFlt = r.minFlightMin;
   }
   return Object.assign({}, m.first, {
-    label: 'Whole mission',
+    label: 'Whole flight',
     landing: m.last.landing,
     fuelDepGal: m.fuel.depGal,
     fuelArrGal: m.fuel.arrGal,

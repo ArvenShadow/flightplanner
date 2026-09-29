@@ -413,7 +413,7 @@ TA('save current flight as a route, then load it back', async () => {
   ev(`localStorage.removeItem('c182_custom_routes'); loadedRouteRef = null; populateRouteDropdown();`);
   const p = w.saveCurrentMission();
   await tick();
-  answerDialog('Save active flight as a new route');
+  answerDialog('Save only the active sector as a route');
   await tick();
   answerDialog('Save');                          // accept the default name
   await p;
@@ -880,7 +880,7 @@ console.log('\n=== 14. Save / export round trip ===');
 TA('save mission + export produce valid JSON', async () => {
   const p = w.saveCurrentMission();
   await tick();
-  answerDialog('Save the whole mission as new');
+  answerDialog('Save the whole flight');
   await tick();
   answerDialog('Save');
   await p;
@@ -7686,7 +7686,7 @@ T('editing the VAR cell marks it manual so it survives future loads', () => {
   assert(input, 'VAR input not found');
   assert(/varSource='MANUAL'/.test(input.getAttribute('onchange')), 'VAR edit does not mark the value manual');
 });
-TA('saving offers every option at once, update-in-place first', async () => {
+TA('saving offers every option at once, the whole flight first', async () => {
   ev(SEED);
   ev(`localStorage.setItem('c182_custom_routes', JSON.stringify({ 'MY ROUTE': [
     { lat: 69.0, lng: 18.0, name: 'A', alt: 500, oat: 10, wdir: 0, wspd: 0, var: -11 },
@@ -7702,11 +7702,17 @@ TA('saving offers every option at once, update-in-place first', async () => {
   // ONE dialog, not a chain of yes/no questions
   const opts = [...openDlg().querySelectorAll('.dlg-btn')].map(b => b.textContent.replace(/\s+/g, ' ').trim());
   assert(opts.length === 4, 'expected 4 options, got: ' + opts.join(' | '));
-  // v16.49 (QoL 11) says what the option DOES: it replaces the saved entry.
-  assert(opts[0].includes('MY ROUTE') && /replace/i.test(opts[0]),
-    'update-in-place is not the first option, or no longer says it overwrites: ' + opts[0]);
-  assert(opts.some(o => o.includes('new route')) && opts.some(o => o.includes('whole mission')),
-    'save-as-new options missing: ' + opts.join(' | '));
+  // UPDATED DELIBERATELY AT v16.100 (the author: the whole flight is "used
+  // 99% of the time"). The whole flight is FIRST and PRIMARY; Replace is the
+  // second option and still says what it does (QoL 11) - but it is no longer
+  // what Enter does, because it is the one choice that overwrites something.
+  const btns = [...openDlg().querySelectorAll('.dlg-btn')];
+  assert(/^Save the whole flight/.test(opts[0]) && btns[0].classList.contains('dlg-primary'),
+    'saving the whole flight is not the first, primary option: ' + opts.join(' | '));
+  assert(opts[1].includes('MY ROUTE') && /replace/i.test(opts[1]) && !btns[1].classList.contains('dlg-primary'),
+    'Replace is not second, or is still the primary: ' + opts.join(' | '));
+  assert(btns.filter((b) => b.classList.contains('dlg-primary')).length === 1, 'more than one primary button');
+  assert(opts.some(o => o.includes('active sector as a route')), 'the route option is missing: ' + opts.join(' | '));
   answerDialog('Replace "MY ROUTE" with this plan');
   await p;
 
@@ -7718,7 +7724,7 @@ TA('saving offers every option at once, update-in-place first', async () => {
 TA('choosing "save as new" asks for a name and keeps both entries', async () => {
   const p = w.saveCurrentMission();
   await tick();
-  answerDialog('Save active flight as a new route');
+  answerDialog('Save only the active sector as a route');
   await tick();
   assert(openDlg().querySelector('.dlg-input'), 'no name field offered');
   typeInDialog('COPY');
@@ -13303,7 +13309,7 @@ TA('the longest page-2 margin notes fit their free paper at no less than the sma
   // longest reporting-point names as the sector's ends.
   const worst = {
     note: 'Last Minute Change: planned 999,9 US gal, actual 1000,0 - every figure here is for the actual fuel',
-    title: 'Whole mission  KVALØYSLETTA → NORDKJOSBOTN   ·   Fuel change at the stops +999,9 US gal: T/O - consumed + that = landing'
+    title: 'Whole flight  KVALØYSLETTA → NORDKJOSBOTN   ·   Fuel change at the stops +999,9 US gal: T/O - consumed + that = landing'
   };
   for (const [k, text] of Object.entries(worst)) {
     const b = P.MB_BOXES[k];
@@ -13478,6 +13484,50 @@ TA('Fetch asks for every aerodrome a distance is worked at, even one not named b
     resetV1698();
     w.renderAllFlightTables();
   }
+});
+
+TA('Enter in the save dialog saves the whole flight - and never overwrites a loaded plan', async () => {
+  ev(SEED2);
+  ev(`localStorage.removeItem('c182_custom_missions'); localStorage.setItem('c182_custom_routes', JSON.stringify({ 'KEEP ME': [
+    { lat: 69.0, lng: 18.0, name: 'A', alt: 500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.3, lng: 18.2, name: 'B', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 } ] }));
+    populateRouteDropdown(); loadedRouteRef = { type: 'route', name: 'KEEP ME' };`);
+  const before = ev(`JSON.stringify(getStoredSingleRoutes()['KEEP ME'])`);
+  const enter = () => doc.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  const p = w.saveCurrentMission();
+  await tick();
+  enter();                     // the choice
+  await tick();
+  const prompt = openDlg();
+  assert(prompt && /Save the whole flight/.test(prompt.textContent) && prompt.querySelector('.dlg-input'),
+    'Enter did not choose the whole flight: ' + (prompt ? prompt.textContent.slice(0, 120) : 'no dialog'));
+  typeInDialog('ROUND TRIP');
+  enter();                     // the name
+  await p;
+  const saved = ev(`getStoredMissions()['ROUND TRIP']`);
+  assert(saved && ev('flights.length') > 1 && saved.length === ev('flights.length'), 'the whole flight was not saved with every sector');
+  assert(ev(`JSON.stringify(getStoredSingleRoutes()['KEEP ME'])`) === before, 'Enter overwrote the loaded route');
+  assert(/Flight "ROUND TRIP" saved/.test(toastText()), 'the toast does not say a flight was saved: ' + toastText());
+  const groups = [...doc.getElementById('route-selector').querySelectorAll('optgroup')].map((g) => g.label);
+  assert(groups.includes('Whole flights') && !groups.some((g) => /mission/i.test(g)), 'the dropdown still says mission: ' + groups);
+  ev(`localStorage.removeItem('c182_custom_missions'); localStorage.removeItem('c182_custom_routes'); loadedRouteRef = null;
+      populateRouteDropdown();`);
+  ev(SEED);
+});
+
+T('nothing on screen calls it "the whole mission" any more', () => {
+  // The author: "Dont call it whole mission rather call it the whole flight."
+  // Comments may still say it; what a pilot READS may not.
+  const visible = doc.body.innerHTML.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<!--[\s\S]*?-->/g, '');
+  assert(!/whole[ -]mission/i.test(visible), 'the page still says whole mission: ' +
+    (visible.match(/.{0,60}whole[ -]mission.{0,40}/i) || [''])[0]);
+  const strings = (APP_SRC.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || []).filter((q) => /whole[ -]mission/i.test(q));
+  assert(strings.length === 0, 'a string literal still says whole mission: ' + strings.slice(0, 3).join(' | '));
+  ev(`mbPrefs.reg = 'LN-TRB'; mbPrefs.view = 'mission'; renderAllFlightTables();`);
+  assert(/Whole flight ·/.test(doc.getElementById('mb-body').textContent), 'the M&B master is not called the whole flight');
+  const master = readMb(printDoc().sheets.filter((sh) => sh.kind === 'mb')[0]);
+  assert(/^Whole flight /.test(master.box.title), 'the printed master is not called the whole flight: ' + master.box.title);
+  ev(`mbPrefs.reg = null; mbPrefs.view = 'sector'; renderAllFlightTables();`);
 });
 
 runAsyncTests().then(() => {
