@@ -551,8 +551,8 @@ check(worst <= 1.5, `every one lands within ${worst.toFixed(2)} px ` +
   });
   check(/VAC/.test(bar), 'the label bar names the drawn chart: ' + bar.slice(0, 140));
   const attrib = await page.evaluate(() => vacAttribution(window.C182_VAC));
-  check(/Avinor/.test(attrib) && /non-commercial/i.test(attrib),
-    'the attribution carries the permission and its condition: ' + attrib.slice(0, 110));
+  check(/Avinor/.test(attrib) && !/permission|non-commercial/i.test(attrib),
+    'the attribution credits Avinor: ' + attrib.slice(0, 110));
 }
 
 // ---- THE TOGGLE TURNS IT BACK OFF ---------------------------------------

@@ -3,9 +3,8 @@
  * Prepare VFR reporting points from the VACs - `npm run build:vac`.
  *
  * SOURCE AND LICENCE. The Visual Approach Charts are part of Avinor's eAIP:
- * © Avinor AS, used with permission, NON-COMMERCIALLY. Same grant as the
- * airspace data, and the same condition - see CLAUDE.md. Nothing here is
- * Kartverket's, so this step depends on one grant only.
+ * © Avinor AS, the same source as the airspace data. Nothing here is
+ * Kartverket's.
  *
  * WHY IT IS A SEPARATE, COMMITTED STEP, like the border. It downloads ~48 PDFs
  * and needs a PDF library that the airspace build has no use for. The output,
@@ -36,7 +35,7 @@ import {
 const CACHE = '.aip-cache';
 const OUT = 'tools/prepared/vac-points.json';
 const ROOT = 'https://aim-prod.avinor.no';
-const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning; permission held)';
+const UA = 'C182FlightPlanner-AipImporter/1.0 (ground planning)';
 
 /** Follow /no/AIP to whichever index Avinor currently publishes - a hardcoded
  *  index silently serves a superseded edition. Same discovery as build-aip. */
@@ -289,8 +288,8 @@ async function main() {
     schema: 1,
     provider: 'Avinor AS',
     source: 'AIP Norge eAIP, AD 2 <ICAO> 6-1 Visual Approach Chart - ICAO (PDF text layer)',
-    attribution: 'VFR reporting points and aerodrome data: AIP Norge © Avinor AS, ' +
-      'used with permission for NON-COMMERCIAL use. Not for navigation - verify against ' +
+    attribution: 'VFR reporting points and aerodrome data: AIP Norge © Avinor AS. ' +
+      'Not for navigation - verify against ' +
       'the current AIP and NOTAM.',
     editionLabel: edition.editionLabel,
     effectiveFrom: edition.effectiveFrom,

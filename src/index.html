@@ -65,9 +65,9 @@
       <div id="map-controls" class="no-print">
         <button id="declutter-btn" class="map-ctl" title="Map label detail. AUTO thins the labels as you zoom out (full ↔ compact ↔ dots only); FULL / MID / FAR lock one level regardless of zoom. Display-only — nothing is deleted." onclick="cycleDeclutterMode()">🔎 Declutter: Auto</button>
         <button id="chart-btn" class="map-ctl" title="Switch the base chart: Kartverket topo or the official ICAO VFR 1:500 000 from Avinor. Both are streamed and need internet. Both render in Web Mercator, so waypoints sit identically on either chart." onclick="toggleBaseChart()">🗺 Chart: Topo</button>
-        <button id="airspace-btn" class="map-ctl" title="Show published AIP airspace - CTR, TIZ, TMA, TIA, CTA and the mandatory zones. Hover an airspace for its class, vertical limits, callsign and frequency. Needs zoom 7 or closer. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleAirspace()">⬢ Airspace: Off</button>
+        <button id="airspace-btn" class="map-ctl" title="Show published AIP airspace - CTR, TIZ, TMA, TIA, CTA and the mandatory zones. Hover an airspace for its class, vertical limits, callsign and frequency. Needs zoom 7 or closer. Data from AIP Norge (© Avinor AS)." onclick="toggleAirspace()">⬢ Airspace: Off</button>
         <button id="corridor-btn" class="map-ctl" title="Draw a band of a chosen radius either side of the whole track, so you can see which terrain and airspace actually lies beside your route. It is GEOMETRY ONLY - it shows you where to read the chart's contours and MEF, and never states a safe altitude of its own. Radius is set on the Map page of Settings." onclick="toggleCorridor()">◫ Corridor: Off</button>
-        <button id="vac-btn" class="map-ctl" title="Draw the published Visual Approach Chart over the map for the aerodromes on screen, georeferenced from the chart's own printed graticule and reporting points. Display only - every coordinate the planner uses still comes from the published tables, never from the picture. Needs zoom 8 or closer; at zoom 8 only the 6 sheets nearest the middle of the map are drawn, and the label bar says so. Opacity is the slider that appears under this button (and on Settings - Map). Charts from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleVac()">▦ VAC: Off</button>
+        <button id="vac-btn" class="map-ctl" title="Draw the published Visual Approach Chart over the map for the aerodromes on screen, georeferenced from the chart's own printed graticule and reporting points. Display only - every coordinate the planner uses still comes from the published tables, never from the picture. Needs zoom 8 or closer; at zoom 8 only the 6 sheets nearest the middle of the map are drawn, and the label bar says so. Opacity is the slider that appears under this button (and on Settings - Map). Charts from AIP Norge (© Avinor AS)." onclick="toggleVac()">▦ VAC: Off</button>
         <!-- THE OPACITY IS WHERE THE CHART IS (v16.87, the pilot's request).
              It is also on Settings - Map, and both write through ONE function
              so the two controls cannot drift: the value a pilot is hunting for
@@ -83,7 +83,7 @@
                  oninput="setVacOpacityPercent(this.value)">
           <span id="vac-opacity-val"></span>
         </div>
-        <button id="fixes-btn" class="map-ctl" title="Show published AIP fixes - aerodromes (from zoom 7) and VFR reporting points (from zoom 9). Click one to add it as a waypoint at its PUBLISHED coordinate instead of clicking an approximate spot. Reporting points come from the printed table on each aerodrome's Visual Approach Chart; 29 aerodromes publish theirs graphically only and have none here. Data from AIP Norge (Avinor, by permission, non-commercial)." onclick="toggleFixes()">⌖ Fixes: Off</button>
+        <button id="fixes-btn" class="map-ctl" title="Show published AIP fixes - aerodromes (from zoom 7) and VFR reporting points (from zoom 9). Click one to add it as a waypoint at its PUBLISHED coordinate instead of clicking an approximate spot. Reporting points come from the printed table on each aerodrome's Visual Approach Chart; 29 aerodromes publish theirs graphically only and have none here. Data from AIP Norge (© Avinor AS)." onclick="toggleFixes()">⌖ Fixes: Off</button>
         <button id="fix-search-btn" class="map-ctl" title="Find a published aerodrome or VFR reporting point by name or ICAO and add it as a waypoint at its published coordinate. Norwegian letters are optional - SORKJOSEN finds SØRKJOSEN." onclick="searchFixes()">🔎 Find fix</button>
         <button id="chart-detail-btn" class="map-ctl" title="How much chart detail to request. Auto keeps full detail at the zooms you read the chart at and lightens the overview, where a dense tile costs about a second per screen just to decode. Sharp is always full detail; Fast is always light." onclick="cycleChartDetail()">🔍 Detail: Auto</button>
         <!-- ROADMAP 7: THE MAP-ONLY VIEW COULD NOT START A PLAN. The
@@ -982,8 +982,7 @@
               <i>6 of 10 on screen</i> — because a correct chart left out for speed must never read
               as an aerodrome that has no chart published.
               <br><br>
-              Charts are prepared at build time from AIP Norge (© Avinor AS, used with permission,
-              <b>non-commercial</b>). A chart whose measured error exceeds its own recorded limit is
+              Charts are prepared at build time from AIP Norge (© Avinor AS). A chart whose measured error exceeds its own recorded limit is
               <b>not drawn</b>, and the label bar at the bottom left says which and why.
               </div>
             </details>
@@ -1448,7 +1447,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.4';
+    const APP_VERSION = '17.5';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4715,10 +4714,9 @@
     // for the culling, colours and hover text, and tools/build-aip.mjs for
     // where the data comes from and what it refuses to invent.
     //
-    // PERMISSION: the airspace data is Avinor's, used with permission, NON-
-    // COMMERCIALLY. The border within it is Kartverket, NLOD. The attribution
-    // line below states both whenever the layer is on, and the guide says it
-    // too. This planner must not be commercialised while it ships this data.
+    // SOURCES: the airspace data is Avinor's (AIP Norge); the border within it
+    // is Kartverket, NLOD. The attribution line below credits both whenever the
+    // layer is on.
     //
     // HOVER, NOT CLICK: clicking the map adds a waypoint, and airspace covers
     // most of the map. Polygons therefore carry a tooltip and let the click
@@ -5110,8 +5108,8 @@
     // with its published name - see src/lib/anchors.js for the search and the
     // culling, and tools/build-vac.mjs for where the coordinates come from.
     //
-    // PERMISSION: Avinor's, non-commercially, same as the airspace. One grant
-    // only here - Kartverket is not involved in the reporting points.
+    // SOURCE: Avinor's AIP Norge, same as the airspace. Kartverket is not
+    // involved in the reporting points.
     //
     // CLICK, NOT HOVER, and it is the opposite choice from the airspace layer
     // for a reason. An airspace polygon covers most of the map, so a click

@@ -8,10 +8,9 @@
  * `app:avgrensningstype` of Riksgrense (national border), Fylkesgrense
  * (county) or Kommunegrense (municipality). We take only Riksgrense.
  *
- * This is a SEPARATE grant from the Avinor AIP permission. Kartverket is
- * NLOD, which is open; the AIP is used by permission and non-commercially.
- * Do not conflate them - the airspace dataset depends on both, and each keeps
- * its own attribution.
+ * This is a SEPARATE source from the Avinor AIP. Kartverket is NLOD, which
+ * is open. The airspace dataset depends on both, and each keeps its own
+ * attribution.
  *
  * WHY IT IS A SEPARATE, COMMITTED STEP. The output makes the airspace build
  * reproducible and auditable: `tools/build-aip.mjs` reads this snapshot rather

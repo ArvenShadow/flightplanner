@@ -15,24 +15,20 @@ claude.ai; this repo is the continuation point for Claude Code.
    feature is not built — an honest "no" beats a plausible wrong answer.
    When data may be outdated or unofficial, say so in the UI and the guide.
 
-## Licence constraint (v16.29 — NEW, and it binds the whole project)
+## Data sources and credit (v17.5 - the author's decision)
 
-The AIP airspace data comes from Avinor's eAIP, which is **copyright Avinor
-AS**: GEN 0.1 states that any use outside copyright law is inadmissible
-without permission. **The user HOLDS that permission, conditional on the
-software not being used commercially.**
+The AIP data (airspace, aerodromes, reporting points, runways, ATS hours and
+the VAC rasters) is Avinor's eAIP, **copyright Avinor AS**, and every
+attribution line credits it: "© Avinor AS" / "AIP Norge". Kartverket (topo
+tiles, the national border) is NLOD, MET Norway is NLOD 2.0, Open-Meteo is
+CC BY; each keeps its own credit line.
 
-That condition is now a constraint on the project, not a footnote:
-
-- The planner MUST NOT be commercialised while `data/aip.js` ships with it.
-  If commercial use is ever wanted, the AIP dataset comes out first.
-- The attribution and the non-commercial condition are stated in the dataset
-  itself, in `tools/build-aip.mjs`, and in the app (guide + attribution line).
-  A test asserts the dataset carries them.
-- This is a PERMISSION, not an open licence. It does not transfer to anyone
-  who forks the repo, and it cannot be widened by assumption. Kartverket
-  (topo tiles, and the national-border WFS if that is ever wired in) is
-  separately NLOD; MET Norway is NLOD 2.0. Do not conflate the three.
+**The v16.29 "permission, non-commercial only" wording was REMOVED at v17.5**
+on the author's instruction: *"I am doing this on my own responsibility and it
+is a private project for me only."* The project is private use, not
+commercial. Do not re-add a permission or licence statement on the author's
+behalf; credit the source, and leave the rest to them. Tests now require the
+credit AND guard that the removed wording stays out.
 
 ## Architecture (deliberate, do not "modernize")
 
@@ -838,8 +834,8 @@ three cheap disciplines applied every time the page is touched:
 - **AIP airspace (v16.29, roadmap item 4 — the DATA half is built)**: 140
   drawable airspaces (53 TMA volumes, 33 TIZ, 19 CTR, 17 TIA, 6 ADS, 5 CTA,
   2 RMZ/TMZ, 2 HTZ, 1 RMZ) with class, published vertical limits, callsigns
-  and frequencies, from the official Avinor eAIP. Permission held — see the
-  Licence constraint at the top. The planner OVERLAY is not built yet; this
+  and frequencies, from the official Avinor eAIP (see "Data sources and
+  credit" at the top). The planner OVERLAY is not built yet; this
   is the importer and the dataset.
   - THE SOURCE IS NOT PROSE, AND THIS IS THE WHOLE TRICK. The eAIP is
     generated from Avinor's AIP database and carries the DATABASE FIELD
@@ -910,8 +906,8 @@ three cheap disciplines applied every time the page is touched:
   - SOURCE: Kartverket's administrative-units WFS
     (`wfs.geonorge.no/skwms1/wfs.administrative_enheter`, `app:Grense`
     filtered server-side to `avgrensningstype = Riksgrense`), under **NLOD**.
-    That is a SEPARATE grant from the Avinor permission - the airspace
-    dataset now depends on both, and each keeps its own attribution.
+    That is a SEPARATE source from the Avinor AIP - the airspace dataset
+    now depends on both, and each keeps its own attribution.
   - MEASURED: 329 LineString fragments, 18 763 points, which stitch by EXACT
     shared endpoint into exactly ONE chain of 18 435 points (lat 58.88-70.09,
     lng 11.45-30.95) - the whole land border with Sweden, Finland and Russia.
@@ -1389,7 +1385,7 @@ three cheap disciplines applied every time the page is touched:
   page cannot read them - see "ATS OPENING HOURS BUILT, NOTAMs REFUSED".
   georeferenced 1:500 000 ICAO charts (licensing - and note this is a DIFFERENT
   product from the VAC under different terms; the VAC overlay shipped at v16.86
-  under the permission this project already holds), traffic (needs receivers).
+  as AIP Norge data), traffic (needs receivers).
   auto-METAR from aviationweather.gov: re-checked Sep 2026 and it sends
   NO CORS header, so it is genuinely unusable from a browser - MET Norway
   is used instead, and is the authoritative source for Norway anyway.
@@ -1524,7 +1520,7 @@ scoped. In the user's order:
    min-zoom and viewport culling (140 polygons drawn at once will choke the
    map), hover for the name, click for the detail, a layer toggle in
    PROFILE_KEYS, and the attribution line. Sourcing rule satisfied: it is
-   AIP Norge, it names its edition, and permission is held.
+   AIP Norge and it names its edition.
 5. **PHASES A-C DONE (v16.93-v16.95) - Mass & Balance from the Excel sheet.**
    Phase A the pure engine and fleet, Phase B the exact per-sector gallons and
    one fuel density, Phase C the tab, the CG chart, the sector/mission toggle
@@ -4247,7 +4243,7 @@ runtime.
   still be georeferenced FROM ITS OWN INK, which is what this does.
 - *"georeferenced VFR charts (licensing)"* under Not planned applies to the
   1:500 000 ICAO tiles, which are a different product under different terms.
-  The VAC is AIP Norge, which is the permission this project already holds.
+  The VAC is AIP Norge, the same source as the rest of the AIP data.
 - *"Do NOT read coordinates off a chart image"* (v16.34) is UNCHANGED AS A DATA
   RULE and must stay that way. The raster is DISPLAYED, never read. The 243
   reporting points still come from the printed coordinate TABLE; the symbols
@@ -4415,11 +4411,8 @@ in the locked build. What the CI guard checks instead is that they really are
 PICTURES: every file greps as a WebP, and a `.webp` that read as JavaScript would
 mean something other than a chart was written there.
 
-**WORTH THE AUTHOR'S ATTENTION, NOT MINE TO DECIDE**: committing 110 MB of
-Avinor charts to a PUBLIC repository is a redistribution, and the permission
-held is for non-commercial USE. That is a licence question about the repo's
-visibility rather than about this feature, and it is flagged rather than
-silently settled.
+**SETTLED BY THE AUTHOR at v17.5**: the charts sit in a public repository and
+that is their call, on their own responsibility (see "Data sources and credit").
 
 `verify:locked` asks the deployed build directly - manifest decrypted, charts
 passing the gate, and one raster actually fetching 200. Removing the part fails
