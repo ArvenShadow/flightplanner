@@ -198,35 +198,35 @@ check(short.map.height >= 140, `...and the map does not vanish: ${short.map.heig
   const chordBox = (id) => page.locator(`.keybind-row[data-action="${id}"] .keybind-chord`);
   const sideBtn = (id) => page.locator(`.keybind-row[data-action="${id}"] .keybind-actions button`);
 
-  await chordBox('print').click();
+  await chordBox('open-winds').click();
   await page.waitForTimeout(120);
-  check(await page.evaluate(() => keybindCapturing === 'print'),
+  check(await page.evaluate(() => keybindCapturing === 'open-winds'),
     'CLICKING the chord box starts a capture');
-  check((await sideBtn('print').textContent()).trim() === 'Cancel',
+  check((await sideBtn('open-winds').textContent()).trim() === 'Cancel',
     'Clear becomes Cancel while capturing');
 
   // BINDING Ctrl+S MUST NOT ALSO SAVE.
   await page.keyboard.press('Control+s');
   await page.waitForTimeout(200);
   const afterCtrlS = await page.evaluate(() => ({
-    saves: window.__saveOpened, capturing: keybindCapturing, print: keybinds['print'],
+    saves: window.__saveOpened, capturing: keybindCapturing, print: keybinds['open-winds'],
     note: document.getElementById('keybind-capture-note').textContent }));
   check(afterCtrlS.saves === 0, `capturing Ctrl+S did not also save (${afterCtrlS.saves} dialogs)`);
   check(afterCtrlS.print === null && /already/.test(afterCtrlS.note),
     'the clash with Save was refused and explained');
-  check(afterCtrlS.capturing === 'print', 'a refused chord leaves capture open to try again');
+  check(afterCtrlS.capturing === 'open-winds', 'a refused chord leaves capture open to try again');
 
   await page.keyboard.press('Alt+p');
   await page.waitForTimeout(150);
-  check(await page.evaluate(() => keybinds['print'] === 'Alt+P' && keybindCapturing === null),
+  check(await page.evaluate(() => keybinds['open-winds'] === 'Alt+P' && keybindCapturing === null),
     'a free chord is accepted and ends the capture');
-  check((await chordBox('print').textContent()).trim() === 'Alt+P', 'the row shows the new chord');
+  check((await chordBox('open-winds').textContent()).trim() === 'Alt+P', 'the row shows the new chord');
 
   // CLICKING CLEAR really unbinds.
-  await sideBtn('print').click();
+  await sideBtn('open-winds').click();
   await page.waitForTimeout(120);
-  check(await page.evaluate(() => keybinds['print'] === null), 'CLICKING Clear unbinds the action');
-  check(await sideBtn('print').isDisabled(), 'Clear disables itself once there is nothing to clear');
+  check(await page.evaluate(() => keybinds['open-winds'] === null), 'CLICKING Clear unbinds the action');
+  check(await sideBtn('open-winds').isDisabled(), 'Clear disables itself once there is nothing to clear');
 
   // A REBOUND KEY FIRES AND THE OLD ONE GOES QUIET - measured on real presses.
   await chordBox('undo').click();
@@ -632,7 +632,7 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
   const at = (r) => page.evaluate(async (r) => {
     applyPaneRatio(false, r);
     await new Promise((x) => setTimeout(x, 250));
-    const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('td'));
+    const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('#flight-plans-container td'));
     const wrap = document.querySelector('.table-container');
     return { side: Math.round(document.getElementById('sidebar').getBoundingClientRect().width),
              n: ins.length,
@@ -664,7 +664,7 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
       applySkin(skin);
       applyPaneRatio(false, 0.8);
       await new Promise((x) => setTimeout(x, 320));
-      const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('td'));
+      const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('#flight-plans-container td'));
       const c = document.createElement('canvas').getContext('2d');
       const out = ins.map((i) => {
         const s = getComputedStyle(i);
@@ -797,7 +797,7 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
     document.head.appendChild(st);
     applyPaneRatio(false, 0.85);
     await new Promise((x) => setTimeout(x, 300));
-    const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('td'));
+    const ins = [...document.querySelectorAll('input[type=number]')].filter((i) => i.closest('#flight-plans-container td'));
     const out = ins.filter((i) => i.scrollWidth > i.clientWidth).map((i) => i.value);
     st.remove();
     applyPaneRatio(false, null);

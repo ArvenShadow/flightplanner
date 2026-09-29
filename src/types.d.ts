@@ -477,9 +477,9 @@ interface Aircraft {
   reg: string;
   emptyWeightLb: number;
   emptyMomentInLb: number;
-  /** Structure the empty weight was established WITHOUT, at the baggage B
-   *  arm. Only LN-TRE has one; it is part of the airframe, not a load. */
-  fixedExtraLb: number;
+  /** The standard compartment B load, pounds (`'AC REG'!D`). Only LN-TRE
+   *  has one; it is DEFAULTED onto the Baggage B line, never hidden. */
+  standardBagBLb: number;
 }
 
 /** What got loaded, in pounds, at each of the form's stations. */
@@ -580,8 +580,15 @@ interface CgChartModel {
   envelope: Array<{ x: number; y: number }>;
   autopilot: Array<{ x: number; y: number }>;
   mlw: Array<{ x: number; y: number }>;
-  gridX: Array<{ arm: number; x: number }>;
-  gridY: Array<{ weight: number; y: number }>;
+  mtow: Array<{ x: number; y: number }>;
+  /** Take-off to landing: the straight line the fuel burn moves the aircraft along. */
+  burn: Array<{ x: number; y: number }>;
+  /** The plot area inside the axis margins. */
+  plot: { x0: number; x1: number; y0: number; y1: number };
+  gridX: Array<{ arm: number; x: number; label: boolean }>;
+  gridY: Array<{ weight: number; y: number; label: boolean }>;
+  minorX: number[];
+  minorY: number[];
   marks: CgChartMark[];
   /** Keys of marks that could not be plotted, so the UI can say so. */
   undrawn: string[];
@@ -606,4 +613,29 @@ declare module 'magvar' {
     decimalYear: number, lat: number, lng: number, altKm?: number): number;
   export const MODEL_EPOCH: number;
   export const MODEL_VALID_UNTIL: number;
+}
+
+/** One take-off or landing distance against a runway (rwyperf.js), metres. */
+interface RunwayDistance {
+  kind: 'takeoff' | 'landing';
+  paFt: number;
+  /** POH total to clear 50 ft, before any correction. */
+  uncorrectedM: number;
+  windCorrM: number;
+  brakingCorrM: number;
+  /** Grass only: a share of the POH ground roll. 0 on a paved runway. */
+  surfaceCorrM: number;
+  correctedM: number;
+  /** 1.25 take-off, 1.43 landing - the school's factors. */
+  factor: number;
+  /** corrected x factor, rounded UP to the whole metre. */
+  requiredM: number;
+  /** TODA for take-off, LDA for landing; null when not published. */
+  availableM: number | null;
+  marginM: number;
+  ok: boolean;
+  /** Why no figure was produced. A refusal is never a pass. */
+  refused: string | null;
+  /** 'limit' is a finding; 'input' and 'surface' are not. */
+  refusedKind: 'input' | 'limit' | 'surface' | null;
 }

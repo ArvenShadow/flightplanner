@@ -34,6 +34,7 @@ import { extractFields, parseDms, verticalLimit, remarkDesignators, remarkNote, 
          borderNameFromRemark } from './aip-fields.mjs';
 import { borderPath, isForeignBorder, SNAP_TOLERANCE_NM } from './aip-border.mjs';
 import { vacGraphics } from './aip-vac.mjs';
+import { parseRunways } from './aip-runways.mjs';
 
 const CACHE = '.aip-cache';
 const OUT_DATA = 'data/aip.js';
@@ -884,11 +885,30 @@ async function main() {
   const icaos = [...new Set((ad13.match(/\bEN[A-Z]{2}\b/g) || []))].sort();
   for (const icao of icaos) pages.push([`EN-AD-2.${icao}`, `AD 2.17 ${icao}`, icao]);
 
+  /** Runways and declared distances (AD 2.12 / 2.13), read off the SAME AD 2
+   *  page the airspace comes from - no extra fetch. @type {Map<string, any>} */
+  const runwaysByIcao = new Map();
+  report.runways = { aerodromes: 0, ends: 0, positions: 0, heliports: [], refused: [] };
+
   for (const [file, label, icao] of pages) {
     let html;
     try { html = await page(edition, file); }
     catch (err) { report.pages.push({ page: label, error: String(err.message || err) }); continue; }
     const fields = extractFields(html);
+
+    if (icao) {
+      const rw = parseRunways(html);
+      if (rw.heliport) report.runways.heliports.push(icao);
+      else if (rw.refused) report.runways.refused.push({ icao, reason: rw.refused });
+      else {
+        runwaysByIcao.set(icao, rw.runways);
+        report.runways.aerodromes++;
+        for (const r of rw.runways) for (const e of r.ends) {
+          report.runways.ends++;
+          report.runways.positions += (e.positions || []).length;
+        }
+      }
+    }
 
     // COUNT EVERY BORDER REFERENCE THE SOURCE STATES, in both of its forms, so
     // the invariant below can be asserted: resolved + refused must equal what
@@ -940,7 +960,12 @@ async function main() {
      *  the VFR reporting points read off the VAC. This is what lets a pilot
      *  put a waypoint on a named fix at its published coordinate instead of
      *  clicking an approximate spot on the map. */
-    aerodromes: vac ? vac.data : [],
+    // A runway list is attached where AD 2.12 / 2.13 were read cleanly. An
+    // aerodrome with none is REFUSED for a reason in the report, never given a
+    // guessed runway - a distance check against a misread TODA is worse than
+    // no check.
+    aerodromes: vac ? vac.data.map((/** @type {any} */ a) =>
+      Object.assign({}, a, { runways: runwaysByIcao.get(a.icao) || [] })) : [],
     aerodromeSource: vac ? {
       source: vac.source, attribution: vac.attribution,
       editionLabel: vac.editionLabel, effectiveFrom: vac.effectiveFrom,
@@ -987,6 +1012,10 @@ async function main() {
   console.log(`ACC sectors: ${sectors.length} usable, ${report.sectorsUnresolved.length} not`);
   console.log(`aerodrome anchors: ${dataset.aerodromes.length} aerodromes, ` +
     `${dataset.aerodromes.reduce((n, a) => n + a.points.length, 0)} reporting points`);
+  console.log(`runways: ${report.runways.ends} ends at ${report.runways.aerodromes} aerodromes, ` +
+    `${report.runways.positions} intersection take-off positions` +
+    (report.runways.refused.length ? `; REFUSED at ${report.runways.refused.map((x) => x.icao + ' (' + x.reason + ')').join(', ')}` : '') +
+    (report.runways.heliports.length ? `; heliports ${report.runways.heliports.join(' ')}` : ''));
   console.log(`ATS delegation areas (not drawn): ${report.delegations.length}` +
     ` - ${report.delegations.filter((x) => x.withinFir && x.withinFir !== 'POLARIS').length} inside a foreign FIR`);
 }

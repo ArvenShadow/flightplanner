@@ -50,6 +50,17 @@ const TILE_PREFIX = 'c182-tiles-';
 // layer silently vanish offline - which would look like a bug, not a gap.
 const SHELL_ASSETS = ['./', './index.html', './app.js', './aip.js', './vac-index.js'];
 
+// THE PRINT ASSETS (v16.97): the school's form PDF and pdf-lib, which the
+// printed OFP is built from. Stamped in by tools/build.mjs, which FAILS if the
+// placeholder moves. Their names carry a hash of their content, so a hit is
+// never stale and they are held CACHE-FIRST in a cache of their own - not the
+// shell's, which every release discards: 3 MB that changes only when the form
+// or the library does has no business being re-downloaded with every app
+// version. Precached, so the OFP prints offline once the app has been visited.
+/** @type {string[]} */
+const PRINT_ASSETS = sw.__PRINT_ASSETS__ || [];
+const PRINT_CACHE = 'c182-print';
+
 // THE VAC RASTERS GET THEIR OWN CAPPED CACHE, and NOT the shell's, for two
 // reasons. They are megabytes each, so left in the shell cache they would grow
 // without bound and fill the origin's quota - and when that happens the browser
@@ -95,6 +106,9 @@ sw.addEventListener('install', (/** @type {any} */ event) => {
       // addAll is atomic: one 404 and nothing is cached, which is what we
       // want - a half-cached shell is worse than none.
       .then((cache) => cache.addAll(SHELL_ASSETS))
+      // Separate and NOT fatal: a failed print precache must not cost the
+      // shell. Printing then fetches them live, like any cache miss.
+      .then(() => caches.open(PRINT_CACHE).then((c) => c.addAll(PRINT_ASSETS)).catch(() => null))
       .then(() => sw.skipWaiting())
       .catch(() => sw.skipWaiting())
   );
@@ -108,6 +122,11 @@ sw.addEventListener('activate', (/** @type {any} */ event) => {
         // by edition rather than by app release
         (name.startsWith('c182-shell-') && name !== SHELL_CACHE) ? caches.delete(name) : null
       )))
+      // A print asset this build no longer names is a superseded form or
+      // library - 3 MB each, so it is retired rather than kept for ever.
+      .then(() => caches.open(PRINT_CACHE))
+      .then((c) => c.keys().then((keys) => Promise.all(keys.map((k) =>
+        PRINT_ASSETS.some((a) => new URL(a, sw.location.href).href === k.url) ? null : c.delete(k)))))
       .then(() => sw.clients.claim())
   );
 });
@@ -164,6 +183,17 @@ async function vacFirst(request) {
   return response;
 }
 
+/** Cache-first: a print asset's name is its content, so a hit is never stale. */
+/** @param {Request} request */
+async function printFirst(request) {
+  const cache = await caches.open(PRINT_CACHE);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const response = await fetch(request);
+  if (response && response.ok) await cache.put(request, response.clone());
+  return response;
+}
+
 /** @param {Request} request */
 async function shellFirst(request) {
   try {
@@ -201,6 +231,10 @@ sw.addEventListener('fetch', (/** @type {any} */ event) => {
   if (url.origin === sw.location.origin) {
     if (/\/vac\/[^/]+\.webp$/.test(url.pathname)) {
       event.respondWith(vacFirst(request));
+      return;
+    }
+    if (/\/print\/[^/]+$/.test(url.pathname)) {
+      event.respondWith(printFirst(request));
       return;
     }
     event.respondWith(shellFirst(request));

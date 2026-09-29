@@ -6,13 +6,8 @@
  * flight school prints on, so what goes in which cell is a specification, not a
  * styling detail, and it is worth testing without a browser.
  *
- * THE GEOMETRY IS MEASURED, NOT EYEBALLED. The PDF's table body is a raster
- * image with the text drawn over it, so the column boundaries cannot be read
- * out of the vector content. They were measured off a 200 dpi render by
- * detecting the vertical rules (runs of dark pixels spanning >=30% of the
- * sheet) - COLUMN_EDGES_PCT below is that measurement, as a percentage of the
- * page width. Do not "tidy" those numbers: they are what makes a printed sheet
- * line up with the paper form.
+ * THE GEOMETRY LIVES IN ofppdf.js since v16.97, in PDF points, beside the
+ * code that writes into the form. This module is only WHAT goes in which cell.
  *
  * THE GROUP HEADERS SETTLE THE ONE AMBIGUITY, and they were measured the same
  * way. "ACC" spans Dist+Time and "Intermediate" spans GS+Dist+Time, which on
@@ -33,14 +28,6 @@
  *
  * No DOM, no I/O.
  */
-
-/** Vertical rules of the main table, as a percentage of the PAGE width,
- *  measured off a 200 dpi render of the form. 26 edges = 25 columns. */
-export const COLUMN_EDGES_PCT = [
-  3.61, 11.80, 15.34, 18.89, 22.43, 26.07, 30.66, 34.16, 37.80, 41.34, 44.75,
-  48.11, 51.57, 59.39, 62.43, 65.57, 68.70, 71.84, 74.84, 77.98, 81.07, 84.02,
-  87.20, 90.25, 93.30, 97.70
-];
 
 /** The form's 16 numbered lines. A flight with more legs runs onto a second
  *  sheet, exactly as the paper form is used. */
@@ -81,29 +68,6 @@ export const OFP_COLUMNS = [
   { key: 'actRem',   label: 'ACT',     group: 'Fuel remaining', totalKey: 'act' },
   { key: 'freq',     label: 'Freq',    group: null,             totalKey: null }
 ];
-
-/** Column widths as a percentage of the TABLE width (not the page), so the
- *  sheet keeps the form's proportions on any paper size. */
-export function columnWidthsPct() {
-  const span = COLUMN_EDGES_PCT[COLUMN_EDGES_PCT.length - 1] - COLUMN_EDGES_PCT[0];
-  const out = [];
-  for (let i = 1; i < COLUMN_EDGES_PCT.length; i++)
-    out.push(((COLUMN_EDGES_PCT[i] - COLUMN_EDGES_PCT[i - 1]) / span) * 100);
-  return out;
-}
-
-/** The group header cells, in order, each spanning the columns it covers.
- *  Built from OFP_COLUMNS so a column added to a group cannot desynchronise
- *  the two header rows. */
-export function groupSpans() {
-  const out = [];
-  for (const c of OFP_COLUMNS) {
-    const last = out[out.length - 1];
-    if (last && last.label === c.group && c.group !== null) last.span++;
-    else out.push({ label: c.group, span: 1 });
-  }
-  return out;
-}
 
 /** Blank cell. The form is printed and written on, so an unknown is an empty
  *  box for the pilot's pen - never a zero, a dash or an invented value. */
