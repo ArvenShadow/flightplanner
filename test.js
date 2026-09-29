@@ -7667,6 +7667,29 @@ T('the project memory and docs are intact (guards against truncation)', () => {
   }
   const readme = fs.readFileSync('README.md', 'utf8');
   assert(readme.includes('npm run build') && readme.includes('dist/'), 'README lost the build instructions');
+  // v17.5: the long form moved to docs/HISTORY.md, verbatim. It is the same
+  // record, so it gets the same truncation guard.
+  const history = fs.readFileSync('docs/HISTORY.md', 'utf8');
+  assert(history.split('\n').length > 5000, 'docs/HISTORY.md looks truncated: ' + history.split('\n').length + ' lines');
+  for (const anchor of ['PINNED CLIMB AND DESCENT CORNERS', 'Offline chart download', 'THE VAC IS DRAWN ON THE MAP']) {
+    assert(history.includes(anchor), 'docs/HISTORY.md lost its "' + anchor + '" section');
+  }
+});
+
+T('every CLAUDE.md pointer names exactly one heading in docs/HISTORY.md', () => {
+  // CLAUDE.md keeps one line per decision and points at the full entry with
+  // a section-sign pointer followed by the exact heading in braces. A pointer
+  // that names no heading - or two - sends the next reader nowhere, which is
+  // the same drift as a stale index. The literal placeholder in the
+  // how-this-file-works note is not a pointer.
+  const md = fs.readFileSync('CLAUDE.md', 'utf8');
+  const hist = fs.readFileSync('docs/HISTORY.md', 'utf8');
+  const heads = hist.split('\n').filter((l) => /^#{1,4} /.test(l)).map((l) => l.replace(/^#+\s+/, '').trim());
+  const ptrs = [...md.matchAll(/\u00a7\{([^}]*)\}/g)].map((m) => m[1]).filter((p) => p !== 'heading');
+  assert(ptrs.length >= 90, 'CLAUDE.md carries only ' + ptrs.length + ' history pointers');
+  const bad = ptrs.filter((p) => heads.filter((h) => h === p).length !== 1);
+  assert(!bad.length, 'pointers that do not name exactly one heading: ' + bad.join(' | '));
+  assert(md.split(/\s+/).length < 12000, 'CLAUDE.md is growing the long form back: ' + md.split(/\s+/).length + ' words');
 });
 
 console.log('\n=== 60. Saved routes: fresh magvar on load, update-in-place on save ===');
