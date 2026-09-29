@@ -109,7 +109,7 @@ export function parseReport(raw) {
   const text = String(raw || '').trim();
   /** @type {WeatherReport} */
   const out = {
-    raw: text, icao: null, timeUTC: null, wind: null, tempoWind: null, tempoWindCount: 0,
+    raw: text, icao: null, timeUTC: null, validHours: null, wind: null, tempoWind: null, tempoWindCount: 0,
     tempC: null, dewC: null, qnhHpa: null, isTaf: false
   };
   if (!text) return out;
@@ -121,8 +121,14 @@ export function parseReport(raw) {
   const t = text.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
   if (t) out.timeUTC = { day: +t[1], hour: +t[2], minute: +t[3] };
 
-  // A TAF carries a validity period DDHH/DDHH; a METAR never does.
-  out.isTaf = /\b\d{4}\/\d{4}\b/.test(text);
+  // A TAF carries a validity period DDHH/DDHH; a METAR never does. The FIRST
+  // one is the TAF's own (a TEMPO group's comes later). Its length decides
+  // how often the TAF is reissued - see routineIntervalMin. The span is at
+  // most 30 h, so it ends on the same day or the next; a month boundary
+  // (3024 -> 0106) is still "the next day".
+  const vp = text.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
+  out.isTaf = !!vp;
+  if (vp) out.validHours = (vp[1] === vp[3] ? 0 : 24) + Number(vp[4]) - Number(vp[2]);
 
   // Wind: dddffKT, dddffGggKT, VRBffKT, or 00000KT for calm. Norwegian
   // reports are in knots; anything in MPS is left undecoded rather than
@@ -238,6 +244,49 @@ export const STALE_AFTER_MIN = 90;
 /** @param {number|null} ageMin @returns {boolean} */
 export function isStale(ageMin) {
   return ageMin !== null && isFinite(ageMin) && ageMin > STALE_AFTER_MIN;
+}
+
+/**
+ * HOW OFTEN A REPORT IS ROUTINELY REISSUED, in minutes - MEASURED, not quoted
+ * (v16.99, the author: "they should update every 30 minutes, and 6 hours
+ * respectively, check local rules").
+ *
+ * The local rule was checked, and it does not give one number. AIP Norge GEN
+ * 3.5 section 3 lists each station's observation interval - 41 of 62 half-
+ * hourly, 16 hourly, several by time of day (ENDU "H, h" with h 0330-1630) -
+ * and publishes no TAF issue schedule at all. So it was MEASURED instead, over
+ * MET Norway's own last 24 hours on 2026-09-29, at ENDU ENTC ENEV ENAT ENGM
+ * ENBO ENNA ENSR:
+ *   - METAR every 30 min at ALL eight, including ENAT, which GEN 3.5 lists as
+ *     hourly. Practice is half-hourly, which is the author's figure.
+ *   - TAF by its OWN LENGTH: the 24/30 h TAFs every 6 h (ENDU ENTC ENEV ENGM
+ *     ENBO ENNA), the 9 h TAFs every 3 h (ENAT ENSR); the shorter gaps are
+ *     amendments. That is ICAO Annex 3's split at 12 h of validity.
+ * A TAF whose validity cannot be read has no interval - null, never a guess.
+ * @param {WeatherReport} p
+ * @returns {number|null}
+ */
+export function routineIntervalMin(p) {
+  if (!p || !p.raw) return null;
+  if (!p.isTaf) return METAR_ROUTINE_MIN;
+  if (p.validHours === null || !Number.isFinite(p.validHours)) return null;
+  return p.validHours <= 12 ? TAF_SHORT_ROUTINE_MIN : TAF_LONG_ROUTINE_MIN;
+}
+export const METAR_ROUTINE_MIN = 30;
+export const TAF_SHORT_ROUTINE_MIN = 180;
+export const TAF_LONG_ROUTINE_MIN = 360;
+
+/**
+ * Older than its routine interval: a newer report is due, so this one is shown
+ * as OUTDATED and the pilot is told to fetch again. It says nothing about the
+ * weather being wrong - only that it is not the latest there should be.
+ * @param {WeatherReport} p
+ * @param {number|null} ageMin
+ * @returns {boolean}
+ */
+export function isOutdated(p, ageMin) {
+  const iv = routineIntervalMin(p);
+  return iv !== null && ageMin !== null && Number.isFinite(ageMin) && ageMin > iv;
 }
 
 /** A one-line summary of the decoded fields, for the card. Returns '' when

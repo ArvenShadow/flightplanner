@@ -1435,7 +1435,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.98';
+    const APP_VERSION = '16.99';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6164,7 +6164,12 @@
     }
 
     async function fetchMetarTaf() {
+      // The route's ICAO-named ends, plus every aerodrome the distance checks
+      // resolved by POSITION (aerodromeAt): a departure waypoint named
+      // "BARDUFOSS" is still ENDU to the runway check, and a distance that can
+      // never get its METAR is a fetch that cannot do its job.
       const icaos = routeAerodromes(flights);
+      for (const c of runwayChecks) if (c.icao && !icaos.includes(c.icao)) icaos.push(c.icao);
       const body = document.getElementById('metar-body');
       if (!icaos.length) {
         body.innerHTML = '';
@@ -6175,6 +6180,7 @@
       const btn = document.getElementById('metar-fetch-btn');
       if (btn) btn.disabled = true;
       metarStatus('Fetching ' + icaos.join(', ') + ' \u2026', false);
+      let fetched = false;
       try {
         const grab = async (kind) => {
           const controller = new AbortController();
@@ -6188,15 +6194,24 @@
         const [metars, tafs] = await Promise.all([grab('metar'), grab('taf')]);
         lastWeather = { icaos, metars, tafs };
         renderMetarCard(icaos, metars, tafs);
-        renderMbWeather();
         metarStatus('Retrieved ' + new Date().toISOString().slice(11, 16) + 'Z \u00b7 ' +
                     METAR_ATTRIBUTION, false);
+        fetched = true;
       } catch (e) {
         metarStatus('\u274c Could not fetch: ' + (e && e.message ? e.message : 'network error') +
                     '. Check the official source before flight.', true);
       } finally {
         if (btn) btn.disabled = false;
       }
+      // THE DISTANCES READ THE METAR, SO A NEW METAR IS A NEW PLAN (v16.99, the
+      // author: "the takeoff and landing distances arent calculated before i
+      // cycle the runways once"). The runway checks are built in the render
+      // pass, and this function only repainted the two weather cards - so the
+      // wind, QNH and OAT prefills, the distances, the banner and the printed
+      // sheet all kept the figures from BEFORE the fetch until something else
+      // happened to re-render. Outside the try on purpose: a render problem is
+      // not a failed fetch, and must not be reported as one.
+      if (fetched) renderAllFlightTables();
     }
 
     /** The last fetch, so the M&B tab can paint on a tab switch without asking
@@ -6220,21 +6235,37 @@
         if (!rawM && !rawT) {
           parts.push(' <span style="color:var(--text-muted);">- no reports published for this aerodrome</span>');
         }
+        // OUTDATED IS PAST THE REPORT'S OWN ROUTINE INTERVAL (v16.99): 30 min
+        // for a METAR, 3 h or 6 h for a TAF by its length - routineIntervalMin
+        // says where those figures come from. The raw text turns yellow and a
+        // label says to fetch again, as the author asked; the report is still
+        // shown in full, because an old report is still the last one there is.
+        const tag = (p) => {
+          const iv = routineIntervalMin(p);
+          return '<span class="wx-outdated-tag" title="Older than its ' + (iv >= 60 ? (iv / 60) + ' h' : iv + ' min') +
+            ' routine reissue - a newer ' + (p.isTaf ? 'TAF' : 'METAR') + ' is due. Press Fetch.">Outdated \u00b7 fetch again</span>';
+        };
         if (rawM) {
           const p = parseReport(rawM);
           const age = reportAgeMinutes(p.timeUTC);
           const ageTxt = formatAge(age);
-          const stale = isStale(age);
-          parts.push(' <span style="font-size:10px; color:' + (stale ? '#c05621' : 'var(--text-muted)') + ';">' +
-                     'METAR' + (ageTxt ? ' \u00b7 ' + esc(ageTxt) : '') +
-                     (stale ? ' \u26a0 not current' : '') + '</span>');
+          const old = isOutdated(p, age);
+          parts.push(' <span class="' + (old ? 'wx-outdated' : 'wx-age') + '" style="font-size:10px;' +
+                     (old ? '' : ' color:var(--text-muted);') + '">' +
+                     'METAR' + (ageTxt ? ' \u00b7 ' + esc(ageTxt) : '') + '</span>' + (old ? tag(p) : ''));
           const sum = summariseReport(p);
           if (sum) parts.push('<div style="font-size:10px; color:var(--highlight-text);">' + esc(sum) + '</div>');
-          parts.push('<div style="font-family:monospace; font-size:10px; word-break:break-word;">' + esc(p.raw) + '</div>');
+          parts.push('<div class="wx-raw' + (old ? ' wx-outdated' : '') + '" style="font-family:monospace; font-size:10px; word-break:break-word;">' + esc(p.raw) + '</div>');
         }
         if (rawT) {
-          parts.push('<div style="font-size:10px; color:var(--text-muted); margin-top:3px;">TAF</div>');
-          parts.push('<div style="font-family:monospace; font-size:10px; word-break:break-word;">' + esc(parseReport(rawT).raw) + '</div>');
+          const p = parseReport(rawT);
+          const age = reportAgeMinutes(p.timeUTC);
+          const ageTxt = formatAge(age);
+          const old = isOutdated(p, age);
+          parts.push('<div style="font-size:10px; margin-top:3px;"><span class="' + (old ? 'wx-outdated' : 'wx-age') + '"' +
+                     (old ? '' : ' style="color:var(--text-muted);"') + '>TAF' + (ageTxt ? ' \u00b7 ' + esc(ageTxt) : '') +
+                     '</span>' + (old ? tag(p) : '') + '</div>');
+          parts.push('<div class="wx-raw' + (old ? ' wx-outdated' : '') + '" style="font-family:monospace; font-size:10px; word-break:break-word;">' + esc(p.raw) + '</div>');
         }
         parts.push('</div>');
       }
@@ -6826,11 +6857,27 @@
         host.innerHTML = '<span style="color:var(--text-muted);">Not fetched yet.</span>';
         return;
       }
-      // First and last ICAO of the mission - the two aerodromes the takeoff and
-      // landing distances are read for, and the two the daylight card judges.
-      const all = lastWeather.icaos;
-      const want = all.length <= 2 ? all : [all[0], all[all.length - 1]];
+      // EVERY AERODROME A DISTANCE IS WORKED AT, in flight order (v16.99, the
+      // author: on ENDU-ENEV-ENTC-ENDU "the metar and taf ... only shows ENDU
+      // and ENEV, not ENTC in the M&B page"). This used to take the FIRST and
+      // LAST entry of the route list - a list already deduplicated, so a round
+      // trip lost its return and every intermediate stop but one fell out. The
+      // distance card below checks each sector's departure and arrival, so the
+      // weather it reads is shown for each of them - the same set, from the
+      // same runwayChecks, so the two cannot disagree about which fields count.
+      const order = [];
+      for (const c of runwayChecks) if (c.icao && !order.includes(c.icao)) order.push(c.icao);
+      const fetched = lastWeather.icaos || [];
+      const want = order.length ? order.filter((i) => fetched.includes(i)) : fetched;
       renderMetarCard(want, lastWeather.metars, lastWeather.tafs, 'mb-wx');
+      // An aerodrome added since the fetch has NO report yet - which is not the
+      // same as "no reports published", the card's own words for a station
+      // that files nothing. Said separately, so it cannot read as that.
+      const missing = order.filter((i) => !fetched.includes(i));
+      if (missing.length) {
+        host.insertAdjacentHTML('beforeend', '<div class="mb-foot mb-warn-text">' + esc(missing.join(', ')) +
+          ' ' + (missing.length > 1 ? 'were' : 'was') + ' not in the last fetch - press Fetch again.</div>');
+      }
     }
 
     function createRowHTML(fromName, toName, type, altDisplay, oat, tas, tt, magVar, varIndicator, mt, wdir, wspd, wca, mh, gs, dist, threeMinNM, legTime, accTime, ff, legBurn, accBurn, remFuel, fIdx, wpIndex, showDelete) {
@@ -8807,8 +8854,10 @@
         const p2 = (n) => String(n).padStart(2, '0');
         const stamp = t ? p2(t.day) + p2(t.hour) + p2(t.minute) + 'Z' : '';
         const age = t ? reportAgeMinutes(t) : null;
+        // The same rule as the weather card: past the METAR's 30 min reissue it
+        // is outdated (v16.99 - this card used to wait 90 min).
         const ageTxt = age === null || !isFinite(age) ? '' : ', ' + Math.round(age) + ' min old' +
-          (age > 90 ? ' - NOT CURRENT, type the day\'s values' : '');
+          (age > METAR_ROUTINE_MIN ? ' - OUTDATED, fetch again or type the day\'s values' : '');
         const tempo = c.windTempo
           ? ' The wind is its <b>TEMPO</b> group, ' + esc(c.windTempo.text) +
             (c.windTempo.count > 1 ? ' - the first of ' + c.windTempo.count + ' TEMPO winds, check the others' : '') + '.'

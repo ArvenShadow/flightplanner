@@ -736,6 +736,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
       --mb-ldg: #16a34a;
       --mb-zfm: #ea580c;
       --mb-bad: #dc2626;
+      /* A weather report past its routine reissue interval (v16.99). Yellow,
+         as the author asked, dark enough on white to be read. */
+      --wx-outdated: #a16207;
+      --wx-outdated-bg: #fef9c3;
       --mb-ok-bg: #ecfdf3;
       --mb-ok-text: #067647;
       --mb-bad-bg: #fef3f2;
@@ -806,6 +810,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
       --mb-ldg: #4ade80;
       --mb-zfm: #fb923c;
       --mb-bad: #f87171;
+      --wx-outdated: #facc15;
+      --wx-outdated-bg: #422006;
       --mb-ok-bg: #052e1a;
       --mb-ok-text: #75e0a7;
       --mb-bad-bg: #3b0d0c;
@@ -827,6 +833,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
       --mb-ldg: #16a34a;
       --mb-zfm: #ea580c;
       --mb-bad: #dc2626;
+      /* A weather report past its routine reissue interval (v16.99). Yellow,
+         as the author asked, dark enough on white to be read. */
+      --wx-outdated: #a16207;
+      --wx-outdated-bg: #fef9c3;
       --mb-ok-bg: #ecfdf3;
       --mb-ok-text: #067647;
       --mb-bad-bg: #fef3f2;
@@ -1615,6 +1625,12 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
 .mb-load td input:focus { outline: 2px solid var(--mb-to); outline-offset: -1px; border-color: transparent; }
 .mb-fixed td { color: var(--text-main); font-weight: 600; }
 .mb-note-cell { color: var(--text-muted); font-size: 10px; }
+/* a METAR or TAF older than its routine interval (v16.99) */
+.wx-outdated { color: var(--wx-outdated); }
+.wx-outdated-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 999px; font-size: 9px;
+  font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--wx-outdated);
+  background: var(--wx-outdated-bg); border: 1px solid var(--wx-outdated); }
+
 /* the last minute change: the actual fuel aboard at preflight */
 .mb-lmc { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px;
   padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--mb-tile-bg); }

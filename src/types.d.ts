@@ -450,6 +450,8 @@ interface WeatherReport {
   icao: string | null;
   /** Day of month, hour, minute - always UTC. */
   timeUTC: { day: number; hour: number; minute: number } | null;
+  /** A TAF's validity span in hours (9, 24, 30...); null on a METAR. */
+  validHours: number | null;
   wind: {
     /** Degrees true; null when the direction is variable. */
     dir: number | null;
