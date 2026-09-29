@@ -1,0 +1,273 @@
+{
+ "source": "Avinor Operational Hours (AD 2.3), ATS table",
+ "url": "https://aim-prod.avinor.no/no/OperationalHours/View/Index/82/ops_hrs.html",
+ "revisedAirac": "2026-09-03",
+ "attribution": "Operational hours © Avinor AS, used with permission. Non-commercial use only.",
+ "entries": {
+  "ENAT": {
+   "name": "Alta",
+   "hours": "MON - FRI: 0415 - 2305 (0315 - 2205), SAT: 0900 - 1900 (0800 - 1800), SUN: 0600 - 0700 (0500 - 0600) / 0900 - 2305 (0800 - 2205)",
+   "rmk": ""
+  },
+  "ENAN": {
+   "name": "Andøya/Andenes",
+   "hours": "MON - FRI: 0420 - 2100 (0320 - 2000), SAT: 0750 - 0830 (0650 - 0730), SUN: 1015 - 2100 (0915 - 2000)",
+   "rmk": "Public HOL excluded"
+  },
+  "ENGK": {
+   "name": "Arendal/Gullknapp",
+   "hours": "No ATS provided",
+   "rmk": ""
+  },
+  "ENDU": {
+   "name": "Bardufoss",
+   "hours": "MON - FRI: 0520 - 2200 (0420 - 2100), SAT: 0800 - 1710 (0700 - 1610), SUN: 0850 - 2230 (0750 - 2130)",
+   "rmk": ""
+  },
+  "ENBR": {
+   "name": "Bergen/Flesland",
+   "hours": "H24",
+   "rmk": ""
+  },
+  "ENBV": {
+   "name": "Berlevåg",
+   "hours": "MON - FRI: 0600 - 2030 (0500 - 1930), SAT: NIL, SUN: 1200 - 2030 (1100 - 1930)",
+   "rmk": "HOSP/SAR outside HR OF OPS AVBL O/R 40 MIN prior notice via Polaris ACC Bodø"
+  },
+  "ENBO": {
+   "name": "Bodø",
+   "hours": "H24",
+   "rmk": ""
+  },
+  "ENBN": {
+   "name": "Brønnøysund/Brønnøy",
+   "hours": "MON - FRI: 0500 - 2215 (0400 - 2115), SAT: 0910 - 1310 (0810 - 1210), SUN: 0940 - 1045 (0840 - 0945) / 1410 - 2215 (1310 - 2115)",
+   "rmk": ""
+  },
+  "ENBS": {
+   "name": "Båtsfjord",
+   "hours": "MON - FRI: 0600 - 2015 (0500 - 1915), SAT: NIL, SUN: 1115 - 2015 (1015 - 1915)",
+   "rmk": "HOSP/SAR outside HR OF OPS AVBL O/R 40 MIN prior notice via Polaris ACC Bodø"
+  },
+  "ENFL": {
+   "name": "Florø",
+   "hours": "MON - FRI: 0400 - 2130 (0300 - 2030), SAT: 1200 - 1215 (1100 - 1115) / 1530 - 1700 (1430 - 1600), SUN: 1200 - 1215 (1100 - 1115)/ 1630 - 2130 (1530 - 2030)",
+   "rmk": ""
+  },
+  "ENBL": {
+   "name": "Førde/Bringeland",
+   "hours": "MON - FRI: 0450 - 2230 (0350 - 2130), SAT: 0730 - 0830 (0630 - 0730) / 1130 - 1530 (1030 - 1430), SUN: 0730 - 0830 (0630 - 0730) / 1130 - 2230 (1030 - 2130)",
+   "rmk": ""
+  },
+  "ENHF": {
+   "name": "Hammerfest",
+   "hours": "MON - FRI: 0505 - 2310 (0405 - 2210), SAT: 1150 - 1400 (1050 - 1300), SUN: 0935 - 2310 (0835 - 2210)",
+   "rmk": "HOSP/SAR OUTSIDE HR OF OPS AVBL O/R VIA POLARIS ACC TEL (+47) 75 58 29 57"
+  },
+  "ENEV": {
+   "name": "Harstad/Narvik/Evenes",
+   "hours": "H24",
+   "rmk": ""
+  },
+  "ENHK": {
+   "name": "Hasvik",
+   "hours": "MON - FRI: 0630 - 2000 (0530 - 1900), SAT: NIL, SUN: 1330 - 1530 (1230 - 1430) / 1830 - 2000 (1730 - 1900)",
+   "rmk": "Extended HR of OPS AVBL for HOSP/SAR O/R via Polaris ACC Bodø"
+  },
+  "ENHD": {
+   "name": "Haugesund/Karmøy",
+   "hours": "MON - FRI: 0520 - 2100 (0420 - 2000), SAT: 0600 - 2100 (0500 - 2000), SUN: 0700 - 2230 (0600 - 2130)",
+   "rmk": ""
+  },
+  "ENHV": {
+   "name": "Honningsvåg/Valan",
+   "hours": "MON - FRI: 0435 - 2205 (0335 - 2105), SAT: CLSD, SUN: 1130 - 13:30 (1030 - 1230) / 2030 - 2205 (1930 - 2105)",
+   "rmk": ""
+  },
+  "ENEG": {
+   "name": "Hønefoss/Eggemoen",
+   "hours": "No ATS service provided",
+   "rmk": ""
+  },
+  "ENKR": {
+   "name": "Kirkenes/Høybuktmoen",
+   "hours": "MON - FRI: 0330 - 2315 (0230 - 2215), SAT: 0830 - 1810 (0730 - 1710), SUN: 0900 - 2315 (0800 - 2215)",
+   "rmk": ""
+  },
+  "ENKJ": {
+   "name": "Kjeller",
+   "hours": "No ATS service provided",
+   "rmk": "AD AVBL for VFR 0700 - 2100 (0600 - 2000). PPR for all TFC."
+  },
+  "ENCN": {
+   "name": "Kristiansand/Kjevik",
+   "hours": "MON - FRI: 0510 - 2215 (0410 - 2115), SAT: 0510 - 2110 (0410 - 2010), SUN: 0510 - 2215 (0410 - 2115)",
+   "rmk": ""
+  },
+  "ENKB": {
+   "name": "Kristiansund/Kvernberget",
+   "hours": "MON - FRI: 0515 - 2200 (0415 - 2100), SAT: 0900 - 1600 (0800 - 1500), SUN: 1100 - 2200 (1000 - 2100)",
+   "rmk": ""
+  },
+  "ENNA": {
+   "name": "Lakselv/Banak",
+   "hours": "MON - FRI: 0520 - 2250 (0420 - 2150), SAT: 1100 - 1530 (1000 - 1430), SUN: 1040 - 2250 (0940 - 2150)",
+   "rmk": "AVBL O/R H24 for charterflights"
+  },
+  "ENLK": {
+   "name": "Leknes",
+   "hours": "MON - FRI: 0535 - 2255 (0435 - 2155), SAT: 0750 - 1610 (0650 - 1510), SUN: 1000 - 1750 (0900 - 1650) / 1920 - 2255 (1820 - 2155)",
+   "rmk": ""
+  },
+  "ENMH": {
+   "name": "Mehamn",
+   "hours": "MON - FRI: 0405 - 1220 (0305 - 1120) / 1610 - 2320 (1510 - 2220), SAT: NIL, SUN: 1705 - 2320 (1605 - 2220)",
+   "rmk": ""
+  },
+  "ENRA": {
+   "name": "Mo I Rana/Røssvoll",
+   "hours": "MON - FRI: 0500 - 2210 (0400 - 2110), SAT: 0800 - 1500 (0700 - 1400), SUN: 1225 - 2210 (1125 - 2110)",
+   "rmk": ""
+  },
+  "ENML": {
+   "name": "Molde/Årø",
+   "hours": "MON - FRI: 0505 - 2100 (0405 - 2000), SAT: 0600 - 1500 (0500 - 1400), SUN: 0930 - 2250 (0830 - 2150)",
+   "rmk": "HOSP/SAR outside HR of OPS AVBL O/R 40 MIN prior notice via Polaris ACC"
+  },
+  "ENMS": {
+   "name": "Mosjøen/Kjærstad",
+   "hours": "MON - FRI: 0350 - 2050 (0250 - 1950), SAT: 0820 - 1450 (0720 - 1350), SUN: 1020 - 2050 (0920 - 1950)",
+   "rmk": ""
+  },
+  "ENNM": {
+   "name": "Namsos",
+   "hours": "MON - FRI: 0520 - 2155 (0420 - 2055), SAT: CLOSED, SUN: 0930-1050 (0830 - 0950) / 1400-2155 (1300 - 2055)",
+   "rmk": ""
+  },
+  "ENNO": {
+   "name": "Notodden",
+   "hours": "MON - FRI: 0500 - 1700 (0400 - 1600), SAT: 1000 - 1500 (0900 - 1400), SUN: 1000 - 1430 (0900 - 1330)",
+   "rmk": "Public HOL excluded"
+  },
+  "ENAS": {
+   "name": "Ny Ålesund/ Hamnerabben",
+   "hours": "No detailed HR of OPS, AFIS AVBL in accordance with PPR.",
+   "rmk": "Contact Kings Bay Ltd. or Longyear AFIS"
+  },
+  "ENGM": {
+   "name": "Oslo/Gardermoen",
+   "hours": "H24",
+   "rmk": ""
+  },
+  "ENRE": {
+   "name": "Rena",
+   "hours": "O/R",
+   "rmk": ""
+  },
+  "ENRY": {
+   "name": "Rygge",
+   "hours": "WEEK 33 - 18, MON: 0700 - 1900 (0600 - 1800), TUE - THU: 0700 - 2300 (0600 - 2200), FRI: 0700 - 1900 (0600 - 1800), SAT: 0800 - 1500 (0700 - 1400), SUN: NIL, WEEK 19 - 32, MON - FRI: 0700 - 1900 (0600 - 1800), SAT - SUN: 0900 - 1300 (0800 - 1200)",
+   "rmk": "Outside HR of OPS, O/R to WingOps"
+  },
+  "ENRO": {
+   "name": "Røros",
+   "hours": "MON - FRI: 0530 - 1515 (0430 - 1415) / 1740 - 1810 (1640 - 1710), SAT: CLOSED, SUN: 1100 - 1820 (1000 - 1720)",
+   "rmk": ""
+  },
+  "ENRM": {
+   "name": "Rørvik/Ryum",
+   "hours": "MON - FRI: 0505 - 1325 (0405 - 1225) / 1340 - 2120 (1240 - 2020), SAT: 0940 - 1015 (0840 - 0915), SUN: 1205 - 2120 (1105 - 2020)",
+   "rmk": ""
+  },
+  "ENRS": {
+   "name": "Røst",
+   "hours": "MON: 0650 - 0830 (0550 - 0730) / 1830 - 2105 (1730 - 2005), TUE - THU: 0650 - 2105 (0550 - 2005), FRI: 0650 - 0830 (0550 - 0730) / 1830 - 2105 (1730 - 2005), SAT: 0650 - 1000 (0550 - 0900), SUN: 1830 - 2105 (1730 - 2005)",
+   "rmk": ""
+  },
+  "ENSD": {
+   "name": "Sandane/Anda",
+   "hours": "MON - FRI: 0440 - 2155 (0340 - 2055), SAT: 0640 - 1630 (0540 - 1530), SUN: 1030 - 1145 (0930 - 1045) / 1615 - 2155 (1515 - 2055)",
+   "rmk": ""
+  },
+  "ENTO": {
+   "name": "Sandefjord/Torp",
+   "hours": "MON - SAT: 0500 - 2200 (0400 - 2100), SUN: 0600 - 2200 (0500 - 2100)",
+   "rmk": ""
+  },
+  "ENST": {
+   "name": "Sandnessjøen/Stokka",
+   "hours": "MON - FRI: 0500 - 2215 (0400 - 2115), SAT: 0930 - 1300 (0830 - 1200), SUN: 1345 - 2215 (1245 - 2115)",
+   "rmk": ""
+  },
+  "ENSG": {
+   "name": "Sogndal/Haukåsen",
+   "hours": "MON - FRI: 0515 - 2100 (0415 - 2000), SAT: 0630 - 1130 (0530 - 1030) / 1450 - 1530 (1350 - 1430), SUN: 1300 - 2130 (1200 - 2030)",
+   "rmk": "OPS HR above are core hours, REF NOTAM for possible adjustments."
+  },
+  "ENZV": {
+   "name": "Stavanger/Sola",
+   "hours": "H24",
+   "rmk": ""
+  },
+  "ENSK": {
+   "name": "Stokmarknes/Skagen",
+   "hours": "MON - WED: 0515 - 2015 (0415 - 1915), THU - FRI: 0450 - 2015 (0350 - 1915), SAT: 1000 - 1500 (0900 - 1400), SUN: 1000 - 2015 (0900 - 1915)",
+   "rmk": ""
+  },
+  "ENSO": {
+   "name": "Stord/Sørstokken",
+   "hours": "MON - FRI: 0500 - 1835 (0400 - 1735), SAT: CLOSED, SUN: 1045 - 1915 (0945 - 1815)",
+   "rmk": "Outside opening HR HOSP/SAR OR. Extend HR of OPS OR TEL (+47) 53 40 37 13."
+  },
+  "ENSB": {
+   "name": "Svalbard/Longyear",
+   "hours": "H24",
+   "rmk": ""
+  },
+  "ENSH": {
+   "name": "Svolvær/Helle",
+   "hours": "MON - FRI: 0535 - 2010 (0435 - 1910), SAT: 0955 - 1750 (0855 - 1650), SUN: 0955 - 2010 (0855 - 1910)",
+   "rmk": ""
+  },
+  "ENSR": {
+   "name": "Sørkjosen",
+   "hours": "MON - FRI: 0445 - 1945 (0345 - 1845), SAT: NIL, SUN: 1115 - 1315 (1015 - 1215) / 1645 - 1945 (1545 - 1845)",
+   "rmk": ""
+  },
+  "ENTC": {
+   "name": "Tromsø/Langnes",
+   "hours": "H24",
+   "rmk": ""
+  },
+  "ENVA": {
+   "name": "Trondheim/Værnes",
+   "hours": "H24",
+   "rmk": ""
+  },
+  "ENVD": {
+   "name": "Vadsø",
+   "hours": "MON - FRI: 0330 - 2325 (0230 - 2225), SAT: 0945 - 1735 (0845 - 1635), SUN: 1230 - 1430 (1130 - 1330) / 1600 - 2325 (1500 - 2225)",
+   "rmk": ""
+  },
+  "ENSS": {
+   "name": "Vardø/Svartnes",
+   "hours": "MON - FRI: 0700 - 1845 (0600 - 1745), SAT: NIL, SUN: 1045 - 1300 (0945 - 1200) / 1700 - 1845 (1600 - 1745)",
+   "rmk": ""
+  },
+  "ENOL": {
+   "name": "Ørland",
+   "hours": "TWR: H24, APP: MON - FRI: 0800 - 1430 (0700 - 1330), SAT - SUN: NIL",
+   "rmk": "Outside detailed APP HR, APP service provided by TWR"
+  },
+  "ENOV": {
+   "name": "Ørsta-Volda/Hovden",
+   "hours": "MON - FRI: 0445 - 2230 (0345 - 2130), SAT: 0645 - 1700 (0545 - 1600), SUN: 0915 - 1715 (0815 - 1615) / 1845 - 2230 (1745 - 2130)",
+   "rmk": "HOSP/SAR outside HR of OPS AVBL O/R VIA Polaris ACC Bodø"
+  },
+  "ENAL": {
+   "name": "Ålesund/Vigra",
+   "hours": "MON - SUN: 0500 - 2230 (0400 - 2130)",
+   "rmk": ""
+  }
+ }
+}

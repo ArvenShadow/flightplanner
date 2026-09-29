@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 56 shared mutable
+    decision, not unfinished work: it is one web of 58 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -1384,8 +1384,9 @@ three cheap disciplines applied every time the page is touched:
   **REOPENED at v16.93: the author named a source, `ippc.no`** (Avinor's
   pre-flight planning centre). That is a changed premise, not a changed mind -
   the old entry said no reliable free API had been FOUND, and a named one has
-  to be checked rather than dismissed. See roadmap item 20; nothing is built
-  and nothing is promised until the CORS question is answered.
+  to be checked rather than dismissed. **ANSWERED at v17.0: no.** ippc.no
+  serves NOTAMs over session-bound DWR calls with no CORS header, so a browser
+  page cannot read them - see "ATS OPENING HOURS BUILT, NOTAMs REFUSED".
   georeferenced 1:500 000 ICAO charts (licensing - and note this is a DIFFERENT
   product from the VAC under different terms; the VAC overlay shipped at v16.86
   under the permission this project already holds), traffic (needs receivers).
@@ -1677,6 +1678,10 @@ and H2 all hold exactly as described.
    semantics are separable, and the mechanical one should not wait for this.
 
 ### 20. AERODROME OPENING HOURS, AND NOTAMs (v16.93, the author's request)
+
+**v17.0: THE HOURS ARE BUILT; THE NOTAMs ARE REFUSED, AND BOTH VERDICTS WERE
+MEASURED.** See "ATS OPENING HOURS" below. What follows is the plan as written
+at v16.93, kept because every question it asked got a measured answer.
 
 *"Opening hours for all aerodromes fetched from the AIS, and NOTAMs fetched
 from ippc.no. If a closed airport is in the flight plan, a warning shall be
@@ -2739,6 +2744,105 @@ shrink-to-fit type. Already here in another form: fail-closed performance
 their M&B has no CG envelope at all (only MTOM/MLM/baggage), and their nomogram
 digitisation is specific to the Z242L AFM - the C182 POH is tabulated, so
 interpolation of the table is the authoritative method here.
+
+## ATS OPENING HOURS BUILT, NOTAMs REFUSED (v17.0, roadmap item 20)
+
+The author: *"Lets do the ATS opening hours and NOTAMs"*. The v16.93 plan said
+to answer two questions before drawing anything. Both were answered by
+measurement, and they came out opposite ways.
+
+### THE HOURS ARE NOT IN THE eAIP - AD 2.3 POINTS ELSEWHERE
+
+Checked on the cached AD 2 pages first, as the plan said: **49 of 53 AD 2.3
+"ATS" rows read "REF AIS Portal www.avinor.no/ais"**, 4 read NIL, and only ENVA
+states anything itself ("H24"). No hours are tagged anywhere. So "read AD 2.3
+from the pages we already fetch" was a dead end, and saying so first saved a
+parser for data that does not exist.
+
+The portal's own "Operational hours" link is **aim-prod.avinor.no/no/
+OperationalHours** - Avinor's publication, on the same AIM host as the eAIP,
+stating "Revised per AIRAC 03 SEP 2026". That is what is imported.
+
+- **ONE `<tbody id="<ICAO>_ATS">` PER AERODROME**, so rows are identified by the
+  source's own ids, never by position (tools/aip-hours.mjs, pure).
+- **THE TEXT IS STORED, NOT A DECODED SCHEDULE**: `aerodrome.ats = {hours,
+  rmk}` in data/aip.js, and `src/lib/opshours.js` is the one reader, used by the
+  planner and by the importer's report alike.
+- **tools/build-hours.mjs** (`npm run build:hours`) writes the committed
+  snapshot `tools/prepared/ats-hours.json` and patches ONLY the `ats` field of
+  data/aip.js - asserted: everything else in the file is identical in content
+  - and REFUSES unless the hours are revised for the dataset's own AIRAC cycle.
+  `build-aip.mjs` attaches the snapshot on a future run under the same rule, and
+  leaves the hours off with a warning when the cycles differ: a September AIP
+  with October hours is two editions in one file.
+
+### THE NOTATION IS READ STRICTLY, AND THE CROSS-CHECK IS THE SOURCE'S OWN
+
+`DAYS: HHMM - HHMM (HHMM - HHMM) [/ ...]`, with `H24`, `No ATS provided`, `O/R`
+and `NIL|CLSD|CLOSED` for a day. The figure outside the brackets is UTC with
+reference to WINTER time, inside it SUMMER time - the page says so.
+
+- **ALL 132 PAIRS IN THE TABLE ARE EXACTLY AN HOUR APART**, measured, so that is
+  REQUIRED per period: a pair that is not means the text was not read the way it
+  was written, and the aerodrome is refused rather than half-decoded. Every day
+  must be stated exactly once too - a day the text does not mention is not a
+  day the aerodrome is closed.
+- **49 DECODED, 4 REFUSED AND SHOWN RAW, pinned per edition** like the ACC
+  sector count: ENRY (hours by week number), ENOL (separate TWR and APP hours),
+  ENAS (prose), ENHV (a published "13:30"). 37 schedules, 8 H24, 3 no ATS, 1 on
+  request.
+- **THE SEASON IS NORWAY'S CLOCK ON THAT INSTANT**, read from the platform's own
+  Europe/Oslo rules (`norwaySeason`), not a last-Sunday rule written here. **THE
+  DAY IS THE UTC DAY**, because the published times are UTC.
+  - **AND THE SUITE COULD NOT SEE THE DAY.** It pins TZ=UTC, where the local and
+    UTC weekday are the same, so a mutation reading the LOCAL day passed every
+    test. A child process under Europe/Oslo now reads 2026-09-27 22:30Z (Monday
+    00:30 local) and requires Sunday's hours. The v16.48 M3 lesson, again.
+
+### THE CHECK
+
+Every take-off and landing - each sector's ends, resolved by POSITION with the
+runway checks' own `aerodromeAt`, at the daylight card's own instants (ETD on
+the flight date plus `sectorTimeWindows`). A fly-by is not a movement there.
+
+- **ONLY A DECODED "CLOSED" IS A BANNER FINDING** ("ENDU take-off at 2355 local
+  (2155Z) is OUTSIDE the published ATS hours (SUN 0750-2130 UTC, summer
+  time)"), which is the author's "a warning shall be issued". No ATS, on
+  request, and refused text are SAID on the card: calling them closed would be a
+  guess, and calling them open a worse one.
+- **WITHOUT AN ETD NOTHING IS CHECKED**, and the card asks for one.
+- **THE PUBLISHED TEXT AND ITS REMARK ARE ALWAYS SHOWN** - "OPS HR above are
+  core hours, REF NOTAM for possible adjustments" is the line a pilot most needs
+  to read - and a "Public HOL excluded" remark says so, because the planner does
+  not know which dates are Norwegian public holidays and will not guess.
+
+### NOTAMs: REFUSED, FOR THE REASON THIS PROJECT HAS REFUSED TWO SOURCES BEFORE
+
+ippc.no was checked exactly as the plan said: CORS, authentication, API.
+
+- **IT IS A SESSION WEB APP, NOT AN API**: JSP pages with a JSESSIONID, and the
+  NOTAMs load through DWR (Direct Web Remoting) - `NotamInterface.getNotams`,
+  POSTed to `/ippc/dwr/call/plaincall/...`, answering with JAVASCRIPT, and
+  registered beside the site's login classes (`FplUserInfo`).
+- **THE ANSWER CARRIES NO `Access-Control-Allow-Origin`** - checked on the page,
+  on a preflight and on the DWR POST itself. A page on GitHub Pages is forbidden
+  by the browser from reading it. That is aviationweather.gov's verdict (v16.21)
+  on a different host.
+- **A PROXY IS NOT A WORKAROUND HERE**: GitHub Pages serves static files, and a
+  stale NOTAM is a wrong NOTAM, so it cannot be imported at build time either.
+- So NOTHING is fetched, and the hours card says in words that NOTAMs are not
+  fetched and to check ippc.no before flight. A NOTAM feature that silently
+  fails is worse than none (the v16.93 rule).
+
+### TEN MUTATIONS, ALL CAUGHT BY NAME, NONE ONLY IN `tsc`
+
+The closing edge exclusive (1); the seasons swapped (2); the LOCAL day instead
+of UTC (1 - escaped until the Europe/Oslo child process existed); no
+summer-an-hour-earlier check (1); a missing day read as closed (1); undecodable
+treated as closed (2); a closed take-off off the banner (1); the importer
+reading the Admin table (1); the raw text not shown (1 - and the first version
+of that test passed with the mutation, because the refusal REASON quotes the
+same text; it reads the text's own element now); the arrival never checked (1).
 
 ## "THE WHOLE FLIGHT", AND IT IS WHAT SAVE DOES FIRST (v16.100)
 

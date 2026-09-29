@@ -2770,6 +2770,8 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
   const rwyModule = require('./src/lib/rwyperf.js');
   assert(rwyModule.pressureAltitudeFt(254, 990) === 875, 'rwyperf: the school\'s pressure altitude moved');
   const pdfModule = require('./src/lib/ofppdf.js');
+  const hoursModule = require('./src/lib/opshours.js');
+  assert(hoursModule.parseAtsHours('H24').kind === 'h24', 'opshours: H24 is not decoded');
   assert(pdfModule.hhmm(125) === '02:05', 'ofppdf: hh:mm is not the form\'s time format');
   // CALLED, not merely required: require() does not execute function bodies, so
   // a free identifier inside one only throws when invoked. That is how toRad,
@@ -2784,7 +2786,7 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
                     airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
                     vac: require('./src/lib/vac.js'),
                     keys: keysModule, corridor: corridorModule, rhumb: rhumbModule, skins: skinsModule,
-                    mb: mbModule, rwy: rwyModule, pdf: pdfModule };
+                    mb: mbModule, rwy: rwyModule, pdf: pdfModule, hours: hoursModule };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3043,6 +3045,9 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                          M.rwy.runwayDistance({ kind: 'takeoff', weightLb: 2600, elevFt: 254, qnhHpa: 1013,
                            tempC: 10, headKt: 0, braking: 6, surface: 'ASPH', availableM: 2443 }),
                          M.rwy.bestEnd([{ desig: '10', trueBrg: 109 }, { desig: '28', trueBrg: 289 }], 290, 10)],
+    'opshours.js': () => [M.hours.parseAtsHours('MON - FRI: 0700 - 1500 (0600 - 1400), SAT - SUN: NIL'),
+                          M.hours.atsOpenAt(M.hours.parseAtsHours('H24'), Date.UTC(2026, 8, 27, 12)),
+                          M.hours.norwaySeason(Date.UTC(2026, 0, 1)), M.hours.holidaysExcluded('Public HOL excluded')],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -13536,6 +13541,191 @@ T('nothing on screen says "mission" any more - it is a flight', () => {
   const master = readMb(printDoc().sheets.filter((sh) => sh.kind === 'mb')[0]);
   assert(/^Whole flight /.test(master.box.title), 'the printed master is not called the whole flight: ' + master.box.title);
   ev(`mbPrefs.reg = null; mbPrefs.view = 'sector'; renderAllFlightTables();`);
+});
+
+// =====================================================================
+// v17.0: ATS opening hours (Avinor Operational Hours, the table AD 2.3
+// points at). NOTAMs are NOT fetched: ippc.no sends no CORS header.
+// =====================================================================
+T('the ATS hours notation is read strictly, and anything outside it is refused', () => {
+  const H = moduleExports.hours;
+  const endu = H.parseAtsHours('MON - FRI: 0520 - 2200 (0420 - 2100), SAT: 0800 - 1710 (0700 - 1610), SUN: 0850 - 2230 (0750 - 2130)');
+  assert(endu.kind === 'schedule' && endu.winter[0][0][0] === 320 && endu.summer[6][0][1] === 1290, 'ENDU misread: ' + JSON.stringify(endu).slice(0, 160));
+  const split = H.parseAtsHours('MON - FRI: 0450 - 2230 (0350 - 2130), SAT: 0730 - 0830 (0630 - 0730) / 1130 - 1530 (1030 - 1430), SUN: 1200 - 1215 (1100 - 1115)/ 1630 - 2130 (1530 - 2030)');
+  assert(split.kind === 'schedule' && split.winter[5].length === 2 && split.winter[6].length === 2, 'two periods a day were not both read');
+  assert(H.parseAtsHours('MON - FRI: 0520 - 2155 (0420 - 2055), SAT: CLOSED, SUN: 0930-1050 (0830 - 0950)').winter[5].length === 0,
+    'CLOSED is not a closed day, or "0930-1050" without spaces was refused');
+  assert(H.parseAtsHours('H24').kind === 'h24' && H.parseAtsHours('No ATS provided').kind === 'none' &&
+    H.parseAtsHours('No ATS service provided').kind === 'none' && H.parseAtsHours('O/R').kind === 'or', 'the word forms');
+  const refused = {
+    'a published 13:30': 'MON - FRI: 0435 - 2205 (0335 - 2105), SAT: CLSD, SUN: 1130 - 13:30 (1030 - 1230)',
+    'a day not stated': 'MON - FRI: 0700 - 1500 (0600 - 1400), SAT: NIL',
+    'a day stated twice': 'MON - FRI: 0700 - 1500 (0600 - 1400), FRI - SUN: NIL',
+    'summer not winter less an hour': 'MON - SUN: 0700 - 1500 (0700 - 1400)',
+    'a period ending before it starts': 'MON - SUN: 1500 - 0700 (1400 - 0600)',
+    'week numbers': 'WEEK 33 - 18, MON: 0700 - 1900 (0600 - 1800)',
+    'unit-by-unit hours': 'TWR: H24, APP: MON - FRI: 0800 - 1430 (0700 - 1330), SAT - SUN: NIL',
+    'prose': 'No detailed HR of OPS, AFIS AVBL in accordance with PPR.'
+  };
+  for (const [why, text] of Object.entries(refused)) {
+    const h = H.parseAtsHours(text);
+    assert(h.kind === 'unparsed' && h.reason, why + ' was decoded instead of refused: ' + JSON.stringify(h).slice(0, 120));
+  }
+});
+
+T('open or closed is decided in UTC, on the season Norway is in on that date', () => {
+  const H = moduleExports.hours;
+  const endu = H.parseAtsHours('MON - FRI: 0520 - 2200 (0420 - 2100), SAT: 0800 - 1710 (0700 - 1610), SUN: 0850 - 2230 (0750 - 2130)');
+  assert(H.norwaySeason(Date.UTC(2026, 0, 15, 12)) === 'winter' && H.norwaySeason(Date.UTC(2026, 6, 15, 12)) === 'summer', 'the season');
+  // The DST change, 2026-03-29 01:00Z: an hour either side.
+  assert(H.norwaySeason(Date.UTC(2026, 2, 29, 0, 30)) === 'winter' && H.norwaySeason(Date.UTC(2026, 2, 29, 1, 30)) === 'summer', 'the change day');
+  const at = (y, mo, d, h, mi) => H.atsOpenAt(endu, Date.UTC(y, mo, d, h, mi));
+  // Sunday 27 Sep 2026, summer: 0750-2130 UTC.
+  assert(at(2026, 8, 27, 21, 30).open === true && at(2026, 8, 27, 21, 31).open === false, 'the closing edge is not inclusive at 2130Z');
+  assert(at(2026, 8, 27, 7, 49).open === false && at(2026, 8, 27, 7, 50).open === true, 'the opening edge');
+  assert(at(2026, 8, 27, 12, 0).window === 'SUN 0750-2130 UTC' && at(2026, 8, 27, 12, 0).season === 'summer', 'the window text');
+  // Sunday 6 Dec 2026, winter: 0850-2230 UTC - the same local hours, an hour later in UTC.
+  assert(at(2026, 11, 6, 22, 15).open === true && at(2026, 11, 6, 7, 55).open === false, 'the winter figures were not used in December');
+  // The UTC day, not the local one: 2026-09-27 23:30 local is 21:30Z SUNDAY.
+  assert(H.atsOpenAt(endu, Date.UTC(2026, 8, 27, 21, 30)).window.startsWith('SUN'), 'the day was not read in UTC');
+  // Undecidable is null, with a reason - never true, never false.
+  for (const h of [H.parseAtsHours('No ATS provided'), H.parseAtsHours('O/R'), H.parseAtsHours('WEEK 33 - 18')]) {
+    const r = H.atsOpenAt(h, Date.UTC(2026, 8, 27, 12));
+    assert(r.open === null && r.why, 'an undecidable entry was decided: ' + JSON.stringify(r));
+  }
+  assert(H.holidaysExcluded('Public HOL excluded') && !H.holidaysExcluded('NIL') && !H.holidaysExcluded(''), 'the holiday remark');
+});
+
+T('the imported table: every aerodrome, the same AIRAC cycle, 49 decoded and exactly four refused', () => {
+  const H = moduleExports.hours;
+  const set = aipDataset();
+  const src = set.atsHoursSource;
+  assert(src && src.revisedAirac === String(set.editionLabel).slice(0, 10),
+    'the hours are not for the dataset\'s own cycle: ' + (src && src.revisedAirac) + ' vs ' + set.editionLabel);
+  assert(/Avinor/.test(src.attribution) && /Non-commercial/i.test(src.attribution) && /aim-prod\.avinor\.no/.test(src.url),
+    'the hours do not carry their source and the non-commercial condition');
+  assert(set.aerodromes.length === 53 && set.aerodromes.every((a) => a.ats && typeof a.ats.hours === 'string' && a.ats.hours),
+    'an aerodrome has no ATS hours entry');
+  const kinds = {}, refused = [];
+  for (const a of set.aerodromes) {
+    const h = H.parseAtsHours(a.ats.hours);
+    kinds[h.kind] = (kinds[h.kind] || 0) + 1;
+    if (h.kind === 'unparsed') refused.push(a.icao);
+  }
+  // PINNED PER EDITION, like the ACC sector count: a parser regression looks
+  // exactly like Avinor rewording an entry, so check the source before editing.
+  assert(JSON.stringify(refused.sort()) === '["ENAS","ENHV","ENOL","ENRY"]', 'the refused set moved: ' + refused.join(' '));
+  assert(kinds.schedule === 37 && kinds.h24 === 8 && kinds.none === 3 && kinds.or === 1,
+    'the decoded split moved: ' + JSON.stringify(kinds));
+  // The committed snapshot IS what shipped.
+  const snap = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'tools', 'prepared', 'ats-hours.json'), 'utf8'));
+  assert(set.aerodromes.every((a) => snap.entries[a.icao] && snap.entries[a.icao].hours === a.ats.hours && snap.entries[a.icao].rmk === a.ats.rmk),
+    'data/aip.js and tools/prepared/ats-hours.json disagree');
+});
+
+TA('the importer reads the page by its own tbody ids, and dates it by its own revision line', async () => {
+  const { parseOpsHoursPage } = await import('./tools/aip-hours.mjs');
+  const html = `<p>Revised per AIRAC 03 SEP 2026 Download PDF</p>
+    <h2>AD 2.3 Operational hours: Admin</h2><table><tbody id="ENDU_Admin"><tr><td>Bardufoss</td><td>ENDU</td><td>WRONG TABLE</td></tr></tbody></table>
+    <h2>AD 2.3 Operational hours: ATS</h2><table>
+    <tbody id="ENDU_ATS"><tr><td>Bardufoss</td><td>ENDU</td><td colspan="2" class="nairac">MON - FRI: 0520 - 2200 (0420 - 2100), SAT: 0800 - 1710 (0700 - 1610), SUN: 0850 - 2230 (0750 - 2130)</td></tr>
+      <tr><td>RMK:</td><td colspan="3">NIL</td></tr></tbody>
+    <tbody id="ENSG_ATS"><tr><td>Sogndal/Haukåsen</td><td>ENSG</td><td>H24</td></tr><tr><td>RMK:</td><td>OPS HR above are core hours, REF NOTAM for possible adjustments.</td></tr></tbody>
+    </table>`;
+  const r = parseOpsHoursPage(html);
+  assert(r.revisedAirac === '2026-09-03', 'the revision date: ' + r.revisedAirac);
+  assert(Object.keys(r.entries).join() === 'ENDU,ENSG', 'the entries: ' + Object.keys(r.entries));
+  assert(/^MON - FRI: 0520/.test(r.entries.ENDU.hours) && r.entries.ENDU.rmk === '', 'ENDU read from the wrong table, or NIL kept as a remark');
+  assert(/core hours/.test(r.entries.ENSG.rmk), 'the remark was lost');
+  assert(parseOpsHoursPage('<p>no date</p>').revisedAirac === null, 'an undated page was dated');
+});
+
+T('a take-off outside the published ATS hours reaches the banner; one inside them does not', () => {
+  const dateWas = doc.getElementById('def-date').value, etdWas = doc.getElementById('def-etd').value;
+  try {
+    ev(SEED_STOP);
+    // Sunday 27 Sep 2026, summer. ENDU ATS SUN 0750-2130 UTC; ENTC is H24.
+    doc.getElementById('def-date').value = '2026-09-27';
+    doc.getElementById('def-etd').value = '12:00';
+    w.renderAllFlightTables();
+    const checks = ev('atsHoursChecks');
+    assert(checks.length === 4 && checks[0].icao === 'ENDU' && checks[0].kind === 'takeoff', 'the movements: ' +
+      checks.map((c) => c.kind + ' ' + c.icao).join(', '));
+    assert(checks.every((c) => c.res && c.res.open === true), 'a daytime flight was found closed somewhere');
+    assert(!ev('runIntegrityCheck()').some((p) => /ATS hours/.test(p)), 'an open flight raised the banner');
+    // ETD 23:55 local - after ENDU closes at 2130Z in Norway (21:55Z) and in
+    // the suite's pinned UTC alike, so the verdict does not depend on the zone.
+    doc.getElementById('def-etd').value = '23:55';
+    w.renderAllFlightTables();
+    const dep = ev('atsHoursChecks[0]');
+    assert(dep.icao === 'ENDU' && dep.res.open === false && dep.res.window === 'SUN 0750-2130 UTC', 'the late take-off: ' + JSON.stringify(dep.res));
+    const probs = ev('runIntegrityCheck()');
+    const z = new Date(dep.ms), zs = String(z.getUTCHours()).padStart(2, '0') + String(z.getUTCMinutes()).padStart(2, '0');
+    assert(probs.some((p) => p.startsWith('ENDU take-off at 2355 local (' + zs + 'Z) is OUTSIDE the published ATS hours (SUN 0750-2130 UTC, summer time)')),
+      'the closed take-off is not on the banner: ' + JSON.stringify(probs));
+    assert(!probs.some((p) => /ENTC .* OUTSIDE/.test(p)), 'the H24 aerodrome was called closed');
+    const card = doc.getElementById('hours-body');
+    assert(card.querySelector('tr.hours-closed') && /CLOSED · SUN 0750-2130 UTC/.test(card.textContent), 'the card does not show it closed');
+    assert(/NOTAMs are not fetched/.test(card.textContent) && /ippc\.no/.test(card.textContent), 'the card does not say NOTAMs are not fetched');
+    assert(/revised per AIRAC 2026-09-03/.test(card.textContent) && /Non-commercial/.test(card.textContent), 'the card does not name its source');
+    // No ETD: nothing to check, nothing on the banner, and the card says why.
+    doc.getElementById('def-etd').value = '';
+    w.renderAllFlightTables();
+    assert(ev('atsHoursChecks.every(c => c.ms === null && c.res === null)') && !ev('runIntegrityCheck()').some((p) => /ATS hours/.test(p)),
+      'without an ETD something was checked');
+    assert(/Set an ETD/.test(card.textContent), 'the card does not ask for an ETD');
+  } finally {
+    doc.getElementById('def-date').value = dateWas;
+    doc.getElementById('def-etd').value = etdWas;
+    ev(SEED);
+  }
+});
+
+T('hours that could not be read are shown raw and are never a banner finding', () => {
+  const dateWas = doc.getElementById('def-date').value, etdWas = doc.getElementById('def-etd').value;
+  try {
+    const ad = (i) => aipDataset().aerodromes.find((a) => a.icao === i);
+    const ry = ad('ENRY'), gm = ad('ENGM');
+    ev(`flights = [{ id: 1, title: "R", depElev: ${ry.elevFt}, waypoints: [
+        { lat: ${ry.lat}, lng: ${ry.lng}, name: "ENRY", alt: ${ry.elevFt}, oat: 10, wdir: 0, wspd: 0, var: 4 },
+        { lat: ${gm.lat}, lng: ${gm.lng}, name: "ENGM", alt: 3000, oat: 10, wdir: 0, wspd: 0, var: 4 } ]}];
+        activeFlightIndex = 0; refreshMap();`);
+    doc.getElementById('def-date').value = '2026-09-27';
+    doc.getElementById('def-etd').value = '03:00';
+    w.renderAllFlightTables();
+    const c = ev('atsHoursChecks[0]');
+    assert(c.icao === 'ENRY' && c.hours.kind === 'unparsed' && c.res.open === null, 'ENRY was decided: ' + JSON.stringify(c.res));
+    assert(!ev('runIntegrityCheck()').some((p) => /ENRY/.test(p)), 'an undecoded entry raised the banner');
+    const card = doc.getElementById('hours-body').textContent;
+    const rawEl = doc.getElementById('hours-body').querySelector('.hours-src');
+    assert(rawEl && /^WEEK 33 - 18, MON: 0700 - 1900/.test(rawEl.textContent), 'the published text itself is not shown: ' + (rawEl && rawEl.textContent));
+    assert(/Not decoded/.test(card) && /Outside HR of OPS, O\/R to WingOps/.test(card),
+      'the refusal or the remark is missing: ' + card.slice(0, 300));
+  } finally {
+    doc.getElementById('def-date').value = dateWas;
+    doc.getElementById('def-etd').value = etdWas;
+    ev(SEED);
+  }
+});
+
+T('the ATS day and hours are read in UTC in the pilot\'s own zone too (TZ=Europe/Oslo)', () => {
+  // The suite pins TZ=UTC, where the local and UTC day are the same thing - so
+  // a mutation reading the LOCAL weekday passed every other test (v17.0; the
+  // v16.48 M3 lesson). In Norway 2026-09-27 22:30Z is MONDAY 00:30 local, and
+  // the published SUN hours are still the ones that apply.
+  const { execFileSync } = require('child_process');
+  const script = `
+    const H = require('${require('path').resolve('./src/lib/opshours.js')}');
+    const endu = H.parseAtsHours('MON - FRI: 0520 - 2200 (0420 - 2100), SAT: 0800 - 1710 (0700 - 1610), SUN: 0850 - 2230 (0750 - 2130)');
+    const at = H.atsOpenAt(endu, Date.UTC(2026, 8, 27, 22, 30));
+    process.stdout.write(JSON.stringify({ window: at.window, open: at.open, localDay: new Date(Date.UTC(2026, 8, 27, 22, 30)).getDay(),
+      season: H.norwaySeason(Date.UTC(2026, 8, 27, 22, 30)) }));
+  `;
+  const r = JSON.parse(execFileSync(process.execPath, ['-e', script],
+    { env: Object.assign({}, process.env, { TZ: 'Europe/Oslo' }), encoding: 'utf8' }));
+  assert(r.localDay === 1, 'the fixture is no longer across local midnight - check it (local day ' + r.localDay + ')');
+  assert(r.window === 'SUN 0750-2130 UTC' && r.open === false && r.season === 'summer',
+    'in Norway the day was read locally: ' + JSON.stringify(r));
 });
 
 runAsyncTests().then(() => {
