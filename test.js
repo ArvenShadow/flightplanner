@@ -9005,6 +9005,51 @@ T('Delete is offered only where editing is', () => {
     'rebinding delete to Backspace did not take');
 });
 
+T('a selected waypoint can be put down again, four ways (v17.6)', () => {
+  // Escape backs out ONE level: a drag or an overlay left over from an earlier
+  // test would take it first, so start from a clean screen.
+  ev(`if (lineDrag) cancelLineDrag(); OVERLAY_IDS.forEach(closeModal); closeLegModal();`);
+  ev(SEED);
+  const click = () => ev(`markers[1]._h.click()`);
+  const sel = () => ev('highlightedWaypoint ? highlightedWaypoint.wpIdx : null');
+  const btn = doc.getElementById('deselect-btn');
+  assert(btn && btn.parentElement === doc.getElementById('map-controls') && btn.classList.contains('map-ctl'),
+    'the Deselect control is not in the map control stack');
+  assert(btn.style.display === 'none', 'Deselect is on screen with nothing selected');
+  // 1. the button, which names what it clears
+  ev('isDoneMode = false'); click();
+  assert(sel() === 1, 'clicking a marker did not select it');
+  assert(doc.querySelector('.row-highlight'), 'the selection is not highlighted in the plan');
+  assert(btn.style.display !== 'none' && /FINNSNES/.test(btn.textContent),
+    'Deselect is hidden or does not name the selection: ' + btn.textContent);
+  w.clearWaypointSelection();
+  assert(sel() === null && !doc.querySelector('.row-highlight'), 'Deselect left the highlight on');
+  assert(btn.style.display === 'none', 'Deselect stayed on screen after clearing');
+  // 2. a second click on the same waypoint
+  click(); click();
+  assert(sel() === null && !doc.querySelector('.row-highlight'), 'a second click did not deselect');
+  // ...while a click on a DIFFERENT waypoint moves the selection instead
+  click(); ev(`markers[2]._h.click()`);
+  assert(sel() === 2, 'clicking another waypoint did not move the selection');
+  // 3. Escape
+  ev(`document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  assert(sel() === null, 'Escape did not deselect');
+  // 4. View Mode: the empty chart adds nothing, so a click there puts it down
+  ev('isDoneMode = true'); refreshAfter();
+  ev(`markers[1]._h.click()`);
+  assert(sel() === 1, 'View Mode lost click-to-select');
+  const n = ev('flights[0].waypoints.length');
+  w.__mapHandlers.click({ latlng: { lat: 69.3, lng: 18.7 } });
+  assert(sel() === null, 'a View-Mode click on the map did not deselect');
+  assert(ev('flights[0].waypoints.length') === n, 'a View-Mode map click added a waypoint');
+  ev('isDoneMode = false'); refreshAfter();
+  // a selection whose waypoint has gone is dropped, not left pointing at nothing
+  ev(`highlightedWaypoint = { fIdx: 0, wpIdx: 40 }; refreshMap();`);
+  assert(sel() === null && btn.style.display === 'none', 'a dangling selection survived a redraw');
+  function refreshAfter() { ev('refreshMap(); renderAllFlightTables();'); }
+  ev(SEED);
+});
+
 TA('Delete removes the selected waypoint, and Ctrl+Z puts it back', async () => {
   ev(SEED);
   ev(`isDoneMode = false; markers[1].fire ? markers[1].fire('click') : markers[1]._h.click()`);

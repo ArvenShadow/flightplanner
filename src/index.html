@@ -101,6 +101,11 @@
              It needs no CSS of its own: #map-controls has been a flex column
              since v16.24, precisely so a new control cannot fall off screen. -->
         <button id="active-flight-btn" class="map-ctl" title="Which flight plan new waypoints are added to. Click to cycle through your plans (it wraps at the end, because this is the only way to switch without a keyboard). The keys , and . step back and forward without wrapping, and 1-9 jump straight to a plan. The full list is in the sidebar." onclick="cycleActiveFlight()">✈ Plan 1</button>
+        <!-- THE WAY OUT OF A SELECTION (v17.6, the author: "there is no way to
+             deselect it"). Only on screen while a waypoint IS selected, and it
+             names the one it will clear. Clicking the selected waypoint again,
+             Escape, and (in View Mode) a click on the empty map do the same. -->
+        <button id="deselect-btn" class="map-ctl" style="display:none;" title="Clear the selected waypoint and its highlight in the flight plan. Clicking the selected waypoint again, or pressing Escape, does the same." onclick="clearWaypointSelection()">✕ Deselect</button>
         <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector) at the end of the flight. It begins at the last waypoint of the LAST plan, so a multi-sector flight joins up. (A touch &amp; go or a full stop opens its next sector right after the plan it was made on instead.) Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
       </div>
       <div id="chart-label"></div>
@@ -370,7 +375,7 @@
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
             <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> (ippc.no cannot be read by a browser page): check them before flight.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
-            <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only.
+            <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only. <b>To deselect</b>, click the selected waypoint again, press <b>Escape</b>, or use the <b>✕ Deselect</b> button that appears in the map controls while something is selected (in View Mode a click on the empty map does it too).
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
               <br><b>Four rules apply to every binding.</b> <b>Ctrl</b> means Ctrl <i>or</i> ⌘, so one binding works on either keyboard. While a dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing fires behind it. Inside a text field the keys keep their normal text-editing meaning (<b>Ctrl+S</b> is the deliberate exception: the browser's own Ctrl+S saves the web page, which is never what you want here). And <b>Escape cannot be rebound</b> — it is the way out of a dialog, out of a half-finished line drag and out of the ruler, so moving it could leave you with no way back. (Whatever you bind <b>undo</b> to follows the ruler too: while the ruler is running that key removes the last ruler point.)
               <br>Two things the menu will refuse, and it says why: a chord the <b>browser owns</b> (Ctrl+W, Ctrl+T, F5 …), because <i>preventDefault</i> cannot stop those and the binding would look like it worked and then not; and a chord <b>already used by another action</b>, because whichever came second would silently never fire. Your bindings are saved with your settings and <b>travel in the exported JSON</b>.</li>
@@ -1221,7 +1226,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 149 inline on*= handlers - 119 written
+    // map, markers, undoStack...) plus 150 inline on*= handlers - 120 written
     // into the markup and 30 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -3240,6 +3245,9 @@
       }
 
       if (isDoneMode) {
+        // View Mode adds nothing, so a click on the empty chart is free to
+        // mean "put the selection down" - the gesture every map app uses.
+        if (highlightedWaypoint) clearWaypointSelection();
         return;
       }
 
@@ -3497,8 +3505,33 @@
       btn.style.borderLeft = '4px solid ' + ROUTE_COLORS[activeFlightIndex % ROUTE_COLORS.length];
     }
 
+    /** Put the selection down: no waypoint highlighted on the map or in the
+     *  plan (v17.6). One function, so the button, a second click on the
+     *  waypoint, Escape and the View-Mode map click cannot disagree. */
+    function clearWaypointSelection() {
+      if (!highlightedWaypoint) return;
+      highlightedWaypoint = null;
+      refreshMap();
+      renderAllFlightTables();
+    }
+
+    /** Show the Deselect control only while there is something to deselect,
+     *  and name it. A selection pointing at a waypoint that no longer exists
+     *  (deleted, undone away) is dropped here rather than left dangling. */
+    function updateSelectionControl() {
+      const hw = highlightedWaypoint;
+      const wp = hw && flights[hw.fIdx] && flights[hw.fIdx].waypoints[hw.wpIdx];
+      if (hw && !wp) highlightedWaypoint = null;
+      const btn = document.getElementById('deselect-btn');
+      if (!btn) return;
+      if (!wp) { btn.style.display = 'none'; return; }
+      btn.style.display = '';
+      btn.textContent = '\u2715 Deselect ' + (hw.wpIdx + 1) + '. ' + wp.name;
+    }
+
     function refreshMap() {
       syncPatternPositions();
+      updateSelectionControl();
       markers.forEach(m => map.removeLayer(m));
       profileMarkers.forEach(m => map.removeLayer(m));
       polylines.forEach(p => map.removeLayer(p));
@@ -3591,6 +3624,11 @@
           // marker was not dragged, so this cannot fire at the end of a drag,
           // and markers do not bubble to the map, so no waypoint is added.
           marker.on('click', function() {
+            // A SECOND CLICK ON THE SELECTED WAYPOINT PUTS IT DOWN (v17.6).
+            if (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === idx) {
+              clearWaypointSelection();
+              return;
+            }
             highlightedWaypoint = { fIdx: fIdx, wpIdx: idx };
             refreshMap();
             renderAllFlightTables();
@@ -7403,7 +7441,7 @@
         case 'close-overlays':
           OVERLAY_IDS.forEach(closeModal);
           closeLegModal();
-          if (highlightedWaypoint) { highlightedWaypoint = null; refreshMap(); renderAllFlightTables(); }
+          clearWaypointSelection();
           break;
         case 'undo': undoLast(true); break;
         case 'redo': redoLast(true); break;
