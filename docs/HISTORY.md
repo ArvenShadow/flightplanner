@@ -120,6 +120,18 @@ authority; the drawing carries no number the text does not.
 - Checked in Chromium at sidebar width, light and dark, and on five synthetic
   cases (overrun, 40 m, gravel, VRB at 60 m, unknown wind at 18 m).
 
+### THE WIND BOX HAS ROOM BELOW ITS LAST LINE (v17.7)
+
+The author, with two screenshots (VRB/02 and 280/10, dark mode): *"the bottom
+text is just a bit too close to the edge of the box which doesnt look right."*
+The box was a fixed 84 units high and ended ONE unit under the last baseline,
+against about nine above the first line. It is now sized from its last line
+(`LAST_BASELINE` + `BOX_PAD`, the same padding as the top), still stretching to
+the runway's bars when the strip is wide, and the drawing's own height grows to
+hold it. A test measures the padding above and below for every last-line
+wording (head / TAILWIND / VRB = tail) at every stripe-table width, and would
+have failed on the old box.
+
 ### TWO CORRECTIONS TO CLAUDE.md (v17.6)
 
 - "140 tests pass at v16.2" and "the 4 100-line page script" were both years

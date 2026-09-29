@@ -405,6 +405,7 @@ three cheap disciplines applied every time the page is touched:
   distances to scale along it, markings per CS ADR-DSN L.525/530/535 (stripes
   by width; a width not in the table gets none; unpaved gets no paint).
   → §{THE DISTANCES ARE DRAWN ON A RUNWAY (v17.6)} → §{THE PERFORMANCE TABLES: THE WORKBOOK IS SHORT OF THE POH, NOT THE OTHER WAY ROUND}
+  The wind box is sized from its last line, even padding. → §{THE WIND BOX HAS ROOM BELOW ITS LAST LINE (v17.7)}
 - **Page 2 corrections**: endurance and reserve at 12 gal/h; take-off always
   full length, stationary, even after a touch & go; the METAR TEMPO wind
   wins; the LMC line is the actual fuel at preflight, applied until a refuel.

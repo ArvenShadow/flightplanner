@@ -182,7 +182,13 @@ export function runwayDiagramSvg(d) {
   }
 
   // --- the wind, as the check used it --------------------------------------
-  out.push(`<rect x="1" y="6" width="64" height="${Math.max(84, bot + 30 - 6)}" rx="4" class="rwyd-box"/>`);
+  // THE BOX IS SIZED FROM ITS LAST LINE, with the same padding below it as
+  // above the first (v17.6, the author: the bottom text sat "just a bit too
+  // close to the edge"). It was a fixed 84 that ended one unit under the last
+  // baseline.
+  const BOX_TOP = 6, BOX_PAD = 9, LAST_BASELINE = 89;
+  const boxBottom = Math.max(LAST_BASELINE + BOX_PAD, bot + 24);
+  out.push(`<rect x="1" y="${BOX_TOP}" width="64" height="${boxBottom - BOX_TOP}" rx="4" class="rwyd-box"/>`);
   out.push(t(33, 20, 'WIND °T', 'rwyd-muted', 'middle'));
   const w = d.wind;
   const dirTxt = d.windDir === 'VRB' ? 'VRB'
@@ -198,13 +204,13 @@ export function runwayDiagramSvg(d) {
     out.push(t(33, 65, w.crossKt && w.crossFrom ? 'cross, from ' + (w.crossFrom === 'L' ? 'L' : 'R') : 'cross', 'rwyd-muted', 'middle'));
     const tail = w.headKt < 0;
     out.push(t(33, 80, (tail ? '→ ' : '← ') + Math.abs(w.headKt) + ' kt', tail ? 'rwyd-bad' : 'rwyd-txt', 'middle'));
-    out.push(t(33, 89, w.variable ? 'VRB = tail' : (tail ? 'TAILWIND' : 'head'), tail ? 'rwyd-bad' : 'rwyd-muted', 'middle'));
+    out.push(t(33, LAST_BASELINE, w.variable ? 'VRB = tail' : (tail ? 'TAILWIND' : 'head'), tail ? 'rwyd-bad' : 'rwyd-muted', 'middle'));
   } else {
     out.push(t(33, 62, 'not known', 'rwyd-muted', 'middle'));
   }
 
   if (note) out.push(t(X0, bot + 46, note, 'rwyd-muted'));
-  const H = Math.max(96, bot + (note ? 50 : 40));
+  const H = Math.max(boxBottom + 2, bot + (note ? 50 : 40));
   const title = (d.kind === 'takeoff' ? 'Take-off' : 'Landing') + ' on runway ' + d.desig +
     (avail ? ', ' + availLbl + ' ' + Math.round(avail) + ' m' : '') +
     (req !== null ? ', required ' + Math.round(req) + ' m' : '');
