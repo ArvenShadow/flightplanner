@@ -308,7 +308,12 @@
               <div class="mb-eyebrow">Weather</div>
               <div class="mb-card-title">Departure &amp; destination</div>
             </div>
-            <button class="btn btn-sm mb-ghost-btn" onclick="fetchMetarTaf()">Fetch</button>
+            <!-- THE SMALL BUTTON IS FOR A REFRESH (v17.6, the author). Before
+                 the first fetch the card has nothing else in it, so the fetch
+                 is the one thing to do there: renderMbWeather draws a large
+                 centred button in the body instead, and this one only appears
+                 once there is weather to refresh. -->
+            <button id="mb-wx-fetch-btn" class="btn btn-sm mb-ghost-btn" style="display:none;" onclick="fetchMetarTaf()">Fetch</button>
           </div>
           <div id="mb-wx" style="font-size:11px; line-height:1.6;"></div>
         </div>
@@ -1226,8 +1231,8 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 150 inline on*= handlers - 120 written
-    // into the markup and 30 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 151 inline on*= handlers - 120 written
+    // into the markup and 31 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -6361,6 +6366,9 @@
       if (!el) return;
       el.innerHTML = msg;
       el.style.color = isError ? '#e53e3e' : 'var(--text-muted)';
+      // The M&B card's empty state shows the same line, so a fetch pressed
+      // there says "Fetching..." or why it failed where the pilot is looking.
+      if (!lastWeather) { try { renderMbWeather(); } catch (e) { /* a convenience */ } }
     }
 
     async function fetchMetarTaf() {
@@ -6402,6 +6410,8 @@
                     '. Check the official source before flight.', true);
       } finally {
         if (btn) btn.disabled = false;
+        // re-enable the M&B card's big button after a failed fetch, too
+        if (!lastWeather) { try { renderMbWeather(); } catch (e) { /* a convenience */ } }
       }
       // THE DISTANCES READ THE METAR, SO A NEW METAR IS A NEW PLAN (v16.99, the
       // author: "the takeoff and landing distances arent calculated before i
@@ -7074,8 +7084,28 @@
     function renderMbWeather() {
       const host = document.getElementById('mb-wx');
       if (!host) return;
+      const headBtn = document.getElementById('mb-wx-fetch-btn');
+      if (headBtn) headBtn.style.display = lastWeather ? '' : 'none';
       if (!lastWeather) {
-        host.innerHTML = '<span style="color:var(--text-muted);">Not fetched yet.</span>';
+        // NOTHING FETCHED YET: the fetch is the card's whole job, so it is the
+        // big thing in the middle of it, and it says which fields it will ask
+        // for - the same list fetchMetarTaf builds, so the promise is kept.
+        const icaos = routeAerodromes(flights);
+        for (const c of runwayChecks) if (c.icao && !icaos.includes(c.icao)) icaos.push(c.icao);
+        const status = document.getElementById('metar-status');
+        const statusText = status ? status.textContent : '';
+        // A fetch in flight has disabled the plan pane's button; this one follows it.
+        const mainBtn = /** @type {HTMLButtonElement|null} */ (document.getElementById('metar-fetch-btn'));
+        const busy = !!(mainBtn && mainBtn.disabled);
+        host.innerHTML = '<div class="mb-wx-empty">' +
+          '<button id="mb-wx-fetch-big" class="btn btn-primary mb-wx-fetch-big" onclick="fetchMetarTaf()"' +
+          (icaos.length && !busy ? '' : ' disabled') + '>\uD83C\uDF26 Fetch METAR &amp; TAF</button>' +
+          '<div class="mb-wx-empty-sub">' + (icaos.length
+            ? 'For ' + esc(icaos.join(', ')) + ' \u00B7 MET Norway, never cached'
+            : 'No ICAO aerodromes on the route yet - choose a published aerodrome, or name a waypoint with its four-letter code.') +
+          '</div>' +
+          (statusText ? '<div id="mb-wx-empty-status" class="mb-wx-empty-sub">' + esc(statusText) + '</div>' : '') +
+          '</div>';
         return;
       }
       // EVERY AERODROME A DISTANCE IS WORKED AT, in flight order (v16.99, the

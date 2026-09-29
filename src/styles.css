@@ -1669,6 +1669,12 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
   font-weight: 700; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
 .mb-seg-on { background: var(--bg-card); color: var(--text-main); box-shadow: var(--mb-shadow); }
 .mb-ghost-btn { flex-shrink: 0; }
+/* the weather card before its first fetch (v17.6): the fetch, big and centred */
+.mb-wx-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  text-align: center; padding: 18px 8px; border: 1px dashed var(--border-color); border-radius: 8px;
+  background: var(--mb-tile-bg); }
+.mb-wx-fetch-big { font-size: 13px; font-weight: 800; padding: 10px 22px; border-radius: 8px; }
+.mb-wx-empty-sub { font-size: 10px; color: var(--text-muted); line-height: 1.5; max-width: 320px; }
 
 /* a sector's results */
 .mb-sector-bad { border-color: var(--mb-bad); }

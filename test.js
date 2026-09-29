@@ -12615,8 +12615,35 @@ T('the weather is decoded once, for two hosts', () => {
     'the M&B tab does not reuse the one renderer');
   assert(!/localStorage[^;]*lastWeather/.test(APP_SRC), 'the weather is being persisted');
   ev('lastWeather = null; renderMbWeather();');
-  assert(/Not fetched yet/.test(doc.getElementById('mb-wx').textContent),
+  assert(/Fetch METAR/.test(doc.getElementById('mb-wx').textContent),
     'the unfetched state says nothing');
+});
+
+T('before the first fetch the M&B weather card IS the fetch button; after it, the button moves to the corner (v17.6)', () => {
+  ev(SEED);
+  ev('lastWeather = null; renderMbWeather();');
+  const host = doc.getElementById('mb-wx');
+  const big = doc.getElementById('mb-wx-fetch-big');
+  const head = doc.getElementById('mb-wx-fetch-btn');
+  assert(big && host.contains(big), 'no large fetch button in the empty card');
+  assert(big.className.includes('btn-primary'), 'the empty-state fetch is not the primary button');
+  assert(/onclick="fetchMetarTaf\(\)"/.test(big.outerHTML), 'the large button does not fetch');
+  assert(head && head.style.display === 'none', 'the small corner button shows while the big one is there');
+  // it names the fields it will ask for, from the same list the fetch builds
+  assert(/ENDU/.test(host.textContent) && /ENTC/.test(host.textContent),
+    'the empty state does not say which fields: ' + host.textContent);
+  const css = fs.readFileSync('src/styles.css', 'utf8');
+  assert(/\.mb-wx-empty\s*\{[^}]*align-items:\s*center/.test(css) &&
+    /\.mb-wx-empty\s*\{[^}]*justify-content:\s*center/.test(css), 'the empty state is not centred');
+  // a status line (fetching / failed) is mirrored into the card where it was pressed
+  ev(`metarStatus('\u274c Could not fetch: HTTP 503.', true);`);
+  assert(/HTTP 503/.test(host.textContent), 'a failed fetch is not reported in the M&B card');
+  ev(`metarStatus('', false);`);
+  // after a fetch: the report is shown and the fetch is the small corner button again
+  ev(`lastWeather = { icaos: ['ENDU', 'ENTC'], metars: {}, tafs: {} }; renderMbWeather();`);
+  assert(!doc.getElementById('mb-wx-fetch-big'), 'the big button stayed after a fetch');
+  assert(head.style.display !== 'none', 'the corner button did not come back after a fetch');
+  ev('lastWeather = null; renderMbWeather();');
 });
 
 T('the whole-mission master walks the fuel, and summarises without laundering', () => {
