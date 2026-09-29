@@ -156,7 +156,7 @@ That condition is now a constraint on the project, not a footnote:
     `plotting.js` took the copyable text; the unit conversions joined
     `format.js`. Page: 4260 -> 3326 lines.
     The remaining script is NOT being force-modularised, and this is a
-    decision, not unfinished work: it is one web of 51 shared mutable
+    decision, not unfinished work: it is one web of 54 shared mutable
     globals (flights, activeFlightIndex, map, markers, undoStack...) plus
     108 inline on*= handlers that need its functions as globals. Threading
     that state through module boundaries would make a UI edit span MORE
@@ -1533,9 +1533,9 @@ scoped. In the user's order:
    2.12/2.13, and take-off/landing distance worked the school's way against
    TODA and LDA. See "PHASE D" below.
 6. **DONE at v16.95** - the OFP half at v16.41, the M&B half with item 5's
-   Phase C. The M&B page is reproduced by its ROWS and vocabulary, NOT
-   pixel-measured the way page 1 was; measuring page 2's grid is a separate
-   piece of work, recorded rather than half-done.
+   Phase C. **At v16.97 both pages became the form's OWN PDF with the figures
+   written on** - page 2's grid measured off its raster strips, 0 differing
+   pixels on a blank sheet. See "THE PRINTOUT IS THE SCHOOL'S FORM".
 
 ### Added v16.41 (a QoL batch, in the user's order)
 
@@ -1845,6 +1845,11 @@ file does not touch it. Do not let the split be mistaken for fixing M5.
 
 ## The company OFP form as the print output (v16.41, roadmap item 6 - the OFP half)
 
+**SUPERSEDED AT v16.97: the printout is now the form's own PDF with the figures
+written on (src/lib/ofppdf.js) - see "THE PRINTOUT IS THE SCHOOL'S FORM". What
+follows is the HTML reproduction it replaced; the blank-on-purpose decisions and
+the one-sector-per-sheet rule still hold, the geometry and print CSS do not.**
+
 `C182OFPMBv4.2.pdf` (committed to the repo by the user) is the flight school's
 two-page form: page 1 the "Operational flightplan", page 2 Mass & Balance.
 **Print OFP now prints page 1, filled from the plan.** The M&B side is NOT
@@ -2035,7 +2040,8 @@ endpoints mean a legal path and there is no interior case to search for.
   reaches 34.03 in there** - the line is drawn exactly as far as it constrains
   anything. Shipped as a CAUTION naming its source, never as an out-of-limits
   finding, and it wants confirming against the autopilot supplement.
-- **LN-TRE's 22.7 lb IS AIRFRAME, NOT BAGGAGE.** The user: "LNTRE is the only
+- **(SUPERSEDED at v16.97 - it is a default Baggage B LOAD now, visible and
+  editable; see "THE STANDARD BAGGAGE IS A LOAD".) LN-TRE's 22.7 lb IS AIRFRAME, NOT BAGGAGE.** The user: "LNTRE is the only
   A/C where compartment B is not included in the total mass/arm". So it is
   added at the compartment B arm before any load, and an unloaded LN-TRE still
   carries it. The workbook adds it into the same cell the pilot types extra
@@ -2566,6 +2572,149 @@ credit under 9 kt; VRB as calm; round to nearest; a deleted cell read as 0 (5).
 Wiring: take-off against ASDA (reports `2826 - TODA is 3119`); distances off
 the banner; an empty box read as 0; the banner with no tail; the distances left
 off the paper (5). Plus the shadowing guard (1).
+
+## THE PRINTOUT IS THE SCHOOL'S FORM, AND THE TAB LOOKS LIKE ITS PAGE 2 (v16.97)
+
+The author, on v16.96: *"The printed OFP HAS to be IDENTICAL to the
+C182OFPMBv4.2.pdf!!! Not a single pixel should differ, that goes for the flight
+plan sheet as well!"*, *"the standard baggage weights in the aircrafts should
+always be present (7.3 lbs in comp A, 0.7 lbs in comp C and LNTRE has 22.7 lbs
+in comp B)"*, and *"make it have a modernized resemblance of the MB sheet. The
+CG graph needs to look better, it has to have a grid..."* - plus a pointer to
+`1ntray/flight_planner` for comparison, and the procedural one: **ALWAYS check
+main before opening a PR** (PR #100 had merged before phase D was pushed; phase
+D was rebased onto main and goes out with this in a new PR).
+
+### THE FORM IS NOT REDRAWN - IT IS EMBEDDED
+
+**THIS SUPERSEDES "The company OFP form as the print output (v16.41)"** and the
+v16.95 `mbPrintHTML` page. Those rebuilt the form in HTML from measured column
+widths; however well measured, a copy is a copy. The friend's planner showed the
+way: it fills the official blank PDF with **pdf-lib**. `src/lib/ofppdf.js` now
+embeds both pages of `C182OFPMBv4.2.pdf` UNCHANGED (one form XObject per page,
+drawn at identity on every sheet) and writes the figures on top.
+
+- **PROVED BY PIXELS, the only way the claim can be proved.** `verify:ofp`
+  renders with pdf.js at 150 dpi: a sheet with nothing written on it differs
+  from the form by **0 pixels on both pages** (also 0 at 300 dpi, measured by
+  hand), and on a worst-case plan (19 legs, the longest reporting-point names,
+  ACC Dist past 1000 NM, both aerodrome and distance blocks filled) **every
+  changed pixel lies inside a box the planner wrote into** - 228 146 changed,
+  0 outside. The form's page is **US Letter landscape, 792 x 612 pt** (its own
+  MediaBox, not A4 as v16.41 assumed), and the PDF keeps it.
+- **ONE DELIBERATE DIFFERENCE, AND IT IS NOT FORM ARTWORK.** The form has a stray
+  "0" printed in the landing H-Wind box - a value left by the workbook it was
+  printed from. It is covered (the glyph's box plus half a point, inside the
+  cell) ONLY when a landing headwind is written there. `PREPRINTED_ZERO`; a test
+  pins its size and its condition.
+- **THE GEOMETRY IS MEASURED, AND A TEST HOLDS IT TO THE MEASUREMENT.** Page 1's
+  rules are vector paths; page 2 is six 600 dpi raster strips with text over
+  them, so no rule is in the content stream. `tools/measure-ofp-form.mjs`
+  renders both pages at 4x in Chromium and detects runs of ink, writing
+  `tools/prepared/ofp-form-rules.json` (committed, like the border). A test
+  requires every box edge in `ofppdf.js` to sit on one of those rules; the only
+  exceptions are named with their reason (two free-paper labels, and the Reg box,
+  which starts after its printed label and under a filled bar).
+  - **MY FIRST RULE DETECTOR LOST TWO RULES**, and the reason is worth keeping:
+    the merge of adjacent pixel runs assigned the run's extent in VISITING order,
+    producing rules of zero and negative thickness that a `t > 0` filter then
+    dropped - the ALT/OAT separator and a dest-block edge. min/max fixed it.
+  - **THE CG CHART IS PLOTTED ON THE FORM'S OWN AXES.** Calibrated off its
+    gridlines (x = 55.45 + 10.59·(arm−30), y = 66.80 + 0.13179·(lb−1800)) and
+    checked against the envelope the form prints: arm 46 lands on the aft-limit
+    rule at 224.88, 3100 lb on the MTOW rule at 238.13, 2950 lb on the MLW rule
+    at 218.38. A point off the paper chart is pinned to its edge and says so.
+- **FIGURES SHRINK TO FIT, NEVER CLIP** - the friend's rule: 7 pt down in
+  quarter points to 4.5 pt, and anything still too wide is REPORTED (a toast
+  names it) rather than silently truncated. The worst case needs none.
+- **PAGE 2 USES THE FORM'S DECIMAL COMMA** ("46,5" is printed; "2582.3" beside
+  it would read as another convention). Page 1 keeps the screen's strings (the
+  v16.41 one-computation rule), and the form prints no figures of its own there.
+- **WHAT PAGE 2 LEAVES FOR THE PEN**, each for a reason: alternate, contingency
+  and extra fuel and so **the total required** (no alternate is planned; a total
+  without it would state a requirement that is too low), MSA and MDA (no
+  terrain), max crosswind (no published figure here), runway state, the minima
+  tables, the signatures, and the station arms the form already prints (only the
+  empty, take-off and landing arms are written). Trip fuel is the sector's burn
+  incl. taxi; final reserve and endurance are timed at the cruise level's POH
+  fuel flow; D. Alt is the workbook's own formula (`densityAltitudeFt`, OFP!P19).
+- **THE WHOLE-MISSION MASTER ADDS UP ON PAPER**: the form has no "fuel at stops"
+  line, so the net change goes on its **Last Minute Change** line and the page's
+  top margin says so. T/O − consumed + that = landing, asserted from the page.
+- **THE ORDER IS THE PAPER'S**: a sector's OFP sheet(s) then its M&B page, as the
+  double-sided form is used; the mission view prints every OFP then one master.
+
+### PRINTING IS A PDF IN A NEW TAB
+
+`Print / preview OFP` (and **Ctrl+P**, bound by default because the browser's
+Ctrl+P used to print the OFP) opens the PDF in a new tab - opened synchronously
+inside the click and filled when ready, or a blocked popup falls back to a
+download. The browser's own File > Print shows only `#print-note`, a line saying
+where the OFP is, so nothing that could be mistaken for company paperwork prints
+from the app screen. `verify:ofp` clicks the real button and reads the PDF out
+of the new tab.
+
+- **THE BANNER STILL REACHES THE PAPER (v16.43)**: a black DO NOT USE band in the
+  empty top margin of every page, asserted on the real PDF with pdf.js.
+- **A RENDER THAT THREW PRINTS NOTHING (H1)**: `printModelReady` is cleared when
+  a render starts and set only at its very end (after every card that can add a
+  finding), and Print refuses while it is clear.
+- **THE PRINT ASSETS ARE NOT THE SHELL.** pdf-lib is 525 KB minified, twice
+  app.js, and the form is 2.6 MB of raster strips; both are needed only when
+  printing. So they are separate files named by content hash
+  (`print/pdf-lib-<sha8>.min.js`, `print/ofp-form-<sha8>.pdf`), announced to the
+  page in two `<meta>` tags and to the worker by a stamped token, precached into
+  their own cache-first `c182-print` cache (not fatal if it fails) and retired
+  by name. An app release re-downloads neither; a new form is a new URL. The
+  module takes pdf-lib as an ARGUMENT (the v16.16 rule), so Node tests run the
+  real library.
+- **THE LOCKED DEPLOY COPIES THEM IN PLAINTEXT**, the VAC argument again: the
+  form is in this public repo and pdf-lib is on npm. The workflow requires
+  exactly the two, a real PDF and a real pdf-lib header, and no app identifier
+  in either.
+
+### THE STANDARD BAGGAGE IS A LOAD, NOT PART OF THE EMPTY MASS
+
+**THIS SUPERSEDES "LN-TRE's 22.7 lb IS AIRFRAME, NOT BAGGAGE" (v16.93).** The
+workbook confirms the author: `OFP!D8 = 7.3`, `OFP!D10 = 0.7` (constants on every
+aircraft) and `OFP!D9 = VLOOKUP(... 'AC REG'!D)`, which only LN-TRE fills
+(22.7). They are the Baggage A/B/C cells themselves. `standardLoads(aircraft)`
+returns them; **choosing a tail sets the three baggage lines to them** (seats are
+untouched - who is aboard is not the machine's business); anything more is typed
+over them, as the workbook's own note says to. `emptyMass` is now the published
+line and nothing else, so the printed Basic Empty Mass matches the form's.
+- **A SAVED LN-TRE LOAD KEEPS ITS 22.7 lb.** Before this the B box held only the
+  extra; an entry with no `v: 2` gets 22.7 added to B once, so the weighed
+  aircraft does not change by a pound. A test loads an old-shape entry twice.
+
+### THE TAB (a modern resemblance of page 2)
+
+Tail chips (five, one click; the chosen one clicked again clears it) over a
+loading table that IS the form's table - its stations, order and arms - down to
+the zero-fuel mass. Per sector: a status pill, three tiles (T/O, LDG, ZFM - the
+number big, what it is measured against beside it, a weight gauge against
+MTOW/MLW and a dot on the CG window), chips for fuel, burn, V<sub>A</sub>,
+V<sub>GLIDE</sub> and Min FLT, and the chart.
+
+- **THE CHART IS GRIDDED AND LABELLED** (the author's request, and the one
+  criticism reviews make of Garmin Pilot's envelope): a major line every inch and
+  100 lb, a minor every half inch and 50 lb, the frame on a gridline, MTOW and
+  MLW labelled on their lines, axes titled, the fuel-burn line from take-off to
+  landing drawn. **Three points, three colours AND three shapes** (T/O circle,
+  LDG triangle, ZFM square), the same on the tiles, the legend and the printed
+  form (`MARK_STYLE`), so a black-and-white print or a colour-blind reader still
+  tells them apart. Out of limits is ringed in red, as ForeFlight marks it.
+- Every colour is a `--mb-*` token defined for light and dark; figures use
+  tabular numerals so columns line up.
+
+### THE COMPARISON WITH 1ntray/flight_planner, and what was taken
+
+Taken: filling the official PDF with pdf-lib at measured coordinates, and
+shrink-to-fit type. Already here in another form: fail-closed performance
+(`refusedKind`), the minimum-flight time, a versioned local store. Not taken:
+their M&B has no CG envelope at all (only MTOM/MLM/baggage), and their nomogram
+digitisation is specific to the Z242L AFM - the C182 POH is tabulated, so
+interpolation of the table is the authoritative method here.
 
 ## AIRAC updates: what re-importing actually costs (v16.42, 2026-09-03)
 

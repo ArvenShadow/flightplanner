@@ -228,6 +228,22 @@ if (existsSync(VAC_SRC)) {
   }
 }
 
+// ---- THE PRINT ASSETS ARE COPIED IN PLAINTEXT TOO, FOR THE SAME REASON -----
+// The school's form PDF and pdf-lib are both committed to / installed from a
+// PUBLIC source (the form is in this repo, pdf-lib is on npm), so ciphertext
+// here would gate files anyone can fetch elsewhere. The page that names them
+// is inside the encrypted body; without the passphrase nothing says they exist.
+const PRINT_SRC = join(SITE, 'print');
+let printCopied = 0;
+if (existsSync(PRINT_SRC)) {
+  mkdirSync(join(OUT, 'print'), { recursive: true });
+  for (const f of readdirSync(PRINT_SRC)) {
+    copyFileSync(join(PRINT_SRC, f), join(OUT, 'print', f));
+    printCopied++;
+  }
+}
+if (printCopied !== 2) fail(`expected the 2 print assets in site/print, found ${printCopied} - the OFP could not print`);
+
 const kb = (n) => (n / 1024).toFixed(0) + ' KB';
 console.log(
   `locked site-locked/  v${version}  gate ${kb(gate.length)} + ` +

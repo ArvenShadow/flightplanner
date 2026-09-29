@@ -180,26 +180,28 @@ export const VA_TABLE = [
  * The fleet, from `'AC REG'!A3:D7`, corroborated figure for figure by the
  * table printed on the form itself.
  *
- * `fixedExtraLb` IS NOT BAGGAGE. LN-TRE is the only aircraft with a value,
- * and the user's explanation is that "LNTRE is the only A/C where compartment
- * B is not included in the total mass/arm" - its empty weight was established
- * without that structure, so 22.7 lb at the compartment B arm is part of the
- * AIRCRAFT and is added before any load is. The workbook does it with
- * `=VLOOKUP(A2,'AC REG'!A:D,4,FALSE)` into the Baggage Area B row, which is
- * also the row the sheet's own note invites the pilot to add extra baggage
- * to - so on the sheet the two are added together in one cell. They are kept
- * apart here: one is a property of the airframe and one is what got loaded.
+ * `standardBagBLb` IS THE WORKBOOK'S `'AC REG'!D` COLUMN - 22.7 lb on LN-TRE,
+ * nothing on the others - and since v16.97 it is a DEFAULT LOAD on the
+ * compartment B line, not a hidden addition to the empty mass. The author:
+ * "the standard baggage weights in the aircrafts should always be present
+ * (7.3 lbs in comp A, 0.7 lbs in comp C and LNTRE has 22.7 lbs in comp B).
+ * That should ALWAYS be defaulted whenever a plane is chosen." That is exactly
+ * the workbook's arrangement: `OFP!D9` is `=VLOOKUP(A2,'AC REG'!A:D,4,FALSE)`,
+ * the Baggage Area B cell itself, and the sheet's own note invites the pilot
+ * to add extra baggage in that same cell. v16.93-v16.96 added it invisibly to
+ * the empty mass instead, which gave the same numbers and a sheet whose
+ * Basic Empty Mass line did not match the paper form's.
  *
  * NO PERSON IS NAMED IN THIS DATASET. The workbook's document properties
  * carry an author; a registration identifies a machine, which the user has
  * explicitly cleared for storage, and that is where it stops.
  */
 export const FLEET = [
-  { reg: 'LN-TRA', emptyWeightLb: 1993.6, emptyMomentInLb: 75870.2, fixedExtraLb: 0 },
-  { reg: 'LN-TRB', emptyWeightLb: 2020.3, emptyMomentInLb: 78756.2, fixedExtraLb: 0 },
-  { reg: 'LN-TRC', emptyWeightLb: 2031.1, emptyMomentInLb: 77121.6, fixedExtraLb: 0 },
-  { reg: 'LN-TRD', emptyWeightLb: 2024.5, emptyMomentInLb: 76587.7, fixedExtraLb: 0 },
-  { reg: 'LN-TRE', emptyWeightLb: 2038.5, emptyMomentInLb: 78989.1, fixedExtraLb: 22.7 }
+  { reg: 'LN-TRA', emptyWeightLb: 1993.6, emptyMomentInLb: 75870.2, standardBagBLb: 0 },
+  { reg: 'LN-TRB', emptyWeightLb: 2020.3, emptyMomentInLb: 78756.2, standardBagBLb: 0 },
+  { reg: 'LN-TRC', emptyWeightLb: 2031.1, emptyMomentInLb: 77121.6, standardBagBLb: 0 },
+  { reg: 'LN-TRD', emptyWeightLb: 2024.5, emptyMomentInLb: 76587.7, standardBagBLb: 0 },
+  { reg: 'LN-TRE', emptyWeightLb: 2038.5, emptyMomentInLb: 78989.1, standardBagBLb: 22.7 }
 ];
 
 /** Where the numbers came from, shown in the UI so a stale sheet is visible. */
@@ -405,17 +407,37 @@ export function vGlideKt(weightLb) {
 }
 
 /**
- * The aircraft on its own: empty weight and moment plus any structure its
- * empty weight was established without. See `FLEET.fixedExtraLb`.
+ * The aircraft on its own: the published basic empty weight and moment,
+ * exactly as the form's Basic Empty Mass line prints them. Nothing is added -
+ * the standard items are LOADS (`standardLoads`), shown on their own lines.
  * @param {Aircraft} aircraft
  * @returns {MassPoint}
  */
 export function emptyMass(aircraft) {
-  const extra = num(aircraft.fixedExtraLb) || 0;
-  return point(
-    aircraft.emptyWeightLb + extra,
-    aircraft.emptyMomentInLb + extra * STATION_ARMS.bagBLb
-  );
+  return point(aircraft.emptyWeightLb, aircraft.emptyMomentInLb);
+}
+
+/**
+ * What is always in the baggage compartment, in pounds: `OFP!D8` (7.3 lb at
+ * A) and `OFP!D10` (0.7 lb at C) on every aircraft, typed as constants in the
+ * workbook, and compartment B from `'AC REG'!D`. The workbook does not say
+ * what the items are, so this does not either.
+ */
+export const STANDARD_BAGGAGE_LB = { bagALb: 7.3, bagCLb: 0.7 };
+
+/**
+ * The baggage lines an aircraft starts with, applied whenever that aircraft
+ * is chosen. Seats are not touched: who is aboard is not a property of the
+ * machine.
+ * @param {Aircraft} aircraft
+ * @returns {{bagALb: number, bagBLb: number, bagCLb: number}}
+ */
+export function standardLoads(aircraft) {
+  return {
+    bagALb: STANDARD_BAGGAGE_LB.bagALb,
+    bagBLb: num(aircraft.standardBagBLb) || 0,
+    bagCLb: STANDARD_BAGGAGE_LB.bagCLb
+  };
 }
 
 /**
@@ -790,13 +812,18 @@ export function normaliseStationLoads(o) {
  * The envelope is drawn at its true size either way; it is the VIEW that grows.
  *
  * @param {Array<{key: string, label: string, weightLb: number, armIn: number|null}>} marks
- * @param {{width?: number, height?: number, pad?: number}} [opts]
+ * @param {{width?: number, height?: number, pad?: number, padL?: number, padR?: number, padT?: number, padB?: number}} [opts]
  * @returns {CgChartModel}
  */
 export function cgChartModel(marks, opts) {
   const width = (opts && opts.width) || 320;
   const height = (opts && opts.height) || 240;
   const pad = (opts && opts.pad) || 34;
+  // THE PLOT AREA HAS ITS OWN MARGINS (v16.97): room on the left for the
+  // weight labels and below for the arm labels, and only a little on the other
+  // two sides - a symmetric pad wasted a quarter of a sidebar-width chart.
+  const padL = (opts && opts.padL) || pad, padR = (opts && opts.padR) || Math.round(pad / 3);
+  const padT = (opts && opts.padT) || Math.round(pad / 3), padB = (opts && opts.padB) || pad;
 
   let aLo = Infinity, aHi = -Infinity, wLo = Infinity, wHi = -Infinity;
   for (const [a, w] of CG_ENVELOPE) {
@@ -810,37 +837,61 @@ export function cgChartModel(marks, opts) {
     if (a < aLo) aLo = a; if (a > aHi) aHi = a;
     if (w < wLo) wLo = w; if (w > wHi) wHi = w;
   }
-  // A margin so a point sitting exactly on a limit is not drawn on the frame.
+  // A margin so a point sitting exactly on a limit is not drawn on the frame,
+  // then out to whole grid steps so the frame IS a gridline on every side -
+  // a chart read by eye is read against its grid.
   const aPad = Math.max(0.5, (aHi - aLo) * 0.06);
   const wPad = Math.max(50, (wHi - wLo) * 0.06);
-  aLo -= aPad; aHi += aPad; wLo -= wPad; wHi += wPad;
+  aLo = Math.floor(aLo - aPad); aHi = Math.ceil(aHi + aPad);
+  wLo = Math.floor((wLo - wPad) / 100) * 100; wHi = Math.ceil((wHi + wPad) / 100) * 100;
 
+  const plot = { x0: padL, x1: width - padR, y0: padT, y1: height - padB };
   /** @param {number} a @param {number} w */
   const px = (a, w) => ({
-    x: pad + ((a - aLo) / (aHi - aLo)) * (width - pad * 2),
+    x: plot.x0 + ((a - aLo) / (aHi - aLo)) * (plot.x1 - plot.x0),
     // Weight grows UPWARDS, as it does on the paper chart.
-    y: height - pad - ((w - wLo) / (wHi - wLo)) * (height - pad * 2)
+    y: plot.y1 - ((w - wLo) / (wHi - wLo)) * (plot.y1 - plot.y0)
   });
 
   /** @param {number[][]} pts */
   const path = (pts) => pts.map(([a, w]) => px(a, w));
 
-  /** @type {Array<{arm:number, x:number}>} */
+  // MAJOR lines every inch and every 100 lb, labelled; MINOR every half inch
+  // and 50 lb. Labels thin out (every 2 in / 200 lb) only when the steps get
+  // too close to read, which depends on the size the chart is drawn at.
+  const aStep = (plot.x1 - plot.x0) / (aHi - aLo) < 16 ? 2 : 1;
+  const wStep = (plot.y1 - plot.y0) / ((wHi - wLo) / 100) < 13 ? 200 : 100;
+  /** @type {Array<{arm:number, x:number, label:boolean}>} */
   const gridX = [];
-  for (let a = Math.ceil(aLo / 2) * 2; a <= aHi; a += 2) gridX.push({ arm: a, x: px(a, wLo).x });
-  /** @type {Array<{weight:number, y:number}>} */
+  for (let a = aLo; a <= aHi + 1e-9; a += 1) gridX.push({ arm: a, x: px(a, wLo).x, label: a % aStep === 0 });
+  /** @type {Array<{weight:number, y:number, label:boolean}>} */
   const gridY = [];
-  for (let w = Math.ceil(wLo / 200) * 200; w <= wHi; w += 200) gridY.push({ weight: w, y: px(aLo, w).y });
+  for (let w = wLo; w <= wHi + 1e-9; w += 100) gridY.push({ weight: w, y: px(aLo, w).y, label: w % wStep === 0 });
+  /** @type {number[]} */
+  const minorX = [];
+  for (let a = aLo + 0.5; a < aHi; a += 1) minorX.push(px(a, wLo).x);
+  /** @type {number[]} */
+  const minorY = [];
+  for (let w = wLo + 50; w < wHi; w += 100) minorY.push(px(aLo, w).y);
 
+  const top = CG_ENVELOPE.filter(([, w]) => w === MTOW_LB);
+  const byKey = (/** @type {string} */ k) => drawable.find((m) => m.key === k);
+  const to = byKey('TO'), ldg = byKey('LDG');
   const res = {
-    width, height, pad,
+    width, height, pad, plot,
     armRange: [aLo, aHi],
     weightRange: [wLo, wHi],
     envelope: path(CG_ENVELOPE),
-    // The two reference lines the workbook draws beside the envelope.
+    // The reference lines the workbook draws beside the envelope, and the
+    // MTOW edge on its own so it can be labelled where it is.
     autopilot: path([[AUTOPILOT_MIN_ARM_IN, 1800], [AUTOPILOT_MIN_ARM_IN, AUTOPILOT_LIMIT_MAX_LB]]),
     mlw: path([[39, MLW_LB], [46, MLW_LB]]),
-    gridX, gridY,
+    mtow: path(top.length >= 2 ? [top[0], top[top.length - 1]] : []),
+    // The fuel burns along a straight line from take-off to landing - the
+    // path the aircraft actually moves along, and the reason checking its two
+    // ends is enough (see computeMassBalance).
+    burn: to && ldg ? path([[Number(to.armIn), to.weightLb], [Number(ldg.armIn), ldg.weightLb]]) : [],
+    gridX, gridY, minorX, minorY,
     marks: drawable.map((m) => {
       const p = px(Number(m.armIn), m.weightLb);
       return {

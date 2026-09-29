@@ -74,6 +74,22 @@ export function pressureAltitudeFt(elevFt, qnhHpa) {
 }
 
 /**
+ * Density altitude, the school's way: `OFP!P19` is
+ * `=ROUND(P18 + (120 * (N20 - (15 - (2 * (P18 / 1000))))), 0)` - 120 ft per
+ * degree of deviation from ISA, with ISA at 15 degrees C less 2 per 1000 ft of
+ * pressure altitude. It goes on the form's D. Alt box and is NOT used in any
+ * distance: the POH tables are entered by pressure altitude and temperature,
+ * which already is the density correction.
+ * @param {number} paFt @param {number} tempC
+ * @returns {number} whole feet, or NaN when either input is not known
+ */
+export function densityAltitudeFt(paFt, tempC) {
+  const pa = Number(paFt), t = Number(tempC);
+  if (!Number.isFinite(pa) || !Number.isFinite(t) || paFt === null || tempC === null) return NaN;
+  return Math.round(pa + 120 * (t - (15 - 2 * (pa / 1000))));
+}
+
+/**
  * The wind along and across a runway. Both directions are TRUE.
  *
  * Whole knots, as the workbook rounds them: the 9 kt credit threshold is

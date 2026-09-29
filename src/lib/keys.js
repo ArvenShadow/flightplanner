@@ -155,7 +155,10 @@ export const ACTION_SPECS = /** @type {ActionSpec[]} */ ([
   { id: 'open-winds', group: 'Plan & output', label: 'Open the wind matrix', dflt: null },
   { id: 'open-settings', group: 'Plan & output', label: 'Open Settings', dflt: null },
   { id: 'open-guide', group: 'Plan & output', label: 'Open the Feature Guide', dflt: null },
-  { id: 'print', group: 'Plan & output', label: 'Print / preview the OFP', dflt: null },
+  { id: 'print', group: 'Plan & output', label: 'Print / preview the OFP',
+    hint: 'Opens the school\u2019s own form, filled in, as a PDF. Bound to Ctrl+P because the ' +
+      'browser\u2019s own Ctrl+P used to print the OFP, and now prints only a note saying where it is.',
+    dflt: 'Ctrl+P', inText: true },
 
   // --- and the one that is not yours to move ------------------------------
   { id: 'close-overlays', group: 'Always',

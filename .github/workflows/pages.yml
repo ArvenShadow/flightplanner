@@ -120,6 +120,17 @@ jobs:
             done
             echo "$(ls site-locked/vac/*.webp | wc -l) VAC chart(s), all WebP, published unencrypted by design"
           fi
+          # THE PRINT ASSETS are plaintext for the same reason (the school's
+          # form is in this repo, pdf-lib is on npm). They must be exactly the
+          # form PDF and the library, and neither may carry the app.
+          test "$(ls site-locked/print | wc -l)" -eq 2 || { echo "::error::expected 2 print assets"; exit 1; }
+          head -c 5 site-locked/print/ofp-form-*.pdf | grep -q '%PDF-' || { echo "::error::the print form is not a PDF"; exit 1; }
+          head -c 400 site-locked/print/pdf-lib-*.min.js | grep -qF '.PDFLib=' || { echo "::error::the print library is not pdf-lib"; exit 1; }
+          for f in site-locked/print/*; do
+            for needle in computeFlightSchedule C182_AIP C182_VAC APP_VERSION runIntegrityCheck; do
+              if grep -qF "$needle" "$f"; then echo "::error::$f contains $needle"; exit 1; fi
+            done
+          done
           echo "locked build carries no readable app"
 
       - uses: actions/configure-pages@v6

@@ -37,7 +37,8 @@
  *   node tools/build.mjs [--watch]
  */
 import { build as esbuild } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -71,6 +72,15 @@ const AIP_DATA = 'data/aip.js';
 const VAC_MARKER = /^([ \t]*)<!-- @VACDATA:.*?-->[ \t]*\r?\n/m;
 const VAC_INDEX = 'data/vac-index.js';
 const VAC_ASSETS = 'data/vac';
+// THE PRINTED OFP IS THE SCHOOL'S OWN PDF WITH THE FIGURES WRITTEN ON (v16.97).
+// Both files are needed only when printing, so they are NOT in the bundle and
+// NOT in the shell: pdf-lib alone is twice the size of app.js, and the form is
+// 2.6 MB of 600 dpi strips. Their names carry a hash of their content, so the
+// service worker can hold them cache-first without ever serving a stale copy
+// (the v16.88 rule) and an app release re-downloads neither.
+const PRINT_MARKER = /^([ \t]*)<!-- @PRINTASSETS:.*?-->[ \t]*\r?\n/m;
+const PRINT_LIB_SRC = 'node_modules/pdf-lib/dist/pdf-lib.min.js';
+const PRINT_FORM_SRC = 'C182OFPMBv4.2.pdf';
 
 const fail = (msg) => { console.error('BUILD FAILED: ' + msg); process.exit(1); };
 // Service-worker registration for the hosted build. Feature-detected on
@@ -189,6 +199,27 @@ export async function runBuild({ quiet = false } = {}) {
     if (VAC_MARKER.test(srcHtml)) fail('the @VACDATA marker was not replaced');
   }
 
+  // The print assets: named by content, announced to the page in two <meta>
+  // tags (no script, so nothing runs before the bundle) and to the worker.
+  const printLib = readFileSync(PRINT_LIB_SRC);
+  const printForm = readFileSync(PRINT_FORM_SRC);
+  // The UMD header assigns `self.PDFLib`, which is the one global the page reads.
+  if (!printLib.subarray(0, 400).toString('latin1').includes('.PDFLib='))
+    fail(`${PRINT_LIB_SRC} does not assign self.PDFLib - the page could not find it`);
+  if (printForm.subarray(0, 5).toString('latin1') !== '%PDF-') fail(`${PRINT_FORM_SRC} is not a PDF`);
+  const sha8 = (buf) => createHash('sha256').update(buf).digest('hex').slice(0, 8);
+  const printAssets = {
+    lib: `print/pdf-lib-${sha8(printLib)}.min.js`,
+    form: `print/ofp-form-${sha8(printForm)}.pdf`
+  };
+  {
+    const m = srcHtml.match(PRINT_MARKER);
+    if (!m) fail('src/index.html has no @PRINTASSETS marker');
+    srcHtml = srcHtml.replace(PRINT_MARKER,
+      m[1] + `<meta name="c182-print-lib" content="${printAssets.lib}">\n` +
+      m[1] + `<meta name="c182-print-form" content="${printAssets.form}">\n`);
+  }
+
 /**
  * A CSS TYPO IS SILENT, WHICH IS WHY THE BUILD HAS TO SEE IT.
  *
@@ -273,7 +304,10 @@ function lintCss(css) {
     fail('src/sw.js no longer contains the version placeholder ' + SW_VERSION_TOKEN +
          ' - the worker would never be version-stamped and old shells would never be dropped.');
   }
-  const sw = swSrc.replace(SW_VERSION_TOKEN, JSON.stringify(version));
+  const SW_PRINT_TOKEN = 'sw.__PRINT_ASSETS__ || []';
+  if (!swSrc.includes(SW_PRINT_TOKEN)) fail('src/sw.js no longer contains ' + SW_PRINT_TOKEN);
+  const sw = swSrc.replace(SW_VERSION_TOKEN, JSON.stringify(version))
+    .replace(SW_PRINT_TOKEN, JSON.stringify(['./' + printAssets.lib, './' + printAssets.form]));
   checkSyntax(sw, 'service worker (src/sw.js)');
   mkdirSync(SITE_DIR, { recursive: true });
   writeFileSync(join(SITE_DIR, 'index.html'), lf(siteHtml));
@@ -295,6 +329,15 @@ function lintCss(css) {
       vacBytes += src.size;
     }
   } catch { /* no rasters prepared yet */ }
+  // The print assets are BYTES, copied as they are - never through lf(), which
+  // would corrupt a PDF. A stale name from an earlier build is removed, or the
+  // folder would grow by 3 MB every time the form or the library changed.
+  mkdirSync(join(SITE_DIR, 'print'), { recursive: true });
+  for (const name of readdirSync(join(SITE_DIR, 'print'))) {
+    if (!Object.values(printAssets).includes('print/' + name)) rmSync(join(SITE_DIR, 'print', name));
+  }
+  writeFileSync(join(SITE_DIR, printAssets.lib), printLib);
+  writeFileSync(join(SITE_DIR, printAssets.form), printForm);
   writeFileSync(join(SITE_DIR, 'sw.js'), lf(sw));
   // Pages would otherwise run the upload through Jekyll, which skips files
   // and folders beginning with an underscore.
