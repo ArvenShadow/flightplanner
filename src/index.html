@@ -19,10 +19,10 @@
     
     <div class="route-controls no-print">
       <select id="route-selector" class="route-select" onchange="loadSelectedRouteOrMission()">
-        <option value="">-- Select Saved Route / Mission --</option>
+        <option value="">-- Select Saved Route / Flight --</option>
       </select>
-      <button class="btn btn-success btn-sm" onclick="saveCurrentMission()" title="Save mission locally">Save</button>
-      <button class="btn btn-danger btn-sm" onclick="deleteCurrentMission()" title="Delete selected mission">Delete</button>
+      <button class="btn btn-success btn-sm" onclick="saveCurrentMission()" title="Save the whole flight (or one sector as a route) in this browser">Save</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCurrentMission()" title="Delete the selected saved route or flight">Delete</button>
       <button class="btn btn-outline btn-sm" style="color:white; border-color:#718096;" onclick="exportMissionFile()" title="Download JSON file">Export</button>
       <button class="btn btn-outline btn-sm" style="color:white; border-color:#718096;" onclick="document.getElementById('import-file').click()" title="Load JSON file">Import</button>
       <input type="file" id="import-file" style="display:none;" accept=".json" onchange="importMissionFile(event)">
@@ -283,7 +283,7 @@
             </div>
             <div class="mb-seg" role="group" aria-label="Sheet">
               <button class="mb-seg-btn" id="mb-view-sector" onclick="setMbView('sector')">Every sector</button>
-              <button class="mb-seg-btn" id="mb-view-mission" onclick="setMbView('mission')">Whole mission</button>
+              <button class="mb-seg-btn" id="mb-view-mission" onclick="setMbView('mission')">Whole flight</button>
             </div>
           </div>
           <div id="mb-view-note" class="mb-foot"></div>
@@ -460,16 +460,16 @@
             <li><b>Print / preview OFP</b> (or <b>Ctrl+P</b>) opens the <b>school's own form, C182OFPMBv4.2, filled in from your plan</b>, as a PDF in a new tab - preview it there, then print or save it. It is the form itself, not a copy: the form's own pages are the background and the figures are written into its boxes, so a sheet with nothing written on it is the blank form, pixel for pixel. One sheet per sector, and a second when a flight has more than the form's 16 lines; each sector's Mass &amp; Balance page follows its flight plan page, as on the double-sided paper form. It is US Letter landscape, the form's own size - print it at 100 % / actual size. The browser's own File &gt; Print prints only a note pointing here.
               <ul>
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
-                <li><b>The ACC columns count the whole mission</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the mission total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
+                <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the mission total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
                 <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>CREW, PASSENGERS and PIC</b> — crew are people, and the planner holds no one's name. <b>Reg</b> is filled from the aircraft you pick on the Mass &amp; Balance tab, and is blank until you pick one — a tail number identifies a machine, not a person.</li>
-                <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. Left blank for your pen: alternate, contingency and extra fuel and so the total required (no alternate is planned here), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. On a whole-mission sheet the net fuel change at the stops is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
+                <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. Left blank for your pen: alternate, contingency and extra fuel and so the total required (no alternate is planned here), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. On a whole-flight sheet the net fuel change at the stops is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
                 <li><b>Choosing an aircraft loads its standard baggage</b> - 7.3 lb at A and 0.7 lb at C on every aircraft, and LN-TRE's 22.7 lb at B, as the school's workbook does. They are ordinary baggage lines you can see and type over; choosing a tail again resets them.</li>
                 <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, the wind correction (no headwind credit under 9 kt, +10% per 2 kt of tailwind, nothing past 10 kt), braking action, then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
                 <li>Wind, QNH and temperature come from the latest METAR when you have fetched it, and you can type over any of them. <b>If the METAR has a TEMPO group with a wind, that wind is the one used</b>, and the card says so. <b>Type a tower or ATIS wind as TRUE</b> - those are magnetic. None of these values is saved: yesterday's QNH is a wrong QNH. The landing table exists for 2950 lb only, so it is used as published for every landing weight - a lighter aeroplane lands shorter, so it errs on the safe side. ENAS is gravel, and the POH has no gravel correction, so no distance is given there.</li>
               </ul>
             </li>
-            <li>➕ <b>Add Next Flight Plan</b> chains sectors (touch &amp; go / next hop); fuel and time accumulate across the whole mission.</li>
+            <li>➕ <b>Add Next Flight Plan</b> chains sectors (touch &amp; go / next hop); fuel and time accumulate across the whole flight.</li>
           </ul>
         </div>
 
@@ -485,7 +485,7 @@
           <h3>💾 Saving, Export &amp; Import — important</h3>
           <ul style="margin-left:16px;">
             <li>Work is auto-saved in <b>this browser's storage</b> — it survives restarts, but it does NOT live inside the HTML file and won't follow you to another browser or computer.</li>
-            <li><b>Save</b> stores a named route or whole mission; the dropdown loads them back.</li>
+            <li><b>Save</b> stores the <b>whole flight</b> - every sector - under a name; that is the first choice and what Enter does. It can instead store only the active sector as a route. The dropdown loads either back.</li>
             <li><b>Export</b> writes a JSON file with everything: routes, missions, current flights, aircraft settings and planning preferences. <b>Import</b> restores it anywhere. Export after any session you'd mind losing.</li>
             <li><b>Import asks what to bring in</b> when the file carries both: <b>Routes and settings</b> (everything, which is what import always did) or <b>Routes only</b>, which leaves your aircraft settings, planning preferences and keyboard shortcuts exactly as they are. A file with no settings in it is not asked about — there would be nothing to choose.</li>
             <li><b>Your saved library is added to, not replaced.</b> Importing three routes leaves your other twenty alone. If a route or mission in the file has the <b>same name</b> as one you have saved, you are asked which to keep, with the two shown <b>side by side</b> — your version on the left, the file's on the right, with the rows that differ highlighted. <b>Keep mine</b> is the default, so pressing Enter never destroys anything. With several collisions you can settle the rest in one answer.</li>
@@ -1435,7 +1435,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.99';
+    const APP_VERSION = '16.100';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -7587,7 +7587,7 @@
         ? '   ·   Fuel change at the stops ' + (stop > 0 ? '+' : '') + nb(stop) + ' US gal: T/O - consumed + that = landing'
         : '';
       const title = idx === null
-        ? 'Whole mission  ' + ((m.first.label.split(' → ')[0]) || '') + ' → ' + ((m.last.label.split(' → ')[1]) || '') + stopTxt
+        ? 'Whole flight  ' + ((m.first.label.split(' → ')[0]) || '') + ' → ' + ((m.last.label.split(' → ')[1]) || '') + stopTxt
         : res.label + (m.sectors.length > 1 ? '   ·   sector ' + (idx + 1) + ' of ' + m.sectors.length : '');
       const at = (i, role) => runwayChecks.find((c) => c.i === i && c.role === role) || null;
       const lastIdx = ofpPrintModel.length - 1;
@@ -7894,7 +7894,7 @@
 
     function populateRouteDropdown() {
       const selector = document.getElementById('route-selector');
-      selector.innerHTML = '<option value="">-- Select Saved Route / Mission --</option>';
+      selector.innerHTML = '<option value="">-- Select Saved Route / Flight --</option>';
 
       const singleRoutes = getStoredSingleRoutes();
       if (Object.keys(singleRoutes).length > 0) {
@@ -7912,7 +7912,7 @@
       const customMissions = getStoredMissions();
       if (Object.keys(customMissions).length > 0) {
         const missionGroup = document.createElement('optgroup');
-        missionGroup.label = "Multi-Flight Missions";
+        missionGroup.label = "Whole flights";
         Object.keys(customMissions).forEach(name => {
           const opt = document.createElement('option');
           opt.value = "mission:" + name;
@@ -8029,27 +8029,30 @@
       const activeFlight = flights[activeFlightIndex];
       const defaultName = activeFlight.waypoints.length >= 2
         ? activeFlight.waypoints[0].name + " to " + activeFlight.waypoints[activeFlight.waypoints.length - 1].name
-        : "Mission " + new Date().toLocaleDateString();
+        : "Flight " + new Date().toLocaleDateString();
 
       // ONE dialog offering every route the save can take. As two chained
       // yes/no confirms this needed "[OK] = route, [Cancel] = mission",
       // which is exactly the kind of question a native dialog cannot ask.
+      // THE WHOLE FLIGHT IS FIRST AND IT IS WHAT ENTER DOES (v16.100, the
+      // author: "have the save whole flight as the top and prioritized choice
+      // as thats whats used 99% of the time"). It is also the safe default:
+      // "Replace" was the primary whenever a saved plan had been loaded, and it
+      // is the one option here that destroys something (QoL 11) - so Enter
+      // after loading used to OVERWRITE. Now it never does.
       const buttons = [];
+      buttons.push({ id: 'mission', label: 'Save the whole flight', variant: 'primary',
+                     hint: flights.length + (flights.length === 1 ? ' sector' : ' sectors') });
       if (loadedRouteRef) {
         buttons.push({
           id: 'update',
-          // "Update X" did not say what it does to X. It REPLACES it, and this
-          // is the one option in the dialog that destroys something (QoL 11).
+          // "Update X" did not say what it does to X. It REPLACES it (QoL 11).
           label: `Replace "${loadedRouteRef.name}" with this plan`,
-          variant: 'primary',
-          hint: loadedRouteRef.type === 'route' ? 'overwrites the saved route' : 'overwrites the saved mission'
+          hint: loadedRouteRef.type === 'route' ? 'overwrites the saved route' : 'overwrites the saved flight'
         });
       }
-      buttons.push({ id: 'route', label: 'Save active flight as a new route',
-                     variant: loadedRouteRef ? 'ghost' : 'primary',
-                     hint: flightTitle(activeFlight) });
-      buttons.push({ id: 'mission', label: 'Save the whole mission as new',
-                     hint: flights.length + (flights.length === 1 ? ' flight' : ' flights') });
+      buttons.push({ id: 'route', label: 'Save only the active sector as a route',
+                     variant: 'ghost', hint: flightTitle(activeFlight) });
       buttons.push({ id: 'cancel', label: 'Cancel' });
 
       const choice = await ask({
@@ -8061,7 +8064,7 @@
       });
 
       if (choice.id === 'update' && loadedRouteRef) {
-        const label = loadedRouteRef.type === 'route' ? 'route' : 'mission';
+        const label = loadedRouteRef.type === 'route' ? 'route' : 'flight';
         if (loadedRouteRef.type === 'route') {
           const routes = getStoredSingleRoutes();
           routes[loadedRouteRef.name] = activeFlight.waypoints;
@@ -8092,7 +8095,7 @@
       }
 
       if (choice.id === 'mission') {
-        const name = await promptDialog('Save the whole mission', 'Mission name', defaultName);
+        const name = await promptDialog('Save the whole flight', 'Flight name', defaultName);
         if (name === null) return;
         const finalName = name.trim() || defaultName;
         const customMissions = getStoredMissions();
@@ -8101,21 +8104,21 @@
         loadedRouteRef = { type: 'mission', name: finalName };
         populateRouteDropdown();
         document.getElementById('route-selector').value = "mission:" + finalName;
-        say(`Mission "${finalName}" saved.`, 'good');
+        say(`Flight "${finalName}" saved.`, 'good');
       }
     }
 
     async function deleteCurrentMission() {
       const selVal = document.getElementById('route-selector').value;
       if (!selVal) {
-        say("Select a saved route or mission from the dropdown to delete it.", "warn");
+        say("Select a saved route or flight from the dropdown to delete it.", "warn");
         return;
       }
       const sepIdx = selVal.indexOf(':');
       const type = selVal.slice(0, sepIdx);
       const name = selVal.slice(sepIdx + 1);
 
-      if (await confirmDialog(`Delete saved ${type === 'route' ? 'route' : 'mission'} "${name}"?`,
+      if (await confirmDialog(`Delete saved ${type === 'route' ? 'route' : 'flight'} "${name}"?`,
             'This removes it from this browser permanently - it cannot be undone.',
             { okLabel: 'Delete', danger: true })) {
         if (type === 'route') {
@@ -8585,7 +8588,7 @@
             (ac.emptyMomentInLb / ac.emptyWeightLb).toFixed(2) + ' in. Choosing it loaded the standard baggage: ' +
             standardLoads(ac).bagALb + ' lb at A, ' + standardLoads(ac).bagBLb + ' lb at B, ' +
             standardLoads(ac).bagCLb + ' lb at C - type over them to add more.'
-          : 'Choose a tail to weigh this mission. With none chosen, nothing is weighed and nothing is checked.';
+          : 'Choose a tail to weigh this flight. With none chosen, nothing is weighed and nothing is checked.';
       }
       for (const [id, on] of [['mb-view-sector', mbPrefs.view === 'sector'],
                               ['mb-view-mission', mbPrefs.view === 'mission']]) {
@@ -8596,7 +8599,7 @@
       const vn = document.getElementById('mb-view-note');
       if (vn) {
         vn.innerHTML = mbPrefs.view === 'mission'
-          ? 'One sheet for the whole mission: the weights it leaves with and the weights it comes back at. ' +
+          ? 'One sheet for the whole flight: the weights it leaves with and the weights it comes back at. ' +
             '<b>Every landing in between is still checked against ' + MLW_LB + ' lb</b> - this changes what is ' +
             'SHOWN, never what is checked.'
           : 'One sheet per sector, which is how the paper form is used - it has one DEP and one DEST.';
@@ -8617,7 +8620,7 @@
         // the burn only when nothing was taken on (missionMaster, massbalance.js).
         const master = missionMaster(m);
         const lmc0 = massBalanceLmc && massBalanceLmc.deltaGal !== null && massBalanceLmc.reach > 0 ? massBalanceLmc.deltaGal : null;
-        h += mbSheetHTML(master, 'Whole mission · ' +
+        h += mbSheetHTML(master, 'Whole flight · ' +
           (m.first.label.split(' → ')[0] || '') + ' → ' +
           (m.last.label.split(' → ')[1] || ''), lmc0);
         if (m.worstLanding && m.worstLanding !== m.last) {

@@ -2740,6 +2740,37 @@ their M&B has no CG envelope at all (only MTOM/MLM/baggage), and their nomogram
 digitisation is specific to the Z242L AFM - the C182 POH is tabulated, so
 interpolation of the table is the authoritative method here.
 
+## "THE WHOLE FLIGHT", AND IT IS WHAT SAVE DOES FIRST (v16.100)
+
+The author: *"Dont call it whole mission rather call it the whole flight. Also
+when saving the flight, have the save whole flight as the top and prioritized
+choice as thats whats used 99% of the time."*
+
+- **THE SAVE DIALOG LEADS WITH "Save the whole flight"**, and it is the one
+  primary button, so Enter does it. `Replace "<name>"` moved to second place and
+  is no longer the primary. That is a safety fix as much as a preference:
+  whenever a saved plan had been loaded, Replace WAS the primary, so Enter
+  after loading used to OVERWRITE the saved entry - and it is the one option in
+  the dialog that destroys something (QoL 11). A test presses Enter twice
+  (choice, then name) with a route loaded and requires the route byte-identical.
+- **"Save active flight as a new route" became "Save only the active sector as
+  a route"**, because with "the whole flight" meaning every sector, "active
+  flight" would have meant two different things in one dialog.
+- **WHAT A PILOT READS SAYS "flight"; WHAT IS STORED DOES NOT CHANGE.** The
+  dropdown group ("Whole flights"), its placeholder, the name prompt, the
+  toast, the delete confirmation, the Save/Delete tooltips, the M&B toggle, the
+  tab's master card, the printed master's title and the guide. The storage key
+  `c182_custom_missions`, the `mission:` option prefix, `mbPrefs.view ===
+  'mission'` and the function names are untouched, so every flight saved before
+  this still loads. A test requires no visible text and no string literal in
+  the app to say "whole mission".
+- **NOT RENAMED, AND IT IS A CHOICE RATHER THAN AN OVERSIGHT**: other prose that
+  says "mission" in passing ("Cumulative Mission Totals", the import/export
+  guide text). The request named "whole mission"; renaming the whole vocabulary
+  is a one-pass change if wanted, not something to do on assumption.
+- Three mutations, each caught by name: Replace made primary again, the whole
+  flight not first, the M&B toggle back to "Whole mission".
+
 ## THE WEATHER FEEDS THE DISTANCES, AND SAYS WHEN IT IS OLD (v16.99)
 
 Three reports from the author, the same afternoon v16.98 merged.
