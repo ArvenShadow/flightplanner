@@ -2764,10 +2764,18 @@ choice as thats whats used 99% of the time."*
   'mission'` and the function names are untouched, so every flight saved before
   this still loads. A test requires no visible text and no string literal in
   the app to say "whole mission".
-- **NOT RENAMED, AND IT IS A CHOICE RATHER THAN AN OVERSIGHT**: other prose that
-  says "mission" in passing ("Cumulative Mission Totals", the import/export
-  guide text). The request named "whole mission"; renaming the whole vocabulary
-  is a one-pass change if wanted, not something to do on assumption.
+- ~~NOT RENAMED, AND IT IS A CHOICE: other prose that says "mission" in
+  passing~~ - **v16.101 renamed ALL of it** on the author's answer ("yes rename
+  all of them to flight"): the totals card ("Whole-Flight Totals (All
+  Sectors)"), the add-plan tooltip, the delete/clear dialogs, the Undo step,
+  the import prompts and toast, the damaged-library message, three engine
+  messages (integrity, M&B, exchange) and the guide - which also corrected a
+  stale line saying taxi fuel is "charged once per mission" (it has been per
+  departure since v16.54). The guard is now "no visible text and no string
+  literal says mission", with an explicit allow-list of the storage keys, ids
+  and function names that must not change, comment lines skipped, and
+  "permission" not counted as the word. Restoring the old card title fails it
+  by name.
 - Three mutations, each caught by name: Replace made primary again, the whole
   flight not first, the M&B toggle back to "Whole mission".
 

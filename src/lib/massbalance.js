@@ -882,7 +882,7 @@ export function actualFuelProblems(applied) {
     if (!Number.isFinite(s.fuelArrGal) || s.fuelArrGal >= 0) continue;
     out.push('Last minute change: with ' + Number(applied.actualGal).toFixed(1) + ' gal actually on board the fuel ' +
       'remaining goes NEGATIVE' + (s.label ? ' on ' + s.label : '') + ' (' + s.fuelArrGal.toFixed(1) + ' gal) - ' +
-      'the mission does not fit the fuel on board.');
+      'the flight does not fit the fuel on board.');
   }
   return out;
 }

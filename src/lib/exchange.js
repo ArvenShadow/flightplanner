@@ -380,7 +380,7 @@ export function importScopeOf(parsed) {
     if (parsed.length) routeKinds.push('a route');
   } else if (obj(parsed)) {
     if (filled(parsed.routes)) routeKinds.push('saved routes');
-    if (filled(parsed.missions)) routeKinds.push('saved missions');
+    if (filled(parsed.missions)) routeKinds.push('saved flights');
     if (Array.isArray(parsed.currentFlights) && parsed.currentFlights.length) {
       routeKinds.push('the open flight plans');
     }

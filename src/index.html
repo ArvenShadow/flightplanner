@@ -95,7 +95,7 @@
              It needs no CSS of its own: #map-controls has been a flex column
              since v16.24, precisely so a new control cannot fall off screen. -->
         <button id="active-flight-btn" class="map-ctl" title="Which flight plan new waypoints are added to. Click to cycle through your plans (it wraps at the end, because this is the only way to switch without a keyboard). The keys , and . step back and forward without wrapping, and 1-9 jump straight to a plan. The full list is in the sidebar." onclick="cycleActiveFlight()">✈ Plan 1</button>
-        <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector) at the end of the mission. It begins at the last waypoint of the LAST plan, so a multi-sector mission joins up. (A touch &amp; go or a full stop opens its next sector right after the plan it was made on instead.) Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
+        <button id="add-flight-btn" class="map-ctl" title="Start another flight plan (a new sector) at the end of the flight. It begins at the last waypoint of the LAST plan, so a multi-sector flight joins up. (A touch &amp; go or a full stop opens its next sector right after the plan it was made on instead.) Shortcut for the + Add Flight Plan button in the sidebar." onclick="addNewFlightPlan()">＋ New plan</button>
       </div>
       <div id="chart-label"></div>
       <div id="airspace-attribution" class="no-print" style="display:none;"></div>
@@ -191,9 +191,9 @@
         ➕ Add Next Flight Plan / Sector (Touch & Go / Next Hop)
       </button>
 
-      <!-- GLOBAL MISSION SUMMARY CARD -->
+      <!-- WHOLE-FLIGHT SUMMARY CARD -->
       <div class="card" style="margin-top:4px;">
-        <div class="card-title">Cumulative Mission Totals (All Flights)</div>
+        <div class="card-title">Whole-Flight Totals (All Sectors)</div>
         <table style="font-weight:700;">
           <tr style="background:var(--bg-table-head);">
             <td>Total Distance: <span id="grand-tot-dist" class="highlight-cell" style="padding:2px 6px;">0.0 NM</span></td>
@@ -358,7 +358,7 @@
               <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing.
               <br><b>The first waypoint of a plan is asked a different question</b>, because you cannot touch down or shut down before you have taken off: a fresh plan offers <b>🛫 Departure</b> (on the field, at its published elevation, and it sets the plan's departure elevation to match) and <b>➡ Fly-by</b> (you are already airborne and pass overhead — it stays at your planned altitude and leaves the departure elevation alone). Nothing is guessed from the position in the plan: whichever you pick is what you get.
               <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type.
-              <br><b>The ground time belongs to the sector it delays</b>, which is the one whose header you edit it in: it opens that plan's total and moves every ETO in it, and it is <i>not</i> added to the sector you just landed from. So a plan that <b>ends</b> in a full stop — nothing after it, or you deleted the sector it opened — is charged <b>no ground time and no circuit fuel at all</b>: a landing is the end of the mission, and there is no off-block left for it to delay. Add a sector after it and the figures appear on that one. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
+              <br><b>The ground time belongs to the sector it delays</b>, which is the one whose header you edit it in: it opens that plan's total and moves every ETO in it, and it is <i>not</i> added to the sector you just landed from. So a plan that <b>ends</b> in a full stop — nothing after it, or you deleted the sector it opened — is charged <b>no ground time and no circuit fuel at all</b>: a landing is the end of the flight, and there is no off-block left for it to delay. Add a sector after it and the figures appear on that one. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
@@ -386,11 +386,11 @@
           <h3>⛽ Flight Defaults &amp; Fuel</h3>
           <ul style="margin-left:16px;">
             <li>New waypoints inherit the defaults: wind starts at <b>000/00</b>, OAT follows <b>ISA automatically</b> for your cruise altitude until you type a real temperature.</li>
-            <li><b>Initial Fuel</b> starts the Rem column; startup/taxi/takeoff burn (POH 1.7 gal) is charged once per mission.</li>
+            <li><b>Initial Fuel</b> starts the Rem column; startup/taxi/takeoff burn (POH 1.7 gal) is charged at every departure - once at the start, and again after each full stop.</li>
             <li>Set a <b>Reserve</b> — any leg landing below it turns the Rem cell <span style="color:#e53e3e; font-weight:700;">red</span>.</li>
-            <li>Enter an <b>ETD</b> to get an ETO clock time on every leg and a mission ETA.</li>
+            <li>Enter an <b>ETD</b> to get an ETO clock time on every leg and an ETA for the whole flight.</li>
             <li><b>Saved routes refresh their magnetic variation when loaded.</b> A route saved years ago carries the variation that was current then, so every waypoint is re-computed with today's WMM on load and a note says how many changed. A VAR you typed yourself is treated as a deliberate override and is never touched.</li>
-            <li><b>Re-saving a route you loaded offers to update it in place</b> ("Update the saved route …?"), so refining a mission does not leave a trail of near-duplicate copies. Decline and it saves as a new entry as before.</li>
+            <li><b>Re-saving a route you loaded offers to update it in place</b> ("Update the saved route …?"), so refining a flight does not leave a trail of near-duplicate copies. Decline and it saves as a new entry as before.</li>
           </ul>
         </div>
 
@@ -418,9 +418,9 @@
         <div class="setting-section">
           <h3>🌅 Daylight &amp; VFR Day</h3>
           <ul style="margin-left:16px;">
-            <li>The <b>Daylight &amp; VFR Day card</b> under the mission totals shows sunrise/sunset and the legal <b>day-VFR window</b> at your departure and destination for the <b>Flight Date</b> (defaults to today; deliberately not saved between sessions so a stale date can never show wrong sun times).</li>
+            <li>The <b>Daylight &amp; VFR Day card</b> under the whole-flight totals shows sunrise/sunset and the legal <b>day-VFR window</b> at your departure and destination for the <b>Flight Date</b> (defaults to today; deliberately not saved between sessions so a stale date can never show wrong sun times).</li>
             <li><b>The rule</b>: SERA Art. 2(97) (Reg. (EU) 923/2012) defines night as the hours between the end of evening civil twilight and the beginning of morning civil twilight — the boundary is the sun's centre <b>6° below the horizon</b>. Norway applies SERA through BSL F 1-1 without prescribing any other period, so this is the Norwegian day/night VFR boundary. Note: it is NOT sunset — at our latitudes civil twilight can last from ~30 minutes to many hours past sunset.</li>
-            <li>With an <b>ETD</b> set, <b>every takeoff and landing</b> in the mission — intermediate stops included — is checked at its own aerodrome on its own calendar date: red = outside day VFR (night per SERA), amber = landing within a 30-minute <i>planning margin</i> of the window's end (the margin is a suggestion, not a rule). Intermediate stops get their own STOP row on the card.</li>
+            <li>With an <b>ETD</b> set, <b>every takeoff and landing</b> in the flight — intermediate stops included — is checked at its own aerodrome on its own calendar date: red = outside day VFR (night per SERA), amber = landing within a 30-minute <i>planning margin</i> of the window's end (the margin is a suggestion, not a rule). Intermediate stops get their own STOP row on the card.</li>
             <li><b>Polar cases are handled</b>: midnight sun / bright summer nights (day VFR all 24 h), polar-night days where the sun never rises but a legal twilight window still exists, and deep polar night (no day-VFR window at all — the card says so instead of showing meaningless times).</li>
             <li><b>Times are local</b> (this computer's timezone — the card states the UTC offset for the flight date, DST included). ETD is local clock time too. AIP and almanac tables are usually <b>UTC</b>: add the local offset when cross-checking.</li>
             <li><b>Accuracy</b>: NOAA solar equations, cross-checked against US Naval Observatory almanac data (±2 min at 69°N; degrades above 72° latitude — the card warns). The computed times are for planning; the official times in <b>AIP Norge GEN 2.7</b> / the almanac govern. Checking legality of the actual flight remains PIC responsibility.</li>
@@ -460,7 +460,7 @@
             <li><b>Print / preview OFP</b> (or <b>Ctrl+P</b>) opens the <b>school's own form, C182OFPMBv4.2, filled in from your plan</b>, as a PDF in a new tab - preview it there, then print or save it. It is the form itself, not a copy: the form's own pages are the background and the figures are written into its boxes, so a sheet with nothing written on it is the blank form, pixel for pixel. One sheet per sector, and a second when a flight has more than the form's 16 lines; each sector's Mass &amp; Balance page follows its flight plan page, as on the double-sided paper form. It is US Letter landscape, the form's own size - print it at 100 % / actual size. The browser's own File &gt; Print prints only a note pointing here.
               <ul>
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
-                <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the mission total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
+                <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the whole-flight total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
                 <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>CREW, PASSENGERS and PIC</b> — crew are people, and the planner holds no one's name. <b>Reg</b> is filled from the aircraft you pick on the Mass &amp; Balance tab, and is blank until you pick one — a tail number identifies a machine, not a person.</li>
                 <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. Left blank for your pen: alternate, contingency and extra fuel and so the total required (no alternate is planned here), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. On a whole-flight sheet the net fuel change at the stops is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
@@ -486,9 +486,9 @@
           <ul style="margin-left:16px;">
             <li>Work is auto-saved in <b>this browser's storage</b> — it survives restarts, but it does NOT live inside the HTML file and won't follow you to another browser or computer.</li>
             <li><b>Save</b> stores the <b>whole flight</b> - every sector - under a name; that is the first choice and what Enter does. It can instead store only the active sector as a route. The dropdown loads either back.</li>
-            <li><b>Export</b> writes a JSON file with everything: routes, missions, current flights, aircraft settings and planning preferences. <b>Import</b> restores it anywhere. Export after any session you'd mind losing.</li>
+            <li><b>Export</b> writes a JSON file with everything: saved routes and flights, the plan on screen, aircraft settings and planning preferences. <b>Import</b> restores it anywhere. Export after any session you'd mind losing.</li>
             <li><b>Import asks what to bring in</b> when the file carries both: <b>Routes and settings</b> (everything, which is what import always did) or <b>Routes only</b>, which leaves your aircraft settings, planning preferences and keyboard shortcuts exactly as they are. A file with no settings in it is not asked about — there would be nothing to choose.</li>
-            <li><b>Your saved library is added to, not replaced.</b> Importing three routes leaves your other twenty alone. If a route or mission in the file has the <b>same name</b> as one you have saved, you are asked which to keep, with the two shown <b>side by side</b> — your version on the left, the file's on the right, with the rows that differ highlighted. <b>Keep mine</b> is the default, so pressing Enter never destroys anything. With several collisions you can settle the rest in one answer.</li>
+            <li><b>Your saved library is added to, not replaced.</b> Importing three routes leaves your other twenty alone. If a route or flight in the file has the <b>same name</b> as one you have saved, you are asked which to keep, with the two shown <b>side by side</b> — your version on the left, the file's on the right, with the rows that differ highlighted. <b>Keep mine</b> is the default, so pressing Enter never destroys anything. With several collisions you can settle the rest in one answer.</li>
             <li><b>Why you are asked at all:</b> replacing a saved route is the one thing an import does that <b>Ctrl+Z cannot take back</b> — undo restores the plan on screen and the plan fields, not the saved library. Everything else an import does is undoable. A route in the file that is byte-for-byte what you already have is not worth a question and does not ask one. <b>Cancel</b> at any point leaves everything exactly as it was, including routes it had already got past.</li>
           </ul>
         </div>
@@ -1435,7 +1435,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '16.100';
+    const APP_VERSION = '16.101';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3384,7 +3384,7 @@
       // asked about and find it again afterwards.
       const targetId = flights[fIdx] && flights[fIdx].id;
       const ok = await confirmDialog(`Delete ${flightTitle(flights[fIdx])}?`,
-        'The flight plan and its waypoints are removed from this mission. Undo (Ctrl+Z) restores it.',
+        'The flight plan and its waypoints are removed from this flight. Undo (Ctrl+Z) restores it.',
         { okLabel: 'Delete flight', danger: true });
       if (ok) {
         fIdx = flights.findIndex((f) => f.id === targetId);
@@ -7110,7 +7110,7 @@
 
     async function clearAllFlights() {
       const ok = await confirmDialog('Clear ALL flight plans?',
-        'Start from an empty sheet. Saved routes and missions are NOT deleted, and Ctrl+Z undoes this.',
+        'Start from an empty sheet. Saved routes and flights are NOT deleted, and Ctrl+Z undoes this.',
         { okLabel: 'Clear everything', danger: true });
       if (!ok) return;
       pushUndoState('clear all flight plans');
@@ -7885,7 +7885,7 @@
     }
 
     function getStoredMissions() {
-      return readStoredLibrary('c182_custom_missions', 'missions');
+      return readStoredLibrary('c182_custom_missions', 'flights');
     }
 
     function getStoredSingleRoutes() {
@@ -8006,11 +8006,11 @@
       } else if (type === 'mission') {
         const customMissions = getStoredMissions();
         if (customMissions[name]) {
-          pushUndoState('load a saved mission');
+          pushUndoState('load a saved flight');
           flights = sanitiseFlights(JSON.parse(JSON.stringify(customMissions[name]))) || flights;
           activeFlightIndex = 0;
           loadedRouteRef = { type: 'mission', name };
-          reportMagVarRefresh(refreshMagVarOnLoad(flights), `Mission "${name}"`);
+          reportMagVarRefresh(refreshMagVarOnLoad(flights), `Flight "${name}"`);
           if (flights[0] && flights[0].depElev !== undefined) {
             document.getElementById('def-dep-elev').value = flights[0].depElev;
           }
@@ -8608,7 +8608,7 @@
       const m = massBalanceMission;
       if (!m) {
         body.innerHTML = '<div class="card mb-card mb-empty"><div class="mb-empty-icon">⚖</div>' +
-          '<div>Choose a tail above to weigh this mission. The fuel comes from the flight plan itself - ' +
+          '<div>Choose a tail above to weigh this flight. The fuel comes from the flight plan itself - ' +
           'the figures on the OFP, not a second number to keep in step.</div></div>';
         return;
       }
@@ -8625,7 +8625,7 @@
           (m.last.label.split(' → ')[1] || ''), lmc0);
         if (m.worstLanding && m.worstLanding !== m.last) {
           h += '<div class="card mb-card mb-callout">' +
-            'The heaviest landing of the mission is <b>' + esc(m.worstLanding.label) + '</b> at ' +
+            'The heaviest landing of the flight is <b>' + esc(m.worstLanding.label) + '</b> at ' +
             m.worstLanding.landing.weightLb.toFixed(1) + ' lb, not the final one. It is checked against MLW ' +
             'whichever sheet you are looking at.</div>';
         }
@@ -9244,7 +9244,7 @@
         }
       }
       if (routesDropped) rejected.push(routesDropped + ' unreadable route' + (routesDropped > 1 ? 's' : ''));
-      if (missionsDropped) rejected.push(missionsDropped + ' unreadable mission' + (missionsDropped > 1 ? 's' : ''));
+      if (missionsDropped) rejected.push(missionsDropped + ' unreadable flight' + (missionsDropped > 1 ? 's' : ''));
 
       // ---- 3. ASK ABOUT COLLISIONS ----------------------------------------
       const existingRoutes = getStoredSingleRoutes();
@@ -9257,7 +9257,7 @@
       if (!routeDecisions) { say('Import cancelled — nothing changed.', 'warn', 5000); return; }
 
       const existingMissions = getStoredMissions();
-      const missionDecisions = await resolveImportCollisions('mission', missionCandidates, existingMissions,
+      const missionDecisions = await resolveImportCollisions('flight', missionCandidates, existingMissions,
         (mineRaw, theirs) => {
           const mine = sanitiseFlights(mineRaw) || [];
           return routeSignature(mine) === routeSignature(theirs) ? null : missionDiffNode(mine, theirs);
@@ -9297,7 +9297,7 @@
         }
         if (added || replaced) {
           localStorage.setItem('c182_custom_missions', JSON.stringify(lib));
-          if (added) applied.push(added + ' mission' + (added > 1 ? 's' : ''));
+          if (added) applied.push(added + ' flight' + (added > 1 ? 's' : ''));
         }
       }
 
