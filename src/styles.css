@@ -1656,6 +1656,13 @@ body.layout-plan #splitter, body.layout-map #splitter, body.skin-menu #splitter 
 .hours-rmk { font-style: italic; }
 /* What the CTR is at that moment (v17.1): class D or, with ATS closed, class G RMZ. */
 .hours-ctr { font-size: 9px; font-weight: 600; color: var(--text-muted); }
+/* ATS closed within +-30 min of an ETA, though open at it (v17.8): amber, not
+   the banner's red - the landing is legal as planned. The weather card's
+   "outdated" amber, so one colour means "check this" across the plan pane. */
+.hours-margin { font-size: 9.5px; font-weight: 700; color: var(--wx-outdated); }
+.ats-margin-chip { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; margin-left: 4px;
+  border-radius: 999px; color: var(--wx-outdated); background: var(--wx-outdated-bg); border: 1px solid var(--wx-outdated);
+  white-space: nowrap; }
 
 /* a METAR or TAF older than its routine interval (v16.99) */
 .wx-outdated { color: var(--wx-outdated); }

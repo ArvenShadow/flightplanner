@@ -380,7 +380,7 @@
               <br><b>The ground time belongs to the sector it delays</b>, which is the one whose header you edit it in: it opens that plan's total and moves every ETO in it, and it is <i>not</i> added to the sector you just landed from. So a plan that <b>ends</b> in a full stop — nothing after it, or you deleted the sector it opened — is charged <b>no ground time and no circuit fuel at all</b>: a landing is the end of the flight, and there is no off-block left for it to delay. Add a sector after it and the figures appear on that one. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
-            <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> (ippc.no cannot be read by a browser page): check them before flight.</li>
+            <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>landing</b> that is inside the hours but within <b>30 minutes</b> of a closing (or an opening) gets a small <b>amber</b> label on the card and a chip in that sector's header — "ENDU ATS closes 18 min after ETA" — so a headwind or a late start cannot quietly turn it into a closed arrival. It is a heads-up, not a finding: the red banner is for a landing that is outside the hours as planned. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> (ippc.no cannot be read by a browser page): check them before flight.</li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
             <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only. <b>To deselect</b>, click the selected waypoint again, press <b>Escape</b>, or use the <b>✕ Deselect</b> button that appears in the map controls while something is selected (in View Mode a click on the empty map does it too).
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
@@ -1461,7 +1461,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.7';
+    const APP_VERSION = '17.8';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6651,6 +6651,7 @@
               <input type="number" class="flight-dep-input" value="${fl.depElev}" step="50" onfocus="this.select()" onchange="setFlightDepElevation(${fIdx}, this.value)"> ft
             </span>
             ${stopBeforeHTML(fIdx)}
+            <span class="ats-margin-chips" data-ats-chip="${fIdx}"></span>
           </div>
           <div class="flight-actions no-print">
             <button class="btn btn-wind btn-sm" onclick="openWindModal()">💨 Winds</button>
@@ -9240,11 +9241,15 @@
     function buildAtsHoursChecks(sectorTimeWindows) {
       const etd = planEtdMs();
       const out = [];
-      const check = (kind, ad, min, sectorLabel) => {
+      const check = (kind, ad, min, sectorLabel, fIdx) => {
         const ms = etd === null || !isFinite(min) ? null : etd + Math.round(min) * 60000;
         const hours = ad.ats ? parseAtsHours(ad.ats.hours) : null;
         const res = hours && ms !== null ? atsOpenAt(hours, ms) : null;
-        return { kind, icao: ad.icao, name: ad.name, sectorLabel, ms, ats: ad.ats || null, hours, res, ctr: ctrOf(ad.icao) };
+        // THE ETA MARGIN (v17.8, the author): a LANDING whose aerodrome is
+        // open at the ETA but closed somewhere within ±30 min of it. Landings
+        // only, as asked - the ETA is the estimate; the ETD is the pilot's.
+        const margin = kind === 'landing' && hours && ms !== null ? atsMarginAt(hours, ms) : null;
+        return { kind, icao: ad.icao, name: ad.name, sectorLabel, fIdx, ms, ats: ad.ats || null, hours, res, margin, ctr: ctrOf(ad.icao) };
       };
       for (const sw of sectorTimeWindows || []) {
         const fl = flights[sw.fIdx];
@@ -9270,7 +9275,7 @@
         });
         if (s.arrAt && !s.arrAt.over) { const ad = aerodromeAt(s.arrAt); if (ad) here.push({ kind: 'landing', ad, min: sw.endMin, j: lastReal + 0.5 }); }
         here.sort((a, b) => a.j - b.j);
-        for (const x of here) out.push(check(x.kind, x.ad, x.min, label));
+        for (const x of here) out.push(check(x.kind, x.ad, x.min, label, sw.fIdx));
       }
       return out;
     }
@@ -9316,8 +9321,33 @@
       return out;
     }
 
+    /** The ETA-margin warning in words, or '' (v17.8). Both edges are said
+     *  when both fall inside the margin. @param {any} c an atsHoursChecks entry */
+    function atsMarginText(c) {
+      const m = c && c.margin;
+      if (!m) return '';
+      // local and UTC, as every other time on the card is given
+      const parts = [];
+      if (m.opensMs !== null) parts.push('opens ' + localAndUtc(m.opensMs) + ', only ' + m.openedMinBefore + ' min before your ETA');
+      if (m.closesMs !== null) parts.push('closes ' + localAndUtc(m.closesMs) + ', ' + m.closesInMin + ' min after your ETA');
+      return c.icao + ' ATS ' + parts.join(' and ') + ' - inside your \u00b1' + ATS_ETA_MARGIN_MIN + ' min margin';
+    }
+
+    /** The chip in each sector's header, filled after the checks are built -
+     *  the headers are drawn before the flight's times exist. */
+    function renderAtsMarginChips() {
+      for (const el of document.querySelectorAll('[data-ats-chip]')) {
+        const fIdx = Number(/** @type {HTMLElement} */ (el).dataset.atsChip);
+        const hits = atsHoursChecks.filter((c) => c.fIdx === fIdx && c.margin);
+        el.innerHTML = hits.map((c) => '<span class="ats-margin-chip" title="' + esc(atsMarginText(c)) + '">\u26A0 ' +
+          esc(c.icao) + ' ATS ' + esc(c.margin.closesMs !== null ? 'closes ' + c.margin.closesInMin + ' min after ETA'
+            : 'opens ' + c.margin.openedMinBefore + ' min before ETA') + '</span>').join('');
+      }
+    }
+
     /** The card on the plan pane. */
     function renderAtsHours() {
+      renderAtsMarginChips();
       const host = document.getElementById('hours-body');
       if (!host) return;
       if (!atsHoursChecks.length) {
@@ -9340,9 +9370,11 @@
         else if (flyby) { verdict = 'ATS closed · ' + c.res.window + ' · fly-by, no landing'; cls = 'hours-flyby'; }
         else { verdict = '⛔ CLOSED · ' + c.res.window; cls = 'hours-closed'; }
         const ctrText = ctrStatusText(c);
+        const marginText = atsMarginText(c);
         h += '<tr class="' + cls + '"><td style="font-weight:700; white-space:nowrap;">' + what + ' ' + esc(c.icao) + '</td>' +
           '<td style="white-space:nowrap;">' + (c.ms === null ? '' : esc(localAndUtc(c.ms))) + '</td>' +
-          '<td>' + esc(verdict) + (ctrText ? '<br><span class="hours-ctr">' + esc(ctrText) + '</span>' : '') + '</td></tr>';
+          '<td>' + esc(verdict) + (ctrText ? '<br><span class="hours-ctr">' + esc(ctrText) + '</span>' : '') +
+          (marginText ? '<br><span class="hours-margin">\u26A0 ' + esc(marginText) + '</span>' : '') + '</td></tr>';
         // THE PUBLISHED TEXT IS ALWAYS SHOWN, decoded or not, and so is the
         // remark - "core hours, REF NOTAM for possible adjustments" is the part
         // a pilot most needs to read.

@@ -150,6 +150,55 @@ export function atsOpenAt(h, ms) {
   return { open: periods.some((p) => t >= p[0] && t <= p[1]), why: '', window, season };
 }
 
+/** The author's margin either side of an ETA (v17.8): "a small warning label
+ *  if an aerodrome is closed +-30min of my ETA". */
+export const ATS_ETA_MARGIN_MIN = 30;
+
+/**
+ * ATS IS OPEN AT THE ETA, BUT NOT ALL THE WAY ROUND IT (v17.8). A landing at
+ * 2115Z on a 2130Z closure is legal as planned and gone with a quarter of an
+ * hour's headwind; one planned for 0710Z on a 0700Z opening is gone the other
+ * way. This finds the nearest closed minute on each side within the margin.
+ *
+ * Every minute is asked of atsOpenAt itself - the schedule has minute
+ * resolution, so 2 x 30 look-ups are exact, and the season, the UTC day and
+ * the inclusive closing edge are decided by the one reader rather than by a
+ * second copy of its rules here.
+ *
+ * Null when there is nothing to add:
+ *   - ATS is not decided OPEN at the ETA itself. CLOSED at the ETA is the red
+ *     banner's finding already; undecidable is said on the card already.
+ *   - the whole margin is open.
+ * A side that runs into an UNDECIDABLE minute stops there and says nothing
+ * about the rest of that side: no guess in either direction.
+ *
+ * @param {AtsHours} h
+ * @param {number} ms the ETA
+ * @param {number} [margin] minutes either side, default ATS_ETA_MARGIN_MIN
+ * @returns {{closesMs: number|null, closesInMin: number|null, opensMs: number|null, openedMinBefore: number|null}|null}
+ *   closesMs: the last open minute after the ETA; opensMs: the first open
+ *   minute before it (both only where the margin crosses that edge)
+ */
+export function atsMarginAt(h, ms, margin = ATS_ETA_MARGIN_MIN) {
+  if (!Number.isFinite(ms) || atsOpenAt(h, ms).open !== true) return null;
+  const step = 60000;
+  /** @param {number} dir +1 after the ETA, -1 before it @returns {number|null} */
+  const edge = (dir) => {
+    for (let k = 1; k <= margin; k++) {
+      const r = atsOpenAt(h, ms + dir * k * step);
+      if (r.open === false) return ms + dir * (k - 1) * step;
+      if (r.open === null) return null;
+    }
+    return null;
+  };
+  const closesMs = edge(1), opensMs = edge(-1);
+  if (closesMs === null && opensMs === null) return null;
+  return {
+    closesMs, closesInMin: closesMs === null ? null : Math.round((closesMs - ms) / step),
+    opensMs, openedMinBefore: opensMs === null ? null : Math.round((ms - opensMs) / step)
+  };
+}
+
 /** A remark that says public holidays are not covered by the published hours. @param {unknown} rmk */
 export function holidaysExcluded(rmk) {
   return /\b(public )?hol(iday)?s?\b.*\bexcl/i.test(String(rmk || '')) || /\bEXC\s+hol/i.test(String(rmk || ''));

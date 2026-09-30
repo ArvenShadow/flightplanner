@@ -346,6 +346,9 @@ three cheap disciplines applied every time the page is touched:
   refused when not decodable; only a decoded CLOSED take-off/landing is a
   banner finding; the day is the UTC day. **NOTAMs are REFUSED** (ippc.no:
   session DWR, no CORS). → §{ATS OPENING HOURS BUILT, NOTAMs REFUSED (v17.0, roadmap item 20)}
+  A LANDING open at its ETA but closed within ±30 min of it gets an amber
+  card line and header chip, never the banner (`atsMarginAt`).
+  → §{A LANDING WITHIN 30 MIN OF ATS CLOSING GETS AN AMBER LABEL (v17.8)}
 - **A fly-by is not a movement** (`flyby: true` or a reporting point); a CTR
   outside ATS hours is class G RMZ (ENR 1.4). → §{A FLY-BY IS NOT A MOVEMENT, AND A CLOSED CTR IS CLASS G RMZ (v17.1)}
 
