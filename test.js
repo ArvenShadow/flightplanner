@@ -3077,7 +3077,8 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                             M.rwyd.runwayFiguresHtml({ kind: 'landing', desig: '28', widthM: 45, surface: 'ASPH', availableM: 2443 })],
     'opshours.js': () => [M.hours.parseAtsHours('MON - FRI: 0700 - 1500 (0600 - 1400), SAT - SUN: NIL'),
                           M.hours.atsOpenAt(M.hours.parseAtsHours('H24'), Date.UTC(2026, 8, 27, 12)),
-                          M.hours.norwaySeason(Date.UTC(2026, 0, 1)), M.hours.holidaysExcluded('Public HOL excluded')],
+                          M.hours.norwaySeason(Date.UTC(2026, 0, 1)), M.hours.holidaysExcluded('Public HOL excluded'),
+                          M.hours.atsMarginAt(M.hours.parseAtsHours('MON - SUN: 0700 - 1500 (0600 - 1400)'), Date.UTC(2026, 10, 2, 14, 40)) || 'none'],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -13838,6 +13839,89 @@ T('a take-off outside the published ATS hours reaches the banner; one inside the
     assert(ev('atsHoursChecks.every(c => c.ms === null && c.res === null)') && !ev('runIntegrityCheck()').some((p) => /ATS hours/.test(p)),
       'without an ETD something was checked');
     assert(/Set an ETD/.test(card.textContent), 'the card does not ask for an ETD');
+  } finally {
+    doc.getElementById('def-date').value = dateWas;
+    doc.getElementById('def-etd').value = etdWas;
+    ev(SEED);
+  }
+});
+
+T('an ETA inside ATS hours but within 30 min of an edge is found, to the minute (v17.8)', () => {
+  // The author: "Make a small warning label if an aerodrome is closed +-30min
+  // of my ETA". Monday 2 Nov 2026 is WINTER time, so the outside figures apply.
+  const H = require('./src/lib/opshours.js');
+  assert(H.ATS_ETA_MARGIN_MIN === 30, 'the margin is the author\'s 30 min, not ' + H.ATS_ETA_MARGIN_MIN);
+  const h = H.parseAtsHours('MON - SUN: 0700 - 1500 (0600 - 1400)');
+  const at = (hh, mm) => Date.UTC(2026, 10, 2, hh, mm);
+  const m = (hh, mm) => H.atsMarginAt(h, at(hh, mm));
+  const close = m(14, 40);
+  assert(close && close.closesInMin === 20 && close.closesMs === at(15, 0) && close.opensMs === null,
+    'a 1440Z ETA on a 1500Z closure: ' + JSON.stringify(close));
+  const open = m(7, 10);
+  assert(open && open.openedMinBefore === 10 && open.opensMs === at(7, 0) && open.closesMs === null,
+    'a 0710Z ETA on a 0700Z opening: ' + JSON.stringify(open));
+  assert(m(12, 0) === null, 'a midday ETA was warned about');
+  // THE EDGE IS INCLUSIVE (atsOpenAt's rule): 1430 + 30 = 1500 is still open, 1431 + 30 is not
+  assert(m(14, 30) === null, 'an ETA exactly 30 min before closing was warned about');
+  assert(m(14, 31) && m(14, 31).closesInMin === 29, 'an ETA 29 min before closing was missed');
+  assert(m(15, 0) && m(15, 0).closesInMin === 0, 'an ETA on the closing minute itself was missed');
+  // CLOSED AT THE ETA is the banner's finding already, and not this label's
+  assert(m(15, 10) === null && m(6, 50) === null, 'a closed ETA got the margin label as well as the banner');
+  // both edges at once: a short opening
+  const shortOpen = H.atsMarginAt(H.parseAtsHours('MON - SUN: 1000 - 1030 (0900 - 0930)'), at(10, 15));
+  assert(shortOpen && shortOpen.openedMinBefore === 15 && shortOpen.closesInMin === 15, 'a 30 min opening: ' + JSON.stringify(shortOpen));
+  // nothing decided -> nothing said, in either direction
+  for (const raw of ['H24', 'O/R', 'No ATS provided', 'WEEK 33 - 18, MON: 0700 - 1900'])
+    assert(H.atsMarginAt(H.parseAtsHours(raw), at(14, 40)) === null, raw + ' got a margin warning');
+  assert(H.atsMarginAt(h, NaN) === null, 'no time still gave a warning');
+  // the SUMMER figures in summer: Monday 28 Sep 2026, open 0600-1400Z
+  const summer = H.atsMarginAt(h, Date.UTC(2026, 8, 28, 13, 45));
+  assert(summer && summer.closesInMin === 15, 'the summer hours were not the ones used: ' + JSON.stringify(summer));
+});
+
+T('a landing near its closing time gets the amber label and the header chip; the banner stays quiet', () => {
+  const dateWas = doc.getElementById('def-date').value, etdWas = doc.getElementById('def-etd').value;
+  try {
+    ev(SEED_STOP);
+    // Sunday 27 Sep 2026, summer: ENDU ATS SUN 0750-2130 UTC. The suite pins
+    // TZ=UTC, so local clock time is UTC and the ETD can be worked backwards.
+    doc.getElementById('def-date').value = '2026-09-27';
+    doc.getElementById('def-etd').value = '12:00';
+    w.renderAllFlightTables();
+    const arrIdx = ev('atsHoursChecks.findIndex(c => c.kind === "landing" && c.icao === "ENDU")');
+    assert(arrIdx >= 0, 'the fixture has no ENDU landing');
+    const etd0 = ev('planEtdMs()');
+    const offMin = Math.round((ev(`atsHoursChecks[${arrIdx}].ms`) - etd0) / 60000);
+    assert(ev('atsHoursChecks.every(c => !c.margin)'), 'a midday flight got a margin warning');
+    assert(!doc.querySelector('.ats-margin-chip'), 'a chip with nothing to warn about');
+    // Land at 2112Z: open, and 18 min before the 2130Z closure.
+    const etdMin = 21 * 60 + 12 - offMin, p2 = (n) => String(n).padStart(2, '0');
+    doc.getElementById('def-etd').value = p2(Math.floor(etdMin / 60)) + ':' + p2(etdMin % 60);
+    w.renderAllFlightTables();
+    const c = ev(`atsHoursChecks[${arrIdx}]`);
+    assert(c.res.open === true && c.margin && c.margin.closesInMin === 18, 'the 2112Z landing: ' + JSON.stringify({ res: c.res, margin: c.margin }));
+    // a take-off is not warned about, as asked (the ETA, not the ETD)
+    assert(ev('atsHoursChecks.filter(c => c.margin).every(c => c.kind === "landing")'), 'a take-off got the ETA label');
+    const card = doc.getElementById('hours-body');
+    const lbl = card.querySelector('.hours-margin');
+    assert(lbl && /ENDU ATS closes 2130 local \(2130Z\), 18 min after your ETA - inside your ±30 min margin/.test(lbl.textContent),
+      'the card label: ' + (lbl && lbl.textContent));
+    assert(!card.querySelector('tr.hours-closed'), 'an open landing was painted closed');
+    const chip = doc.querySelector(`[data-ats-chip="${c.fIdx}"] .ats-margin-chip`);
+    assert(chip && /ENDU ATS closes 18 min after ETA/.test(chip.textContent), 'no header chip on the sector: ' + (chip && chip.textContent));
+    assert(doc.querySelectorAll('.ats-margin-chip').length === 1, 'the chip landed on more than its own sector');
+    // AMBER, NOT RED: the landing is legal as planned, so nothing on the banner
+    assert(!ev('runIntegrityCheck()').some((p) => /ENDU/.test(p) && /ATS/.test(p)), 'a margin warning reached the red banner');
+    const css = fs.readFileSync('src/styles.css', 'utf8');
+    assert(/\.ats-margin-chip\s*\{[^}]*var\(--wx-outdated\)/.test(css) && !/\.ats-margin-chip\s*\{[^}]*--mb-bad/.test(css),
+      'the chip is not the amber "check this" colour');
+    // after the closure it is the banner's finding, and the label goes
+    const lateMin = 21 * 60 + 40 - offMin;
+    doc.getElementById('def-etd').value = p2(Math.floor(lateMin / 60)) + ':' + p2(lateMin % 60);
+    w.renderAllFlightTables();
+    assert(ev(`atsHoursChecks[${arrIdx}].res.open`) === false && !ev(`atsHoursChecks[${arrIdx}].margin`), 'a closed landing kept the margin label');
+    assert(ev('runIntegrityCheck()').some((p) => /ENDU landing .* OUTSIDE/.test(p)), 'the closed landing left the banner');
+    assert(!doc.querySelector('.ats-margin-chip'), 'the chip stayed once the landing was simply closed');
   } finally {
     doc.getElementById('def-date').value = dateWas;
     doc.getElementById('def-etd').value = etdWas;

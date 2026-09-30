@@ -10,6 +10,43 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## A LANDING WITHIN 30 MIN OF ATS CLOSING GETS AN AMBER LABEL (v17.8)
+
+The author: *"Make a small warning label if an aerodrome is closed +-30min of
+my ETA."* (Asked right after a username-and-PIN login was discussed and
+dropped: on a static host a PIN can be brute-forced offline and nothing can log
+or revoke a login, so the honest options were Cloudflare Access or a server of
+our own. The author: *"scratch the idea."* Nothing was built.)
+
+- **`atsMarginAt(h, ms)`** in `src/lib/opshours.js` (pure): for an ETA at which
+  ATS is decided OPEN, the nearest closed minute on each side within
+  `ATS_ETA_MARGIN_MIN` (30, the author's figure). Each of the 2 x 30 minutes is
+  asked of `atsOpenAt` itself - the schedule has minute resolution, so that is
+  exact, and the season, the UTC day and the INCLUSIVE closing edge come from
+  the one reader rather than a second copy of its rules. So an ETA 30 min before
+  a 1500Z closure is not warned about (1500 is still open), 29 min is.
+- **NOTHING IS SAID THAT IS NOT DECIDED.** Closed AT the ETA is already the red
+  banner's finding (v17.0), so it does not get this label as well. H24, "no
+  ATS", on request and undecoded text give nothing, and a side that runs into
+  an undecidable minute stops there.
+- **LANDINGS ONLY, as asked** - the ETA is the estimate that drifts; the ETD is
+  the pilot's to set. Every landing counts: the destination and every touch &
+  go or full stop. Take-offs are one line to add if the author wants them.
+- **AMBER, NEVER THE BANNER.** The landing is legal as planned. It shows as a
+  line under that landing's row on the ATS hours card ("ENDU ATS closes 2330
+  local (2130Z), 18 min after your ETA - inside your ±30 min margin") and as a
+  chip in the sector's header ("ENDU ATS closes 18 min after ETA"). The chip
+  holders are drawn with the headers and filled once the checks exist, because
+  a flight's times do not exist until its tables have been worked. The colour
+  is the weather card's "outdated" amber, so one colour means "check this" on
+  the plan pane.
+- Tested to the minute (1440Z on a 1500Z closure = 20 min; 0710Z on a 0700Z
+  opening = 10 min; the 30/29 min edge; both edges of a 30-min opening; summer
+  vs winter figures), and on the page: the label and the chip appear for a
+  2112Z landing on ENDU's 2130Z Sunday closure, stay off the banner, and give
+  way to the banner's finding once the landing is after the closure. Seen in
+  Chromium under Europe/Oslo.
+
 ## FIVE REQUESTS FROM THE AUTHOR, ONE VERSION (v17.6)
 
 Asked together: *"I want the flight defaults tab changed..."*, *"the Airport
