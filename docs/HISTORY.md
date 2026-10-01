@@ -10,6 +10,131 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## A ROUNDED PAPER, A LANDING ALTITUDE KEPT, AND THE CORNERS REBUILT (v17.9)
+
+One feature and two bugs from the author, in one message.
+
+### THE PRINTED OFP ROUNDS FOR COPYING, AND NEVER DOWN (v17.9)
+
+*"In the printed OFP, i want the intermediate distances and fuel consumption
+rounded to the nearest whole number for easy copying and reading. If a leg uses
+less than 1 gal of fuel, it shall show 1 regardless if its 0.4 or 0.7 ... Round
+it in a way that makes sure that the rounded fuel used NEVER becomes less than
+ACTUAL fuel used. Distances should also be rounded to nearest whole, never 0,
+but lowest may be 0.5NM ... the rounding is only for show ... Accumulated fuel
+and distance will just use the rounded intermediate values."*
+
+- **`paperRoundSectors`** (`src/lib/ofpform.js`, pure) runs on a COPY of
+  `ofpPrintModel` when the print is built. Nothing else moves: the screen, Mass
+  & Balance and the fuel tracker keep the exact figures.
+- **FUEL IS ROUNDED UP FROM THE UNROUNDED BURN.** The rows now carry
+  `legBurnRaw` (and `distRaw`) beside the tenth the screen shows, because
+  rounding the TENTH up is not safe: 2.04 shows as 2.0, and up from that is 2 -
+  less than the leg burns. `paperFuel` = the next whole unit at or above the
+  actual, floor 1, so the margin is under one unit a leg. A 5 000-value sweep in
+  the suite asserts both halves on every value.
+- **DISTANCE** (`paperDist`): nearest whole, floor 0.5 - a 0.3 NM leg prints 0.5.
+- **THE ACC COLUMNS AND THE TOTAL LINE ADD UP WHAT IS PRINTED** (ACC still counts
+  the flight, the Total line the sector - v16.85). A touch & go's ground burn,
+  which has no row (`prefixBurnRaw`), is rounded up the same way and counted, so
+  no fuel the plan counts is missing from the paper's sums.
+- **EST FUEL REMAINING FALLS BY THE SAME SURPLUS**, so on one sheet start - acc
+  = remaining, and the paper never shows more fuel left than the plan. The
+  surplus restarts at a refuel, where the tanks hold a stated figure again.
+- `verify:ofp`'s "widest ACC Dist" check matched `NNN.N` and found only a
+  remaining-fuel figure once the column went whole; it now reads the ACC Dist
+  column BY POSITION (a bare pattern would have matched the PL altitudes - it
+  briefly reported "8600").
+
+### A TOUCH & GO WITH CIRCUITS KEEPS ITS LANDING ALTITUDE (v17.9)
+
+*"if I have planned to do touch n go with pattern, the altitude at the arrival
+is also set to the cruise altitude and not the landing altitude. Its only when a
+single touch&go is selected that the destination altitude remains the landing
+elevation."*
+
+`levelFromIndices` (v16.73) excluded "the last waypoint" as the destination. A
+touch & go with circuits is logged as the aerodrome THEN a PATTERN entry, so the
+last waypoint was the circuit and the aerodrome before it was levelled like any
+other fix. `destinationIndex` (legs.js) is the last waypoint that is not a
+circuit, and any waypoint carrying a `stop` is never levelled from upstream -
+it is a landing at its field elevation wherever it is. The dialog's hint ("ENTC
+keeps its own") names the real destination too.
+
+### THE CORNERS FOLLOW THE DRAG, AND A DROP THAT CANNOT BE FLOWN CHANGES NOTHING (v17.9)
+
+*"We should work on the TOC, TOD logic. I want it fixed to be seamless and
+smooth ... Dragging a TOD further back should create a BOD automatically AND
+also simultaneously calculated. Same with dragging a TOC, i want the BOC to
+immediately follow the TOC around so it doesnt respawn whenever i place the TOC
+somewhere or BOC somewhere. A TOC and TOD cannot cross paths, that just drops
+whichever moved back to its previous position with an alert that the action
+cannot be performed. And same warning if a climb leg and descent leg would
+intersect, notifying the highest altitude the climb leg can reach before needing
+to descend (this assumes 500fpm but the needed fpm descend will also be shown
+and can be selected as target descent rate for that specific leg). I want the
+symbols to have a little more area the mouse can grab."*
+
+**THIS SUPERSEDES PART OF v16.75.** "It fits, or the leg goes back to the corner
+the POH puts there" was the "respawn" the author describes: a refused drop
+cleared the leg's target, so the corner jumped to the natural place rather than
+staying where the pilot had it.
+
+- **ONE DECISION, TWO CALLERS.** `profileDropDecision` turns a drop position
+  into a candidate plan and classifies it: `ok`, `clamp` (a LIMIT - a TOC
+  earlier than the POH can climb stops at the earliest it reaches, v16.75's rule
+  kept), `cross` (the candidate makes a descent short because a climb blocks it -
+  exactly a TOC and a TOD crossing), or `refused`. The drag runs it every frame
+  (`cheap`: one flight's schedule, no integrity pass, no conflict search) and
+  draws every OTHER corner of the flight where the drop will put it, plus a
+  readout; the drop runs it once more in full. So what is drawn during the drag
+  is what the drop does - asserted to the 1e-9 degree for the BOC.
+- **`cross` AND `refused` CHANGE NOTHING.** The plan is left exactly as it was
+  before the drag - not the natural corner. A test gives the leg a REAL previous
+  target first, because with none "as it was" and "natural" are the same plan
+  and a regression would pass; mutating the drop to clear the target fails it by
+  name.
+- **THE CONFLICT DIALOG** gives the climb's ceiling and the rate, both from
+  `descentConflict` (legs.js, pure), each FOUND ON TRIAL SCHEDULES: the ceiling
+  is the highest 100 ft at which the descent still fits at the leg's rate
+  (asserted: it fits, +100 ft does not), and the rate is the lowest 50 fpm step
+  that fits as planned (asserted: it fits, -50 does not). "Use N fpm for the
+  descent to X" commits the drop AND the rate as one undo step, after re-checking
+  the plan did not change while the dialog was open (rule 7).
+- **A DESCENT RATE PER LEG**: `rodFpm` on the fix the descent ends at
+  (`descentRateFpm`, 100-3000 fpm, else the profile's - 500 by default, the
+  author's "assumes 500fpm"). ONLY THE RATE CHANGES: the descent is still flown
+  at the profile's descent TAS and fuel flow, so it is shorter in time and
+  distance and nothing is invented about the aircraft. It is set by the dialog's
+  button or in the leg panel ("Descend to it at", blank = the profile's), passes
+  the sanitiser only inside the range, and travels in route files.
+- **THE SAME WARNING FOR AN ALTITUDE**: an edit that newly makes a climb run
+  into a descent opens the same dialog after the edit - the altitude is kept as
+  typed (v16.77) and the rate is offered. The leg panel shows the figures with a
+  "Use N fpm" button whenever its leg's descent is blocked by a climb.
+- **A TOD WHOSE DESCENT ENDS ON A LATER LEG** moves that descent's end by the
+  distance the top moved (the descent keeps its length) - the engine now records
+  `descTargetIdx`, so the target lands on the right fix rather than on the TOD
+  leg's own.
+- **A 32 px INVISIBLE GRAB DISC** under each tick and ring (`.prof-hit`).
+  Measured in Chromium: a mouse-down 12 px off a 3 px tick drags it.
+- `sweep:drag` answers the new dialog ("keep it as it was") and adds an
+  invariant: while it is up, the plan is byte-identical to before the drop.
+  **280 real mouse drags over 11 plans, 19 refused as conflicts, 0 problems.**
+  `verify:leg` passes unchanged.
+
+### SETTLED AFTER v17.9: THE 3 000 FPM CAP STANDS, AND TAKE-OFFS ARE PARKED
+
+Two questions put to the author after v17.9, answered:
+
+- **THE DESCENT RATE CAP (`DESCENT_FPM_MAX = 3000`) STAYS** - *"3000fpm cap is
+  fine."* The conflict dialog may offer a steep rate on a short final leg (1 650
+  fpm was measured on a 3.6 NM one); it is offered, never applied unasked.
+- **THE ±30 MIN ATS LABEL STAYS LANDINGS-ONLY FOR NOW** - *"there is no need to
+  add the takeoff warning yet, but it could be saved as an optional item
+  later."* Building it is one line in `buildAtsHoursChecks` (`kind === 'landing'`
+  -> also `'takeoff'`), plus a test; it is on the open list in CLAUDE.md.
+
 ## A LANDING WITHIN 30 MIN OF ATS CLOSING GETS AN AMBER LABEL (v17.8)
 
 The author: *"Make a small warning label if an aerodrome is closed +-30min of

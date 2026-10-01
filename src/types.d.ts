@@ -44,6 +44,9 @@ interface Waypoint {
   isPattern?: boolean;
   /** Number of circuits flown at a pattern stop. */
   laps?: number;
+  /** A landing here: 'touch-and-go' or 'full-stop' (v16.54). The next sector
+   *  departs from this field. */
+  stop?: string | null;
   /** Flown over, not landed on or departed from (v17.1): no runway or ATS
    *  opening-hours check applies here. Never set together with a stop. */
   flyby?: boolean;
@@ -71,6 +74,9 @@ interface Waypoint {
   altAtNM?: number | null;
   /** LEGACY, read but never written - see `legTarget` in legs.js. */
   bocNM?: number | null;
+  /** The descent rate (ft/min) for the descent that ENDS at this fix (v17.9).
+   *  Absent: the profile's rate. See `descentRateFpm` in legs.js. */
+  rodFpm?: number | null;
   /**
    * BOTTOM OF DESCENT pin for the leg ENDING here: be level this many NM
    * before the leg's END fix and run in level. Also pure geometry - the
@@ -192,6 +198,16 @@ interface ScheduleLeg {
   /** True when a descent that began earlier is still running through here. */
   descContinues: boolean;
   descTargetName: string | null;
+  /** Index of the waypoint the descent through here is for (v17.9). */
+  descTargetIdx?: number | null;
+  /** On the leg a descent ENDS on: the rate it was planned at, ft/min. */
+  descRodFpm?: number | null;
+  /** On a SHORT descent's leg: the leg whose climb stopped it backing up. */
+  descBlockedByLeg?: number | null;
+  /** On a SHORT descent's leg: the level it starts down from. */
+  descHighAlt?: number | null;
+  /** On a SHORT descent's leg: the minutes of descending there was room for. */
+  descAvailMin?: number | null;
   descTargetAlt: number | null;
   /** Minutes by which an impossible descent falls short. 0 when achievable. */
   shortfallMin: number;

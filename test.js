@@ -6271,15 +6271,102 @@ T('the page builds the form from the SAME pass that renders the screen', () => {
   const sheet = readOfp(ofps[0]);
   assert(sheet.filled[0][0] === 'ENDU' && sheet.filled[0][12] === 'FINNSNES',
     'the first line is not the first leg: ' + JSON.stringify([sheet.filled[0][0], sheet.filled[0][12]]));
-  // THE REAL CROSS-CHECK: the figure the screen shows as the sector total and
-  // the figure the form prints on its Total line are the same number, because
-  // they come from the same pass.
-  const screenBurn = txtOf('f-tot-accburn-0').trim();
-  assert(screenBurn && sheet.total.includes(screenBurn),
-    'the form total does not match the screen total: screen ' + JSON.stringify(screenBurn) +
-    ' vs printed ' + JSON.stringify(sheet.total.filter(Boolean)));
+  // THE REAL CROSS-CHECK: the form's Total burn comes from the same pass as
+  // the screen's - and since v17.9 it is that pass's figures ROUNDED UP per
+  // leg (the author: "rounded fuel used NEVER becomes less than ACTUAL"). So
+  // it is the sum of the per-leg ceilings of the very rows the screen drew,
+  // never below the screen total, and under one unit a leg above it.
+  const screenBurn = Number(txtOf('f-tot-accburn-0').trim());
+  const raws = ev('ofpPrintModel[0].rows.map(r => r.legBurnRaw)');
+  const want = raws.reduce((t, v) => t + Math.max(1, Math.ceil(v - 1e-9)), 0);
+  assert(sheet.total.includes(String(want)),
+    'the form total is not the sum of the rounded legs: want ' + want + ' vs printed ' + JSON.stringify(sheet.total.filter(Boolean)));
+  assert(want >= screenBurn && want - screenBurn < raws.length,
+    'the rounded total ' + want + ' is below, or too far above, the screen total ' + screenBurn);
   assert(sheet.box.dep === 'ENDU' && sheet.box.dest, 'the DEP/DEST boxes are not filled: ' + JSON.stringify(sheet.box));
 });
+T('the paper rounds fuel UP to a whole unit (floor 1) and distance to the nearest whole (floor 0.5) (v17.9)', () => {
+  const F = moduleExports.ofp;
+  // the author's examples: under 1 gal shows 1, "regardless if its 0.4 or 0.7"
+  for (const [raw, want] of [[0.4, 1], [0.7, 1], [0.05, 1], [1, 1], [1.01, 2], [2.04, 3], [6.8, 7], [3.0000000004, 3], [0, 0]])
+    assert(F.paperFuel(raw) === want, 'paperFuel(' + raw + ') = ' + F.paperFuel(raw) + ', want ' + want);
+  assert(isNaN(F.paperFuel(NaN)), 'an unknown burn was given a number');
+  for (const [raw, want] of [[0.3, 0.5], [0.49, 0.5], [0.01, 0.5], [0.5, 1], [0.6, 1], [12.4, 12], [12.5, 13], [38.4, 38]])
+    assert(F.paperDist(raw) === want, 'paperDist(' + raw + ') = ' + F.paperDist(raw) + ', want ' + want);
+  // THE RULE, ON EVERY VALUE: never below the actual, and under one unit above
+  // it (or the floor of 1 for a leg under 1) - "not obnoxiously higher".
+  let worst = 0;
+  for (let i = 0; i < 5000; i++) {
+    const raw = Math.random() * 30;
+    const p = F.paperFuel(raw);
+    assert(p >= raw - 1e-9, 'rounded ' + p + ' is below the actual ' + raw);
+    assert(raw < 1 ? p === 1 : p - raw < 1, 'rounded ' + p + ' is a whole unit or more above ' + raw);
+    worst = Math.max(worst, p - raw);
+  }
+  assert(worst < 1, 'the worst surplus was ' + worst);
+});
+
+T('the paper\'s Acc columns and Total line add up the ROUNDED legs; EST remaining agrees with them, and a refuel restarts it', () => {
+  const F = moduleExports.ofp;
+  const leg = (dist, burnRaw, rem) => ({ from: 'A', to: 'B', dist: Number(dist.toFixed(1)), distRaw: dist,
+    legBurn: Number(burnRaw.toFixed(1)), legBurnRaw: burnRaw, rem });
+  // sector 1 from 62.3 gal (64 less 1.7 taxi inside leg 1); sector 2 after a T&G
+  // (0.8 gal ground burn, no row) with no refuel; sector 3 after a full stop refuelled to 40.
+  const s1 = { meta: { fuelRem: '55.0', totals: { dist: '30.4', time: '', burn: '7.3', rem: '55.0' } }, rows: [
+    leg(12.3, 4.26, 58.0), leg(0.3, 0.12, 57.9), leg(17.8, 2.92, 55.0)] };
+  s1.rows.push({ pattern: true, from: 'B', to: 'PATTERN', laps: 3, legBurn: 3.0, legBurnRaw: 3.0, rem: 52.0 });
+  const s2 = { prefixBurn: 0.8, prefixBurnRaw: 0.84, meta: { fuelRem: '50.1', totals: { dist: '20.0', time: '', burn: '3.6', rem: '50.1' } },
+    rows: [leg(20.04, 2.81, 48.4)] };
+  const s3 = { refuelled: true, meta: { fuelRem: '37.6', totals: { dist: '15.0', time: '', burn: '2.4', rem: '37.6' } },
+    rows: [leg(15.0, 2.41, 37.6)] };
+  const [p1, p2, p3] = F.paperRoundSectors([s1, s2, s3]);
+  const col = (p, k) => p.rows.map((r) => r[k]);
+  assert(JSON.stringify(col(p1, 'legBurn')) === '[5,1,3,3]', 'the rounded burns: ' + JSON.stringify(col(p1, 'legBurn')));
+  assert(JSON.stringify(col(p1, 'dist').slice(0, 3)) === '[12,0.5,18]', 'the rounded distances: ' + JSON.stringify(col(p1, 'dist')));
+  // ACC is the running sum of what is printed, across sectors
+  assert(JSON.stringify(col(p1, 'accBurn')) === '[5,6,9,12]', 'the acc burn: ' + JSON.stringify(col(p1, 'accBurn')));
+  assert(JSON.stringify(col(p1, 'accDist')) === '[12,12.5,30.5,"30.5"]', 'the acc dist: ' + JSON.stringify(col(p1, 'accDist')));
+  // the T&G ground burn (0.84 -> 1) has no row but is in the sum
+  assert(p2.rows[0].accBurn === 12 + 1 + 3 && p2.rows[0].accDist === 30.5 + 20, 'sector 2 does not continue the sums: ' + JSON.stringify(p2.rows[0]));
+  // the Total line is the sector's own rounded sum
+  assert(p1.meta.totals.burn === '12' && p1.meta.totals.dist === '30.5', 'sector 1 totals: ' + JSON.stringify(p1.meta.totals));
+  assert(p2.meta.totals.burn === '4' && p2.meta.totals.dist === '20', 'sector 2 totals (with the ground burn): ' + JSON.stringify(p2.meta.totals));
+  // EST REMAINING falls with the rounded column: 62.3 - 12 = 50.3 at the end of sector 1
+  assert(p1.rows[3].rem === 50.3 && p1.meta.fuelRem === '50.3', 'EST rem disagrees with the Acc column: ' + p1.rows[3].rem);
+  assert(p2.rows[0].rem === round1(62.3 - 16), 'EST rem after the T&G: ' + p2.rows[0].rem);
+  // never MORE fuel left on paper than the plan says
+  for (const [a, b] of [[s1, p1], [s2, p2], [s3, p3]]) a.rows.forEach((r, i) => assert(b.rows[i].rem <= r.rem + 1e-9, 'paper rem above the plan'));
+  // after a refuel the tanks hold a stated figure: no surplus carried over
+  assert(p3.rows[0].rem === round1(37.6 - (3 - 2.4)), 'the surplus crossed the refuel: ' + p3.rows[0].rem);
+  // ...while the ACC columns keep counting the flight
+  assert(p3.rows[0].accBurn === 16 + 3, 'acc burn restarted at the refuel');
+  // the input is not touched: the screen keeps the exact figures
+  assert(s1.rows[0].legBurn === 4.3 && s1.meta.totals.burn === '7.3', 'paperRoundSectors changed the plan it was given');
+  function round1(v) { return Math.round(v * 10) / 10; }
+});
+
+T('the printed OFP carries the rounded figures; the screen keeps its tenths', () => {
+  ev(SEED);
+  const ofp = readOfp(printDoc().sheets.find((s) => s.kind === 'ofp'));
+  const C = moduleExports.ofp.OFP_COLUMNS.map((c) => c.key);
+  const at = (row, key) => ofp.filled[row][C.indexOf(key)];
+  const rows = ev('ofpPrintModel[0].rows');
+  let acc = 0;
+  rows.forEach((r, i) => {
+    const burn = at(i, 'legBurn'), dist = at(i, 'dist');
+    assert(/^\d+$/.test(burn) && Number(burn) >= r.legBurnRaw && Number(burn) - r.legBurnRaw < 1,
+      'line ' + (i + 1) + ' prints fuel ' + JSON.stringify(burn) + ' for an actual ' + r.legBurnRaw);
+    if (!r.pattern) {
+      assert(/^(\d+|0\.5)$/.test(dist) && Number(dist) === moduleExports.ofp.paperDist(r.distRaw),
+        'line ' + (i + 1) + ' prints distance ' + JSON.stringify(dist) + ' for ' + r.distRaw);
+      acc += Number(dist);
+      assert(Number(at(i, 'accDist')) === acc, 'the Acc Dist column is not the sum of the printed legs');
+    }
+  });
+  // the on-screen table still shows the exact tenths
+  assert(/\d+\.\d/.test(txtOf('f-tot-burn-0')), 'the screen total lost its decimals: ' + txtOf('f-tot-burn-0'));
+});
+
 T('the printed form carries no personal data; the Reg box follows the tail', () => {
   // UPDATED DELIBERATELY AT v16.95, not left to fail. The v16.41 rule kept the
   // Reg box empty because the planner did not know which tail was flown - a
@@ -8681,6 +8768,45 @@ T('the propagation reaches every fix after the one you pointed at, with two excl
   assert(idx.every((v, i) => i === 0 || v > idx[i - 1]), 'the indices came back out of order');
 });
 
+T('a touch & go WITH circuits keeps its landing altitude, exactly as one without them does (v17.9)', () => {
+  // The author: "if I have planned to do touch n go with pattern, the altitude
+  // at the arrival is also set to the cruise altitude and not the landing
+  // altitude. Its only when a single touch&go is selected that the destination
+  // altitude remains the landing elevation." The circuits are a PATTERN entry
+  // AFTER the aerodrome, so the literal last waypoint was the circuit.
+  const L = moduleExports.legs;
+  const route = () => [
+    { name: 'ENDU', alt: 254 }, { name: 'MID1', alt: 2500 }, { name: 'MID2', alt: 2500 },
+    { name: 'ENTC', alt: 32, stop: 'touch-and-go' }, { name: 'PATTERN', alt: 1000, isPattern: true, laps: 3 }];
+  assert(L.destinationIndex(route()) === 3, 'the destination is the circuit, not the aerodrome: ' + L.destinationIndex(route()));
+  assert(JSON.stringify(L.levelFromIndices(route(), 1)) === '[1,2]',
+    'the T&G arrival or its circuit was levelled: ' + JSON.stringify(L.levelFromIndices(route(), 1)));
+  // the same without circuits, which already worked - still works
+  const plain = route().slice(0, 4);
+  assert(JSON.stringify(L.levelFromIndices(plain, 1)) === '[1,2]', 'the plain T&G case broke');
+  // several circuit entries, and pointing AT the arrival still sets it
+  const two = route().concat([{ name: 'PATTERN', alt: 1000, isPattern: true, laps: 2 }]);
+  assert(L.destinationIndex(two) === 3 && JSON.stringify(L.levelFromIndices(two, 3)) === '[3]', 'two circuit entries broke it');
+  // a stop is a landing wherever it is: never levelled from upstream
+  const midStop = [{ name: 'A' }, { name: 'B' }, { name: 'C', stop: 'full-stop' }, { name: 'D' }, { name: 'E' }];
+  assert(JSON.stringify(L.levelFromIndices(midStop, 1)) === '[1,3]', 'a stop was levelled: ' + JSON.stringify(L.levelFromIndices(midStop, 1)));
+  assert(L.destinationIndex([]) === -1 && L.destinationIndex(null) === -1, 'an empty plan has a destination');
+});
+
+T('on the page: setting 4500 ft from MID1 leaves the T&G arrival at field elevation and the circuit at its own', () => {
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.20, lng: 18.30, name: 'MID1', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.40, lng: 18.60, name: 'MID2', alt: 3000, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12, stop: 'touch-and-go' },
+        { lat: 69.679, lng: 18.911, name: 'PATTERN', alt: 1000, oat: 10, wdir: 0, wspd: 0, var: -12, isPattern: true, laps: 3 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  ev(`applyWaypointEdit(0, 1, { alt: '4500' })`);
+  const alts = ev('flights[0].waypoints.map(w => w.alt)');
+  assert(JSON.stringify(alts) === '[254,4500,4500,32,1000]', 'the altitudes after the edit: ' + JSON.stringify(alts));
+  ev(SEED);
+});
+
 TA('right-clicking a waypoint sets the altitude from there onward', async () => {
   ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
         { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
@@ -8911,7 +9037,12 @@ TA('a BOC dragged into the tail the descent needs is refused, not committed', as
     'a BOC drag left the plan unusable: ' + JSON.stringify(ev(`collectIntegrityProblems(flights, {})`)));
   assert(ev('flights[0].waypoints[1].altAtNM') == null,
     'the contradicting target was kept: ' + ev('flights[0].waypoints[1].altAtNM'));
-  assert(toastText().trim() !== '', 'the pilot was told nothing at all');
+  // v17.9: the climb running into the descent is a CROSSING, and the pilot is
+  // told so in a dialog that gives the ceiling and the rate that would fit.
+  assert(/would cross/i.test(dialogText()) && /Nothing was moved/.test(dialogText()),
+    'the pilot was told nothing at all: ' + dialogText().slice(0, 200));
+  answerDialog('Keep it as it was');
+  await tick();
   ev(SEED);
 });
 
@@ -14442,6 +14573,207 @@ TA('the M&B distance card draws the runway for every worked check, from the same
       'the v16.96 usage bar is back beside the drawing');
     assert(/Required\s*\d+ m/.test(host.textContent), 'the figure line went - the drawing is not the authority');
   } finally { ev('lastWeather = null;'); ev(SEED); }
+});
+
+console.log('\n=== 62a000q. The climb and descent corners, drag overhaul (v17.9) ===');
+const SHORT_FINAL = (aAlt) => `flights = [{ id: 1, title: 'S', depElev: 254, waypoints: [
+    { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.60, lng: 18.50, name: 'A', alt: ${aAlt}, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+  activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+  document.getElementById('app-toasts').innerHTML = '';`;
+
+T('a descent can have its own rate; only its time and length change, and the sanitiser keeps it in range', () => {
+  const L = moduleExports.legs, E = moduleExports.exch;
+  const fl = () => ({ id: 1, title: 'S', depElev: 254, waypoints: [
+    { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.60, lng: 18.50, name: 'A', alt: 8000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }] });
+  const base = L.computeFlightSchedule(fl());
+  const f2 = fl(); f2.waypoints[2].rodFpm = 1000;
+  const fast = L.computeFlightSchedule(f2);
+  const prof = L.descentRateFpm({});
+  assert(base[1].descRodFpm === prof && fast[1].descRodFpm === 1000, 'the rate used: ' + base[1].descRodFpm + ' / ' + fast[1].descRodFpm);
+  const mins = (S) => S.reduce((t, x) => t + (x ? x.descMin : 0), 0);
+  const ratio = mins(fast) / mins(base);
+  assert(Math.abs(ratio - prof / 1000) < 0.02, 'twice the rate should take half the time: ratio ' + ratio.toFixed(3));
+  assert(fast[0].tocAlongNM === base[0].tocAlongNM && fast[0].climbMin === base[0].climbMin, 'a descent rate moved the climb');
+  for (const bad of [50, 5000, 'x', null, -500]) assert(L.descentRateFpm({ rodFpm: bad }) === prof, 'rate ' + bad + ' was used');
+  const clean = E.sanitiseFlights([{ id: 1, title: 'S', depElev: 254, waypoints: [
+    Object.assign(fl().waypoints[0], { rodFpm: 900 }), Object.assign(fl().waypoints[1], { rodFpm: 99999 }), fl().waypoints[2]] }]);
+  assert(clean[0].waypoints[0].rodFpm === 900 && clean[0].waypoints[1].rodFpm === undefined, 'the sanitiser: ' +
+    JSON.stringify(clean[0].waypoints.map((w) => w.rodFpm)));
+});
+
+T('descentConflict gives the ceiling and the rate, each one verified on the real schedule', () => {
+  const L = moduleExports.legs;
+  const fl = { id: 1, title: 'S', depElev: 254, waypoints: [
+    { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.60, lng: 18.50, name: 'A', alt: 8000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }] };
+  assert(L.descentConflict(fl, 1) === null, 'a plan that fits reported a conflict');
+  // delay the climb two thirds along the long leg: the descent can no longer back up past the TOC
+  fl.waypoints[1].altAtNM = Math.round(L.computeFlightSchedule(fl)[0].distNM * 0.68 * 10) / 10;
+  const c = L.descentConflict(fl, 1);
+  assert(c && c.targetIdx === 2 && c.climbLegIdx === 0 && c.rodFpm === L.descentRateFpm({}), 'the conflict: ' + JSON.stringify(c));
+  const short = (f) => L.computeFlightSchedule(f)[1].shortfallMin > 0.001;
+  const withAlt = (a) => { const f = JSON.parse(JSON.stringify(fl)); f.waypoints[1].alt = a; return f; };
+  const withRate = (r) => { const f = JSON.parse(JSON.stringify(fl)); f.waypoints[2].rodFpm = r; return f; };
+  // THE CEILING IS A CEILING: it fits, and the next hundred feet does not
+  assert(c.maxAltFt % 100 === 0 && !short(withAlt(c.maxAltFt)) && short(withAlt(c.maxAltFt + 100)),
+    'the ceiling ' + c.maxAltFt + ' is not the highest 100 ft that fits');
+  // THE RATE IS THE LOWEST 50 fpm STEP THAT FITS
+  assert(c.needFpm % 50 === 0 && !short(withRate(c.needFpm)) && short(withRate(c.needFpm - 50)),
+    'the rate ' + c.needFpm + ' is not the lowest 50 fpm step that fits');
+  // nothing about the plan is changed by asking
+  assert(fl.waypoints[1].alt === 8000 && fl.waypoints[2].rodFpm === undefined, 'descentConflict changed the plan');
+});
+
+TA('a TOC dragged into the descent goes back where it was, and the offered rate makes the drop stand', async () => {
+  ev(SHORT_FINAL(8000));
+  // A REAL PREVIOUS POSITION, so "back where it was" cannot pass by accident:
+  // the v16.75 fallback cleared the target, which would land on the natural
+  // corner instead of this one.
+  ev(`applyProfileDrop({ fIdx: 0, legIdx: 0, kind: 'TOC', dropNM: 30, SL: computeFlightSchedule(flights[0])[0] })`);
+  assert(ev('flights[0].waypoints[1].altAtNM') === 30, 'the first, valid drop did not stand: ' + ev('flights[0].waypoints[1].altAtNM'));
+  const before = ev('JSON.stringify(flights[0])');
+  const legLen = ev(`computeFlightSchedule(flights[0])[0].distNM`);
+  const drop = Math.round(legLen * 0.68 * 10) / 10;
+  const dec = ev(`(() => { const d = profileDropDecision(0, 0, 'TOC', computeFlightSchedule(flights[0])[0], ${drop}, false);
+    return { status: d.status, c: d.conflict }; })()`);
+  assert(dec.status === 'cross' && dec.c && dec.c.needFpm > 0, 'the decision: ' + JSON.stringify(dec));
+  ev(`applyProfileDrop({ fIdx: 0, legIdx: 0, kind: 'TOC', dropNM: ${drop}, SL: computeFlightSchedule(flights[0])[0] })`);
+  await tick();
+  // NOTHING MOVED - not to the natural corner, not anywhere
+  assert(ev('JSON.stringify(flights[0])') === before, 'the plan changed on a refused drop');
+  const txt = dialogText();
+  assert(/would cross/.test(txt) && /Nothing was moved/.test(txt), 'the alert: ' + txt.slice(0, 160));
+  assert(txt.includes('at most ' + dec.c.maxAltFt + ' ft') && txt.includes(dec.c.needFpm + ' fpm'),
+    'the alert does not give the ceiling and the rate: ' + txt);
+  answerDialog('Use ' + dec.c.needFpm + ' fpm');
+  await tick();
+  assert(ev('flights[0].waypoints[1].altAtNM') === drop && ev('flights[0].waypoints[2].rodFpm') === dec.c.needFpm,
+    'the rate did not make the drop stand: ' + ev('JSON.stringify(flights[0].waypoints.map(w => [w.altAtNM, w.rodFpm]))'));
+  assert(ev('collectIntegrityProblems(flights, {}).length') === 0, 'the accepted offer left the plan unusable');
+  assert(ev('flights[0].waypoints.map(w => w.alt).join()') === '254,8000,2000', 'an altitude the pilot typed was changed');
+  // ONE undo takes both back
+  // ONE undo takes both back (the restore goes through the sanitiser, so the
+  // fields are compared rather than the serialisation)
+  ev('undoLast(true)');
+  assert(ev('flights[0].waypoints[1].altAtNM') === 30 && ev('flights[0].waypoints[2].rodFpm') == null &&
+    ev('flights[0].waypoints.map(w => w.alt).join()') === '254,8000,2000',
+    'one undo did not take the drop and the rate back together: ' + ev('JSON.stringify(flights[0].waypoints.map(w => [w.altAtNM, w.rodFpm]))'));
+  ev(SEED);
+});
+
+T('while a TOC is dragged the BOC is drawn where the drop will put it, and the drop puts it exactly there', () => {
+  ev(`flights = [{ id: 1, title: 'C', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 6500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const S = ev('computeFlightSchedule(flights[0])[0]');
+  assert(S.tocAlongNM > 5 && S.climbStartNM === 0, 'the probe: ' + JSON.stringify([S.tocAlongNM, S.climbStartNM]));
+  const drop = Math.round((S.tocAlongNM + 8) * 10) / 10;
+  ev(`profDrag = { fIdx: 0, legIdx: 0, kind: 'TOC', SL: computeFlightSchedule(flights[0])[0], dropNM: ${drop},
+        marker: profileMarkers.find(m => m._prof && m._prof.kind === 'TOC'), ghosts: [], raf: null };
+      previewProfileDrag();`);
+  const ghosts = ev('profDrag.ghosts.map(g => ({ ll: g._latlng, html: g._opts.icon.html }))');
+  const boc = ghosts.find((g) => /prof-ring toc/.test(g.html));
+  const readout = ghosts.find((g) => /prof-readout/.test(g.html));
+  assert(boc, 'no BOC is drawn while the TOC is dragged: ' + ghosts.map((g) => g.html.slice(0, 40)).join(' | '));
+  assert(readout && /TOC \d+\.\d NM after ENDU/.test(readout.html) && !/prof-readout-bad/.test(readout.html),
+    'the readout: ' + (readout && readout.html));
+  ev(`const d = profDrag; clearProfileDragPreview(d); profDrag = null; applyProfileDrop(d);`);
+  const marks = ev(`computeLegMarkers(flights[0].waypoints[0], flights[0].waypoints[1], computeFlightSchedule(flights[0])[0])`);
+  const real = marks.find((m) => m.kind === 'BOC');
+  assert(real && Math.abs(real.lat - boc.ll[0]) < 1e-9 && Math.abs(real.lng - boc.ll[1]) < 1e-9,
+    'the BOC "respawned" somewhere other than where it was drawn during the drag');
+  assert(Math.abs(marks.find((m) => m.kind === 'TOC').distNM - drop) < 0.06, 'the TOC is not where it was dropped');
+  ev(SEED);
+});
+
+T('dragging a TOD earlier draws the BOD at once, and keeps the descent its own length', () => {
+  ev(`flights = [{ id: 1, title: 'D', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 68.80, lng: 18.50, name: 'A', alt: 4500, oat: 0, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.50, lng: 18.50, name: 'ENTC', alt: 32, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const S = ev('computeFlightSchedule(flights[0])[1]');
+  const todPos = S.distNM - S.todBeforeNM;
+  assert(S.todStartsHere && todPos > 10 && !(S.bodTailNM > 0.05), 'the probe: ' + JSON.stringify([todPos, S.bodTailNM]));
+  const drop = Math.round((todPos - 6) * 10) / 10;
+  ev(`profDrag = { fIdx: 0, legIdx: 1, kind: 'TOD', SL: computeFlightSchedule(flights[0])[1], dropNM: ${drop},
+        marker: profileMarkers.find(m => m._prof && m._prof.kind === 'TOD'), ghosts: [], raf: null };
+      previewProfileDrag();`);
+  const bod = ev('profDrag.ghosts.map(g => g._opts.icon.html)').find((h) => /prof-ring tod/.test(h));
+  assert(bod, 'no BOD appeared while the TOD was dragged earlier');
+  ev(`const d = profDrag; clearProfileDragPreview(d); profDrag = null; applyProfileDrop(d);`);
+  const A = ev('computeFlightSchedule(flights[0])[1]');
+  assert(Math.abs((A.distNM - A.todBeforeNM) - drop) < 0.15, 'the TOD is not where it was dropped: ' + (A.distNM - A.todBeforeNM));
+  assert(A.bodTailNM > 5.5 && Math.abs(A.descDistNM - S.descDistNM) < 0.15, 'the descent was not moved whole: ' +
+    JSON.stringify([A.bodTailNM, A.descDistNM, S.descDistNM]));
+  ev(SEED);
+});
+
+T('a position that cannot be flown turns the readout red and draws no corners from it', () => {
+  ev(SHORT_FINAL(8000));
+  const legLen = ev(`computeFlightSchedule(flights[0])[0].distNM`);
+  ev(`profDrag = { fIdx: 0, legIdx: 0, kind: 'TOC', SL: computeFlightSchedule(flights[0])[0], dropNM: ${Math.round(legLen * 0.68 * 10) / 10},
+        marker: profileMarkers.find(m => m._prof && m._prof.kind === 'TOC'), ghosts: [], raf: null };
+      previewProfileDrag();`);
+  const html = ev('profDrag.ghosts.map(g => g._opts.icon.html)');
+  assert(html.length === 1 && /prof-readout-bad/.test(html[0]) && /run into the descent/.test(html[0]),
+    'the invalid preview: ' + JSON.stringify(html));
+  ev(`clearProfileDragPreview(profDrag); profDrag = null;`);
+  ev(SEED);
+});
+
+T('every draggable corner has a 32 px grab area under its thin glyph', () => {
+  ev(SEED);
+  const html = ev('profileMarkers.filter(m => m._prof).map(m => m._opts.icon.html)');
+  assert(html.length && html.every((h) => /class="prof-hit prof-drag"/.test(h)), 'a corner has no grab area');
+  const css = fs.readFileSync('src/styles.css', 'utf8');
+  const m = css.match(/\.prof-hit\s*\{[^}]*width:\s*(\d+)px[^}]*height:\s*(\d+)px/);
+  assert(m && Number(m[1]) >= 28 && Number(m[2]) >= 28, 'the grab area is not at least 28 px: ' + (m && m.slice(1)));
+});
+
+TA('an altitude that makes the climb run into the descent says so, keeps the altitude, and offers the rate', async () => {
+  ev(`flights = [{ id: 1, title: 'E', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 68.85, lng: 18.50, name: 'A', alt: 3500, oat: 0, wdir: 0, wspd: 0, var: -11 },
+        { lat: 68.91, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  assert(ev('computeFlightSchedule(flights[0])[1].shortfallMin') <= 0.001, 'the probe is already short at 3500 ft');
+  ev(`applyWaypointEdit(0, 1, { alt: '5000' })`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].alt') === 5000, 'the typed altitude was not kept');
+  const txt = dialogText();
+  assert(/do not both fit/.test(txt) && /at most \d+ ft/.test(txt) && /needs \d+ fpm/.test(txt), 'the notice: ' + txt.slice(0, 200));
+  const need = Number(txt.match(/needs (\d+) fpm/)[1]);
+  answerDialog('Use ' + need + ' fpm');
+  await tick();
+  assert(ev('flights[0].waypoints[2].rodFpm') === need && ev('computeFlightSchedule(flights[0])[1].shortfallMin') <= 0.001,
+    'the offered rate did not make the plan fit');
+  ev(SEED);
+});
+
+TA('the leg panel sets, previews and clears a leg\'s descent rate, and refuses one out of range', async () => {
+  ev(SHORT_FINAL(8000));
+  ev(`openLegPanel(0, { lat: 69.63, lng: 18.50 })`);
+  assert(ev('legPanel && legPanel.legEnd') === 2, 'the panel opened on the wrong leg');
+  const rod = doc.getElementById('leg-rod');
+  assert(rod && rod.value === '' && rod.placeholder === String(ev('aircraftProfile.rod')), 'the field: ' + (rod && [rod.value, rod.placeholder]));
+  rod.value = '50'; ev('updateLegPreview()');
+  assert(/must be 100 to 3000/.test(doc.getElementById('leg-preview').textContent), 'an out-of-range rate was not flagged');
+  ev('saveLegSettings()');
+  assert(ev('flights[0].waypoints[2].rodFpm') === undefined && ev('legPanel') !== null, 'an out-of-range rate was saved, or the panel closed');
+  rod.value = '800'; ev('saveLegSettings()');
+  assert(ev('flights[0].waypoints[2].rodFpm') === 800, 'the rate was not saved');
+  ev(`openLegPanel(0, { lat: 69.63, lng: 18.50 })`);
+  assert(doc.getElementById('leg-rod').value === '800', 'the panel does not show the saved rate');
+  doc.getElementById('leg-rod').value = ''; ev('saveLegSettings()');
+  assert(ev('flights[0].waypoints[2].rodFpm') === null, 'clearing the box did not go back to the profile rate');
+  ev(SEED);
 });
 
 runAsyncTests().then(() => {

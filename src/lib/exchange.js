@@ -219,6 +219,10 @@ function sanitiseWaypoint(/** @type {any} */ w) {
   // file carries - but nothing writes them any more.
   const at = num(w.altAtNM);
   if (Number.isFinite(at) && at > 0) out.altAtNM = at;
+  // A LEG'S OWN DESCENT RATE (v17.9): kept only inside the range the engine
+  // accepts, so a file cannot carry a rate the schedule would silently ignore.
+  const rod = num(w.rodFpm);
+  if (Number.isFinite(rod) && rod >= 100 && rod <= 3000) out.rodFpm = Math.round(rod);
   for (const k of ['bocNM', 'bodNM', 'tocNM']) {
     const v = num(w[k]);
     if (Number.isFinite(v) && v > 0) out[k] = v;

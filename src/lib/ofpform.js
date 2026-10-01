@@ -85,6 +85,109 @@ const whole = (/** @type {number} */ v) => (isFinite(v) ? String(Math.round(v)) 
 const signed = (/** @type {number} */ v) =>
   (isFinite(v) ? (v > 0 ? '+' : '') + Math.round(v) : BLANK);
 
+// =========================================================================
+// THE PAPER ROUNDS, THE PLAN DOES NOT (v17.9, the author).
+//
+// "In the printed OFP, i want the intermediate distances and fuel consumption
+// rounded to the nearest whole number for easy copying and reading. If a leg
+// uses less than 1 gal of fuel, it shall show 1 ... Round it in a way that
+// makes sure that the rounded fuel used NEVER becomes less than ACTUAL fuel
+// used. Distances should also be rounded to nearest whole, never 0, but lowest
+// may be 0.5NM. The fuel consumption should be based on actual distance flown,
+// and the rounding is only for show ... Accumulated fuel and distance will just
+// use the rounded intermediate values."
+//
+//  - FUEL IS ROUNDED UP, from the UNROUNDED burn (`legBurnRaw`), never from the
+//    tenth the screen shows: 2.04 shows as 2.0, and rounding THAT up gives 2,
+//    which is less than what the leg burns. Up to the next whole unit, so the
+//    margin is under one unit a leg - never "obnoxiously higher". Floor 1.
+//  - DISTANCE IS ROUNDED TO THE NEAREST WHOLE, with 0.5 as the floor: a 0.3 NM
+//    leg reads 0.5, never 0.
+//  - THE ACC COLUMNS AND THE TOTAL LINE ADD UP THE ROUNDED FIGURES, so a pilot
+//    checking the sheet down the column gets the printed total.
+//  - EST FUEL REMAINING FALLS BY THE SAME SURPLUS, so it agrees with the Acc
+//    column on the same sheet (start - acc), and it is the conservative way
+//    round. The surplus restarts at a refuel, where the tanks hold a stated
+//    figure again.
+//  - NOTHING ELSE MOVES: the screen, Mass & Balance and the fuel tracker keep
+//    the exact figures. This runs on a COPY when the print is built.
+// =========================================================================
+
+/** Fuel for the paper: the next whole unit at or above the actual burn, never
+ *  below 1. The 1e-9 only absorbs floating-point noise (3.0000000004 is 3).
+ *  @param {number} raw @returns {number} */
+export function paperFuel(raw) {
+  const v = Number(raw);
+  if (!isFinite(v)) return NaN;
+  if (v <= 0) return 0;
+  return Math.max(1, Math.ceil(v - 1e-9));
+}
+
+/** A leg distance for the paper: nearest whole, never 0 - 0.5 is the floor.
+ *  @param {number} raw @returns {number} */
+export function paperDist(raw) {
+  const v = Number(raw);
+  if (!isFinite(v)) return NaN;
+  const r = Math.round(v);
+  return r < 1 ? 0.5 : r;
+}
+
+/** "12", or "12.5" where a 0.5 leg is in the sum. @param {number} v */
+const distText = (v) => (isFinite(v) ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : BLANK);
+const round1 = (/** @type {number} */ v) => Math.round(v * 10) / 10;
+
+/**
+ * Every sector of the flight, rounded for the paper. The ACC columns count the
+ * WHOLE flight (v16.85), so the running sums carry across sectors; the Total
+ * line counts the SECTOR.
+ *
+ * A sector may open with burn that has no row of its own - a touch & go's
+ * ground time, `prefixBurnRaw` - and that is rounded up the same way and added
+ * to the sums, so no fuel the plan counts is missing from the paper's.
+ *
+ * @param {any[]} sectors ofpPrintModel entries: {meta, rows, refuelled, prefixBurn, prefixBurnRaw}
+ * @returns {any[]} copies, with rounded rows and totals
+ */
+export function paperRoundSectors(sectors) {
+  let accDist = 0, accBurn = 0, remSurplus = 0;
+  return (Array.isArray(sectors) ? sectors : []).map((s) => {
+    if (!s) return s;
+    if (s.refuelled) remSurplus = 0;
+    const preRaw = Number(s.prefixBurnRaw) || 0;
+    const pre = preRaw > 0 ? paperFuel(preRaw) : 0;
+    accBurn += pre;
+    remSurplus += pre - (Number(s.prefixBurn) || 0);
+    let secDist = 0, secBurn = pre;
+    let lastRem = null;
+    const rows = (s.rows || []).map((/** @type {any} */ r) => {
+      const raw = isFinite(r.legBurnRaw) ? r.legBurnRaw : Number(r.legBurn);
+      const burn = paperFuel(raw);
+      accBurn += burn; secBurn += burn;
+      remSurplus += burn - (Number(r.legBurn) || 0);
+      const rem = isFinite(Number(r.rem)) ? round1(Number(r.rem) - remSurplus) : r.rem;
+      lastRem = rem;
+      const out = Object.assign({}, r, { paper: true, legBurn: burn, accBurn, rem });
+      if (r.pattern) {
+        out.accDist = accDist ? distText(accDist) : '';
+      } else {
+        const d = paperDist(isFinite(r.distRaw) ? r.distRaw : Number(r.dist));
+        accDist += d; secDist += d;
+        out.dist = d; out.accDist = accDist;
+      }
+      return out;
+    });
+    const meta = Object.assign({}, s.meta);
+    const remAfter = lastRem !== null ? lastRem : round1(Number(meta.fuelRem) - remSurplus);
+    meta.fuelRem = isFinite(remAfter) ? remAfter.toFixed(1) : meta.fuelRem;
+    if (meta.totals) {
+      meta.totals = Object.assign({}, meta.totals, {
+        dist: distText(round1(secDist)), burn: String(secBurn), rem: meta.fuelRem
+      });
+    }
+    return Object.assign({}, s, { meta, rows });
+  });
+}
+
 /**
  * One flight's rows as the form's cells: strings, ready to print.
  *
@@ -110,8 +213,8 @@ export function ofpRowCells(row) {
       // `accDist` arrives pre-formatted (or '' where the sector has no distance
       // yet) and is passed on as a string: one('') would print 0.0, because
       // Number('') is 0 and isFinite says yes.
-      accTime: row.accTime, accBurn: one(row.accBurn),
-      ff: one(row.ff), legBurn: one(row.legBurn),
+      accTime: row.accTime, accBurn: row.paper ? whole(row.accBurn) : one(row.accBurn),
+      ff: one(row.ff), legBurn: row.paper ? whole(row.legBurn) : one(row.legBurn),
       pl: whole(row.pl),
       time: row.time, eto: row.eto || BLANK, estRem: one(row.rem),
       tas: BLANK, tt: BLANK, var: BLANK, mt: BLANK, wv: BLANK, wca: BLANK,
@@ -130,17 +233,19 @@ export function ofpRowCells(row) {
     mt: row.mt === null || row.mt === undefined ? '---' : pad3(row.mt),
     wv,
     wca: signed(row.wca),
-    accDist: one(row.accDist),
+    // ROUNDED ROWS (paperRoundSectors) print as whole numbers; a distance can
+    // be 0.5 at the floor, and a sum that includes one keeps its half.
+    accDist: row.paper ? distText(row.accDist) : one(row.accDist),
     accTime: row.accTime,
     ff: one(row.ff),
-    legBurn: one(row.legBurn),
-    accBurn: one(row.accBurn),
+    legBurn: row.paper ? whole(row.legBurn) : one(row.legBurn),
+    accBurn: row.paper ? whole(row.accBurn) : one(row.accBurn),
     to: row.to,
     msa: BLANK,
     pl: whole(row.alt),
     mh: row.mh === null || row.mh === undefined ? '---' : pad3(row.mh),
     gs: whole(row.gs),
-    dist: one(row.dist),
+    dist: row.paper ? distText(row.dist) : one(row.dist),
     time: row.time,
     eto: row.eto || BLANK,
     ato: BLANK,

@@ -248,11 +248,18 @@ three cheap disciplines applied every time the page is touched:
   changes an altitude the pilot typed. An unreachable target is REPORTED with
   the required rate; the climb stays the POH's. (Reverses v16.74's
   carry-back.) → §{THE ALTITUDE COLUMN IS THE PILOT'S, AND NOTHING REWRITES IT (v16.77)}
-- **A drag never commits a plan the app calls unusable**; it fits, or the
-  leg returns to the POH corner. → §{A DRAG NEVER COMMITS A PLAN THE APP CALLS UNUSABLE (v16.75)}
+- **A drag never commits a plan the app calls unusable**; it fits, stops at a
+  POH LIMIT (a TOC earlier than the climb allows), or NOTHING MOVES - a refused
+  drop no longer snaps to the natural corner (v17.9 supersedes v16.75's
+  fallback). One decision (`profileDropDecision`) drives the live preview and
+  the drop; a climb/descent crossing gives the ceiling and the rate
+  (`descentConflict`); a descent may have its own rate (`rodFpm`, profile's by
+  default, rate only). → §{THE CORNERS FOLLOW THE DRAG, AND A DROP THAT CANNOT BE FLOWN CHANGES NOTHING (v17.9)}
+  → §{A DRAG NEVER COMMITS A PLAN THE APP CALLS UNUSABLE (v16.75)}
 - **Dragging the marks**: a top is a tick, a bottom is a ring; marks forward
   a right-click to the leg panel and bubble a left click to the map.
-  "Set altitude from here" skips the destination and circuit stops.
+  "Set altitude from here" skips the destination (the last NON-circuit fix)
+  and circuit and stop fixes. → §{A TOUCH & GO WITH CIRCUITS KEEPS ITS LANDING ALTITUDE (v17.9)}
   → §{Dragging the corners, and setting an altitude for a phase (v16.73)}
   The waypoint dialog edits name and altitude together; Enter commits.
   → §{The waypoint box, and a TOC dragged past what the aircraft can climb (v16.74)}
@@ -384,6 +391,10 @@ three cheap disciplines applied every time the page is touched:
   → §{THE PRINTOUT IS THE SCHOOL'S FORM, AND THE TAB LOOKS LIKE ITS PAGE 2 (v16.97)}
   The blank-on-purpose decisions (MSA, actuals, Freq, crew) and the
   sector-per-sheet rule: → §{The company OFP form as the print output (v16.41, roadmap item 6 - the OFP half)}
+- **The paper rounds, the plan does not** (`paperRoundSectors`): leg fuel UP to
+  a whole unit from the unrounded burn (floor 1), leg distance to the nearest
+  whole (floor 0.5); ACC, Total and EST remaining follow the printed figures.
+  → §{THE PRINTED OFP ROUNDS FOR COPYING, AND NEVER DOWN (v17.9)}
 - **ACC columns count the flight; the Total line counts the sector.**
   → §{THE ACC COLUMNS COUNT THE MISSION; THE TOTAL LINE COUNTS THE SECTOR (v16.85)}
 - **Mass & Balance**: the workbook and the form agree on every constant; the
@@ -503,6 +514,10 @@ download (quota eviction). → §{Not planned}
 - 19. Split `test.js` for navigability (closes no quality gap). → §{19. SPLIT `test.js` (5 451 lines, 352 tests, 75 sections)}
 - 21. Modern looks: three offered (Slate, Chart, Float); choosing is the
   author's call; Tier 3 not attempted. → §{THREE MODERN LOOKS (v17.2, roadmap item 21)}
+- OPTIONAL: the ±30 min ATS amber label for TAKE-OFFS too (v17.8 does
+  landings only; the author: "no need ... yet, but it could be saved as an
+  optional item later"). The 3 000 fpm descent cap is settled.
+  → §{SETTLED AFTER v17.9: THE 3 000 FPM CAP STANDS, AND TAKE-OFFS ARE PARKED}
 - AD 1.1's PPR rule (non-commercial VFR outside hours) - whether the closed
   finding should mention it is the author's call. → §{AN OPEN QUESTION FOR THE AUTHOR, FOUND ON THE WAY AND NOT ACTED ON}
 
