@@ -6271,15 +6271,102 @@ T('the page builds the form from the SAME pass that renders the screen', () => {
   const sheet = readOfp(ofps[0]);
   assert(sheet.filled[0][0] === 'ENDU' && sheet.filled[0][12] === 'FINNSNES',
     'the first line is not the first leg: ' + JSON.stringify([sheet.filled[0][0], sheet.filled[0][12]]));
-  // THE REAL CROSS-CHECK: the figure the screen shows as the sector total and
-  // the figure the form prints on its Total line are the same number, because
-  // they come from the same pass.
-  const screenBurn = txtOf('f-tot-accburn-0').trim();
-  assert(screenBurn && sheet.total.includes(screenBurn),
-    'the form total does not match the screen total: screen ' + JSON.stringify(screenBurn) +
-    ' vs printed ' + JSON.stringify(sheet.total.filter(Boolean)));
+  // THE REAL CROSS-CHECK: the form's Total burn comes from the same pass as
+  // the screen's - and since v17.9 it is that pass's figures ROUNDED UP per
+  // leg (the author: "rounded fuel used NEVER becomes less than ACTUAL"). So
+  // it is the sum of the per-leg ceilings of the very rows the screen drew,
+  // never below the screen total, and under one unit a leg above it.
+  const screenBurn = Number(txtOf('f-tot-accburn-0').trim());
+  const raws = ev('ofpPrintModel[0].rows.map(r => r.legBurnRaw)');
+  const want = raws.reduce((t, v) => t + Math.max(1, Math.ceil(v - 1e-9)), 0);
+  assert(sheet.total.includes(String(want)),
+    'the form total is not the sum of the rounded legs: want ' + want + ' vs printed ' + JSON.stringify(sheet.total.filter(Boolean)));
+  assert(want >= screenBurn && want - screenBurn < raws.length,
+    'the rounded total ' + want + ' is below, or too far above, the screen total ' + screenBurn);
   assert(sheet.box.dep === 'ENDU' && sheet.box.dest, 'the DEP/DEST boxes are not filled: ' + JSON.stringify(sheet.box));
 });
+T('the paper rounds fuel UP to a whole unit (floor 1) and distance to the nearest whole (floor 0.5) (v17.9)', () => {
+  const F = moduleExports.ofp;
+  // the author's examples: under 1 gal shows 1, "regardless if its 0.4 or 0.7"
+  for (const [raw, want] of [[0.4, 1], [0.7, 1], [0.05, 1], [1, 1], [1.01, 2], [2.04, 3], [6.8, 7], [3.0000000004, 3], [0, 0]])
+    assert(F.paperFuel(raw) === want, 'paperFuel(' + raw + ') = ' + F.paperFuel(raw) + ', want ' + want);
+  assert(isNaN(F.paperFuel(NaN)), 'an unknown burn was given a number');
+  for (const [raw, want] of [[0.3, 0.5], [0.49, 0.5], [0.01, 0.5], [0.5, 1], [0.6, 1], [12.4, 12], [12.5, 13], [38.4, 38]])
+    assert(F.paperDist(raw) === want, 'paperDist(' + raw + ') = ' + F.paperDist(raw) + ', want ' + want);
+  // THE RULE, ON EVERY VALUE: never below the actual, and under one unit above
+  // it (or the floor of 1 for a leg under 1) - "not obnoxiously higher".
+  let worst = 0;
+  for (let i = 0; i < 5000; i++) {
+    const raw = Math.random() * 30;
+    const p = F.paperFuel(raw);
+    assert(p >= raw - 1e-9, 'rounded ' + p + ' is below the actual ' + raw);
+    assert(raw < 1 ? p === 1 : p - raw < 1, 'rounded ' + p + ' is a whole unit or more above ' + raw);
+    worst = Math.max(worst, p - raw);
+  }
+  assert(worst < 1, 'the worst surplus was ' + worst);
+});
+
+T('the paper\'s Acc columns and Total line add up the ROUNDED legs; EST remaining agrees with them, and a refuel restarts it', () => {
+  const F = moduleExports.ofp;
+  const leg = (dist, burnRaw, rem) => ({ from: 'A', to: 'B', dist: Number(dist.toFixed(1)), distRaw: dist,
+    legBurn: Number(burnRaw.toFixed(1)), legBurnRaw: burnRaw, rem });
+  // sector 1 from 62.3 gal (64 less 1.7 taxi inside leg 1); sector 2 after a T&G
+  // (0.8 gal ground burn, no row) with no refuel; sector 3 after a full stop refuelled to 40.
+  const s1 = { meta: { fuelRem: '55.0', totals: { dist: '30.4', time: '', burn: '7.3', rem: '55.0' } }, rows: [
+    leg(12.3, 4.26, 58.0), leg(0.3, 0.12, 57.9), leg(17.8, 2.92, 55.0)] };
+  s1.rows.push({ pattern: true, from: 'B', to: 'PATTERN', laps: 3, legBurn: 3.0, legBurnRaw: 3.0, rem: 52.0 });
+  const s2 = { prefixBurn: 0.8, prefixBurnRaw: 0.84, meta: { fuelRem: '50.1', totals: { dist: '20.0', time: '', burn: '3.6', rem: '50.1' } },
+    rows: [leg(20.04, 2.81, 48.4)] };
+  const s3 = { refuelled: true, meta: { fuelRem: '37.6', totals: { dist: '15.0', time: '', burn: '2.4', rem: '37.6' } },
+    rows: [leg(15.0, 2.41, 37.6)] };
+  const [p1, p2, p3] = F.paperRoundSectors([s1, s2, s3]);
+  const col = (p, k) => p.rows.map((r) => r[k]);
+  assert(JSON.stringify(col(p1, 'legBurn')) === '[5,1,3,3]', 'the rounded burns: ' + JSON.stringify(col(p1, 'legBurn')));
+  assert(JSON.stringify(col(p1, 'dist').slice(0, 3)) === '[12,0.5,18]', 'the rounded distances: ' + JSON.stringify(col(p1, 'dist')));
+  // ACC is the running sum of what is printed, across sectors
+  assert(JSON.stringify(col(p1, 'accBurn')) === '[5,6,9,12]', 'the acc burn: ' + JSON.stringify(col(p1, 'accBurn')));
+  assert(JSON.stringify(col(p1, 'accDist')) === '[12,12.5,30.5,"30.5"]', 'the acc dist: ' + JSON.stringify(col(p1, 'accDist')));
+  // the T&G ground burn (0.84 -> 1) has no row but is in the sum
+  assert(p2.rows[0].accBurn === 12 + 1 + 3 && p2.rows[0].accDist === 30.5 + 20, 'sector 2 does not continue the sums: ' + JSON.stringify(p2.rows[0]));
+  // the Total line is the sector's own rounded sum
+  assert(p1.meta.totals.burn === '12' && p1.meta.totals.dist === '30.5', 'sector 1 totals: ' + JSON.stringify(p1.meta.totals));
+  assert(p2.meta.totals.burn === '4' && p2.meta.totals.dist === '20', 'sector 2 totals (with the ground burn): ' + JSON.stringify(p2.meta.totals));
+  // EST REMAINING falls with the rounded column: 62.3 - 12 = 50.3 at the end of sector 1
+  assert(p1.rows[3].rem === 50.3 && p1.meta.fuelRem === '50.3', 'EST rem disagrees with the Acc column: ' + p1.rows[3].rem);
+  assert(p2.rows[0].rem === round1(62.3 - 16), 'EST rem after the T&G: ' + p2.rows[0].rem);
+  // never MORE fuel left on paper than the plan says
+  for (const [a, b] of [[s1, p1], [s2, p2], [s3, p3]]) a.rows.forEach((r, i) => assert(b.rows[i].rem <= r.rem + 1e-9, 'paper rem above the plan'));
+  // after a refuel the tanks hold a stated figure: no surplus carried over
+  assert(p3.rows[0].rem === round1(37.6 - (3 - 2.4)), 'the surplus crossed the refuel: ' + p3.rows[0].rem);
+  // ...while the ACC columns keep counting the flight
+  assert(p3.rows[0].accBurn === 16 + 3, 'acc burn restarted at the refuel');
+  // the input is not touched: the screen keeps the exact figures
+  assert(s1.rows[0].legBurn === 4.3 && s1.meta.totals.burn === '7.3', 'paperRoundSectors changed the plan it was given');
+  function round1(v) { return Math.round(v * 10) / 10; }
+});
+
+T('the printed OFP carries the rounded figures; the screen keeps its tenths', () => {
+  ev(SEED);
+  const ofp = readOfp(printDoc().sheets.find((s) => s.kind === 'ofp'));
+  const C = moduleExports.ofp.OFP_COLUMNS.map((c) => c.key);
+  const at = (row, key) => ofp.filled[row][C.indexOf(key)];
+  const rows = ev('ofpPrintModel[0].rows');
+  let acc = 0;
+  rows.forEach((r, i) => {
+    const burn = at(i, 'legBurn'), dist = at(i, 'dist');
+    assert(/^\d+$/.test(burn) && Number(burn) >= r.legBurnRaw && Number(burn) - r.legBurnRaw < 1,
+      'line ' + (i + 1) + ' prints fuel ' + JSON.stringify(burn) + ' for an actual ' + r.legBurnRaw);
+    if (!r.pattern) {
+      assert(/^(\d+|0\.5)$/.test(dist) && Number(dist) === moduleExports.ofp.paperDist(r.distRaw),
+        'line ' + (i + 1) + ' prints distance ' + JSON.stringify(dist) + ' for ' + r.distRaw);
+      acc += Number(dist);
+      assert(Number(at(i, 'accDist')) === acc, 'the Acc Dist column is not the sum of the printed legs');
+    }
+  });
+  // the on-screen table still shows the exact tenths
+  assert(/\d+\.\d/.test(txtOf('f-tot-burn-0')), 'the screen total lost its decimals: ' + txtOf('f-tot-burn-0'));
+});
+
 T('the printed form carries no personal data; the Reg box follows the tail', () => {
   // UPDATED DELIBERATELY AT v16.95, not left to fail. The v16.41 rule kept the
   // Reg box empty because the planner did not know which tail was flown - a
