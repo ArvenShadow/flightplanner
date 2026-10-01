@@ -514,6 +514,10 @@ download (quota eviction). → §{Not planned}
 - 19. Split `test.js` for navigability (closes no quality gap). → §{19. SPLIT `test.js` (5 451 lines, 352 tests, 75 sections)}
 - 21. Modern looks: three offered (Slate, Chart, Float); choosing is the
   author's call; Tier 3 not attempted. → §{THREE MODERN LOOKS (v17.2, roadmap item 21)}
+- OPTIONAL: the ±30 min ATS amber label for TAKE-OFFS too (v17.8 does
+  landings only; the author: "no need ... yet, but it could be saved as an
+  optional item later"). The 3 000 fpm descent cap is settled.
+  → §{SETTLED AFTER v17.9: THE 3 000 FPM CAP STANDS, AND TAKE-OFFS ARE PARKED}
 - AD 1.1's PPR rule (non-commercial VFR outside hours) - whether the closed
   finding should mention it is the author's call. → §{AN OPEN QUESTION FOR THE AUTHOR, FOUND ON THE WAY AND NOT ACTED ON}
 

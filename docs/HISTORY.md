@@ -123,6 +123,18 @@ staying where the pilot had it.
   **280 real mouse drags over 11 plans, 19 refused as conflicts, 0 problems.**
   `verify:leg` passes unchanged.
 
+### SETTLED AFTER v17.9: THE 3 000 FPM CAP STANDS, AND TAKE-OFFS ARE PARKED
+
+Two questions put to the author after v17.9, answered:
+
+- **THE DESCENT RATE CAP (`DESCENT_FPM_MAX = 3000`) STAYS** - *"3000fpm cap is
+  fine."* The conflict dialog may offer a steep rate on a short final leg (1 650
+  fpm was measured on a 3.6 NM one); it is offered, never applied unasked.
+- **THE ±30 MIN ATS LABEL STAYS LANDINGS-ONLY FOR NOW** - *"there is no need to
+  add the takeoff warning yet, but it could be saved as an optional item
+  later."* Building it is one line in `buildAtsHoursChecks` (`kind === 'landing'`
+  -> also `'takeoff'`), plus a test; it is on the open list in CLAUDE.md.
+
 ## A LANDING WITHIN 30 MIN OF ATS CLOSING GETS AN AMBER LABEL (v17.8)
 
 The author: *"Make a small warning label if an aerodrome is closed +-30min of
