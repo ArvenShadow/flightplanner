@@ -196,7 +196,12 @@ const res = await page.evaluate(async (b64) => {
     stray.push({ page: i + 1, kind: sh.kind, outside, first });
   }
   const acc = Math.max(...model.sheets.filter((s) => s.kind === 'ofp')
-    .flatMap((s) => s.items).filter((it) => /^\d+\.\d$/.test(it.text)).map((it) => Number(it.text)));
+    .flatMap((s) => s.items)
+    // THE ACC DIST COLUMN ITSELF, by position (OFP_COLUMNS index 7, between
+    // OFP_COL_EDGES[7] and [8]). v17.9 prints the paper's distances as WHOLE
+    // numbers, so a pattern alone would now also match the PL altitudes.
+    .filter((it) => it.box && (it.box.x0 + it.box.x1) / 2 > OFP_COL_EDGES[7] && (it.box.x0 + it.box.x1) / 2 < OFP_COL_EDGES[8])
+    .filter((it) => /^\d+(\.\d)?$/.test(it.text)).map((it) => Number(it.text)));
   return { unsettled, blankDiff, stray, changed, pages: real.numPages, sheets: model.sheets.length, sizes,
            overflow: rebuilt.overflow, acc, band: model.band };
 }, fromButton.b64);

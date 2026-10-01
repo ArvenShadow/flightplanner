@@ -196,7 +196,24 @@ const drag = async (m, tx, ty) => {
 };
 
 const problems = [];
-let drags = 0;
+let drags = 0, conflicts = 0;
+/** Answer a conflict dialog "keep it as it was", after checking the plan is
+ *  exactly what it was before the drop (v17.9: a refused drop changes nothing). */
+const answerConflict = async (planBefore, where) => {
+  const conflict = await page.evaluate(() => {
+    const d = document.getElementById('app-dialog');
+    if (!d) return null;
+    return { title: ((d.querySelector('.dlg-title') || {}).textContent || '').trim(), plan: JSON.stringify(flights[0]) };
+  });
+  if (!conflict) return;
+  conflicts++;
+  if (conflict.plan !== planBefore) problems.push(`MOVED   ${where}: the plan changed although the drop was refused (${conflict.title})`);
+  await page.evaluate(() => {
+    const btns = [...document.querySelectorAll('#app-dialog .dlg-btn')];
+    (btns.find((b) => /Keep it as it was|Leave it/.test(b.textContent)) || btns[btns.length - 1]).click();
+  });
+  await page.waitForTimeout(80);
+};
 const seenBanner = new Map();
 
 const ONLY = process.env.PLAN || '';
@@ -234,10 +251,17 @@ for (const [name, wps] of Object.entries(PLANS)) {
         return [Math.round(r.x + c.x), Math.round(r.y + c.y)];
       }, [frac, m.leg]);
       if (!target) continue;
+      const planBefore = await page.evaluate(() => JSON.stringify(flights[0]));
       await drag(m, target[0], target[1]);
       drags++;
-      const a = await audit();
       const where = `${name} / drag ${m.k}#${mi} to ${frac}`;
+      // 8. A REFUSED DROP CHANGES NOTHING (v17.9). A climb running into the
+      //    descent now opens a dialog instead of moving the corner back to the
+      //    POH's natural place; the plan must be EXACTLY what it was before the
+      //    drag while it is up, and it is answered "keep it as it was" so the
+      //    sweep can go on (an open dialog covers the map).
+      await answerConflict(planBefore, where);
+      const a = await audit();
       if (a.banner && !base.banner) {
         problems.push(`BANNER  ${where}: ${a.banner}`);
         seenBanner.set(a.banner, (seenBanner.get(a.banner) || 0) + 1);
@@ -270,8 +294,10 @@ for (const [name, wps] of Object.entries(PLANS)) {
           const r = document.getElementById('map').getBoundingClientRect();
           return [Math.round(r.x + c.x), Math.round(r.y + c.y)];
         });
+        const planMid = await page.evaluate(() => JSON.stringify(flights[0]));
         await drag(same, far[0], far[1]);
         drags++;
+        await answerConflict(planMid, where + ' (returned)');
         const after = await page.evaluate(() => JSON.stringify(flights[0].waypoints.map((w) => w.alt)));
         if (after !== before) problems.push(`RATCHET ${where}: altitudes ${before} -> ${after}`);
         const a2 = await audit();
@@ -284,7 +310,7 @@ for (const [name, wps] of Object.entries(PLANS)) {
 }
 
 await b.close();
-console.log(`\n${drags} drags over ${Object.keys(PLANS).length} plans`);
+console.log(`\n${drags} drags over ${Object.keys(PLANS).length} plans, ${conflicts} refused as a climb/descent conflict`);
 if (errs.length) problems.unshift(...errs.map((e) => 'PAGEERR ' + e));
 const uniq = [...new Set(problems)];
 if (!uniq.length) { console.log('no problems found'); process.exit(0); }
