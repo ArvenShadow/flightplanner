@@ -8681,6 +8681,45 @@ T('the propagation reaches every fix after the one you pointed at, with two excl
   assert(idx.every((v, i) => i === 0 || v > idx[i - 1]), 'the indices came back out of order');
 });
 
+T('a touch & go WITH circuits keeps its landing altitude, exactly as one without them does (v17.9)', () => {
+  // The author: "if I have planned to do touch n go with pattern, the altitude
+  // at the arrival is also set to the cruise altitude and not the landing
+  // altitude. Its only when a single touch&go is selected that the destination
+  // altitude remains the landing elevation." The circuits are a PATTERN entry
+  // AFTER the aerodrome, so the literal last waypoint was the circuit.
+  const L = moduleExports.legs;
+  const route = () => [
+    { name: 'ENDU', alt: 254 }, { name: 'MID1', alt: 2500 }, { name: 'MID2', alt: 2500 },
+    { name: 'ENTC', alt: 32, stop: 'touch-and-go' }, { name: 'PATTERN', alt: 1000, isPattern: true, laps: 3 }];
+  assert(L.destinationIndex(route()) === 3, 'the destination is the circuit, not the aerodrome: ' + L.destinationIndex(route()));
+  assert(JSON.stringify(L.levelFromIndices(route(), 1)) === '[1,2]',
+    'the T&G arrival or its circuit was levelled: ' + JSON.stringify(L.levelFromIndices(route(), 1)));
+  // the same without circuits, which already worked - still works
+  const plain = route().slice(0, 4);
+  assert(JSON.stringify(L.levelFromIndices(plain, 1)) === '[1,2]', 'the plain T&G case broke');
+  // several circuit entries, and pointing AT the arrival still sets it
+  const two = route().concat([{ name: 'PATTERN', alt: 1000, isPattern: true, laps: 2 }]);
+  assert(L.destinationIndex(two) === 3 && JSON.stringify(L.levelFromIndices(two, 3)) === '[3]', 'two circuit entries broke it');
+  // a stop is a landing wherever it is: never levelled from upstream
+  const midStop = [{ name: 'A' }, { name: 'B' }, { name: 'C', stop: 'full-stop' }, { name: 'D' }, { name: 'E' }];
+  assert(JSON.stringify(L.levelFromIndices(midStop, 1)) === '[1,3]', 'a stop was levelled: ' + JSON.stringify(L.levelFromIndices(midStop, 1)));
+  assert(L.destinationIndex([]) === -1 && L.destinationIndex(null) === -1, 'an empty plan has a destination');
+});
+
+T('on the page: setting 4500 ft from MID1 leaves the T&G arrival at field elevation and the circuit at its own', () => {
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.20, lng: 18.30, name: 'MID1', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.40, lng: 18.60, name: 'MID2', alt: 3000, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12, stop: 'touch-and-go' },
+        { lat: 69.679, lng: 18.911, name: 'PATTERN', alt: 1000, oat: 10, wdir: 0, wspd: 0, var: -12, isPattern: true, laps: 3 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  ev(`applyWaypointEdit(0, 1, { alt: '4500' })`);
+  const alts = ev('flights[0].waypoints.map(w => w.alt)');
+  assert(JSON.stringify(alts) === '[254,4500,4500,32,1000]', 'the altitudes after the edit: ' + JSON.stringify(alts));
+  ev(SEED);
+});
+
 TA('right-clicking a waypoint sets the altitude from there onward', async () => {
   ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
         { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },

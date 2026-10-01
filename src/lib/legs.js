@@ -1074,6 +1074,15 @@ export function computeFlightSchedule(fl) {
  *   arrive. Pointing AT the last fix still sets it, because then the pilot said
  *   so explicitly.
  *
+ *   THE DESTINATION IS THE LAST FIX THAT IS NOT A CIRCUIT (v17.9, the
+ *   author's bug: a touch & go followed by circuits had its ARRIVAL raised to
+ *   cruise, and only a touch & go without circuits kept its field elevation).
+ *   Circuits are logged as PATTERN waypoints AFTER the fix they are flown at,
+ *   so "the last waypoint" was the circuit, and the aerodrome itself - one
+ *   before it - was treated as just another fix on the way. The same goes for
+ *   ANY touch & go or full stop: it is a landing at its field elevation, so it
+ *   is never levelled by an edit made upstream of it.
+ *
  *   A CIRCUIT STOP IS SKIPPED. Its altitude is DERIVED from the field it is
  *   flown at (v16.40: elevation rounded to the nearest 100 ft, plus 1000), not
  *   inherited from the leg before - which is the whole reason that rule exists.
@@ -1086,13 +1095,28 @@ export function computeFlightSchedule(fl) {
 export function levelFromIndices(waypoints, fromIdx) {
   if (!Array.isArray(waypoints)) return [];
   if (!(fromIdx >= 0) || fromIdx >= waypoints.length) return [];
-  const last = waypoints.length - 1;
   const out = [fromIdx];
-  for (let i = fromIdx + 1; i < last; i++) {
-    if (waypoints[i] && waypoints[i].isPattern) continue;
+  const dest = destinationIndex(waypoints);
+  for (let i = fromIdx + 1; i < dest; i++) {
+    const w = waypoints[i];
+    if (w && (w.isPattern || w.stop)) continue;
     out.push(i);
   }
   return out;
+}
+
+/**
+ * The flight plan's destination: its last waypoint that is NOT a circuit
+ * (v17.9). Circuits flown at the destination are logged after it, so the
+ * literal last entry is often a PATTERN. -1 for an empty list.
+ * @param {Waypoint[]} waypoints
+ * @returns {number}
+ */
+export function destinationIndex(waypoints) {
+  if (!Array.isArray(waypoints)) return -1;
+  let i = waypoints.length - 1;
+  while (i > 0 && waypoints[i] && waypoints[i].isPattern) i--;
+  return i;
 }
 
 // Map/plotting markers for one leg under the flight schedule: a leg can

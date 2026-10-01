@@ -4224,7 +4224,7 @@
         ? 'Circuit altitude for this stop only'
         : onward > 0
           ? 'Applies here and to the ' + onward + ' fix' + (onward === 1 ? '' : 'es') +
-            ' after it \u2014 ' + fl.waypoints[fl.waypoints.length - 1].name + ' keeps its own'
+            ' after it \u2014 ' + fl.waypoints[destinationIndex(fl.waypoints)].name + ' keeps its own'
           : 'Applies to this fix';
       // FLY-BY OR MOVEMENT (v17.1). Offered only where the answer changes
       // something: a waypoint on a published aerodrome that is not already a

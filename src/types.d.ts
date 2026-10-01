@@ -44,6 +44,9 @@ interface Waypoint {
   isPattern?: boolean;
   /** Number of circuits flown at a pattern stop. */
   laps?: number;
+  /** A landing here: 'touch-and-go' or 'full-stop' (v16.54). The next sector
+   *  departs from this field. */
+  stop?: string | null;
   /** Flown over, not landed on or departed from (v17.1): no runway or ATS
    *  opening-hours check applies here. Never set together with a stop. */
   flyby?: boolean;
