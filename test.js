@@ -9037,7 +9037,12 @@ TA('a BOC dragged into the tail the descent needs is refused, not committed', as
     'a BOC drag left the plan unusable: ' + JSON.stringify(ev(`collectIntegrityProblems(flights, {})`)));
   assert(ev('flights[0].waypoints[1].altAtNM') == null,
     'the contradicting target was kept: ' + ev('flights[0].waypoints[1].altAtNM'));
-  assert(toastText().trim() !== '', 'the pilot was told nothing at all');
+  // v17.9: the climb running into the descent is a CROSSING, and the pilot is
+  // told so in a dialog that gives the ceiling and the rate that would fit.
+  assert(/would cross/i.test(dialogText()) && /Nothing was moved/.test(dialogText()),
+    'the pilot was told nothing at all: ' + dialogText().slice(0, 200));
+  answerDialog('Keep it as it was');
+  await tick();
   ev(SEED);
 });
 
@@ -14568,6 +14573,207 @@ TA('the M&B distance card draws the runway for every worked check, from the same
       'the v16.96 usage bar is back beside the drawing');
     assert(/Required\s*\d+ m/.test(host.textContent), 'the figure line went - the drawing is not the authority');
   } finally { ev('lastWeather = null;'); ev(SEED); }
+});
+
+console.log('\n=== 62a000q. The climb and descent corners, drag overhaul (v17.9) ===');
+const SHORT_FINAL = (aAlt) => `flights = [{ id: 1, title: 'S', depElev: 254, waypoints: [
+    { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.60, lng: 18.50, name: 'A', alt: ${aAlt}, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+  activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
+  document.getElementById('app-toasts').innerHTML = '';`;
+
+T('a descent can have its own rate; only its time and length change, and the sanitiser keeps it in range', () => {
+  const L = moduleExports.legs, E = moduleExports.exch;
+  const fl = () => ({ id: 1, title: 'S', depElev: 254, waypoints: [
+    { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.60, lng: 18.50, name: 'A', alt: 8000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }] });
+  const base = L.computeFlightSchedule(fl());
+  const f2 = fl(); f2.waypoints[2].rodFpm = 1000;
+  const fast = L.computeFlightSchedule(f2);
+  const prof = L.descentRateFpm({});
+  assert(base[1].descRodFpm === prof && fast[1].descRodFpm === 1000, 'the rate used: ' + base[1].descRodFpm + ' / ' + fast[1].descRodFpm);
+  const mins = (S) => S.reduce((t, x) => t + (x ? x.descMin : 0), 0);
+  const ratio = mins(fast) / mins(base);
+  assert(Math.abs(ratio - prof / 1000) < 0.02, 'twice the rate should take half the time: ratio ' + ratio.toFixed(3));
+  assert(fast[0].tocAlongNM === base[0].tocAlongNM && fast[0].climbMin === base[0].climbMin, 'a descent rate moved the climb');
+  for (const bad of [50, 5000, 'x', null, -500]) assert(L.descentRateFpm({ rodFpm: bad }) === prof, 'rate ' + bad + ' was used');
+  const clean = E.sanitiseFlights([{ id: 1, title: 'S', depElev: 254, waypoints: [
+    Object.assign(fl().waypoints[0], { rodFpm: 900 }), Object.assign(fl().waypoints[1], { rodFpm: 99999 }), fl().waypoints[2]] }]);
+  assert(clean[0].waypoints[0].rodFpm === 900 && clean[0].waypoints[1].rodFpm === undefined, 'the sanitiser: ' +
+    JSON.stringify(clean[0].waypoints.map((w) => w.rodFpm)));
+});
+
+T('descentConflict gives the ceiling and the rate, each one verified on the real schedule', () => {
+  const L = moduleExports.legs;
+  const fl = { id: 1, title: 'S', depElev: 254, waypoints: [
+    { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.60, lng: 18.50, name: 'A', alt: 8000, oat: 0, wdir: 0, wspd: 0, var: -11 },
+    { lat: 69.66, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }] };
+  assert(L.descentConflict(fl, 1) === null, 'a plan that fits reported a conflict');
+  // delay the climb two thirds along the long leg: the descent can no longer back up past the TOC
+  fl.waypoints[1].altAtNM = Math.round(L.computeFlightSchedule(fl)[0].distNM * 0.68 * 10) / 10;
+  const c = L.descentConflict(fl, 1);
+  assert(c && c.targetIdx === 2 && c.climbLegIdx === 0 && c.rodFpm === L.descentRateFpm({}), 'the conflict: ' + JSON.stringify(c));
+  const short = (f) => L.computeFlightSchedule(f)[1].shortfallMin > 0.001;
+  const withAlt = (a) => { const f = JSON.parse(JSON.stringify(fl)); f.waypoints[1].alt = a; return f; };
+  const withRate = (r) => { const f = JSON.parse(JSON.stringify(fl)); f.waypoints[2].rodFpm = r; return f; };
+  // THE CEILING IS A CEILING: it fits, and the next hundred feet does not
+  assert(c.maxAltFt % 100 === 0 && !short(withAlt(c.maxAltFt)) && short(withAlt(c.maxAltFt + 100)),
+    'the ceiling ' + c.maxAltFt + ' is not the highest 100 ft that fits');
+  // THE RATE IS THE LOWEST 50 fpm STEP THAT FITS
+  assert(c.needFpm % 50 === 0 && !short(withRate(c.needFpm)) && short(withRate(c.needFpm - 50)),
+    'the rate ' + c.needFpm + ' is not the lowest 50 fpm step that fits');
+  // nothing about the plan is changed by asking
+  assert(fl.waypoints[1].alt === 8000 && fl.waypoints[2].rodFpm === undefined, 'descentConflict changed the plan');
+});
+
+TA('a TOC dragged into the descent goes back where it was, and the offered rate makes the drop stand', async () => {
+  ev(SHORT_FINAL(8000));
+  // A REAL PREVIOUS POSITION, so "back where it was" cannot pass by accident:
+  // the v16.75 fallback cleared the target, which would land on the natural
+  // corner instead of this one.
+  ev(`applyProfileDrop({ fIdx: 0, legIdx: 0, kind: 'TOC', dropNM: 30, SL: computeFlightSchedule(flights[0])[0] })`);
+  assert(ev('flights[0].waypoints[1].altAtNM') === 30, 'the first, valid drop did not stand: ' + ev('flights[0].waypoints[1].altAtNM'));
+  const before = ev('JSON.stringify(flights[0])');
+  const legLen = ev(`computeFlightSchedule(flights[0])[0].distNM`);
+  const drop = Math.round(legLen * 0.68 * 10) / 10;
+  const dec = ev(`(() => { const d = profileDropDecision(0, 0, 'TOC', computeFlightSchedule(flights[0])[0], ${drop}, false);
+    return { status: d.status, c: d.conflict }; })()`);
+  assert(dec.status === 'cross' && dec.c && dec.c.needFpm > 0, 'the decision: ' + JSON.stringify(dec));
+  ev(`applyProfileDrop({ fIdx: 0, legIdx: 0, kind: 'TOC', dropNM: ${drop}, SL: computeFlightSchedule(flights[0])[0] })`);
+  await tick();
+  // NOTHING MOVED - not to the natural corner, not anywhere
+  assert(ev('JSON.stringify(flights[0])') === before, 'the plan changed on a refused drop');
+  const txt = dialogText();
+  assert(/would cross/.test(txt) && /Nothing was moved/.test(txt), 'the alert: ' + txt.slice(0, 160));
+  assert(txt.includes('at most ' + dec.c.maxAltFt + ' ft') && txt.includes(dec.c.needFpm + ' fpm'),
+    'the alert does not give the ceiling and the rate: ' + txt);
+  answerDialog('Use ' + dec.c.needFpm + ' fpm');
+  await tick();
+  assert(ev('flights[0].waypoints[1].altAtNM') === drop && ev('flights[0].waypoints[2].rodFpm') === dec.c.needFpm,
+    'the rate did not make the drop stand: ' + ev('JSON.stringify(flights[0].waypoints.map(w => [w.altAtNM, w.rodFpm]))'));
+  assert(ev('collectIntegrityProblems(flights, {}).length') === 0, 'the accepted offer left the plan unusable');
+  assert(ev('flights[0].waypoints.map(w => w.alt).join()') === '254,8000,2000', 'an altitude the pilot typed was changed');
+  // ONE undo takes both back
+  // ONE undo takes both back (the restore goes through the sanitiser, so the
+  // fields are compared rather than the serialisation)
+  ev('undoLast(true)');
+  assert(ev('flights[0].waypoints[1].altAtNM') === 30 && ev('flights[0].waypoints[2].rodFpm') == null &&
+    ev('flights[0].waypoints.map(w => w.alt).join()') === '254,8000,2000',
+    'one undo did not take the drop and the rate back together: ' + ev('JSON.stringify(flights[0].waypoints.map(w => [w.altAtNM, w.rodFpm]))'));
+  ev(SEED);
+});
+
+T('while a TOC is dragged the BOC is drawn where the drop will put it, and the drop puts it exactly there', () => {
+  ev(`flights = [{ id: 1, title: 'C', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 6500, oat: 0, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const S = ev('computeFlightSchedule(flights[0])[0]');
+  assert(S.tocAlongNM > 5 && S.climbStartNM === 0, 'the probe: ' + JSON.stringify([S.tocAlongNM, S.climbStartNM]));
+  const drop = Math.round((S.tocAlongNM + 8) * 10) / 10;
+  ev(`profDrag = { fIdx: 0, legIdx: 0, kind: 'TOC', SL: computeFlightSchedule(flights[0])[0], dropNM: ${drop},
+        marker: profileMarkers.find(m => m._prof && m._prof.kind === 'TOC'), ghosts: [], raf: null };
+      previewProfileDrag();`);
+  const ghosts = ev('profDrag.ghosts.map(g => ({ ll: g._latlng, html: g._opts.icon.html }))');
+  const boc = ghosts.find((g) => /prof-ring toc/.test(g.html));
+  const readout = ghosts.find((g) => /prof-readout/.test(g.html));
+  assert(boc, 'no BOC is drawn while the TOC is dragged: ' + ghosts.map((g) => g.html.slice(0, 40)).join(' | '));
+  assert(readout && /TOC \d+\.\d NM after ENDU/.test(readout.html) && !/prof-readout-bad/.test(readout.html),
+    'the readout: ' + (readout && readout.html));
+  ev(`const d = profDrag; clearProfileDragPreview(d); profDrag = null; applyProfileDrop(d);`);
+  const marks = ev(`computeLegMarkers(flights[0].waypoints[0], flights[0].waypoints[1], computeFlightSchedule(flights[0])[0])`);
+  const real = marks.find((m) => m.kind === 'BOC');
+  assert(real && Math.abs(real.lat - boc.ll[0]) < 1e-9 && Math.abs(real.lng - boc.ll[1]) < 1e-9,
+    'the BOC "respawned" somewhere other than where it was drawn during the drag');
+  assert(Math.abs(marks.find((m) => m.kind === 'TOC').distNM - drop) < 0.06, 'the TOC is not where it was dropped');
+  ev(SEED);
+});
+
+T('dragging a TOD earlier draws the BOD at once, and keeps the descent its own length', () => {
+  ev(`flights = [{ id: 1, title: 'D', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 68.80, lng: 18.50, name: 'A', alt: 4500, oat: 0, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.50, lng: 18.50, name: 'ENTC', alt: 32, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const S = ev('computeFlightSchedule(flights[0])[1]');
+  const todPos = S.distNM - S.todBeforeNM;
+  assert(S.todStartsHere && todPos > 10 && !(S.bodTailNM > 0.05), 'the probe: ' + JSON.stringify([todPos, S.bodTailNM]));
+  const drop = Math.round((todPos - 6) * 10) / 10;
+  ev(`profDrag = { fIdx: 0, legIdx: 1, kind: 'TOD', SL: computeFlightSchedule(flights[0])[1], dropNM: ${drop},
+        marker: profileMarkers.find(m => m._prof && m._prof.kind === 'TOD'), ghosts: [], raf: null };
+      previewProfileDrag();`);
+  const bod = ev('profDrag.ghosts.map(g => g._opts.icon.html)').find((h) => /prof-ring tod/.test(h));
+  assert(bod, 'no BOD appeared while the TOD was dragged earlier');
+  ev(`const d = profDrag; clearProfileDragPreview(d); profDrag = null; applyProfileDrop(d);`);
+  const A = ev('computeFlightSchedule(flights[0])[1]');
+  assert(Math.abs((A.distNM - A.todBeforeNM) - drop) < 0.15, 'the TOD is not where it was dropped: ' + (A.distNM - A.todBeforeNM));
+  assert(A.bodTailNM > 5.5 && Math.abs(A.descDistNM - S.descDistNM) < 0.15, 'the descent was not moved whole: ' +
+    JSON.stringify([A.bodTailNM, A.descDistNM, S.descDistNM]));
+  ev(SEED);
+});
+
+T('a position that cannot be flown turns the readout red and draws no corners from it', () => {
+  ev(SHORT_FINAL(8000));
+  const legLen = ev(`computeFlightSchedule(flights[0])[0].distNM`);
+  ev(`profDrag = { fIdx: 0, legIdx: 0, kind: 'TOC', SL: computeFlightSchedule(flights[0])[0], dropNM: ${Math.round(legLen * 0.68 * 10) / 10},
+        marker: profileMarkers.find(m => m._prof && m._prof.kind === 'TOC'), ghosts: [], raf: null };
+      previewProfileDrag();`);
+  const html = ev('profDrag.ghosts.map(g => g._opts.icon.html)');
+  assert(html.length === 1 && /prof-readout-bad/.test(html[0]) && /run into the descent/.test(html[0]),
+    'the invalid preview: ' + JSON.stringify(html));
+  ev(`clearProfileDragPreview(profDrag); profDrag = null;`);
+  ev(SEED);
+});
+
+T('every draggable corner has a 32 px grab area under its thin glyph', () => {
+  ev(SEED);
+  const html = ev('profileMarkers.filter(m => m._prof).map(m => m._opts.icon.html)');
+  assert(html.length && html.every((h) => /class="prof-hit prof-drag"/.test(h)), 'a corner has no grab area');
+  const css = fs.readFileSync('src/styles.css', 'utf8');
+  const m = css.match(/\.prof-hit\s*\{[^}]*width:\s*(\d+)px[^}]*height:\s*(\d+)px/);
+  assert(m && Number(m[1]) >= 28 && Number(m[2]) >= 28, 'the grab area is not at least 28 px: ' + (m && m.slice(1)));
+});
+
+TA('an altitude that makes the climb run into the descent says so, keeps the altitude, and offers the rate', async () => {
+  ev(`flights = [{ id: 1, title: 'E', depElev: 254, waypoints: [
+        { lat: 68.60, lng: 18.50, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 68.85, lng: 18.50, name: 'A', alt: 3500, oat: 0, wdir: 0, wspd: 0, var: -11 },
+        { lat: 68.91, lng: 18.50, name: 'ENTC', alt: 2000, oat: 5, wdir: 0, wspd: 0, var: -12 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  assert(ev('computeFlightSchedule(flights[0])[1].shortfallMin') <= 0.001, 'the probe is already short at 3500 ft');
+  ev(`applyWaypointEdit(0, 1, { alt: '5000' })`);
+  await tick();
+  assert(ev('flights[0].waypoints[1].alt') === 5000, 'the typed altitude was not kept');
+  const txt = dialogText();
+  assert(/do not both fit/.test(txt) && /at most \d+ ft/.test(txt) && /needs \d+ fpm/.test(txt), 'the notice: ' + txt.slice(0, 200));
+  const need = Number(txt.match(/needs (\d+) fpm/)[1]);
+  answerDialog('Use ' + need + ' fpm');
+  await tick();
+  assert(ev('flights[0].waypoints[2].rodFpm') === need && ev('computeFlightSchedule(flights[0])[1].shortfallMin') <= 0.001,
+    'the offered rate did not make the plan fit');
+  ev(SEED);
+});
+
+TA('the leg panel sets, previews and clears a leg\'s descent rate, and refuses one out of range', async () => {
+  ev(SHORT_FINAL(8000));
+  ev(`openLegPanel(0, { lat: 69.63, lng: 18.50 })`);
+  assert(ev('legPanel && legPanel.legEnd') === 2, 'the panel opened on the wrong leg');
+  const rod = doc.getElementById('leg-rod');
+  assert(rod && rod.value === '' && rod.placeholder === String(ev('aircraftProfile.rod')), 'the field: ' + (rod && [rod.value, rod.placeholder]));
+  rod.value = '50'; ev('updateLegPreview()');
+  assert(/must be 100 to 3000/.test(doc.getElementById('leg-preview').textContent), 'an out-of-range rate was not flagged');
+  ev('saveLegSettings()');
+  assert(ev('flights[0].waypoints[2].rodFpm') === undefined && ev('legPanel') !== null, 'an out-of-range rate was saved, or the panel closed');
+  rod.value = '800'; ev('saveLegSettings()');
+  assert(ev('flights[0].waypoints[2].rodFpm') === 800, 'the rate was not saved');
+  ev(`openLegPanel(0, { lat: 69.63, lng: 18.50 })`);
+  assert(doc.getElementById('leg-rod').value === '800', 'the panel does not show the saved rate');
+  doc.getElementById('leg-rod').value = ''; ev('saveLegSettings()');
+  assert(ev('flights[0].waypoints[2].rodFpm') === null, 'clearing the box did not go back to the profile rate');
+  ev(SEED);
 });
 
 runAsyncTests().then(() => {

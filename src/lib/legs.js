@@ -758,6 +758,28 @@ function legTarget(to, distNM, climbing) {
   return { attainNM: bod > 0 ? Math.max(0, distNM - bod) : 0, legacyBocNM: 0 };
 }
 
+/** The lowest and highest descent rate a leg may be given (v17.9). Outside
+ *  this a typed figure is refused rather than clamped - a 30 000 fpm descent
+ *  is a typo, not a plan. */
+export const DESCENT_FPM_MIN = 100;
+export const DESCENT_FPM_MAX = 3000;
+
+/**
+ * The descent rate for the descent that TERMINATES at this fix (v17.9, the
+ * author: the rate a climb/descent conflict needs "can be selected as target
+ * descent rate for that specific leg"). `rodFpm` on the fix, else the
+ * profile's own rate (500 fpm by default). Only the RATE changes: the descent
+ * is still flown at the profile's descent TAS and fuel flow, so a steeper
+ * descent is simply a shorter one in time and distance.
+ * @param {Waypoint} to
+ * @returns {number}
+ */
+export function descentRateFpm(to) {
+  const v = Number(to && to.rodFpm);
+  if (Number.isFinite(v) && v >= DESCENT_FPM_MIN && v <= DESCENT_FPM_MAX) return v;
+  return Math.max(1, activeAircraftProfile().rod);
+}
+
 /** The whole-flight altitude plan: a forward pass so an unfinished climb
  *  spills onto later legs, then a backward pass so a descent starts early
  *  enough that every fix is crossed AT its planned altitude.
@@ -807,6 +829,11 @@ export function computeFlightSchedule(fl) {
                 descMin: 0, descDistNM: 0, todStartsHere: false, todBeforeNM: null,
                 descContinues: false, descTargetName: null, descTargetAlt: null,
                 shortfallMin: 0,
+                /** @type {number|null} */ descTargetIdx: null,
+                /** @type {number|null} */ descRodFpm: null,
+                /** @type {number|null} */ descBlockedByLeg: null,
+                /** @type {number|null} */ descHighAlt: null,
+                /** @type {number|null} */ descAvailMin: null,
                 // PINS (v16.37). climbStartNM is the BOC - how far the current
                 // altitude is held before the climb begins. bodTailNM is the
                 // BOD - how far before the end fix the descent must finish, so
@@ -965,7 +992,12 @@ export function computeFlightSchedule(fl) {
       if (L.descDistNM > 0.001) L.bodRefused = true;
       else { bodTail = L.bodPinNM; L.bodTailNM = bodTail; }
     }
-    let remMin = (highAlt - target) / Math.max(1, activeAircraftProfile().rod);
+    const rod = descentRateFpm(L.to);
+    L.descRodFpm = rod;
+    const needMin = (highAlt - target) / rod;
+    let remMin = needMin;
+    /** @type {number|null} */
+    let blockedBy = null;
     for (let k = i; k >= 0 && remMin > 0.001; k--) {
       const Lk = legs[k];
       if (!Lk) break;   // a pattern stop ends the chain
@@ -995,7 +1027,7 @@ export function computeFlightSchedule(fl) {
         }
         Lk.descMin += usedMin;
         Lk.descDistNM += usedDist;
-        if (!Lk.descTargetName) { Lk.descTargetName = L.to.name; Lk.descTargetAlt = target; }
+        if (!Lk.descTargetName) { Lk.descTargetName = L.to.name; Lk.descTargetAlt = target; Lk.descTargetIdx = i + 1; }
         if (remMin <= 0.001) {
           Lk.todStartsHere = true;
           // Distance before the leg's END fix. The level run-in a BOD pin adds
@@ -1003,14 +1035,23 @@ export function computeFlightSchedule(fl) {
           Lk.todBeforeNM = tail + Lk.descDistNM;
           Lk.descTargetName = L.to.name;
           Lk.descTargetAlt = target;
+          Lk.descTargetIdx = i + 1;
         }
       }
       if (k < i) Lk.descContinues = true;
       // a climb on this leg blocks any earlier descent: TOD can back up
       // at most to just after that climb's TOC.
-      if (remMin > 0.001 && (Lk.tocAlongNM != null || Lk.stillClimbing)) break;
+      if (remMin > 0.001 && (Lk.tocAlongNM != null || Lk.stillClimbing)) { blockedBy = k; break; }
     }
-    if (remMin > 0.001) L.shortfallMin = remMin;
+    if (remMin > 0.001) {
+      L.shortfallMin = remMin;
+      // THE CLIMB AND THE DESCENT MEET (v17.9). Which climb stopped the
+      // descent backing up, and how many minutes of descending there was room
+      // for - the two figures descentConflict() reports from.
+      L.descBlockedByLeg = blockedBy;
+      L.descHighAlt = highAlt;
+      L.descAvailMin = Math.max(0, needMin - remMin);
+    }
   }
 
   // WHERE THE DESCENT ACTUALLY STARTS, settled after ALL of it is placed.
@@ -1058,6 +1099,87 @@ export function computeFlightSchedule(fl) {
   }
 
   return legs;
+}
+
+/**
+ * A CLIMB AND A DESCENT THAT DO NOT BOTH FIT (v17.9, the author: "same warning
+ * if a climb leg and descent leg would intersect, notifying the highest
+ * altitude the climb leg can reach before needing to descend (this assumes
+ * 500fpm but the needed fpm descend will also be shown and can be selected as
+ * target descent rate for that specific leg)").
+ *
+ * For the descent that terminates at `waypoints[legIdx + 1]`, when it is short
+ * because a climb blocks it, two answers - each FOUND ON TRIAL COPIES of the
+ * real schedule, never estimated:
+ *
+ *   maxAltFt  the highest level the climb can top out at and still get down in
+ *             time at the leg's own descent rate (the profile's 500 fpm unless
+ *             the leg has its own). Rounded DOWN to the 100 ft, because it is a
+ *             ceiling. Null when no level above the entry works at all.
+ *   needFpm   the descent rate that makes the plan AS TYPED fit, rounded UP to
+ *             the 50 fpm. Null when no rate up to DESCENT_FPM_MAX does.
+ *
+ * Only REPORTED. The altitude column is the pilot's (v16.77): the level is
+ * offered as a figure, and the rate is offered as a choice for this one leg.
+ *
+ * @param {Flight} fl
+ * @param {number} legIdx the leg whose END fix the descent is for
+ * @param {(f: Flight) => Array<ScheduleLeg|null>} [schedule] injectable for tests
+ * @returns {{targetIdx: number, climbLegIdx: number, rodFpm: number, peakAlt: number,
+ *            targetAlt: number, maxAltFt: number|null, needFpm: number|null}|null}
+ */
+export function descentConflict(fl, legIdx, schedule = computeFlightSchedule) {
+  const legs = schedule(fl);
+  const L = legs[legIdx];
+  if (!L || !(L.shortfallMin > 0.001) || L.descBlockedByLeg == null) return null;
+  const k = L.descBlockedByLeg, j = legIdx + 1;
+  const wps = fl.waypoints;
+  const short = (/** @type {Flight} */ f) => {
+    const S = schedule(f)[legIdx];
+    return !S || S.shortfallMin > 0.001;
+  };
+  const copy = () => /** @type {Flight} */ (JSON.parse(JSON.stringify(fl)));
+  // THE CEILING: lower every fix between the climb and the descent that sits
+  // above a trial level H down to H, and bisect H.
+  const Lk = legs[k];
+  const lo0 = Math.max(Lk ? Lk.entryAlt : 0, Number(wps[j].alt));
+  const peak = Number(L.descHighAlt);
+  const at = (/** @type {number} */ H) => {
+    const c = copy();
+    for (let m = k + 1; m < j; m++) {
+      const w = c.waypoints[m];
+      if (w && !w.isPattern && Number(w.alt) > H) w.alt = H;
+    }
+    return c;
+  };
+  /** @type {number|null} */
+  let maxAltFt = null;
+  if (peak > lo0 + 1 && !short(at(lo0))) {
+    let lo = lo0, hi = peak;
+    for (let n = 0; n < 30 && hi - lo > 1; n++) {
+      const mid = (lo + hi) / 2;
+      if (short(at(mid))) hi = mid; else lo = mid;
+    }
+    const floored = Math.floor(lo / 100) * 100;
+    maxAltFt = floored >= lo0 ? floored : Math.floor(lo);
+  }
+  // THE RATE: start from the arithmetic (the minutes there was room for) and
+  // step up in 50s until a trial actually fits - the walk is per segment, so
+  // the arithmetic alone is a starting point, not the answer.
+  /** @type {number|null} */
+  let needFpm = null;
+  const drop = peak - Number(wps[j].alt);
+  const avail = Number(L.descAvailMin);
+  if (avail > 0.01 && drop > 0) {
+    let r = Math.ceil((drop / avail) / 50) * 50;
+    for (; r <= DESCENT_FPM_MAX; r += 50) {
+      const c = copy();
+      c.waypoints[j].rodFpm = r;
+      if (!short(c)) { needFpm = r; break; }
+    }
+  }
+  return { targetIdx: j, climbLegIdx: k, rodFpm: Number(L.descRodFpm), peakAlt: peak,
+           targetAlt: Number(wps[j].alt), maxAltFt, needFpm };
 }
 
 /**

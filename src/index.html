@@ -608,6 +608,14 @@
             <label>Cross it at:</label>
             <div><input type="number" id="leg-alt" step="100"> ft AMSL</div>
           </div>
+          <!-- THIS LEG'S DESCENT RATE (v17.9): for the descent that ENDS at this
+               fix. Blank is the profile's rate. Only the rate moves - the
+               descent TAS and fuel flow stay the profile's. -->
+          <div class="setting-row">
+            <label title="The rate of descent for the descent that ends at this fix. Blank uses your profile's rate.">Descend to it at:</label>
+            <div><input type="number" id="leg-rod" step="50" min="100" max="3000" style="width:80px;" oninput="updateLegPreview()"> ft/min
+              <span style="font-size:9px; color:var(--text-muted);">blank = your profile's rate</span></div>
+          </div>
         </div>
 
         <div class="setting-section">
@@ -1236,8 +1244,8 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 151 inline on*= handlers - 120 written
-    // into the markup and 31 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 153 inline on*= handlers - 121 written
+    // into the markup and 32 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -3842,7 +3850,12 @@
           const glyph = isBottom
             ? `<div class="prof-ring ${kindCls} ${canDragProf ? 'prof-drag' : ''}" style="${ringStyle}"></div>`
             : `<div class="prof-tick ${kindCls} ${canDragProf ? 'prof-drag' : ''}" style="${tickStyle}"></div>`;
-          const labelHtml = glyph +
+          // A WIDER GRAB AREA THAN THE GLYPH (v17.9, the author: "I want the
+          // symbols to have a little more area the mouse can grab so it doesnt
+          // become a game of precision"). An invisible disc under the tick or
+          // ring; the glyph itself stays as thin as the chart needs it.
+          const hitHtml = canDragProf ? `<div class="prof-hit prof-drag"></div>` : '';
+          const labelHtml = hitHtml + glyph +
             `<div class="${kindCls}-label" style="${chipStyle}" title="${esc(tip)}">${fTag}${esc(prof.kind)}</div>`;
 
           const m = L.marker([prof.lat, prof.lng], {
@@ -3870,6 +3883,8 @@
             })
           }).addTo(map);
           if (canDragProf) attachProfileDrag(m, fIdx, i, prof, schedM[i]);
+          // Which mark this is, so a live drag can hide the ones it redraws.
+          /** @type {any} */ (m)._prof = { fIdx, legIdx: i, kind: prof.kind };
           profileMarkers.push(m);
           });
         }
@@ -3940,7 +3955,7 @@
       });
       m.on('dragstart', function() {
         map.dragging.disable();
-        profDrag = { fIdx, legIdx, kind: prof.kind, SL, dropNM: null };
+        profDrag = { fIdx, legIdx, kind: prof.kind, SL, dropNM: null, marker: m, ghosts: [], raf: null };
       });
       m.on('drag', function(e) {
         if (!profDrag) return;
@@ -3967,9 +3982,16 @@
         profDrag.dropNM = Math.max(0, Math.min(SL.distNM, rep.alongNM));
         const pt = pointAlongSegments(SL.segs, profDrag.dropNM);
         if (pt) e.target.setLatLng([pt.lat, pt.lng]);
+        // THE REST OF THE PROFILE FOLLOWS LIVE (v17.9), once a frame at most.
+        if (profDrag.raf === null) {
+          const run = () => { if (profDrag) { profDrag.raf = null; previewProfileDrag(); } };
+          if (typeof requestAnimationFrame === 'function') profDrag.raf = requestAnimationFrame(run);
+          else run();
+        }
       });
       m.on('dragend', function() {
         const d = profDrag;
+        clearProfileDragPreview(d);
         profDrag = null;
         map.dragging.enable();
         // NaN IS NOT null. Checking only for null let a NaN through to the pin
@@ -4144,66 +4166,234 @@
       saveActiveState();
     }
 
-    /** Turn a drop into a pin on the leg's TO waypoint, where alt/OAT/wind
-     *  already live. @param {any} d */
-    function applyProfileDrop(d) {
-      const fl = flights[d.fIdx];
-      if (!fl || !fl.waypoints[d.legIdx + 1]) { refreshMap(); return; }
-      const SL = d.SL;
-      const D = SL.distNM;
-      const at = d.dropNM;
-      const round = (v) => Math.round(v * 10) / 10;   // a tenth of a mile, as the OFP prints
-      // A TOC DRAGGED FURTHER BACK THAN THE POH CAN CLIMB IS NOT AN ERROR
-      // (v16.74). It has its own settler, which can carry the climb onto the leg
-      // before or fall back to no pin at all.
-      // ONE FIELD FOR ALL FOUR MARKS (v16.76). Every drop is the same question -
-      // where must this leg's altitude be attained - and the four kinds differ
-      // only in which END of the manoeuvre the pilot grabbed. The manoeuvre
-      // keeps its POH length, so grabbing the BOTTOM means the target sits one
-      // manoeuvre-length further on.
-      //
-      // This is what replaced the three pins: there is no longer a BOC that can
-      // contradict a TOC, so there are no rules about which wins.
+    // =======================================================================
+    // A DROP IS DECIDED ONCE, AND THE LIVE PREVIEW ASKS THE SAME QUESTION (v17.9)
+    //
+    // The author: "I want it fixed to be seamless and smooth ... Dragging a TOD
+    // further back should create a BOD automatically AND also simultaneously
+    // calculated. Same with dragging a TOC, i want the BOC to immediately
+    // follow the TOC around so it doesnt respawn whenever i place the TOC
+    // somewhere or BOC somewhere. A TOC and TOD cannot cross paths, that just
+    // drops whichever moved back to its previous position with an alert that
+    // the action cannot be performed."
+    //
+    //  - ONE FUNCTION, profileDropDecision, turns a position into a candidate
+    //    plan and says what it is. The drag runs it every frame (cheap: one
+    //    flight's schedule) to draw the other corners where they WILL be; the
+    //    drop runs it once more with the full integrity check. So what the
+    //    pilot watched while dragging is what the drop does.
+    //  - A DROP THAT CANNOT BE FLOWN CHANGES NOTHING. Before v17.9 a refused
+    //    drop cleared the leg's target and the corner "respawned" at the POH's
+    //    natural place - which is not where the pilot had it. Now the plan is
+    //    left exactly as it was before the drag, and the alert says why.
+    //  - THE ONE EXCEPTION IS A LIMIT, NOT A CONFLICT: a TOC dragged earlier than
+    //    the POH can climb, or a TOD later than the descent can start, stops AT
+    //    that limit (v16.75's clamp) - the pilot was pushing towards it, and the
+    //    limit is the closest flyable answer.
+    // =======================================================================
+
+    /** Where a drop puts the leg's one target (`altAtNM`), and on which leg.
+     *  A TOD whose descent ends on a LATER leg moves that descent's end by the
+     *  same distance the top moved - the descent keeps its length.
+     *  @returns {{pinLeg: number, attainNM: number, legLen: number, descent: boolean}|null} */
+    function profileDropTarget(fl, legIdx, kind, SL, dropNM) {
+      const descent = kind === 'TOD' || kind === 'BOD';
+      if (kind === 'TOD' && SL.descTargetIdx != null && SL.descTargetIdx !== legIdx + 1) {
+        const j = SL.descTargetIdx;
+        const Lj = computeFlightSchedule(fl)[j - 1];
+        if (!Lj) return null;
+        const todPos = SL.distNM - (SL.todBeforeNM || 0);
+        return { pinLeg: j - 1, attainNM: (Lj.distNM - (Lj.bodTailNM || 0)) + (dropNM - todPos),
+                 legLen: Lj.distNM, descent: true };
+      }
       const climbLen = isFinite(SL.climbDistNM) ? SL.climbDistNM : 0;
       const descLen = isFinite(SL.descDistNM) ? SL.descDistNM : 0;
-      const attain = d.kind === 'TOC' ? at
-        : d.kind === 'BOC' ? at + climbLen
-        : d.kind === 'BOD' ? at
-        : at + descLen;                       // TOD
-      settleTargetDrag(d.fIdx, d.legIdx, attain > 0.05 ? round(Math.min(attain, D)) : null);
-      return;
-      // A DROP IS TRIED BEFORE IT IS COMMITTED, exactly like the TOC (v16.75).
-      // The sweep found drags that turned a clean plan into one the app itself
-      // calls unusable; a pin is a REQUEST, and one that cannot be honoured is
-      // refused with a reason rather than accepted and then reported as
-      // DO NOT USE THESE FIGURES.
-      const copy = JSON.parse(JSON.stringify(fl));
-      const to = copy.waypoints[d.legIdx + 1];
-      if (d.kind === 'BOC') {
-        // A POSITION AND A DEADLINE CANNOT BOTH BE THE TRUTH. Setting one
-        // clears the other, so the leg never carries two answers for where the
-        // climb begins - which the engine would report as contradicting.
-        to.bocNM = at > 0.05 ? round(at) : null;
-        to.tocNM = null;
-      } else if (d.kind === 'BOD') {
-        const tail = D - at;
-        to.bodNM = tail > 0.05 ? round(tail) : null;
-      } else if (d.kind === 'TOD') {
-        // The descent keeps its POH length, so moving the TOP moves the BOTTOM
-        // by the same distance. Working in a DELTA rather than recomputing from
-        // the descent length means this is right whether or not the descent
-        // also runs back onto an earlier leg.
-        const todWas = D - (SL.todBeforeNM === null ? 0 : SL.todBeforeNM);
-        const tail = (SL.bodTailNM || 0) - (at - todWas);
-        to.bodNM = tail > 0.05 ? round(tail) : null;
+      const attain = kind === 'TOC' ? dropNM
+        : kind === 'BOC' ? dropNM + climbLen
+        : kind === 'BOD' ? dropNM
+        : dropNM + descLen;                       // TOD
+      return { pinLeg: legIdx, attainNM: attain, legLen: SL.distNM, descent };
+    }
+
+    /**
+     * What a drop would do. `cheap` (the live preview) skips the whole-plan
+     * integrity check and the conflict search; the drop runs both.
+     * @returns {{status: 'ok'|'clamp'|'cross'|'refused', copy?: any, sched?: any[], pinLeg?: number,
+     *            wantNM?: number|null, shortLeg?: number|null, conflict?: any, reason?: string}}
+     */
+    function profileDropDecision(fIdx, legIdx, kind, SL, dropNM, cheap) {
+      const fl = flights[fIdx];
+      if (!fl || !SL || !isFinite(dropNM)) return { status: 'refused', reason: 'That mark is no longer on the plan.' };
+      const t = profileDropTarget(fl, legIdx, kind, SL, dropNM);
+      if (!t) return { status: 'refused', reason: 'That descent is no longer on the plan.' };
+      const round = (v) => Math.round(v * 10) / 10;
+      let want = t.attainNM;
+      if (t.descent) {
+        // A descent ending AT or past its fix is the natural one; one ending
+        // before this leg begins would have to level off on the leg before,
+        // which one target per leg cannot say.
+        if (want >= t.legLen - 0.05) want = null;
+        else if (want < 0.05) return { status: 'refused', pinLeg: t.pinLeg,
+          reason: 'The descent cannot level off before this leg begins - it would have to finish on the leg before.' };
+      } else {
+        want = Math.min(want, t.legLen);
+        if (want <= 0.05) want = null;
       }
-      const added = addedProblems(flightsWith(d.fIdx, copy));
-      if (added.length) {
-        refreshMap();
-        say('That ' + d.kind + ' does not fit this plan \u2014 nothing was changed. ' + added[0], 'warn', 6000);
+      const wantNM = want === null ? null : round(want);
+      const copy = JSON.parse(JSON.stringify(fl));
+      const w = copy.waypoints[t.pinLeg + 1];
+      if (!w) return { status: 'refused', reason: 'That leg is no longer on the plan.' };
+      w.altAtNM = wantNM; w.tocNM = null; w.bocNM = null; w.bodNM = null;
+      const sched = computeFlightSchedule(copy);
+      const nowShort = new Set(computeFlightSchedule(fl).map((x, i) => (x && x.shortfallMin > 0.001 ? i : -1)));
+      const newShort = sched.map((x, i) => (x && x.shortfallMin > 0.001 && !nowShort.has(i) ? i : -1)).filter((i) => i >= 0);
+      const L = sched[t.pinLeg];
+      const honoured = wantNM === null || (!!L && (t.descent
+        ? L.descDistNM > 0.05 && !L.bodRefused
+        : L.tocTargetNM != null && L.tocTargetMet !== false));
+      const base = { copy, sched, pinLeg: t.pinLeg, wantNM };
+      // THE CLIMB AND THE DESCENT WOULD MEET: a descent this candidate makes
+      // short, stopped by a climb - which is exactly a TOC and a TOD crossing.
+      const crossLeg = newShort.find((i) => sched[i].descBlockedByLeg != null);
+      if (crossLeg !== undefined) {
+        return Object.assign(base, { status: /** @type {'cross'} */ ('cross'), shortLeg: crossLeg,
+          conflict: cheap ? null : descentConflict(copy, crossLeg) });
+      }
+      // A CLIMB ASKED TO BE LEVEL SOONER THAN THE POH CAN CLIMB: the limit.
+      if (!t.descent && !honoured && L && !L.tocContinuation && L.climbStartNM <= 0.001) {
+        return Object.assign(base, { status: /** @type {'clamp'} */ ('clamp') });
+      }
+      if (!honoured || newShort.length) {
+        return Object.assign(base, { status: /** @type {'refused'} */ ('refused'),
+          reason: L && L.bodRefused ? 'a descent for a later, lower fix already runs through that stretch'
+            : 'the manoeuvre does not fit there at the POH rate' });
+      }
+      if (!cheap) {
+        const added = addedProblems(flightsWith(fIdx, copy));
+        if (added.length) return Object.assign(base, { status: /** @type {'refused'} */ ('refused'), reason: added[0] });
+      }
+      return Object.assign(base, { status: /** @type {'ok'} */ ('ok') });
+    }
+
+    /** Draw the candidate's corners while the mark is moving: the dragged mark
+     *  is the pilot's hand, every OTHER corner of the flight is drawn where
+     *  the drop would put it, and an unflyable position turns the mark red
+     *  and says why. */
+    function previewProfileDrag() {
+      const d = profDrag;
+      if (!d || !isFinite(d.dropNM)) return;
+      const dec = profileDropDecision(d.fIdx, d.legIdx, d.kind, d.SL, d.dropNM, true);
+      clearProfileDragPreview(d, true);
+      const el = d.marker && d.marker.getElement ? d.marker.getElement() : null;
+      const bad = dec.status === 'cross' || dec.status === 'refused';
+      if (el && el.classList) el.classList.toggle('prof-invalid', bad);
+      const fl = dec.copy;
+      let readout = '';
+      if (bad) {
+        readout = dec.status === 'cross' ? '✕ the climb would run into the descent'
+          : '✕ ' + (dec.reason || 'does not fit');
+      } else if (fl && dec.sched) {
+        for (const m of profileMarkers) {
+          if (m._prof && m._prof.fIdx === d.fIdx && m !== d.marker && m.setOpacity) m.setOpacity(0);
+        }
+        for (let i = 0; i < fl.waypoints.length - 1; i++) {
+          for (const p of computeLegMarkers(fl.waypoints[i], fl.waypoints[i + 1], dec.sched[i])) {
+            if (i === d.legIdx && p.kind === d.kind) {
+              const unit = aircraftProfile.distUnit || 'NM';
+              readout = p.kind + ' ' + convertDist(p.distNM, unit).toFixed(1) + ' ' + distLabel(unit) + ' ' + p.rel + ' ' + p.refName;
+              continue;
+            }
+            const cls = (p.kind === 'TOC' || p.kind === 'BOC') ? 'toc' : 'tod';
+            const bottom = p.kind === 'BOC' || p.kind === 'BOD';
+            const glyph = bottom
+              ? `<div class="prof-ring ${cls}" style="transform:translate(-50%,-50%);"></div>`
+              : `<div class="prof-tick ${cls}" style="transform:translate(-50%,-50%) rotate(${Math.round(p.tt + 90)}deg);"></div>`;
+            const g = L.marker([p.lat, p.lng], { interactive: false, zIndexOffset: 640,
+              icon: L.divIcon({ className: 'prof-ghost', html: glyph +
+                `<div class="${cls}-label" style="position:absolute; left:0; top:0; transform:translate(-50%,-50%) translate(${Math.round(30 * Math.cos(toRad(p.tt)))}px,${Math.round(30 * Math.sin(toRad(p.tt)))}px);">${esc(p.kind)}</div>`,
+                iconAnchor: [0, 0] }) }).addTo(map);
+            d.ghosts.push(g);
+          }
+        }
+      }
+      if (readout && d.marker && d.marker.getLatLng) {
+        const r = L.marker(d.marker.getLatLng(), { interactive: false, zIndexOffset: 700,
+          icon: L.divIcon({ className: 'prof-ghost', html:
+            `<div class="prof-readout${bad ? ' prof-readout-bad' : ''}">${esc(readout)}</div>`, iconAnchor: [0, 0] }) }).addTo(map);
+        d.ghosts.push(r);
+      }
+    }
+
+    /** Take the live preview down. `keepMarks` while still dragging. */
+    function clearProfileDragPreview(d, keepMarks) {
+      if (!d) return;
+      for (const g of d.ghosts || []) map.removeLayer(g);
+      d.ghosts = [];
+      if (!keepMarks) {
+        const el = d.marker && d.marker.getElement ? d.marker.getElement() : null;
+        if (el && el.classList) el.classList.remove('prof-invalid');
+      }
+      for (const m of profileMarkers) if (m._prof && m.setOpacity) m.setOpacity(1);
+    }
+
+    /** Turn a drop into the leg's one target - or into nothing, with a reason.
+     *  @param {any} d */
+    function applyProfileDrop(d) {
+      const dec = profileDropDecision(d.fIdx, d.legIdx, d.kind, d.SL, d.dropNM, false);
+      if (dec.status === 'ok') { commitFlightCopy(d.fIdx, dec.copy, 'move the ' + d.kind); return; }
+      if (dec.status === 'clamp') { settleTargetDrag(d.fIdx, dec.pinLeg, dec.wantNM); return; }
+      // NOTHING MOVES: the plan is exactly as it was before the drag.
+      refreshMap();
+      if (dec.status === 'cross') { profileConflictDialog(d.fIdx, d.kind, dec); return; }
+      say('That ' + d.kind + ' cannot go there - ' + (dec.reason || 'it does not fit') +
+          '. Nothing was moved.', 'warn', 6000);
+    }
+
+    /**
+     * THE CLIMB AND THE DESCENT WOULD CROSS (v17.9). The drop has already been
+     * refused - the plan is as it was - and this says why, gives the ceiling
+     * the climb can reach at the leg's descent rate, and offers the descent
+     * rate that WOULD let the drop stand, for that one leg.
+     */
+    async function profileConflictDialog(fIdx, kind, dec) {
+      const c = dec.conflict;
+      const fl = flights[fIdx];
+      if (!fl) return;
+      const snapshot = JSON.stringify(fl);
+      const tgt = c ? dec.copy.waypoints[c.targetIdx] : null;
+      const tName = tgt ? tgt.name : 'the next fix';
+      const lines = ['That ' + kind + ' cannot go there: the climb would run into the descent to ' + tName +
+        ' (the top of climb and the top of descent would cross). Nothing was moved.'];
+      if (c) {
+        lines.push(c.maxAltFt !== null
+          ? 'At ' + c.rodFpm + ' fpm the climb can reach at most ' + c.maxAltFt + ' ft before it has to start down.'
+          : 'At ' + c.rodFpm + ' fpm there is no level above ' + Math.round(c.targetAlt) + ' ft that leaves room for both.');
+        lines.push(c.needFpm !== null
+          ? 'For the plan as it stands, the descent to ' + tName + ' needs ' + c.needFpm + ' fpm.'
+          : 'No descent rate up to ' + DESCENT_FPM_MAX + ' fpm makes it fit.');
+      }
+      const r = await ask({
+        title: 'The climb and the descent would cross',
+        message: lines.join('\n'),
+        buttons: [
+          ...(c && c.needFpm !== null ? [{ id: 'rate', label: 'Use ' + c.needFpm + ' fpm for the descent to ' + tName, variant: 'primary' }] : []),
+          { id: 'keep', label: 'Keep it as it was', variant: c && c.needFpm !== null ? 'ghost' : 'primary' }
+        ]
+      });
+      if (!r || r.id !== 'rate' || !c) return;
+      // RE-READ AFTER THE AWAIT (discipline rule 7): the plan the offer was
+      // worked on must still be the plan, or the offer no longer means anything.
+      const live = flights[fIdx];
+      if (!live || JSON.stringify(live) !== snapshot) {
+        say('The plan changed while the question was open - nothing was applied.', 'warn');
         return;
       }
-      commitFlightCopy(d.fIdx, copy, 'move the ' + d.kind);
+      const cand = JSON.parse(JSON.stringify(dec.copy));
+      cand.waypoints[c.targetIdx].rodFpm = c.needFpm;
+      const added = addedProblems(flightsWith(fIdx, cand));
+      if (added.length) { say('That still does not fit - nothing was changed. ' + added[0], 'warn', 6500); return; }
+      commitFlightCopy(fIdx, cand, 'move the ' + kind + ' and descend at ' + c.needFpm + ' fpm');
+      say('Moved, with the descent to ' + tName + ' at ' + c.needFpm + ' fpm (this leg only - set it in the leg panel).', 'good', 6000);
     }
 
     /** Right-click a waypoint: rename it and set its altitude in ONE dialog,
@@ -4297,6 +4487,7 @@
       const idxs = altChanged
         ? (wp.isPattern ? [wpIdx] : levelFromIndices(fl.waypoints, wpIdx))
         : [];
+      const shortBefore = shortDescentLegs(fl);
       pushUndoState(nameChanged && altChanged ? 'edit a waypoint'
         : nameChanged ? 'rename a waypoint' : 'set the altitude from ' + wp.name);
       if (nameChanged) renameWaypoint(fIdx, wpIdx, wantName, true);
@@ -4312,7 +4503,50 @@
           ? fl.waypoints[wpIdx].name + ' set to ' + ft + ' ft.'
           : ft + ' ft from ' + fl.waypoints[wpIdx].name + ' onwards (' + idxs.length + ' fixes).',
           'success');
+        climbDescentNotice(fIdx, shortBefore);
       }
+    }
+
+    /** The legs whose descent is short because a climb blocks it. */
+    function shortDescentLegs(fl) {
+      return new Set(computeFlightSchedule(fl)
+        .map((x, i) => (x && x.shortfallMin > 0.001 && x.descBlockedByLeg != null ? i : -1)).filter((i) => i >= 0));
+    }
+
+    /**
+     * AN ALTITUDE THAT MAKES THE CLIMB RUN INTO THE DESCENT (v17.9) - the
+     * author's "same warning if a climb leg and descent leg would intersect".
+     * The altitude is the pilot's and stays as typed (v16.77); this says what
+     * it costs and offers the descent rate that would fit, for that one leg.
+     */
+    async function climbDescentNotice(fIdx, shortBefore) {
+      const fl = flights[fIdx];
+      if (!fl) return;
+      const fresh = [...shortDescentLegs(fl)].filter((i) => !shortBefore.has(i));
+      if (!fresh.length) return;
+      const c = descentConflict(fl, fresh[0]);
+      if (!c) return;
+      const snapshot = JSON.stringify(fl);
+      const tName = fl.waypoints[c.targetIdx].name;
+      const r = await ask({
+        title: 'The climb runs into the descent',
+        message: 'The climb and the descent to ' + tName + ' do not both fit - ' +
+          'you would arrive HIGH. Your altitude is kept as you typed it.\n' +
+          (c.maxAltFt !== null
+            ? 'At ' + c.rodFpm + ' fpm the climb can reach at most ' + c.maxAltFt + ' ft before it has to start down.'
+            : 'At ' + c.rodFpm + ' fpm no level above ' + Math.round(c.targetAlt) + ' ft leaves room for both.') +
+          (c.needFpm !== null ? '\nAs planned, the descent to ' + tName + ' needs ' + c.needFpm + ' fpm.' : ''),
+        buttons: [
+          ...(c.needFpm !== null ? [{ id: 'rate', label: 'Use ' + c.needFpm + ' fpm for the descent to ' + tName, variant: 'primary' }] : []),
+          { id: 'keep', label: 'Leave it', variant: c.needFpm !== null ? 'ghost' : 'primary' }
+        ]
+      });
+      if (!r || r.id !== 'rate') return;
+      const live = flights[fIdx];
+      if (!live || JSON.stringify(live) !== snapshot) { say('The plan changed while the question was open - nothing was applied.', 'warn'); return; }
+      const cand = JSON.parse(JSON.stringify(live));
+      cand.waypoints[c.targetIdx].rodFpm = c.needFpm;
+      commitFlightCopy(fIdx, cand, 'descend to ' + tName + ' at ' + c.needFpm + ' fpm');
     }
 
     /**
@@ -5799,6 +6033,11 @@
       for (const id of ['leg-to-name', 'leg-to-name2']) document.getElementById(id).textContent = to.name;
       for (const id of ['leg-from-name2', 'leg-from-name3']) document.getElementById(id).textContent = from.name;
       document.getElementById('leg-alt').value = String(to.alt);
+      const rodEl = document.getElementById('leg-rod');
+      if (rodEl) {
+        rodEl.value = to.rodFpm ? String(to.rodFpm) : '';
+        rodEl.placeholder = String(Math.round(Number(aircraftProfile.rod) || 500));
+      }
       document.getElementById('leg-boc').value = to.bocNM ? String(to.bocNM) : '';
       // SHOWN AS AN ATTAIN-BY, whichever box the pilot last used. One field,
       // read back into the box that matches the leg's phase.
@@ -5860,8 +6099,14 @@
         const n = Number(v);
         return isFinite(n) && n > 0 ? n : null;
       };
+      // A DESCENT RATE IS READ STRICTLY (v17.9): blank is "the profile's", a
+      // figure outside DESCENT_FPM_MIN..MAX is NaN and refused at Apply.
+      const rodRaw = String((document.getElementById('leg-rod') || {}).value || '').trim();
+      const rodN = Number(rodRaw);
+      const rodFpm = rodRaw === '' ? null
+        : (isFinite(rodN) && rodN >= DESCENT_FPM_MIN && rodN <= DESCENT_FPM_MAX ? Math.round(rodN) : NaN);
       return { alt: Number(document.getElementById('leg-alt').value),
-               bocNM: num('leg-boc'), bodNM: num('leg-bod'), tocNM: num('leg-toc') };
+               bocNM: num('leg-boc'), bodNM: num('leg-bod'), tocNM: num('leg-toc'), rodFpm };
     }
 
     /**
@@ -5879,7 +6124,8 @@
       const trial = {
         id: fl.id,
         waypoints: fl.waypoints.map((w, i) => i === legPanel.legEnd
-          ? Object.assign({}, w, { alt: form.alt, bocNM: form.bocNM, bodNM: form.bodNM, tocNM: form.tocNM })
+          ? Object.assign({}, w, { alt: form.alt, bocNM: form.bocNM, bodNM: form.bodNM, tocNM: form.tocNM,
+              rodFpm: Number.isFinite(form.rodFpm) ? form.rodFpm : null })
           : Object.assign({}, w))
       };
       const sch = computeFlightSchedule(trial);
@@ -5931,10 +6177,33 @@
       if (S.shortfallMin > 0.001) {
         warn += '<div class="leg-warn">The descent is ' + f(S.shortfallMin) + ' min short even started earlier' +
           ' \u2014 you would arrive HIGH.</div>';
+        // THE CLIMB AND THE DESCENT MEET (v17.9): the same figures the drag's
+        // alert gives, and the rate offered for this one leg.
+        const c = S.descBlockedByLeg != null ? descentConflict(trial, legPanel.legEnd - 1) : null;
+        if (c) {
+          warn += '<div class="leg-warn">The climb runs into this descent. At ' + c.rodFpm + ' fpm the climb can reach ' +
+            (c.maxAltFt !== null ? 'at most ' + c.maxAltFt + ' ft' : 'no level above ' + Math.round(c.targetAlt) + ' ft') +
+            ' before it has to start down.' +
+            (c.needFpm !== null
+              ? ' As planned, it fits descending at <b>' + c.needFpm + ' fpm</b>. ' +
+                '<button class="btn btn-outline btn-sm" onclick="useLegDescentRate(' + c.needFpm + ')">Use ' + c.needFpm + ' fpm</button>'
+              : ' No rate up to ' + DESCENT_FPM_MAX + ' fpm makes it fit.') + '</div>';
+        }
+      }
+      if (form.rodFpm !== null && !Number.isFinite(form.rodFpm)) {
+        warn += '<div class="leg-warn">A descent rate must be ' + DESCENT_FPM_MIN + ' to ' + DESCENT_FPM_MAX + ' ft/min.</div>';
       }
       host.innerHTML = rows.map((r) =>
         '<div class="lp-row"><span class="lp-k">' + esc(r[0]) + '</span><span class="lp-v">' + esc(r[1]) + '</span></div>'
       ).join('') + warn;
+    }
+
+    /** The panel's "Use N fpm" button: put the rate in the box and preview it. */
+    function useLegDescentRate(fpm) {
+      const el = document.getElementById('leg-rod');
+      if (!el) return;
+      el.value = String(fpm);
+      updateLegPreview();
     }
 
     function clearLegPins() {
@@ -5950,8 +6219,14 @@
       const to = fl.waypoints[legPanel.legEnd];
       if (!to) { closeLegModal(); return; }
       const form = readLegForm();
+      if (form.rodFpm !== null && !Number.isFinite(form.rodFpm)) {
+        say('A descent rate must be ' + DESCENT_FPM_MIN + ' to ' + DESCENT_FPM_MAX + ' ft/min - nothing was changed.', 'error');
+        return;
+      }
       pushUndoState('apply leg settings');
       if (isFinite(form.alt)) to.alt = form.alt;
+      // Null clears it, so the leg goes back to the profile's rate.
+      to.rodFpm = form.rodFpm;
       // Stored as null rather than 0 when cleared, so a saved route carries no
       // pin at all and reads identically to one made before pins existed.
       // THE PANEL WRITES THE SAME ONE FIELD THE DRAG DOES (v16.76). It still

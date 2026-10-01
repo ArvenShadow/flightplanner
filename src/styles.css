@@ -1327,6 +1327,22 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .prof-drag { pointer-events: auto; cursor: grab; }
     .prof-drag:active { cursor: grabbing; }
     .leaflet-dragging .prof-drag { cursor: grabbing; }
+    /* THE GRAB AREA IS BIGGER THAN THE GLYPH (v17.9, the author: "a little more
+       area the mouse can grab so it doesnt become a game of precision"). An
+       invisible 32 px disc centred on the mark; the 3 px tick and the 13 px
+       ring stay as thin as the chart needs them. */
+    .prof-hit { position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%;
+      transform: translate(-50%, -50%); background: transparent; }
+    /* THE LIVE DRAG (v17.9): every other corner drawn where the drop will put
+       it, a readout beside the hand, and the mark red where it cannot go. */
+    .prof-ghost { pointer-events: none; }
+    .prof-ghost > div { opacity: 0.85; }
+    .prof-readout { position: absolute; left: 0; top: 0; transform: translate(-50%, calc(-100% - 22px));
+      white-space: nowrap; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+      background: #1a202c; color: #ffffff; border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+    .prof-readout-bad { background: #c53030; }
+    .prof-invalid .prof-tick, .prof-invalid .prof-ring { background-color: #c53030; border-color: #c53030 !important;
+      box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #c53030; }
     /* Just "TOC" / "TOD". The full sentence is the title tooltip, and the
        numbers are in the OFP sub-line and the plotting list, which is where
        they are copied from. pointer-events is needed for the tooltip to
