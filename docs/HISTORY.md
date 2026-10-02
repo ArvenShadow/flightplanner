@@ -10,6 +10,29 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## PAGE 2 IS WEIGHED FROM THE PAPER'S ROUNDED FUEL TOO (v17.11)
+
+The author, asked whether printed page 2 should follow page 1's rounding:
+*"yeah just use the rounded values for the whole paper. The reason for it is
+because i just want something thats easy to quickly copy onto my own paper."*
+
+- Until now page 2 printed the EXACT M&B (v16.94: "a rounded display value never
+  ends up in a weight"), so one printout read 7 gal on page 1's Total and 6.8 gal
+  of trip fuel on page 2. **`paperMassBalanceMission`** weighs a copy of the
+  mission from the paper's figures, and the print path uses it for every page 2
+  and for the whole-flight master.
+- **A STATED FIGURE STAYS AS STATED**: the fuel at the first engine start (the
+  plan's, or the last-minute-change actual) and the fuel after a refuel are what
+  the pilot wrote. Every later sector departs with the paper's own arrival fuel,
+  less a touch & go's rounded ground time; each sector burns its rounded legs.
+  So page 2's trip fuel is page 1's rounded legs, and TOM - trip x 6 = LDM on the
+  sheet.
+- **v16.94's RULE STILL HOLDS WHERE IT MATTERS**: the M&B tab, its limit checks
+  and the red banner keep weighing the exact fuel (`massBalanceMission` is not
+  touched by printing - asserted). The paper is a rounded copy, and now a
+  consistent one. Page 2's take-off and landing DISTANCE blocks are unchanged:
+  they are the runway checks' own figures, already rounded up to the metre.
+
 ## THE PAPER ROUNDS TO THE NEAREST, BOTH WAYS (v17.10) - THIS REVERSES v17.9's ROUND-UP
 
 The author, on the v17.9 printout: *"what the hell why is it rounding 1.1gal up
