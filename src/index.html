@@ -479,7 +479,7 @@
             <li>Expand the <b>🗺 Chart Plotting List</b> under each flight: waypoint coordinates in <b>degrees + decimal minutes</b> (as on chart margins), editable names, and whole-leg TT/MT/distance — the lines you actually draw.</li>
             <li><b>📋 Copy List</b> puts it on your clipboard as aligned text.</li>
             <li><b>Print / preview OFP</b> (or <b>Ctrl+P</b>) opens the <b>school's own form, C182OFPMBv4.2, filled in from your plan</b>, as a PDF in a new tab - preview it there, then print or save it. It is the form itself, not a copy: the form's own pages are the background and the figures are written into its boxes, so a sheet with nothing written on it is the blank form, pixel for pixel. One sheet per sector, and a second when a flight has more than the form's 16 lines; each sector's Mass &amp; Balance page follows its flight plan page, as on the double-sided paper form. It is US Letter landscape, the form's own size - print it at 100 % / actual size. The browser's own File &gt; Print prints only a note pointing here.
-            <li><b>The printed OFP rounds for easy copying</b>: each leg's <b>fuel</b> and <b>distance</b> are rounded to the <b>nearest whole number</b>, up or down (1.1 gal prints 1, 1.6 prints 2). A leg burning under 1 gal still prints 1, and a very short leg prints 0.5 NM rather than 0. The <b>Acc</b> columns and the <b>Total</b> line add up those printed figures, and <b>EST fuel remaining</b> falls with them, so a column checked by hand adds up. It is for show only: the fuel is still worked from the real distance, and the screen, Mass &amp; Balance and the remaining-fuel tracking keep the exact figures.</li>
+            <li><b>The printed OFP rounds for easy copying</b>: each leg's <b>fuel</b> and <b>distance</b> are rounded to the <b>nearest whole number</b>, up or down (1.1 gal prints 1, 1.6 prints 2). A leg burning under 1 gal still prints 1, and a very short leg prints 0.5 NM rather than 0. The <b>Acc</b> columns and the <b>Total</b> line add up those printed figures, and <b>EST fuel remaining</b> falls with them, so a column checked by hand adds up. <b>Page 2 (Mass &amp; Balance) is weighed from the same rounded fuel</b>, so its trip fuel is page 1's total and the take-off and landing masses follow from it - the whole printout is one rounded copy, easy to copy by hand. The fuel at the first engine start and after a refuel are printed as you entered them. It is for show only: the fuel is still worked from the real distance, and the screen, the M&amp;B tab and the red banner keep checking the exact figures.</li>
               <ul>
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
                 <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the whole-flight total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
@@ -1470,7 +1470,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.10';
+    const APP_VERSION = '17.11';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -8159,7 +8159,11 @@
     function buildPrintDoc() {
       const cols = OFP_COLUMNS.map((c) => c.key);
       const tks = Object.fromEntries(OFP_COLUMNS.map((c) => [c.key, c.totalKey]));
-      const m = massBalanceMission;
+      // THE PAPER IS ROUNDED, ON A COPY (v17.9) - see paperRoundSectors - and
+      // PAGE 2 IS WEIGHED FROM THE SAME ROUNDED FUEL (v17.11), so the whole
+      // printout is one rounded copy. The screen and the banner stay exact.
+      const paper = paperRoundSectors(ofpPrintModel);
+      const m = paperMassBalanceMission(paper) || massBalanceMission;
       const mission = !!m && mbPrefs.view === 'mission';
       const mbPage = (res, idx) => {
         const s = printMbSheet(res, idx);
@@ -8167,8 +8171,6 @@
                  ldHwind: !!(s.dest && isFinite(s.dest.hwindKt)) };
       };
       const sheets = [];
-      // THE PAPER IS ROUNDED, ON A COPY (v17.9) - see paperRoundSectors.
-      const paper = paperRoundSectors(ofpPrintModel);
       paper.forEach((f, i) => {
         for (const sh of buildOfpSheets(f.meta, f.rows)) sheets.push({ kind: 'ofp', items: ofpPageItems(sh, cols, tks) });
         if (m && !mission && m.sectors[i]) sheets.push(mbPage(m.sectors[i], i));
@@ -8812,6 +8814,43 @@
       // against; every mass, CG, endurance and take-off distance is the actual.
       massBalanceLmc = applyActualFuel(planned, actualFuelGal);
       return computeMissionMassBalance(ac, mbPrefs.loads, massBalanceLmc.sectors);
+    }
+
+    /**
+     * THE PRINTED MASS & BALANCE, WEIGHED FROM THE PAPER'S ROUNDED FUEL (v17.11,
+     * the author: "just use the rounded values for the whole paper. The reason
+     * for it is because i just want something thats easy to quickly copy onto
+     * my own paper").
+     *
+     * A STATED FIGURE STAYS AS STATED: the fuel at the first engine start (the
+     * plan's, or the last-minute-change actual) and the fuel after a refuel are
+     * what the pilot wrote, so they are taken as they are. Everything after is
+     * walked on the paper's own numbers - each sector burns its ROUNDED legs,
+     * a touch & go its rounded ground time - so page 2's trip fuel is page 1's
+     * Total, and the masses, the CG marks and the endurance follow from that.
+     *
+     * Print only. The M&B tab and the red banner keep weighing the exact fuel
+     * (massBalanceMission), so no limit is checked against a rounded figure.
+     * @param {any[]} paper paperRoundSectors(ofpPrintModel)
+     */
+    function paperMassBalanceMission(paper) {
+      const lmc = massBalanceLmc;
+      const ac = mbPrefs.reg ? aircraftByReg(mbPrefs.reg) : null;
+      if (!ac || !massBalanceMission || !lmc || !Array.isArray(lmc.sectors)) return null;
+      const unit = aircraftProfile.fuelUnit || 'GAL';
+      const out = [];
+      for (let i = 0; i < paper.length; i++) {
+        const s = paper[i], exact = lmc.sectors[i];
+        if (!s || !exact) return null;
+        const legs = (s.rows || []).reduce((t, r) => t + (Number(r.legBurn) || 0), 0);
+        const ground = Number(s.prefixBurnRaw) > 0 ? paperFuel(s.prefixBurnRaw) : 0;
+        const dep = i === 0 || s.refuelled
+          ? exact.fuelDepGal
+          : out[i - 1].fuelArrGal - toGallons(ground, unit);
+        out.push({ fuelDepGal: dep, fuelArrGal: dep - toGallons(legs, unit),
+                   refuelled: !!s.refuelled, label: exact.label });
+      }
+      return computeMissionMassBalance(ac, mbPrefs.loads, out);
     }
 
     /** One weight/arm/moment line. */

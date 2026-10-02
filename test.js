@@ -12877,6 +12877,49 @@ T('the printed whole-mission sheet adds up, with a refuel in the middle', () => 
   w.renderAllFlightTables();
 });
 
+T('page 2 is weighed from the same rounded fuel as page 1, and the M&B tab stays exact (v17.11)', () => {
+  // The author: "just use the rounded values for the whole paper. The reason
+  // for it is because i just want something thats easy to quickly copy onto
+  // my own paper."
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev('mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); mbPrefs.view = "sector";');
+  w.renderAllFlightTables();
+  try {
+    const d = printDoc();
+    const mbs = d.sheets.filter((sh) => sh.kind === 'mb');
+    const paper = ev('paperRoundSectors(ofpPrintModel).map(s => ({ legs: s.rows.reduce((t, r) => t + r.legBurn, 0), total: s.meta.totals.burn, refuelled: !!s.refuelled, pre: s.prefixBurnRaw || 0 }))');
+    assert(mbs.length === paper.length && paper.length >= 2, 'the fixture prints ' + mbs.length + ' M&B pages for ' + paper.length + ' sectors');
+    const exact = ev('massBalanceMission.sectors.map(r => r.burnGal)');
+    assert(exact.some((g) => Math.abs(g - Math.round(g)) > 0.05), 'the fixture burns whole gallons anyway - it cannot tell exact from rounded');
+    mbs.forEach((sh, i) => {
+      const r = readMb(sh);
+      const trip = numPt(r.fuel.trip.gal);
+      // PAGE 2's TRIP FUEL IS PAGE 1's ROUNDED LEGS - the Total line where no
+      // ground burn sits in front of them
+      assert(trip === paper[i].legs, 'sector ' + (i + 1) + ': page 2 trip ' + trip + ' is not the rounded legs ' + paper[i].legs);
+      if (!(paper[i].pre > 0)) assert(String(trip) === paper[i].total, 'sector ' + (i + 1) + ': page 2 trip ' + trip + ' vs page 1 Total ' + paper[i].total);
+      // and the masses follow from it: TOM - trip x 6 = LDM, to the printed tenth
+      const tom = numPt(r.mb.tom.w), en = numPt(r.mb.enroute.w), ldm = numPt(r.mb.ldg.w);
+      assert(Math.abs(en - trip * 6) < 0.06 && Math.abs(tom - en - ldm) < 0.15,
+        'sector ' + (i + 1) + ' does not add up on paper: ' + JSON.stringify({ tom, en, ldm, trip }));
+    });
+    // THE SCREEN AND THE BANNER STAY EXACT: the live mission is untouched by printing
+    assert(JSON.stringify(ev('massBalanceMission.sectors.map(r => r.burnGal)')) === JSON.stringify(exact),
+      'printing changed the M&B the tab and the banner weigh');
+    // a later sector departs with the paper's own arrival fuel, unless it refuelled
+    const pm = ev('paperMassBalanceMission(paperRoundSectors(ofpPrintModel)).sectors.map(r => [r.fuelDepGal, r.fuelArrGal])');
+    for (let i = 1; i < pm.length; i++) {
+      if (!paper[i].refuelled) assert(Math.abs(pm[i][0] - (pm[i - 1][1] - (paper[i].pre > 0 ? Math.max(1, Math.round(paper[i].pre)) : 0))) < 1e-9,
+        'sector ' + (i + 1) + ' does not depart with the paper\'s arrival fuel');
+    }
+    assert(pm[0][0] === ev('massBalanceMission.sectors[0].fuelDepGal'), 'the stated fuel at the first start was rounded');
+  } finally {
+    ev('mbPrefs.reg = null; mbPrefs.view = "sector";');
+    w.renderAllFlightTables();
+  }
+});
+
 T('each sector end is checked against its own runway, from the METAR unless typed over', () => {
   // UPDATED DELIBERATELY AT v16.96: this test used to assert the tab SAID the
   // distances were not computed. They are now, and it says so.

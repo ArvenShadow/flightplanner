@@ -395,7 +395,10 @@ three cheap disciplines applied every time the page is touched:
   leg distance to the NEAREST whole, up or down (v17.10 reverses v17.9's
   round-up: "why is it rounding 1.1gal up to 2?"); fuel floor 1, distance floor
   0.5; ACC, Total and EST remaining follow the printed figures - the author:
-  "The paper should only use the rounded values".
+  "The paper should only use the rounded values". PAGE 2 TOO (v17.11):
+  `paperMassBalanceMission` weighs the print from the rounded fuel (stated
+  figures stay stated); the M&B tab and the banner stay exact.
+  → §{PAGE 2 IS WEIGHED FROM THE PAPER'S ROUNDED FUEL TOO (v17.11)}
   → §{THE PAPER ROUNDS TO THE NEAREST, BOTH WAYS (v17.10) - THIS REVERSES v17.9's ROUND-UP}
   → §{THE PRINTED OFP ROUNDS FOR COPYING, AND NEVER DOWN (v17.9)}
 - **ACC columns count the flight; the Total line counts the sector.**
@@ -407,7 +410,8 @@ three cheap disciplines applied every time the page is touched:
   Standard baggage (7.3 A / 0.7 C / LN-TRE 22.7 B) is a default LOAD.
   → §{THE STANDARD BAGGAGE IS A LOAD, NOT PART OF THE EMPTY MASS}
 - **One fuel density** (`FUEL_LB_PER_GAL = 6.0`, `toGallons` is the one
-  inverse); exact gallons leave the render on `ofpPrintModel[i].fuelGal`.
+  inverse); exact gallons leave the render on `ofpPrintModel[i].fuelGal` - and
+  the SCREEN weighs them; only the printout is weighed from the rounded copy.
   → §{PHASE B (v16.94): THE EXACT GALLONS, AND ONE FUEL DENSITY}
 - **The M&B tab** reads the plan's fuel, raises findings through the same
   banner only once a tail is chosen, and the whole-flight view changes what
