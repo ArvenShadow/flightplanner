@@ -494,6 +494,13 @@ download (quota eviction). → §{Not planned}
 
 ## Open items
 
+### FIRST PRIORITY NEXT SESSION (the author, v17.11)
+
+**Whole-flight Trip Fuel leaves out the touch & go ground-time burn** (it sits
+in the net stop change instead), so Trip Fuel - and Total Fuel Required on the
+form - is under-stated. *"Trip fuel is ALL fuel expected to be used."* Fix it
+before anything else. → §{FIRST PRIORITY, NOT YET BUILT: TRIP FUEL MUST INCLUDE THE GROUND TIME AT THE STOPS}
+
 ### Deferred nits (observed, not urgent) → §{DEFERRED: known nits and small bugs (v16.39)}
 
 1. A spilled descent reports planned, not flown, entry/exit altitudes.

@@ -10,6 +10,26 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## FIRST PRIORITY, NOT YET BUILT: TRIP FUEL MUST INCLUDE THE GROUND TIME AT THE STOPS
+
+Found by the author on a v17.11 whole-flight printout (ENHK -> ENDU, several
+touch & goes): page 1's Acc column reached 69 gal while page 2's Trip Fuel read
+64. The author: *"Trip fuel is ALL fuel expected to be used, so it should
+Absolutely be fixed first priority on the next session."*
+
+- **CAUSE**: the whole-flight master's trip fuel is `consumedGal` = the sum of
+  each sector's dep - arr (`computeMissionMassBalance`). A touch & go's ground
+  time burn is spent BETWEEN sectors (`prefixBurn`, charged at the next sector's
+  start), so it is in no sector's dep - arr; it lands in `stopChangeGal`, the NET
+  stop change, next to refuels. Acc counts it; Trip Fuel does not.
+- **WHY IT MATTERS**: Trip Fuel feeds Total Fuel Required on the school's form,
+  so it UNDER-STATES the fuel requirement by the ground burn (~5 gal there).
+- **THE FIX TO MAKE**: whole-flight trip fuel = every fuel burned (legs + stop
+  ground burns), matching the Acc column; keep only REFUELS as the separate stop
+  line. Check the screen M&B tab, the printed master (rounded, v17.11) and the
+  per-sector pages alike; masses are per-sector and should not move. Grep for
+  every place `consumedGal` / `stopChangeGal` / `burnGal` is read.
+
 ## PAGE 2 IS WEIGHED FROM THE PAPER'S ROUNDED FUEL TOO (v17.11)
 
 The author, asked whether printed page 2 should follow page 1's rounding:
