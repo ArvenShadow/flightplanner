@@ -10,6 +10,37 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE PAPER ROUNDS TO THE NEAREST, BOTH WAYS (v17.10) - THIS REVERSES v17.9's ROUND-UP
+
+The author, on the v17.9 printout: *"what the hell why is it rounding 1.1gal up
+to 2? Round it to the nearest whole number, both up and down. Same for
+distance"* - and, to be exact about the second half: *"same for distance meant
+also round up and down for distance"*.
+
+- **WHY v17.9 WENT UP.** The request it was built from said *"Round it in a way
+  that makes sure that the rounded fuel used NEVER becomes less than ACTUAL fuel
+  used"* and *"not obnoxiously higher"*. The only rounding to a whole number that
+  is never below the actual is the ceiling, and on a short leg the ceiling is
+  most of a gallon above - 1.1 printed 2. That was a faithful reading of the
+  first sentence, and it was the wrong trade for the pilot copying the sheet.
+- **`paperFuel` IS NOW `Math.round`, floor 1**: half rounds up, everything else
+  to the nearest (1.1 -> 1, 1.5 -> 2, 2.04 -> 2). A leg burning under 1 still
+  prints 1, from the original request ("regardless if its 0.4 or 0.7"). It still
+  rounds the UNROUNDED burn, so a 1.46 shown on screen as 1.5 prints 1.
+- **DISTANCE WAS ALREADY THE NEAREST**, both ways (`paperDist`, 12.4 -> 12,
+  12.5 -> 13), with the "never 0" floor of 0.5 the first request asked for. It is
+  unchanged; the suite now says so explicitly.
+- **WHAT THIS GIVES UP, stated rather than left to be found.** The paper can now
+  show a leg burning up to half a unit LESS than the plan, and the EST fuel
+  remaining - which follows the printed Acc column so start - acc = remaining on
+  the sheet - can read up to half a unit a leg MORE than the plan's own figure.
+  The screen, Mass & Balance and the fuel tracker keep the exact figures, and the
+  red banner judges those, so no check is weakened; it is the paper that is now a
+  rounded copy rather than a conservative one.
+- The property sweep was turned round to match: every value within half a unit,
+  whole, and BOTH directions must actually occur (a one-sided rule - the v17.9
+  one - fails it).
+
 ## A ROUNDED PAPER, A LANDING ALTITUDE KEPT, AND THE CORNERS REBUILT (v17.9)
 
 One feature and two bugs from the author, in one message.

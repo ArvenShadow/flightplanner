@@ -97,30 +97,32 @@ const signed = (/** @type {number} */ v) =>
 // and the rounding is only for show ... Accumulated fuel and distance will just
 // use the rounded intermediate values."
 //
-//  - FUEL IS ROUNDED UP, from the UNROUNDED burn (`legBurnRaw`), never from the
-//    tenth the screen shows: 2.04 shows as 2.0, and rounding THAT up gives 2,
-//    which is less than what the leg burns. Up to the next whole unit, so the
-//    margin is under one unit a leg - never "obnoxiously higher". Floor 1.
+//  - FUEL IS ROUNDED TO THE NEAREST WHOLE UNIT, up AND down (v17.10, the
+//    author: "why is it rounding 1.1gal up to 2? Round it to the nearest whole
+//    number, both up and down. Same for distance"). v17.9 rounded UP, from the
+//    request that the paper never show less than the actual burn; this
+//    reverses that. It rounds the UNROUNDED burn (`legBurnRaw`), not the tenth
+//    the screen shows, so the half-way case is decided by the real figure.
+//    A leg under 1 still prints 1 (the original request), never 0.
 //  - DISTANCE IS ROUNDED TO THE NEAREST WHOLE, with 0.5 as the floor: a 0.3 NM
 //    leg reads 0.5, never 0.
 //  - THE ACC COLUMNS AND THE TOTAL LINE ADD UP THE ROUNDED FIGURES, so a pilot
 //    checking the sheet down the column gets the printed total.
-//  - EST FUEL REMAINING FALLS BY THE SAME SURPLUS, so it agrees with the Acc
-//    column on the same sheet (start - acc), and it is the conservative way
-//    round. The surplus restarts at a refuel, where the tanks hold a stated
-//    figure again.
+//  - EST FUEL REMAINING MOVES WITH THE PRINTED ACC COLUMN, so on one sheet
+//    start - acc = remaining. Rounding to the nearest means that difference
+//    can go either way (under half a unit a leg, plus the floor of 1). It
+//    restarts at a refuel, where the tanks hold a stated figure again.
 //  - NOTHING ELSE MOVES: the screen, Mass & Balance and the fuel tracker keep
 //    the exact figures. This runs on a COPY when the print is built.
 // =========================================================================
 
-/** Fuel for the paper: the next whole unit at or above the actual burn, never
- *  below 1. The 1e-9 only absorbs floating-point noise (3.0000000004 is 3).
- *  @param {number} raw @returns {number} */
+/** Fuel for the paper: the nearest whole unit (half rounds up), never below
+ *  1 for a leg that burns anything. @param {number} raw @returns {number} */
 export function paperFuel(raw) {
   const v = Number(raw);
   if (!isFinite(v)) return NaN;
   if (v <= 0) return 0;
-  return Math.max(1, Math.ceil(v - 1e-9));
+  return Math.max(1, Math.round(v));
 }
 
 /** A leg distance for the paper: nearest whole, never 0 - 0.5 is the floor.
@@ -142,7 +144,7 @@ const round1 = (/** @type {number} */ v) => Math.round(v * 10) / 10;
  * line counts the SECTOR.
  *
  * A sector may open with burn that has no row of its own - a touch & go's
- * ground time, `prefixBurnRaw` - and that is rounded up the same way and added
+ * ground time, `prefixBurnRaw` - and that is rounded the same way and added
  * to the sums, so no fuel the plan counts is missing from the paper's.
  *
  * @param {any[]} sectors ofpPrintModel entries: {meta, rows, refuelled, prefixBurn, prefixBurnRaw}
