@@ -394,7 +394,8 @@ three cheap disciplines applied every time the page is touched:
 - **The paper rounds, the plan does not** (`paperRoundSectors`): leg fuel and
   leg distance to the NEAREST whole, up or down (v17.10 reverses v17.9's
   round-up: "why is it rounding 1.1gal up to 2?"); fuel floor 1, distance floor
-  0.5; ACC, Total and EST remaining follow the printed figures.
+  0.5; ACC, Total and EST remaining follow the printed figures - the author:
+  "The paper should only use the rounded values".
   → §{THE PAPER ROUNDS TO THE NEAREST, BOTH WAYS (v17.10) - THIS REVERSES v17.9's ROUND-UP}
   → §{THE PRINTED OFP ROUNDS FOR COPYING, AND NEVER DOWN (v17.9)}
 - **ACC columns count the flight; the Total line counts the sector.**

@@ -40,6 +40,10 @@ also round up and down for distance"*.
 - The property sweep was turned round to match: every value within half a unit,
   whole, and BOTH directions must actually occur (a one-sided rule - the v17.9
   one - fails it).
+- **SETTLED BY THE AUTHOR, asked straight after**: whether EST remaining should
+  follow the rounded column (and so read up to half a unit a leg above the plan)
+  or stay exact. *"The paper should only use the rounded values."* It follows
+  the rounded column, as built - the sheet is one consistent rounded copy.
 
 ## A ROUNDED PAPER, A LANDING ALTITUDE KEPT, AND THE CORNERS REBUILT (v17.9)
 
