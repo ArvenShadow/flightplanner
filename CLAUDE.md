@@ -391,9 +391,12 @@ three cheap disciplines applied every time the page is touched:
   → §{THE PRINTOUT IS THE SCHOOL'S FORM, AND THE TAB LOOKS LIKE ITS PAGE 2 (v16.97)}
   The blank-on-purpose decisions (MSA, actuals, Freq, crew) and the
   sector-per-sheet rule: → §{The company OFP form as the print output (v16.41, roadmap item 6 - the OFP half)}
-- **The paper rounds, the plan does not** (`paperRoundSectors`): leg fuel UP to
-  a whole unit from the unrounded burn (floor 1), leg distance to the nearest
-  whole (floor 0.5); ACC, Total and EST remaining follow the printed figures.
+- **The paper rounds, the plan does not** (`paperRoundSectors`): leg fuel and
+  leg distance to the NEAREST whole, up or down (v17.10 reverses v17.9's
+  round-up: "why is it rounding 1.1gal up to 2?"); fuel floor 1, distance floor
+  0.5; ACC, Total and EST remaining follow the printed figures - the author:
+  "The paper should only use the rounded values".
+  → §{THE PAPER ROUNDS TO THE NEAREST, BOTH WAYS (v17.10) - THIS REVERSES v17.9's ROUND-UP}
   → §{THE PRINTED OFP ROUNDS FOR COPYING, AND NEVER DOWN (v17.9)}
 - **ACC columns count the flight; the Total line counts the sector.**
   → §{THE ACC COLUMNS COUNT THE MISSION; THE TOTAL LINE COUNTS THE SECTOR (v16.85)}
