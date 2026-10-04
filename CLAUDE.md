@@ -401,6 +401,10 @@ three cheap disciplines applied every time the page is touched:
   → §{PAGE 2 IS WEIGHED FROM THE PAPER'S ROUNDED FUEL TOO (v17.11)}
   → §{THE PAPER ROUNDS TO THE NEAREST, BOTH WAYS (v17.10) - THIS REVERSES v17.9's ROUND-UP}
   → §{THE PRINTED OFP ROUNDS FOR COPYING, AND NEVER DOWN (v17.9)}
+- **Trip fuel is ALL fuel used** (v17.12, the author): touch & go ground time
+  is in the whole-flight trip and in the sector it delays (its page 2 says so);
+  the stop line is REFUELS only, told apart by `refuelled`, never guessed.
+  → §{TRIP FUEL IS ALL THE FUEL USED, TOUCH & GO GROUND TIME INCLUDED (v17.12)}
 - **ACC columns count the flight; the Total line counts the sector.**
   → §{THE ACC COLUMNS COUNT THE MISSION; THE TOTAL LINE COUNTS THE SECTOR (v16.85)}
 - **Mass & Balance**: the workbook and the form agree on every constant; the
@@ -493,13 +497,6 @@ terrain elevation (declined), openAIP (lags the chart), offline chart
 download (quota eviction). → §{Not planned}
 
 ## Open items
-
-### FIRST PRIORITY NEXT SESSION (the author, v17.11)
-
-**Whole-flight Trip Fuel leaves out the touch & go ground-time burn** (it sits
-in the net stop change instead), so Trip Fuel - and Total Fuel Required on the
-form - is under-stated. *"Trip fuel is ALL fuel expected to be used."* Fix it
-before anything else. → §{FIRST PRIORITY, NOT YET BUILT: TRIP FUEL MUST INCLUDE THE GROUND TIME AT THE STOPS}
 
 ### Deferred nits (observed, not urgent) → §{DEFERRED: known nits and small bugs (v16.39)}
 

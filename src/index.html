@@ -484,7 +484,7 @@
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
                 <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the whole-flight total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
                 <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>CREW, PASSENGERS and PIC</b> — crew are people, and the planner holds no one's name. <b>Reg</b> is filled from the aircraft you pick on the Mass &amp; Balance tab, and is blank until you pick one — a tail number identifies a machine, not a person.</li>
-                <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. Left blank for your pen: alternate, contingency and extra fuel and so the total required (no alternate is planned here), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. On a whole-flight sheet the net fuel change at the stops is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
+                <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. Left blank for your pen: alternate, contingency and extra fuel and so the total required (no alternate is planned here), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. <b>Trip fuel is all the fuel the plan uses</b>, a touch &amp; go's ground time included - on a sector's own page too, which says so beside its title. On a whole-flight sheet the fuel taken on at a refuelling stop is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
                 <li><b>Choosing an aircraft loads its standard baggage</b> - 7.3 lb at A and 0.7 lb at C on every aircraft, and LN-TRE's 22.7 lb at B, as the school's workbook does. They are ordinary baggage lines you can see and type over; choosing a tail again resets them.</li>
                 <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, the wind correction (no headwind credit under 9 kt, +10% per 2 kt of tailwind, nothing past 10 kt), braking action, then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
@@ -1470,7 +1470,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.11';
+    const APP_VERSION = '17.12';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -8077,8 +8077,16 @@
     }
 
     /** One Mass & Balance page: a sector, or the whole-mission master. */
-    function printMbSheet(res, idx) {
+    function printMbSheet(res, idx, groundGal) {
       const m = massBalanceMission;
+      // TRIP FUEL IS ALL FUEL EXPECTED TO BE USED (v17.12, the author). A sector
+      // after a touch & go burns its ground time before it takes off; that time
+      // belongs to the sector it delays (v16.84) and page 1's sector Total
+      // already counts it, so this sheet's trip does too, and its fuel on board
+      // is what was aboard before it - on board minus trip is still the arrival.
+      // The MASS lines are untouched: the take-off is weighed after the burn.
+      // The whole-flight master has it inside burnGal already (missionMaster).
+      const ground = idx !== null && isFinite(groundGal) && groundGal > 0 ? groundGal : 0;
       const L = res.loads, arm = STATION_ARMS;
       const line = (lb, a) => ({ w: lb, mom: lb * a });
       const pt = (p) => ({ w: p.weightLb, arm: p.armIn, mom: p.momentInLb });
@@ -8118,8 +8126,9 @@
           ' - every figure here is for the actual fuel'
         : '';
       // THE SHEET HAS TO ADD UP. On the whole-mission master the fuel is walked
-      // over the sectors (missionMaster): burned in the air, plus the NET change
-      // at the stops - which the form has no line for. v16.97 put it on the
+      // over the sectors (missionMaster): everything burned, touch & go ground
+      // time included (v17.12), plus what was REFUELLED at the stops - which the
+      // form has no line for. v16.97 put it on the
       // Last Minute Change line; that line is the preflight fuel now, so the
       // stop change is stated beside the title instead (the note strip holds
       // the LMC's own sentence, and the two together do not fit it - measured,
@@ -8127,18 +8136,21 @@
       // plus that, is the landing printed below it.
       const stop = res.stopChangeGal;
       const stopTxt = idx === null && isFinite(stop) && Math.abs(stop) >= 0.05
-        ? '   ·   Fuel change at the stops ' + (stop > 0 ? '+' : '') + nb(stop) + ' US gal: T/O - consumed + that = landing'
+        ? '   ·   Refuelled at the stops ' + (stop > 0 ? '+' : '') + nb(stop) + ' US gal: T/O - consumed + that = landing'
+        : '';
+      const groundTxt = ground > 0
+        ? '   ·   Trip includes ' + nb(ground) + ' US gal ground time at the touch & go'
         : '';
       const title = idx === null
         ? 'Whole flight  ' + ((m.first.label.split(' → ')[0]) || '') + ' → ' + ((m.last.label.split(' → ')[1]) || '') + stopTxt
-        : res.label + (m.sectors.length > 1 ? '   ·   sector ' + (idx + 1) + ' of ' + m.sectors.length : '');
+        : res.label + (m.sectors.length > 1 ? '   ·   sector ' + (idx + 1) + ' of ' + m.sectors.length : '') + groundTxt;
       const at = (i, role) => runwayChecks.find((c) => c.i === i && c.role === role) || null;
       const lastIdx = ofpPrintModel.length - 1;
       const c = res.checks;
       return {
         title, note, reg: res.aircraft.reg, lines,
-        fuel: { tripGal: res.burnGal, tripMin, reserveGal, reserveMin: perHour(reserveGal),
-                onboardGal: res.fuelDepGal, enduranceMin: perHour(res.fuelDepGal) },
+        fuel: { tripGal: res.burnGal + ground, tripMin, reserveGal, reserveMin: perHour(reserveGal),
+                onboardGal: res.fuelDepGal + ground, enduranceMin: perHour(res.fuelDepGal + ground) },
         vaKt: res.vaKt, vGlideKt: res.vGlideKt, cruise: cr, minFltMin: res.minFlightMin,
         dep: printAerodrome(at(idx === null ? 0 : idx, 'dep')),
         dest: printAerodrome(at(idx === null ? lastIdx : idx, 'arr')),
@@ -8166,7 +8178,7 @@
       const m = paperMassBalanceMission(paper) || massBalanceMission;
       const mission = !!m && mbPrefs.view === 'mission';
       const mbPage = (res, idx) => {
-        const s = printMbSheet(res, idx);
+        const s = printMbSheet(res, idx, idx === null ? 0 : m.fuel.groundGal[idx]);
         return { kind: 'mb', items: mbPageItems(s), marks: s.marks,
                  ldHwind: !!(s.dest && isFinite(s.dest.hwindKt)) };
       };
@@ -9001,7 +9013,7 @@
     }
 
     /** One sector (or the mission master) as a card. */
-    function mbSheetHTML(res, title, lmcGal) {
+    function mbSheetHTML(res, title, lmcGal, groundGal) {
       const c = res.checks;
       const okTO = c.takeoffWeight === 'ok' && c.takeoffCg === 'ok';
       const okLDG = c.landingWeight === 'ok' && c.landingCg === 'ok';
@@ -9021,7 +9033,13 @@
       // blocks carry, at a glance.
       const chips = [];
       chips.push('<span class="mb-chip"><b>Fuel</b> ' + f1(res.fuelDepGal) + ' → ' + f1(res.fuelArrGal) + ' gal</span>');
-      chips.push('<span class="mb-chip"><b>Burn</b> ' + f1(res.burnGal) + ' gal · ' + f1(res.burnGal * FUEL_LB_PER_GAL) + ' lb</span>');
+      // ALL the fuel this sheet uses (v17.12): a sector after a touch & go
+      // burns its ground time first, as the printed sheet and page 1 count it.
+      const ground = isFinite(groundGal) && groundGal >= 0.05 ? groundGal : 0;
+      const burn = res.burnGal + ground;
+      chips.push('<span class="mb-chip"' + (ground ? ' title="' + f1(res.burnGal) + ' gal in the air + ' + f1(ground) +
+        ' gal ground time at the touch & go before it"' : '') + '><b>Burn</b> ' + f1(burn) + ' gal · ' +
+        f1(burn * FUEL_LB_PER_GAL) + ' lb' + (ground ? ' <i>incl. ' + f1(ground) + ' ground</i>' : '') + '</span>');
       // Endurance at the sheet's one planning rate (OFP!O9), from the fuel this
       // sheet departs with: 64 gal is 05:20.
       const endMin = minutesAtPlanningRate(res.fuelDepGal);
@@ -9034,7 +9052,7 @@
       // Only the whole-mission sheet has stops inside it. Said separately, so
       // the fuel figures above still add up to the tanks.
       if (isFinite(res.stopChangeGal) && Math.abs(res.stopChangeGal) >= 0.05)
-        chips.push('<span class="mb-chip" title="Net: a refuel adds, circuit and ground minutes subtract"><b>At stops</b> ' +
+        chips.push('<span class="mb-chip" title="Fuel taken on at the stops. Touch &amp; go ground time is in the Burn"><b>Refuelled</b> ' +
           (res.stopChangeGal > 0 ? '+' : '') + f1(res.stopChangeGal) + ' gal</span>');
       chips.push('<span class="mb-chip" title="POH table, at the landing mass - the lightest moment of the flight binds it"><b>V<sub>A</sub></b> ' +
         (res.vaKt === null ? 'not tabulated' : Math.round(res.vaKt) + ' kt') + '</span>');
@@ -9212,7 +9230,7 @@
       } else {
         m.sectors.forEach((r, i) => {
           const hit = massBalanceLmc && massBalanceLmc.deltaGal !== null && i < massBalanceLmc.reach;
-          h += mbSheetHTML(r, r.label, hit ? massBalanceLmc.deltaGal : null);
+          h += mbSheetHTML(r, r.label, hit ? massBalanceLmc.deltaGal : null, m.fuel.groundGal[i]);
         });
       }
       const cautions = massBalanceCautions(m);

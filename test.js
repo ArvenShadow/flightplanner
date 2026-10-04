@@ -12859,7 +12859,7 @@ T('the printed whole-mission sheet adds up, with a refuel in the middle', () => 
   // preflight fuel against the planned now (the author), so the stop change is
   // STATED beside the title, and the LMC line is left alone.
   assert(!sheet.mb.lmc, 'the stop change is still on the Last Minute Change line: ' + JSON.stringify(sheet.mb.lmc));
-  const said = /Fuel change at the stops \+([\d,]+) US gal/.exec(sheet.box.title || '');
+  const said = /Refuelled at the stops \+([\d,]+) US gal/.exec(sheet.box.title || '');
   assert(said, 'the master does not state the fuel change at the stops: ' + sheet.box.title);
   const tom = numPt(sheet.mb.tom.w), burn = numPt(sheet.mb.enroute.w),
         stop = numPt(said[1]) * 6, ldm = numPt(sheet.mb.ldg.w);
@@ -12895,13 +12895,14 @@ T('page 2 is weighed from the same rounded fuel as page 1, and the M&B tab stays
     mbs.forEach((sh, i) => {
       const r = readMb(sh);
       const trip = numPt(r.fuel.trip.gal);
-      // PAGE 2's TRIP FUEL IS PAGE 1's ROUNDED LEGS - the Total line where no
-      // ground burn sits in front of them
-      assert(trip === paper[i].legs, 'sector ' + (i + 1) + ': page 2 trip ' + trip + ' is not the rounded legs ' + paper[i].legs);
-      if (!(paper[i].pre > 0)) assert(String(trip) === paper[i].total, 'sector ' + (i + 1) + ': page 2 trip ' + trip + ' vs page 1 Total ' + paper[i].total);
-      // and the masses follow from it: TOM - trip x 6 = LDM, to the printed tenth
+      // PAGE 2's TRIP FUEL IS PAGE 1's ROUNDED LEGS, plus a touch & go's rounded
+      // ground time in front of them (v17.12) - which is page 1's Total line
+      const pre = paper[i].pre > 0 ? Math.max(1, Math.round(paper[i].pre)) : 0;
+      assert(trip === paper[i].legs + pre, 'sector ' + (i + 1) + ': page 2 trip ' + trip + ' is not the rounded legs ' + paper[i].legs + ' + ground ' + pre);
+      assert(String(trip) === paper[i].total, 'sector ' + (i + 1) + ': page 2 trip ' + trip + ' vs page 1 Total ' + paper[i].total);
+      // and the masses follow from the AIRBORNE part: TOM - legs x 6 = LDM
       const tom = numPt(r.mb.tom.w), en = numPt(r.mb.enroute.w), ldm = numPt(r.mb.ldg.w);
-      assert(Math.abs(en - trip * 6) < 0.06 && Math.abs(tom - en - ldm) < 0.15,
+      assert(Math.abs(en - (trip - pre) * 6) < 0.06 && Math.abs(tom - en - ldm) < 0.15,
         'sector ' + (i + 1) + ' does not add up on paper: ' + JSON.stringify({ tom, en, ldm, trip }));
     });
     // THE SCREEN AND THE BANNER STAY EXACT: the live mission is untouched by printing
@@ -12914,6 +12915,79 @@ T('page 2 is weighed from the same rounded fuel as page 1, and the M&B tab stays
         'sector ' + (i + 1) + ' does not depart with the paper\'s arrival fuel');
     }
     assert(pm[0][0] === ev('massBalanceMission.sectors[0].fuelDepGal'), 'the stated fuel at the first start was rounded');
+  } finally {
+    ev('mbPrefs.reg = null; mbPrefs.view = "sector";');
+    w.renderAllFlightTables();
+  }
+});
+
+T('trip fuel is ALL the fuel used: a touch & go\'s ground time is in it, a refuel is not (v17.12)', () => {
+  // The author, on a whole-flight printout whose Acc column read 69 gal and
+  // whose Trip Fuel read 64: "Trip fuel is ALL fuel expected to be used".
+  // The touch & go's ground burn sat in the NET stop change instead.
+  const MB = moduleExports.mb;
+  const ac = MB.aircraftByReg('LN-TRB');
+  const st = MB.normaliseStationLoads({ pilotLb: 180 });
+  const m = MB.computeMissionMassBalance(ac, st, [
+    { fuelDepGal: 40, fuelArrGal: 30 },
+    { fuelDepGal: 28, fuelArrGal: 20 },                    // 2 gal at a touch & go
+    { fuelDepGal: 50, fuelArrGal: 40, refuelled: true },   // full stop, +30 taken on
+    { fuelDepGal: 38.5, fuelArrGal: 31 }                   // 1.5 gal at a touch & go
+  ]);
+  assert(Math.abs(m.fuel.consumedGal - (10 + 2 + 8 + 10 + 1.5 + 7.5)) < 1e-9,
+    'the ground time is not in the trip fuel: ' + m.fuel.consumedGal);
+  assert(Math.abs(m.fuel.stopChangeGal - 30) < 1e-9, 'the stop line is not the refuel alone: ' + m.fuel.stopChangeGal);
+  assert(JSON.stringify(m.fuel.groundGal) === '[0,2,0,1.5]', 'the ground burn is not charged to the sector it delays: ' + JSON.stringify(m.fuel.groundGal));
+  assert(Math.abs(m.fuel.depGal - m.fuel.consumedGal + m.fuel.stopChangeGal - m.fuel.arrGal) < 1e-9,
+    'the whole flight no longer reconciles: dep - consumed + refuelled != arr');
+  const M = MB.missionMaster(m);
+  assert(M.burnGal === m.fuel.consumedGal && M.stopChangeGal === 30, 'the master does not carry the whole burn');
+  // A refuel that leaves LESS than was landed with is still the pilot's stated
+  // figure, not a burn - only a full stop refuels, and it burns nothing.
+  const d = MB.computeMissionMassBalance(ac, st, [
+    { fuelDepGal: 60, fuelArrGal: 50 }, { fuelDepGal: 45, fuelArrGal: 35, refuelled: true }]);
+  assert(d.fuel.consumedGal === 20 && d.fuel.stopChangeGal === -5, 'a defuel was counted as burn: ' + JSON.stringify(d.fuel));
+
+  // THE APP, on paper and on screen: a touch & go between two sectors.
+  const tg = SEED_STOP.replace('stop: "full-stop", stopMin: 10, fuelAfterGal: 50', 'stop: "touch-go", stopMin: 10');
+  assert(tg !== SEED_STOP, 'the touch & go fixture did not substitute');
+  ev(tg);
+  doc.getElementById('fuel-dep').value = '64';
+  ev('mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); mbPrefs.view = "mission";');
+  w.renderAllFlightTables();
+  try {
+    const paper = ev('paperRoundSectors(ofpPrintModel).map(s => ({ acc: s.rows[s.rows.length - 1].accBurn, total: Number(s.meta.totals.burn), pre: s.prefixBurnRaw || 0, arr: Number(s.meta.fuelRem) }))');
+    assert(paper.length === 2 && paper[1].pre > 0, 'the fixture has no ground burn: ' + JSON.stringify(paper));
+    const ground = Math.max(1, Math.round(paper[1].pre));
+    // 1. The printed master: trip is page 1's last Acc figure, and no stop line.
+    let mbs = printDoc().sheets.filter((sh) => sh.kind === 'mb');
+    assert(mbs.length === 1, 'the mission view printed ' + mbs.length + ' M&B pages');
+    let r = readMb(mbs[0]);
+    const acc = paper[paper.length - 1].acc;
+    assert(numPt(r.fuel.trip.gal) === acc, 'whole-flight trip ' + r.fuel.trip.gal + ' is not page 1\'s Acc ' + acc);
+    assert(!/Refuelled at the stops/.test(r.box.title), 'a touch & go printed as a stop change: ' + r.box.title);
+    assert(Math.abs(numPt(r.mb.tom.w) - numPt(r.mb.enroute.w) - numPt(r.mb.ldg.w)) < 0.15,
+      'the master does not add up without a stop line: ' + JSON.stringify(r.mb));
+    // 2. The M&B tab, exact: the master's burn is every gallon the plan burns.
+    const exact = ev('[ofpPrintModel[0].fuelGal.dep, ofpPrintModel[ofpPrintModel.length - 1].fuelGal.arr]');
+    assert(Math.abs(ev('missionMaster(massBalanceMission).burnGal') - (exact[0] - exact[1])) < 1e-9,
+      'the screen master leaves fuel out of the burn');
+    let html = doc.getElementById('mb-body').innerHTML;
+    assert(!/Refuelled<\/b>|At stops/.test(html), 'the tab still shows a stop change for a touch & go');
+    // 3. Per sector: page 2's trip is page 1's sector Total, ground time included,
+    //    on board less trip is the arrival, and the masses do not move.
+    ev('mbPrefs.view = "sector"; renderAllFlightTables();');
+    mbs = printDoc().sheets.filter((sh) => sh.kind === 'mb');
+    r = readMb(mbs[1]);
+    const trip = numPt(r.fuel.trip.gal), onb = numPt(r.fuel.onboard.gal);
+    assert(trip === paper[1].total, 'sector 2: page 2 trip ' + trip + ' is not page 1\'s Total ' + paper[1].total);
+    assert(Math.abs(onb - trip - paper[1].arr) < 0.06, 'sector 2: on board ' + onb + ' less trip ' + trip + ' is not the arrival ' + paper[1].arr);
+    assert(r.box.title.includes('Trip includes ' + ground + ',0 US gal ground time at the touch & go'),
+      'sector 2 does not say its trip includes the ground time: ' + r.box.title);
+    assert(Math.abs(numPt(r.mb.enroute.w) - (trip - ground) * 6) < 0.06, 'the enroute MASS line took the ground burn too');
+    assert(!/Trip includes/.test(readMb(mbs[0]).box.title), 'the first sector claims a ground time it does not have');
+    html = doc.getElementById('mb-body').innerHTML;
+    assert(/incl\. \d+\.\d ground/.test(html), 'the tab\'s sector card does not show the ground time in its burn');
   } finally {
     ev('mbPrefs.reg = null; mbPrefs.view = "sector";');
     w.renderAllFlightTables();
@@ -13601,7 +13675,7 @@ T('typing the actual fuel recalculates the M&B, prints the change on the LMC lin
   // The whole-mission master carries it too.
   ev(`mbPrefs.view = 'mission'; actualFuelGal = 60; renderAllFlightTables();`);
   const master = readMb(printDoc().sheets.filter((s) => s.kind === 'mb')[0]);
-  assert(master.mb.lmc && master.mb.lmc.w === '-24,0' && /Last Minute Change/.test(master.box.note) && /Fuel change at the stops/.test(master.box.title),
+  assert(master.mb.lmc && master.mb.lmc.w === '-24,0' && /Last Minute Change/.test(master.box.note) && /Refuelled at the stops/.test(master.box.title),
     'the master lost the change or the stop note: ' + master.box.note + ' / ' + master.box.title);
   // Nothing typed: no LMC line, anywhere.
   box.value = '';
@@ -13655,10 +13729,11 @@ TA('the longest page-2 margin notes fit their free paper at no less than the sma
   // longest reporting-point names as the sector's ends.
   const worst = {
     note: 'Last Minute Change: planned 999,9 US gal, actual 1000,0 - every figure here is for the actual fuel',
-    title: 'Whole flight  KVALØYSLETTA → NORDKJOSBOTN   ·   Fuel change at the stops +999,9 US gal: T/O - consumed + that = landing'
+    title: 'Whole flight  KVALØYSLETTA → NORDKJOSBOTN   ·   Refuelled at the stops +999,9 US gal: T/O - consumed + that = landing',
+    sector: 'KVALØYSLETTA → NORDKJOSBOTN   ·   sector 10 of 12   ·   Trip includes 999,9 US gal ground time at the touch & go'
   };
   for (const [k, text] of Object.entries(worst)) {
-    const b = P.MB_BOXES[k];
+    const b = P.MB_BOXES[k === 'sector' ? 'title' : k];
     const fit = P.fitSize((t, sz) => font.widthOfTextAtSize(P.encodable(t, new Set(font.getCharacterSet())), sz),
       text, b.x1 - b.x0 - 2 * P.PAD, 6);
     assert(fit.fits, 'the ' + k + ' strip cannot hold its longest text even at ' + P.MIN_SIZE + ' pt');

@@ -569,7 +569,9 @@ export function computeMassBalance(aircraft, stations, fuelDepGal, fuelArrGal, l
  *
  * @param {Aircraft} aircraft
  * @param {StationLoads} stations
- * @param {Array<{fuelDepGal: number, fuelArrGal: number, label?: string}>} sectors
+ * @param {Array<{fuelDepGal: number, fuelArrGal: number, refuelled?: boolean, label?: string}>} sectors
+ *   `refuelled` marks a sector that departs after a refuel, so the change at
+ *   the stop before it is fuel taken on, not fuel burned.
  * @returns {MassBalanceMission}
  */
 export function computeMissionMassBalance(aircraft, stations, sectors) {
@@ -586,18 +588,34 @@ export function computeMissionMassBalance(aircraft, stations, sectors) {
   // only when nothing was taken on: refuel to 64 gal half way and a mission
   // that burned 44 reports 24. So the two things that happen to the tanks are
   // kept apart and each is summed where it happens:
-  //   consumedGal   - burned IN each sector, taxi included (dep - arr)
-  //   stopChangeGal - the NET change at the stops between them: a refuel adds,
-  //                   circuit and ground minutes subtract. It is net on purpose:
-  //                   a refuel is entered as the fuel AFTER, so the split
-  //                   between uplift and ground burn is not something the plan
-  //                   states, and inventing one would be a guess.
+  //   consumedGal   - EVERY gallon burned: each sector's dep - arr (taxi
+  //                   included) AND the ground time at a touch & go between
+  //                   sectors. The author (v17.12): "Trip fuel is ALL fuel
+  //                   expected to be used". Until v17.12 the touch & go burn
+  //                   sat in the stop change instead, so a printout read 69 gal
+  //                   on page 1's Acc column and 64 gal of trip fuel on page 2.
+  //   stopChangeGal - what was TAKEN ON at the stops, and nothing else. The
+  //                   plan states which is which, so nothing is guessed: only
+  //                   a full stop can refuel (`refuelled`) and a full stop
+  //                   burns nothing on the ground (engine off), so its change
+  //                   is the uplift; at any other stop the change is the
+  //                   ground burn. A gain at a stop not marked refuelled can
+  //                   only be an uplift too, and is counted as one.
   // Together they reconcile exactly: depGal - consumedGal + stopChangeGal
   // is arrGal, which is what lets a printed sheet add up.
+  // `groundGal[i]` is the ground burn charged to sector i - the ground time
+  // belongs to the sector it delays (v16.84) - so a sector's own sheet can
+  // count it too, the way page 1's sector Total already does.
   let consumed = 0, stopChange = 0;
+  /** @type {number[]} */
+  const ground = [];
   for (let i = 0; i < list.length; i++) {
     consumed += list[i].fuelDepGal - list[i].fuelArrGal;
-    if (i > 0) stopChange += list[i].fuelDepGal - list[i - 1].fuelArrGal;
+    ground.push(0);
+    if (i === 0) continue;
+    const change = list[i].fuelDepGal - list[i - 1].fuelArrGal;
+    if ((sectors[i] && sectors[i].refuelled) || change > 0) stopChange += change;
+    else { consumed -= change; ground[i] = -change; }
   }
   const res = {
     aircraft,
@@ -610,7 +628,8 @@ export function computeMissionMassBalance(aircraft, stations, sectors) {
       depGal: list.length ? list[0].fuelDepGal : NaN,
       arrGal: list.length ? list[list.length - 1].fuelArrGal : NaN,
       consumedGal: list.length ? consumed : NaN,
-      stopChangeGal: list.length ? stopChange : NaN
+      stopChangeGal: list.length ? stopChange : NaN,
+      groundGal: ground
     }
   };
   return /** @type {MassBalanceMission} */ (res);
