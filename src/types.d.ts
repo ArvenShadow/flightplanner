@@ -579,10 +579,13 @@ interface MassBalanceMission {
   fuel: {
     depGal: number;
     arrGal: number;
-    /** Burned in the sectors, taxi included. */
+    /** EVERY gallon burned: in the sectors (taxi included) and the ground
+     *  time at a touch & go between them (v17.12). */
     consumedGal: number;
-    /** Net change at the stops: refuel adds, circuit and ground minutes subtract. */
+    /** Fuel TAKEN ON at the stops (refuels) - the ground burn is in consumed. */
     stopChangeGal: number;
+    /** Per sector: the touch & go ground burn charged at its start (0 if none). */
+    groundGal: number[];
   };
 }
 

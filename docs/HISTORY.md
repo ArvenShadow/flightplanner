@@ -10,7 +10,10 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
-## FIRST PRIORITY, NOT YET BUILT: TRIP FUEL MUST INCLUDE THE GROUND TIME AT THE STOPS
+## TRIP FUEL IS ALL THE FUEL USED, TOUCH & GO GROUND TIME INCLUDED (v17.12)
+
+Recorded at v17.11 as the first priority for the next session, built at v17.12.
+The record as it was written, then what was built:
 
 Found by the author on a v17.11 whole-flight printout (ENHK -> ENDU, several
 touch & goes): page 1's Acc column reached 69 gal while page 2's Trip Fuel read
@@ -29,6 +32,34 @@ Absolutely be fixed first priority on the next session."*
   line. Check the screen M&B tab, the printed master (rounded, v17.11) and the
   per-sector pages alike; masses are per-sector and should not move. Grep for
   every place `consumedGal` / `stopChangeGal` / `burnGal` is read.
+
+**BUILT (v17.12):**
+
+- **`computeMissionMassBalance` SPLITS THE STOP CHANGE BY WHAT THE PLAN STATES**,
+  so nothing is guessed (the v16.94 comment called the split "a guess"; it is
+  not one): only a full stop can refuel, and a full stop burns nothing on the
+  ground. So the change at a stop before a `refuelled` sector is fuel taken on;
+  anywhere else it is the touch & go's ground burn and goes into `consumedGal`.
+  A gain at a stop not marked refuelled can only be an uplift and is counted as
+  one (the older pure tests pass sectors with no flag). `stopChangeGal` is now
+  the refuels alone; `dep - consumed + stopChange = arr` still holds.
+- **`fuel.groundGal[i]`** is the ground burn charged to sector i - the ground
+  time belongs to the sector it delays (v16.84), and page 1's sector Total
+  already counted it (`paperRoundSectors` adds `prefixBurnRaw`). So a SECTOR's
+  page 2 now prints trip = legs + ground (= page 1's Total) and fuel on board =
+  take-off fuel + ground (on board less trip = the arrival), and says "Trip
+  includes N US gal ground time at the touch & go" beside its title (fit-tested
+  at the worst case). The MASS lines do not move: the take-off is weighed after
+  the burn, and the enroute line is still the airborne burn.
+- **Every surface**: the printed master (trip = page 1's last Acc), the M&B tab's
+  master (Burn chip = every gallon; the stop chip is "Refuelled" and appears
+  only for an uplift), the tab's sector cards (Burn includes the ground time,
+  "incl. N ground"), and the printed per-sector pages. The margin line reads
+  "Refuelled at the stops" instead of "Fuel change at the stops".
+- Tests: one pure (four sectors, two touch & goes and a refuel, plus a defuel
+  that must not read as burn) and one through the app on SEED_STOP turned into
+  a touch & go, both views, paper and tab. Mutation: putting the ground burn
+  back into the stop change fails it (trip 35.5 against 39).
 
 ## PAGE 2 IS WEIGHED FROM THE PAPER'S ROUNDED FUEL TOO (v17.11)
 
