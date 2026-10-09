@@ -21,8 +21,8 @@
  * WHAT IS BLANK IS BLANK ON PURPOSE (v16.41, unchanged): actuals (ATO, Diff,
  * ACT, block and take-off/landing times, flight and block time), MSA (no
  * terrain data by decision), Freq, the alternate line, crew and passengers
- * (people), and on page 2 the alternate, contingency and extra fuel and so the
- * total required (no alternate is planned here), MSA and MDA, max crosswind,
+ * (people), and on page 2 the contingency fuel (alternate and extra are the
+ * pilot's own figures since v17.14, and the total required is filled), MSA and MDA, max crosswind,
  * runway state, the minima tables and the signatures. An empty box for the
  * pilot's pen, never a zero or a dash.
  *
@@ -318,7 +318,9 @@ export function ofpPageItems(sheet, columns, totalKeys) {
  * @typedef {{title: string, note?: string, reg: string,
  *   lines: Partial<Record<'bem'|'pilot'|'right'|'rear'|'fuel'|'bagA'|'bagB'|'bagC'|'tom'|'enroute'|'lmc'|'ldg', MbLine>>,
  *   fuel: {tripGal: number, tripMin: number, reserveGal: number, reserveMin: number,
- *          onboardGal: number, enduranceMin: number},
+ *          onboardGal: number, enduranceMin: number,
+ *          alternateGal?: number, alternateMin?: number, extraGal?: number, extraMin?: number,
+ *          requiredGal?: number, requiredMin?: number},
  *   vaKt: number|null, vGlideKt: number|null,
  *   cruise: {altFt: number, oatC: number, rpm: number|null, mp: number|null, tasKt: number, ffGph: number},
  *   minFltMin: number,
@@ -359,7 +361,13 @@ export function mbPageItems(s) {
     put(hhmm(min), bx(FR_TIME[0], FR_TIME[1], r[0], r[1]));
   };
   frow('trip', f.tripGal, f.tripMin);
+  // Alternate and extra are the pilot's (v17.14); one not typed stays an empty
+  // box for the pen - nb and hhmm write nothing for NaN. The total required is
+  // always written: an absent line counts nothing in it (fuelRequirement).
+  if (f.alternateGal !== undefined) frow('alternate', f.alternateGal, /** @type {number} */ (f.alternateMin));
+  if (f.extraGal !== undefined) frow('extra', f.extraGal, /** @type {number} */ (f.extraMin));
   frow('reserve', f.reserveGal, f.reserveMin);
+  if (f.requiredGal !== undefined) frow('required', f.requiredGal, /** @type {number} */ (f.requiredMin));
   put(nb(f.onboardGal), bx(FR_GAL[0], FR_GAL[1], FR_ROWS.onboard[0], FR_ROWS.onboard[1]));
   put(nb(f.onboardGal * 6), bx(FR_LB[0], FR_LB[1], FR_ROWS.onboard[0], FR_ROWS.onboard[1]));
   put(hhmm(f.enduranceMin), bx(FR_TIME[0], FR_TIME[1], FR_ROWS.endurance[0], FR_ROWS.endurance[1]));

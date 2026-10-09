@@ -10,6 +10,38 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## ALTERNATE AND EXTRA FUEL ARE THE PILOT'S, AND PAGE 2 PRINTS THE TOTAL REQUIRED (v17.14)
+
+The author: *"in the mass & balance page, let me manually put in alternate and
+extra fuel. The time will estimate 12gph. Also, the total fuel required cells
+are empty on the OFP, make sure they are also filled."* And, on the workbook
+being read for the formula: *"fyi the schools workbook excel is of my own lazy
+making..."* - so the workbook is a cross-check here, not the authority; the
+author's words are.
+
+- **THIS SUPERSEDES PART OF v16.41's "WHAT PAGE 2 LEAVES FOR THE PEN"**: the
+  total required was left blank because no alternate was planned and a total
+  without one would state a requirement too low. The pilot now types the
+  alternate, so the total is written. Contingency stays for the pen (not asked
+  for) and is NOT counted in the total; the guide and the tab note say so.
+- **TWO BOXES ON THE M&B TAB** (Alternate fuel, Extra fuel, US gal), under the
+  last minute change. Read by `normaliseActualFuelGal` (empty = none, 0 to 1000
+  or refused). **Session only**, like the actual fuel: an alternate is chosen
+  for the day's weather. One pair applies to every page 2, sector or master.
+- **`fuelRequirement`** (massbalance.js): each typed line timed at 12 gal/h
+  (`minutesAtPlanningRate`), total = trip + alternate + extra + final reserve,
+  its time the sum of the lines' times (trip's is the sector's flight time) -
+  the workbook's OFP!M7/O7 do the same SUMs, and its worked example (34 + 6 + 12
+  = 52 gal, 04:11.5) is asserted. An absent line counts nothing; a REFUSED one
+  makes the total NaN, so a typo prints an empty total box and the tab says why,
+  rather than a requirement too low by the refused amount.
+- **`mbFuelBlock`** builds the page's fuel block once, for the printed page 2
+  and for the tab's new **Required** chip (red, "over on board", when the total
+  exceeds the fuel on board - said, not raised to the banner, the way a landing
+  below reserve is treated).
+- The handler count in the page-script header (153 -> 157) and CLAUDE.md's
+  shared-globals count (58 -> 59, `fuelAddGal`) moved with it.
+
 ## THE PRINTED WIND IS TO THE NEAREST 10 DEGREES (v17.13)
 
 The author: *"Please also round the OFP wind values to the nearest 10 degrees.
