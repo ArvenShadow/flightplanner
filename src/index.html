@@ -284,6 +284,18 @@
             <span class="mb-lmc-field"><input type="number" id="mb-actual-fuel" min="0" step="0.1" onfocus="this.select()" onchange="setActualFuel(this.value)"><small>US gal</small></span>
           </div>
           <div id="mb-lmc-note" class="mb-foot"></div>
+          <!-- THE FUEL REQUIREMENT (v17.14): alternate and extra fuel, the
+               pilot's own figures, printed on page 2 and in its total. Session
+               only - see fuelAddGal. -->
+          <div class="mb-lmc mb-fueladd" id="mb-fueladd-alternate">
+            <label class="mb-lmc-label" for="mb-alt-fuel"><span class="mb-eyebrow">Fuel requirement</span>Alternate fuel</label>
+            <span class="mb-lmc-field"><input type="number" id="mb-alt-fuel" min="0" step="0.1" onfocus="this.select()" onchange="setFuelAdd('alternate', this.value)"><small>US gal</small></span>
+          </div>
+          <div class="mb-lmc mb-fueladd" id="mb-fueladd-extra">
+            <label class="mb-lmc-label" for="mb-extra-fuel">Extra fuel</label>
+            <span class="mb-lmc-field"><input type="number" id="mb-extra-fuel" min="0" step="0.1" onfocus="this.select()" onchange="setFuelAdd('extra', this.value)"><small>US gal</small></span>
+          </div>
+          <div id="mb-fueladd-note" class="mb-foot"></div>
         </div>
 
         <div class="card no-print mb-card">
@@ -484,7 +496,7 @@
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
                 <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the whole-flight total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
                 <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>CREW, PASSENGERS and PIC</b> — crew are people, and the planner holds no one's name. <b>Reg</b> is filled from the aircraft you pick on the Mass &amp; Balance tab, and is blank until you pick one — a tail number identifies a machine, not a person.</li>
-                <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. Left blank for your pen: alternate, contingency and extra fuel and so the total required (no alternate is planned here), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. <b>Trip fuel is all the fuel the plan uses</b>, a touch &amp; go's ground time included - on a sector's own page too, which says so beside its title. On a whole-flight sheet the fuel taken on at a refuelling stop is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
+                <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. <b>Alternate and extra fuel</b> are typed on the M&amp;B tab (US gal, timed at 12 gal/h, not stored) and printed with the <b>total fuel required</b> - trip + alternate + extra + final reserve; a box you leave empty stays empty and adds nothing. Left blank for your pen: contingency fuel (not counted in the total), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. <b>Trip fuel is all the fuel the plan uses</b>, a touch &amp; go's ground time included - on a sector's own page too, which says so beside its title. On a whole-flight sheet the fuel taken on at a refuelling stop is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
                 <li><b>Choosing an aircraft loads its standard baggage</b> - 7.3 lb at A and 0.7 lb at C on every aircraft, and LN-TRE's 22.7 lb at B, as the school's workbook does. They are ordinary baggage lines you can see and type over; choosing a tail again resets them.</li>
                 <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, the wind correction (no headwind credit under 9 kt, +10% per 2 kt of tailwind, nothing past 10 kt), braking action, then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
@@ -1244,7 +1256,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 153 inline on*= handlers - 121 written
+    // map, markers, undoStack...) plus 157 inline on*= handlers - 125 written
     // into the markup and 32 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1470,7 +1482,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.13';
+    const APP_VERSION = '17.14';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -8077,6 +8089,30 @@
     }
 
     /** One Mass & Balance page: a sector, or the whole-mission master. */
+    /**
+     * Page 2's FUEL block for one sheet, as the form lays it out - built once for
+     * the printed page and the M&B tab, so the two cannot state two requirements.
+     *
+     * FUEL TIMES ARE AT THE SHEET'S ONE PLANNING RATE, 12 gal/h (OFP!P4):
+     * endurance, final reserve, and the pilot's alternate and extra (v17.14).
+     * 64 gal is 05:20 whatever the cruise level - v16.97 timed them at the
+     * cruise POH flow, which the school's sheet never does (v16.98, the author).
+     * Trip is timed by the sector's own flight time.
+     */
+    function mbFuelBlock(res, idx, groundGal) {
+      const sectors = idx === null ? ofpPrintModel : [ofpPrintModel[idx]];
+      const tripMin = sectors.reduce((t, s) => t + (s ? s.sectorMin : 0), 0);
+      const reserveGal = toGallons(Number((document.getElementById('fuel-reserve') || {}).value), aircraftProfile.fuelUnit || 'GAL');
+      const perHour = (gal) => minutesAtPlanningRate(gal);
+      const ground = idx !== null && isFinite(groundGal) && groundGal > 0 ? groundGal : 0;
+      const tripGal = res.burnGal + ground;
+      const reserveMin = perHour(reserveGal);
+      return Object.assign({ tripGal, tripMin, reserveGal, reserveMin,
+        onboardGal: res.fuelDepGal + ground, enduranceMin: perHour(res.fuelDepGal + ground) },
+        fuelRequirement({ tripGal, tripMin, reserveGal, reserveMin,
+          alternateGal: fuelAddGal.alternate, extraGal: fuelAddGal.extra }));
+    }
+
     function printMbSheet(res, idx, groundGal) {
       const m = massBalanceMission;
       // TRIP FUEL IS ALL FUEL EXPECTED TO BE USED (v17.12, the author). A sector
@@ -8091,16 +8127,9 @@
       const line = (lb, a) => ({ w: lb, mom: lb * a });
       const pt = (p) => ({ w: p.weightLb, arm: p.armIn, mom: p.momentInLb });
       const sectors = idx === null ? ofpPrintModel : [ofpPrintModel[idx]];
-      const tripMin = sectors.reduce((t, s) => t + (s ? s.sectorMin : 0), 0);
       let cruise = null;
       for (const s of sectors) if (s && s.cruise && (!cruise || s.cruise.altFt > cruise.altFt)) cruise = s.cruise;
       const cr = printCruise(cruise);
-      const reserveGal = toGallons(Number((document.getElementById('fuel-reserve') || {}).value), aircraftProfile.fuelUnit || 'GAL');
-      // FUEL TIMES ARE AT THE SHEET'S ONE PLANNING RATE, 12 gal/h (OFP!P4):
-      // endurance and final reserve both. 64 gal is 05:20 whatever the cruise
-      // level - v16.97 timed them at the cruise POH flow, which the school's
-      // sheet never does (v16.98, the author).
-      const perHour = (gal) => minutesAtPlanningRate(gal);
       const lines = {
         bem: pt(res.emptyMass),
         pilot: line(L.pilotLb, arm.pilotLb), right: line(L.rightLb, arm.rightLb), rear: line(L.rearLb, arm.rearLb),
@@ -8149,8 +8178,7 @@
       const c = res.checks;
       return {
         title, note, reg: res.aircraft.reg, lines,
-        fuel: { tripGal: res.burnGal + ground, tripMin, reserveGal, reserveMin: perHour(reserveGal),
-                onboardGal: res.fuelDepGal + ground, enduranceMin: perHour(res.fuelDepGal + ground) },
+        fuel: mbFuelBlock(res, idx, groundGal),
         vaKt: res.vaKt, vGlideKt: res.vGlideKt, cruise: cr, minFltMin: res.minFlightMin,
         dep: printAerodrome(at(idx === null ? 0 : idx, 'dep')),
         dest: printAerodrome(at(idx === null ? lastIdx : idx, 'arr')),
@@ -8721,6 +8749,13 @@
     let actualFuelGal = null;
     /** What applyActualFuel made of it on the last render. @type {any} */
     let massBalanceLmc = null;
+    /**
+     * ALTERNATE AND EXTRA FUEL (v17.14), US gallons as the pilot typed them, null
+     * when nothing was typed, NaN when what was typed was refused. SESSION ONLY,
+     * like the actual fuel: an alternate is chosen for the day's weather, and a
+     * figure remembered from another day would print somebody else's requirement.
+     * @type {{alternate: number|null, extra: number|null}} */
+    let fuelAddGal = { alternate: null, extra: null };
 
     function loadMbPrefs() {
       try {
@@ -8780,6 +8815,13 @@
      *  figure is never stored (see actualFuelGal). */
     function setActualFuel(v) {
       actualFuelGal = normaliseActualFuelGal(v);
+      renderAllFlightTables();
+    }
+    /** The alternate and extra fuel boxes. Same reading as the actual fuel:
+     *  empty is none, unreadable is refused (normaliseActualFuelGal). */
+    function setFuelAdd(kind, v) {
+      if (kind !== 'alternate' && kind !== 'extra') return;
+      fuelAddGal = Object.assign({}, fuelAddGal, { [kind]: normaliseActualFuelGal(v) });
       renderAllFlightTables();
     }
     function setMbView(v) {
@@ -9013,7 +9055,7 @@
     }
 
     /** One sector (or the mission master) as a card. */
-    function mbSheetHTML(res, title, lmcGal, groundGal) {
+    function mbSheetHTML(res, title, lmcGal, groundGal, idx) {
       const c = res.checks;
       const okTO = c.takeoffWeight === 'ok' && c.takeoffCg === 'ok';
       const okLDG = c.landingWeight === 'ok' && c.landingCg === 'ok';
@@ -9040,6 +9082,19 @@
       chips.push('<span class="mb-chip"' + (ground ? ' title="' + f1(res.burnGal) + ' gal in the air + ' + f1(ground) +
         ' gal ground time at the touch & go before it"' : '') + '><b>Burn</b> ' + f1(burn) + ' gal · ' +
         f1(burn * FUEL_LB_PER_GAL) + ' lb' + (ground ? ' <i>incl. ' + f1(ground) + ' ground</i>' : '') + '</span>');
+      // THE TOTAL FUEL REQUIRED, the page's own figure (mbFuelBlock): trip,
+      // the pilot's alternate and extra, and final reserve (v17.14). Against
+      // what is on board it is said, in red, never raised to the banner - the
+      // same treatment a landing below reserve gets.
+      const fb = mbFuelBlock(res, idx === undefined ? null : idx, groundGal);
+      const short = isFinite(fb.requiredGal) && isFinite(fb.onboardGal) && fb.requiredGal > fb.onboardGal + 1e-9;
+      const reqParts = ['trip ' + f1(fb.tripGal)];
+      if (isFinite(fb.alternateGal)) reqParts.push('alternate ' + f1(fb.alternateGal));
+      if (isFinite(fb.extraGal)) reqParts.push('extra ' + f1(fb.extraGal));
+      reqParts.push('final reserve ' + f1(fb.reserveGal));
+      chips.push('<span class="mb-chip' + (short ? ' mb-chip-bad' : '') + '" title="Total fuel required: ' + reqParts.join(' + ') +
+        ' gal' + (short ? ' - MORE than the ' + f1(fb.onboardGal) + ' gal on board' : '') + '"><b>Required</b> ' + f1(fb.requiredGal) + ' gal · ' +
+        (isFinite(fb.requiredMin) ? formatTimeHHMM(Math.round(fb.requiredMin)) : '---') + (short ? ' <i>over on board</i>' : '') + '</span>');
       // Endurance at the sheet's one planning rate (OFP!O9), from the fuel this
       // sheet departs with: 64 gal is 05:20.
       const endMin = minutesAtPlanningRate(res.fuelDepGal);
@@ -9076,6 +9131,36 @@
            '</table></details>';
       h += '</div>';
       return h;
+    }
+
+    /** The alternate and extra fuel boxes, and what they add (v17.14). */
+    function renderFuelAdd() {
+      const note = document.getElementById('mb-fueladd-note');
+      const f1 = (n) => (isFinite(n) ? n.toFixed(1) : '---');
+      const bad = [];
+      for (const [kind, id, name] of [['alternate', 'mb-alt-fuel', 'Alternate'], ['extra', 'mb-extra-fuel', 'Extra']]) {
+        const v = fuelAddGal[kind];
+        const inp = /** @type {any} */ (document.getElementById(id));
+        if (inp && document.activeElement !== inp) inp.value = v === null || !isFinite(v) ? '' : String(v);
+        const box = document.getElementById('mb-fueladd-' + kind);
+        if (box) box.className = 'mb-lmc mb-fueladd' + (v !== null && isFinite(v) ? ' mb-lmc-on' : '');
+        if (v !== null && !isFinite(v)) bad.push(name);
+      }
+      if (!note) return;
+      if (bad.length) {
+        note.innerHTML = '<span class="mb-warn-text">' + bad.join(' and ') + ' fuel is not a readable figure (0 to ' +
+          ACTUAL_FUEL_MAX_GAL + ' US gal), so the total fuel required is left empty on the paper until it is.</span>';
+        return;
+      }
+      const parts = [];
+      for (const [kind, name] of [['alternate', 'Alternate'], ['extra', 'Extra']]) {
+        const v = fuelAddGal[kind];
+        if (v !== null) parts.push(name + ' <b>' + f1(v) + ' gal</b> = ' + formatTimeHHMM(Math.round(minutesAtPlanningRate(v))));
+      }
+      note.innerHTML = (parts.length ? parts.join(', ') + ' at ' + PLANNING_GPH + ' gal/h. ' : '') +
+        'Printed on page 2 and added into its <b>total fuel required</b> with the trip fuel and final reserve; ' +
+        'an empty box stays empty for your pen and adds nothing. Contingency is left for your pen and not counted. ' +
+        'Not stored - it is today\'s figure.';
     }
 
     /** The last minute change box and what it did. */
@@ -9194,6 +9279,7 @@
         if (el) { el.className = 'mb-seg-btn' + (on ? ' mb-seg-on' : ''); el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
       }
       renderActualFuel();
+      renderFuelAdd();
       const vn = document.getElementById('mb-view-note');
       if (vn) {
         vn.innerHTML = mbPrefs.view === 'mission'
@@ -9220,7 +9306,7 @@
         const lmc0 = massBalanceLmc && massBalanceLmc.deltaGal !== null && massBalanceLmc.reach > 0 ? massBalanceLmc.deltaGal : null;
         h += mbSheetHTML(master, 'Whole flight · ' +
           (m.first.label.split(' → ')[0] || '') + ' → ' +
-          (m.last.label.split(' → ')[1] || ''), lmc0);
+          (m.last.label.split(' → ')[1] || ''), lmc0, 0, null);
         if (m.worstLanding && m.worstLanding !== m.last) {
           h += '<div class="card mb-card mb-callout">' +
             'The heaviest landing of the flight is <b>' + esc(m.worstLanding.label) + '</b> at ' +
@@ -9230,7 +9316,7 @@
       } else {
         m.sectors.forEach((r, i) => {
           const hit = massBalanceLmc && massBalanceLmc.deltaGal !== null && i < massBalanceLmc.reach;
-          h += mbSheetHTML(r, r.label, hit ? massBalanceLmc.deltaGal : null, m.fuel.groundGal[i]);
+          h += mbSheetHTML(r, r.label, hit ? massBalanceLmc.deltaGal : null, m.fuel.groundGal[i], i);
         });
       }
       const cautions = massBalanceCautions(m);

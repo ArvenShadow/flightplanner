@@ -174,7 +174,7 @@ three cheap disciplines applied every time the page is touched:
   WHERE TO EDIT WHAT index; a test requires it to name every module in
   `src/lib/`. → §{The single-file artifact and the v16.8 build, Phase 1 extraction}
 - **Phase 1 closed at v16.19 on purpose.** The remaining page script is NOT
-  being force-modularised: it is one web of 58 shared mutable globals plus
+  being force-modularised: it is one web of 59 shared mutable globals plus
   the inline handlers, and threading that through module boundaries would
   make a UI edit span more files. (A test re-counts that number.)
 - **HIDDEN GLOBALS ARE THE TRAP when extracting.** A module takes what it needs
@@ -401,6 +401,11 @@ three cheap disciplines applied every time the page is touched:
   → §{PAGE 2 IS WEIGHED FROM THE PAPER'S ROUNDED FUEL TOO (v17.11)}
   → §{THE PAPER ROUNDS TO THE NEAREST, BOTH WAYS (v17.10) - THIS REVERSES v17.9's ROUND-UP}
   → §{THE PRINTED OFP ROUNDS FOR COPYING, AND NEVER DOWN (v17.9)}
+- **Alternate and extra fuel are typed on the M&B tab** (v17.14, US gal, 12
+  gal/h, session only); page 2 prints them and the total required = trip +
+  alternate + extra + final reserve (`fuelRequirement`); contingency stays for
+  the pen. Supersedes v16.41's blank total.
+  → §{ALTERNATE AND EXTRA FUEL ARE THE PILOT'S, AND PAGE 2 PRINTS THE TOTAL REQUIRED (v17.14)}
 - **The printed wind direction is to the nearest 10°** (v17.13, the author;
   `windDirTen`): north is 360, calm 000; the plan is worked from the exact wind.
   → §{THE PRINTED WIND IS TO THE NEAREST 10 DEGREES (v17.13)}

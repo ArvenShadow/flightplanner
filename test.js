@@ -12916,6 +12916,84 @@ T('the printed whole-mission sheet adds up, with a refuel in the middle', () => 
   w.renderAllFlightTables();
 });
 
+T('alternate and extra fuel are the pilot\'s, timed at 12 gal/h, and page 2 prints the total required (v17.14)', () => {
+  // The author: "in the mass & balance page, let me manually put in alternate
+  // and extra fuel. The time will estimate 12gph. Also, the total fuel required
+  // cells are empty on the OFP, make sure they are also filled".
+  const MB = moduleExports.mb, P = moduleExports.pdf;
+  // The workbook's own worked example (OFP!M3:O7): trip 34 gal in 02:41.5,
+  // alternate 6 gal, final reserve 12 gal - total 52 gal, its time the sum.
+  const tripMin = 0.11215277777777778 * 24 * 60;
+  const wb = MB.fuelRequirement({ tripGal: 34, tripMin, reserveGal: 12, reserveMin: MB.minutesAtPlanningRate(12),
+                                  alternateGal: 6, extraGal: null });
+  assert(Math.abs(wb.requiredGal - 52) < 1e-9, 'the total is not the workbook\'s 52 gal: ' + wb.requiredGal);
+  assert(Math.abs(wb.alternateMin - 30) < 1e-9, '6 gal at 12 gal/h is not 00:30: ' + wb.alternateMin);
+  assert(Math.abs(wb.requiredMin - 0.17465277777777777 * 24 * 60) < 1e-6, 'the total time is not the workbook\'s: ' + wb.requiredMin);
+  assert(Number.isNaN(wb.extraGal) && Number.isNaN(wb.extraMin), 'an extra nobody typed got a figure');
+  const both = MB.fuelRequirement({ tripGal: 34, tripMin, reserveGal: 12, reserveMin: 60, alternateGal: 6, extraGal: 3 });
+  assert(both.requiredGal === 55 && Math.abs(both.extraMin - 15) < 1e-9, 'extra is not added and timed: ' + JSON.stringify(both));
+  const typo = MB.fuelRequirement({ tripGal: 34, tripMin, reserveGal: 12, reserveMin: 60, alternateGal: NaN, extraGal: null });
+  assert(Number.isNaN(typo.requiredGal), 'a refused alternate still produced a total, too low by the refused amount');
+
+  // The page: alternate, extra and total in the form's own rows; none typed is an empty box.
+  const sheet = (fuel) => {
+    const items = P.mbPageItems({ title: 'T', reg: 'LN-TRB', lines: {}, vaKt: null, vGlideKt: null,
+      cruise: { altFt: 2500, oatC: 10, rpm: null, mp: null, tasKt: 130, ffGph: 12 }, minFltMin: 0,
+      dep: null, dest: null, marks: [], fuel: Object.assign({ tripGal: 34, tripMin, reserveGal: 12, reserveMin: 60,
+        onboardGal: 64, enduranceMin: 320 }, fuel) });
+    return readMb({ items, marks: [] }).fuel;
+  };
+  let f = sheet(MB.fuelRequirement({ tripGal: 34, tripMin, reserveGal: 12, reserveMin: 60, alternateGal: 6, extraGal: 3 }));
+  assert(f.alternate.gal === '6,0' && f.alternate.lb === '36,0' && f.alternate.time === '00:30', 'alternate row: ' + JSON.stringify(f.alternate));
+  assert(f.extra.gal === '3,0' && f.extra.time === '00:15', 'extra row: ' + JSON.stringify(f.extra));
+  assert(f.required.gal === '55,0' && f.required.lb === '330,0' && f.required.time === '04:27', 'total required row: ' + JSON.stringify(f.required));
+  assert(!f.contingency, 'contingency is the pilot\'s pen, and something was printed in it');
+  f = sheet(MB.fuelRequirement({ tripGal: 34, tripMin, reserveGal: 12, reserveMin: 60, alternateGal: null, extraGal: null }));
+  assert(!f.alternate && !f.extra, 'an alternate or extra nobody typed was printed: ' + JSON.stringify(f));
+  assert(f.required && f.required.gal === '46,0', 'the total required is empty without an alternate: ' + JSON.stringify(f.required));
+
+  // Through the app: the M&B tab's boxes reach every page 2.
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  doc.getElementById('fuel-reserve').value = '8';
+  ev('mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); mbPrefs.view = "sector";');
+  w.renderAllFlightTables();
+  try {
+    const altIn = doc.getElementById('mb-alt-fuel'), extraIn = doc.getElementById('mb-extra-fuel');
+    assert(altIn && extraIn, 'the M&B tab has no alternate or extra fuel box');
+    altIn.value = '6'; altIn.dispatchEvent(new w.Event('change'));
+    extraIn.value = '2.5'; extraIn.dispatchEvent(new w.Event('change'));
+    assert(JSON.stringify(ev('fuelAddGal')) === '{"alternate":6,"extra":2.5}', 'the boxes did not set the figures: ' + JSON.stringify(ev('fuelAddGal')));
+    const mbs = printDoc().sheets.filter((sh) => sh.kind === 'mb');
+    assert(mbs.length === 2, 'the fixture prints ' + mbs.length + ' M&B pages');
+    for (const sh of mbs) {
+      const r = readMb(sh).fuel;
+      const sum = numPt(r.trip.gal) + 6 + 2.5 + numPt(r.reserve.gal);
+      assert(r.alternate.gal === '6,0' && r.extra.gal === '2,5' && r.extra.time === '00:13', 'a page lost the alternate or extra: ' + JSON.stringify(r));
+      assert(Math.abs(numPt(r.required.gal) - sum) < 0.051, 'total required ' + r.required.gal + ' is not trip + alternate + extra + reserve ' + sum);
+    }
+    assert(/<b>Required<\/b>/.test(doc.getElementById('mb-body').innerHTML), 'the tab does not show the total required');
+    assert(/Alternate <b>6\.0 gal<\/b> = 00:30/.test(doc.getElementById('mb-fueladd-note').innerHTML), 'the note does not time the alternate');
+    // NOT STORED: it is the day's figure, like the actual fuel.
+    ev('saveMbPrefs(); savePlanningPrefs();');
+    const all = Object.keys(w.localStorage).map((k) => w.localStorage.getItem(k)).join('\n');
+    assert(!/fuelAdd|alternate/i.test(all), 'the alternate or extra fuel reached localStorage');
+    // A typo empties the total and says why - a requirement too low is worse than none.
+    altIn.value = '5000'; altIn.dispatchEvent(new w.Event('change'));
+    const bad = readMb(printDoc().sheets.filter((sh) => sh.kind === 'mb')[0]).fuel;
+    assert(!bad.required && !bad.alternate, 'a refused alternate printed a total: ' + JSON.stringify(bad.required));
+    assert(/not a readable figure/.test(doc.getElementById('mb-fueladd-note').innerHTML), 'the refused figure is not explained');
+    // Emptying the boxes takes both off the page and leaves the total.
+    altIn.value = ''; altIn.dispatchEvent(new w.Event('change'));
+    extraIn.value = ''; extraIn.dispatchEvent(new w.Event('change'));
+    const none = readMb(printDoc().sheets.filter((sh) => sh.kind === 'mb')[0]).fuel;
+    assert(!none.alternate && !none.extra && none.required, 'emptying the boxes: ' + JSON.stringify(none));
+  } finally {
+    ev('fuelAddGal = { alternate: null, extra: null }; mbPrefs.reg = null; mbPrefs.view = "sector";');
+    w.renderAllFlightTables();
+  }
+});
+
 T('page 2 is weighed from the same rounded fuel as page 1, and the M&B tab stays exact (v17.11)', () => {
   // The author: "just use the rounded values for the whole paper. The reason
   // for it is because i just want something thats easy to quickly copy onto

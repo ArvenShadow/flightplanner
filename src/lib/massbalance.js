@@ -842,6 +842,37 @@ export function normaliseActualFuelGal(v) {
 }
 
 /**
+ * THE FORM'S FUEL REQUIREMENT BLOCK (v17.14, the author: "let me manually put
+ * in alternate and extra fuel. The time will estimate 12gph. Also, the total
+ * fuel required cells are empty on the OFP, make sure they are also filled").
+ *
+ * Alternate and extra are the pilot's figures in US gal, or null when none was
+ * typed; each is timed at the sheet's planning rate (12 gal/h). The total is
+ * every line the form sums - trip, alternate, contingency, extra and final
+ * reserve - with an absent line counting nothing, and its time is the sum of
+ * the lines' times, trip's being the sector's own flight time. Contingency has
+ * no input (the author asked for alternate and extra), so it is always absent.
+ *
+ * @param {{tripGal: number, tripMin: number, reserveGal: number, reserveMin: number,
+ *          alternateGal: number|null, extraGal: number|null}} f
+ */
+export function fuelRequirement(f) {
+  // ABSENT IS NOT UNREADABLE. null (nothing typed) counts nothing; a figure the
+  // normaliser refused is NaN and makes the total NaN, so a typo prints an
+  // empty total box rather than a requirement too low by the refused amount.
+  const line = (/** @type {number|null|undefined} */ g) => g === null || g === undefined
+    ? { gal: NaN, min: NaN, add: 0, addMin: 0 }
+    : { gal: g, min: minutesAtPlanningRate(g), add: g, addMin: minutesAtPlanningRate(g) };
+  const alternate = line(f.alternateGal), extra = line(f.extraGal);
+  return {
+    alternateGal: alternate.gal, alternateMin: alternate.min,
+    extraGal: extra.gal, extraMin: extra.min,
+    requiredGal: f.tripGal + f.reserveGal + alternate.add + extra.add,
+    requiredMin: f.tripMin + f.reserveMin + alternate.addMin + extra.addMin
+  };
+}
+
+/**
  * THE LAST MINUTE CHANGE: the fuel actually on board at preflight against the
  * fuel the plan was made with (the author, v16.98: "Say i planned with 64GAL
  * and actual fuel is 60, then i can type in 60GAL actual and it will do
