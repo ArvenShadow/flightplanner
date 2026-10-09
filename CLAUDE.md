@@ -401,6 +401,9 @@ three cheap disciplines applied every time the page is touched:
   → §{PAGE 2 IS WEIGHED FROM THE PAPER'S ROUNDED FUEL TOO (v17.11)}
   → §{THE PAPER ROUNDS TO THE NEAREST, BOTH WAYS (v17.10) - THIS REVERSES v17.9's ROUND-UP}
   → §{THE PRINTED OFP ROUNDS FOR COPYING, AND NEVER DOWN (v17.9)}
+- **The printed wind direction is to the nearest 10°** (v17.13, the author;
+  `windDirTen`): north is 360, calm 000; the plan is worked from the exact wind.
+  → §{THE PRINTED WIND IS TO THE NEAREST 10 DEGREES (v17.13)}
 - **Trip fuel is ALL fuel used** (v17.12, the author): touch & go ground time
   is in the whole-flight trip and in the sector it delays (its page 2 says so);
   the stop line is REFUELS only, told apart by `refuelled`, never guessed.

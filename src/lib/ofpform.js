@@ -80,6 +80,20 @@ const BLANK = '';
 // exactly like the fields we deliberately never fill.
 const pad3 = (/** @type {number} */ v) =>
   (isFinite(v) ? String(Math.round(v)).padStart(3, '0') : BLANK);
+/**
+ * THE PRINTED WIND DIRECTION IS TO THE NEAREST 10 DEGREES (v17.13, the author:
+ * "the OFP should show whole 10 degrees" - 043/9 prints 040/09, 145/11 prints
+ * 150/11). The paper only: the plan's WCA, MH and GS are worked from the exact
+ * direction. A wind from the north is 360, the way a METAR writes it; 000 is
+ * kept for calm, which is what a new waypoint's 000/00 is.
+ * @param {number} dir degrees true
+ * @param {number} kt
+ */
+export function windDirTen(dir, kt) {
+  if (!isFinite(dir)) return BLANK;
+  const r = (((Math.round(dir / 10) * 10) % 360) + 360) % 360;
+  return pad3(r === 0 && Math.round(kt) > 0 ? 360 : r);
+}
 const one = (/** @type {number} */ v) => (isFinite(v) ? Number(v).toFixed(1) : BLANK);
 const whole = (/** @type {number} */ v) => (isFinite(v) ? String(Math.round(v)) : BLANK);
 const signed = (/** @type {number} */ v) =>
@@ -226,7 +240,7 @@ export function ofpRowCells(row) {
     };
   }
   const wv = isFinite(row.wdir) && isFinite(row.wspd)
-    ? pad3(row.wdir) + '/' + String(Math.round(row.wspd)).padStart(2, '0') : BLANK;
+    ? windDirTen(row.wdir, row.wspd) + '/' + String(Math.round(row.wspd)).padStart(2, '0') : BLANK;
   return {
     from: row.from,
     tas: whole(row.tas),
