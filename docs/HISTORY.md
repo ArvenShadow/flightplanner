@@ -10,6 +10,26 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE PRINTED WIND IS TO THE NEAREST 10 DEGREES (v17.13)
+
+The author: *"Please also round the OFP wind values to the nearest 10 degrees.
+Calculations can remain exact values, but the OFP should show whole 10 degrees.
+(043/9kt - 040/9kt, 145/11kt - 150/11kt)"*
+
+- **`windDirTen`** (`ofpform.js`) formats the Dir half of the printed Dir/Vel
+  cell: `Math.round(dir / 10) * 10`, so 5 rounds up (045 -> 050, 285 -> 290).
+  Speed is unchanged (whole knots, two digits).
+- **North is 360, calm is 000**: 355 and 003 both round to north, and a METAR
+  writes a north wind as 360; 000 stays for a calm wind (a speed rounding to
+  0), which is what a new waypoint's 000/00 is (v17.6). Before this a typed 000/15
+  printed 000/15; it now prints 360/15.
+- **Paper only**: `ofpRowCells` feeds only `buildOfpSheets`, the printed sheet.
+  The plan, the wind column on screen and every figure worked from the wind (WCA,
+  MH, GS, time, fuel) keep the exact direction. A test checks that the leg's
+  unrounded burn still moves between 040 and 043, because WCA and GS are held to
+  whole numbers and 3 degrees of a 9 kt wind cannot show in them.
+- Two older asserts expected `285/45`; they now expect `290/45`, deliberately.
+
 ## TRIP FUEL IS ALL THE FUEL USED, TOUCH & GO GROUND TIME INCLUDED (v17.12)
 
 Recorded at v17.11 as the first priority for the next session, built at v17.12.

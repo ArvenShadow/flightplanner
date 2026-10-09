@@ -6057,7 +6057,8 @@ T('a non-finite figure is an EMPTY box on the company form, never "NaN"', () => 
   const ok = F.ofpRowCells({ from: 'A', to: 'B', tas: 129.4, tt: 74, var: -11.6, mt: 62,
     mh: 52, wdir: 285, wspd: 45, wca: -10, accDist: 20.6, accTime: '00:08', ff: 13,
     legBurn: 3.4, accBurn: 3.4, alt: 2500, gs: 158.6, dist: 20.6, time: '00:08', eto: '', rem: 84.5 });
-  assert(ok.tas === '129' && ok.tt === '074' && ok.wv === '285/45' && ok.pl === '2500',
+  // 285 prints 290 since v17.13: the printed wind is to the nearest 10 degrees.
+  assert(ok.tas === '129' && ok.tt === '074' && ok.wv === '290/45' && ok.pl === '2500',
     'a valid row stopped printing: ' + JSON.stringify([ok.tas, ok.tt, ok.wv, ok.pl]));
 });
 TA('a plan the app calls unusable prints a DO NOT USE band on every page', async () => {
@@ -6402,6 +6403,44 @@ T('the printed form carries no personal data; the Reg box follows the tail', () 
   ev('mbPrefs.reg = null;');
   w.renderAllFlightTables();
 });
+T('the printed wind is to the nearest 10 degrees; the plan keeps the exact one (v17.13)', () => {
+  // The author: "round the OFP wind values to the nearest 10 degrees.
+  // Calculations can remain exact values" - 043/9kt -> 040/9kt, 145/11kt -> 150/11kt.
+  const F = moduleExports.ofp;
+  const cases = [[43, 9, '040/09'], [145, 11, '150/11'], [44.9, 9, '040/09'], [45, 9, '050/09'],
+                 [354, 12, '350/12'], [355, 12, '360/12'], [3, 8, '360/08'], [360, 8, '360/08'],
+                 [0, 0, '000/00'], [3, 0.4, '000/00'], [278, 25.6, '280/26']];
+  for (const [d, v, want] of cases) {
+    const got = F.ofpRowCells({ from: 'A', to: 'B', wdir: d, wspd: v }).wv;
+    assert(got === want, d + '/' + v + ' printed ' + got + ', not ' + want);
+  }
+  assert(F.ofpRowCells({ from: 'A', to: 'B', wdir: NaN, wspd: 9 }).wv === '',
+    'an unknown wind printed as a direction');
+  // Through the app: the paper rounds, the plan does not.
+  ev(`flights = [
+    { id: 1, title: "F1", depElev: 254, waypoints: [
+      { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 254,  oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 2500, oat: 10, wdir: 43, wspd: 9, var: -12 },
+      { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 2500, oat: 10, wdir: 145, wspd: 11, var: -11 }
+    ]}]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const rows = ev('ofpPrintModel[0].rows.map(r => [r.wdir, r.wspd, r.wca])');
+  assert(rows[0][0] === 43 && rows[1][0] === 145, 'the plan\'s wind was rounded: ' + JSON.stringify(rows));
+  const text = printDoc().sheets.filter((sh) => sh.kind === 'ofp')
+    .map((sh) => sh.items.map((it) => it.text).join('|')).join('|');
+  assert(/\|040\/09\|/.test('|' + text + '|') && /\|150\/11\|/.test('|' + text + '|'),
+    'the printed wind is not to the nearest 10 degrees: ' + text.slice(0, 400));
+  assert(!/043\/09|145\/11/.test(text), 'the exact direction reached the paper');
+  // The leg is still worked from 043, not from the printed 040: its unrounded
+  // burn moves (WCA and GS are held to whole numbers, so 3 degrees of a 9 kt
+  // wind cannot show in them).
+  ev('flights[0].waypoints[1].wdir = 40; renderAllFlightTables();');
+  const burn40 = ev('ofpPrintModel[0].rows[0].legBurnRaw');
+  ev('flights[0].waypoints[1].wdir = 43; renderAllFlightTables();');
+  const burn43 = ev('ofpPrintModel[0].rows[0].legBurnRaw');
+  assert(isFinite(burn40) && isFinite(burn43) && Math.abs(burn43 - burn40) > 1e-6,
+    'the plan is worked from the rounded wind: ' + burn40 + ' vs ' + burn43);
+  ev(SEED);
+});
 T('a leg lands in the right cells, and what we do not know stays EMPTY', () => {
   const F = moduleExports.ofp;
   const c = F.ofpRowCells({ from: 'ENDU', to: 'FINNSNES', tas: 129.4, tt: 74, var: -11.6,
@@ -6411,7 +6450,7 @@ T('a leg lands in the right cells, and what we do not know stays EMPTY', () => {
   assert(c.from === 'ENDU' && c.to === 'FINNSNES', 'the fixes are wrong');
   assert(c.tt === '074' && c.mt === '062' && c.mh === '052',
     'tracks and headings must be three digits: ' + [c.tt, c.mt, c.mh].join('/'));
-  assert(c.wv === '285/45', 'the wind cell is Dir/Vel: ' + c.wv);
+  assert(c.wv === '290/45', 'the wind cell is Dir/Vel, to the nearest 10 degrees (v17.13): ' + c.wv);
   assert(c.var === '-12' && c.wca === '-10', 'VAR/WCA: ' + c.var + ' ' + c.wca);
   assert(c.accDist === '20.6' && c.dist === '20.6', 'ACC vs Intermediate distance');
   assert(c.pl === '2500' && c.gs === '159', 'PL/GS: ' + c.pl + ' ' + c.gs);
