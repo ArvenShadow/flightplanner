@@ -6602,13 +6602,13 @@ TA('the ACC columns all measure the same thing: the mission so far', async () =>
     ' NM to the accumulated distance but is ' + firstTwo[17] + ' NM long');
 });
 
-TA('the Total line: ACC distance and time are the flight\'s so far; fuel and Intermediate Time are the sector\'s', async () => {
+TA('the Total line: ACC distance, time and fuel are the flight\'s so far; Intermediate Time is the sector\'s', async () => {
   // UPDATED DELIBERATELY AT v17.15. Until then every figure on the Total line
   // was the SECTOR's (v16.85). The author: "the total accumulated distance and
   // time should be written on the 'total' cells. Exception is the
   // intermediate time, where this flight's time should be totaled. If i want
   // to see sector total distance, i can look in the flight plan page instead
-  // of the OFP." The fuel burn was not part of that, and stays the sector's.
+  // of the OFP." And then: "you should do the same with the fuel".
   ev(TWO_SECTORS);
   const sheets = ofpSheets();
   assert(sheets.length === 2, 'expected two sheets, got ' + sheets.length);
@@ -6627,10 +6627,12 @@ TA('the Total line: ACC distance and time are the flight\'s so far; fuel and Int
   const secTime = ev('ofpPrintModel[1].meta.totals.time');
   assert(totTwo[18] === secTime && totTwo[18] !== totTwo[8],
     'the Intermediate Time total is ' + totTwo[18] + ', not this sector\'s ' + secTime + ' (ACC ' + totTwo[8] + ')');
-  // Fuel stays the sector's: the DIFFERENCE between the two sheets' final Acc.
+  // Fuel Acc likewise: the column's own last figure, more than sector 2 burned.
+  for (const [tot, end, n] of [[totOne, endOne, 1], [totTwo, endTwo, 2]]) {
+    assert(tot[11] === end[11], 'sector ' + n + ': Total Acc fuel ' + tot[11] + ' is not the accumulated ' + end[11]);
+  }
   const sectorBurn = Number(endTwo[11]) - Number(endOne[11]);
-  assert(Math.abs(Number(totTwo[11]) - sectorBurn) < 0.11,
-    'the Total fuel is ' + totTwo[11] + ' but this sector burned ' + sectorBurn.toFixed(1));
+  assert(Number(totTwo[11]) - sectorBurn > 0.5, 'the fixture cannot tell the flight\'s fuel from the sector\'s');
   // Fuel REMAINING is a state at the end of the sector, not a sum over it, so
   // it stays the running figure and must match the last row's EST.
   assert(totTwo[22] === endTwo[22],

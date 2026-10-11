@@ -413,9 +413,9 @@ three cheap disciplines applied every time the page is touched:
   is in the whole-flight trip and in the sector it delays (its page 2 says so);
   the stop line is REFUELS only, told apart by `refuelled`, never guessed.
   → §{TRIP FUEL IS ALL THE FUEL USED, TOUCH & GO GROUND TIME INCLUDED (v17.12)}
-- **ACC columns count the flight.** The Total line's ACC Dist/Time cells are
-  the ACCUMULATED figures (v17.15); its fuel and Intermediate Time are the
-  sector's. → §{FOUR FIXES FROM THE AUTHOR: VIEW MODE, ECMWF, THE TOTAL LINE, AND NO WIND ON THE DISTANCES (v17.15)}
+- **ACC columns count the flight.** The Total line's ACC Dist/Time and fuel
+  Acc cells are the ACCUMULATED figures (v17.15); only its Intermediate Time is
+  the sector's. → §{FOUR FIXES FROM THE AUTHOR: VIEW MODE, ECMWF, THE TOTAL LINE, AND NO WIND ON THE DISTANCES (v17.15)}
   → §{THE ACC COLUMNS COUNT THE MISSION; THE TOTAL LINE COUNTS THE SECTOR (v16.85)}
 - **Mass & Balance**: the workbook and the form agree on every constant; the
   envelope is convex so the two ends prove the path; Va from the POH table

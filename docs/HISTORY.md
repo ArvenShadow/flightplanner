@@ -33,13 +33,14 @@ make a setting that allows that to be toggled (normal should then be off)"*
   page starts there. Verified live on 2026-10-11 before building: Open-Meteo
   returns wind, temperature and geopotential height on pressure levels for it,
   with data to ~15.6 days (the guide said 16 for Auto; it now says ~15 for ECMWF).
-- **THE TOTAL LINE (SUPERSEDES PART OF v16.85).** The ACC Dist and ACC Time
+- **THE TOTAL LINE (SUPERSEDES v16.85).** The ACC Dist, ACC Time and fuel Acc
   Total cells print the flight's ACCUMULATED figures (`totals.accDist` /
-  `accTime`; on paper `accDist` is the sum of the rounded legs, the figure the
-  column ends on). The Intermediate Time total stays this sector's flight time.
-  The fuel total stays the sector's burn - the request named distance and time
-  only, and page 2's per-sector trip fuel is that figure (v17.12). The v16.85
-  test that asserted the sector distance was rewritten deliberately.
+  `accTime` / `accBurn`; on paper the sums of the rounded legs, the figures the
+  columns end on). The fuel was asked for in a follow-up: *"sorry shoulda
+  specified that you should do the same with the fuel"*. Only the Intermediate
+  Time total stays this sector's flight time. `totals.burn` (the sector's burn)
+  is kept - it is page 2's per-sector trip fuel (v17.12), it is just no longer
+  printed on page 1. The v16.85 test was rewritten deliberately.
 - **NO WIND CORRECTION ON THE DISTANCES BY DEFAULT.** `runwayDistance` takes
   `windCorrection`; the app passes the new `perfWindCorr` profile setting
   (Settings -> Take-off & landing distance, default OFF, in PROFILE_KEYS - a
