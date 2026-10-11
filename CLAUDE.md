@@ -227,7 +227,7 @@ three cheap disciplines applied every time the page is touched:
   `MANUAL` and never overwritten. → §{MagVar (v16.9, the real WMM)} and →
   §{Saved-route freshness (v16.10)}
 - **Winds aloft**: Open-Meteo pressure levels, u/v averaging, 3 samples a
-  leg. MET Nordic has no pressure levels. **Never assume calm wind**: a
+  leg; **ECMWF IFS 0.25° is the default model** (v17.15). MET Nordic has no pressure levels. **Never assume calm wind**: a
   missing wind or OAT is NaN and named on the banner.
   → §{Winds aloft}
 - **Flight Defaults hold no departure elevation and no wind** (v17.6, the
@@ -413,7 +413,9 @@ three cheap disciplines applied every time the page is touched:
   is in the whole-flight trip and in the sector it delays (its page 2 says so);
   the stop line is REFUELS only, told apart by `refuelled`, never guessed.
   → §{TRIP FUEL IS ALL THE FUEL USED, TOUCH & GO GROUND TIME INCLUDED (v17.12)}
-- **ACC columns count the flight; the Total line counts the sector.**
+- **ACC columns count the flight.** The Total line's ACC Dist/Time and fuel
+  Acc cells are the ACCUMULATED figures (v17.15); only its Intermediate Time is
+  the sector's. → §{FOUR FIXES FROM THE AUTHOR: VIEW MODE, ECMWF, THE TOTAL LINE, AND NO WIND ON THE DISTANCES (v17.15)}
   → §{THE ACC COLUMNS COUNT THE MISSION; THE TOTAL LINE COUNTS THE SECTOR (v16.85)}
 - **Mass & Balance**: the workbook and the form agree on every constant; the
   envelope is convex so the two ends prove the path; Va from the POH table
@@ -432,6 +434,8 @@ three cheap disciplines applied every time the page is touched:
   from AD 2.12/2.13 by table header; the school's method cell for cell, with
   five stated departures (TRUE runway direction, TODA, VRB is a tailwind,
   above the table refused, rounds up). → §{PHASE D (v16.96): RUNWAYS FROM THE AIP, AND THE DISTANCE AGAINST THEM}
+  **No wind correction by default** (v17.15, `perfWindCorr`, a Setting); the
+  10 kt tailwind limit is refused either way.
   POH tables are PA 0-8000 (the workbook stops at 5000); three deleted cells
   stay refused; landing is at MLW only.
   Each check is DRAWN (`rwydiagram.js`): the strip is the declared TODA/LDA,
@@ -474,7 +478,8 @@ three cheap disciplines applied every time the page is touched:
 - **Every undo/redo, keyboard included, shows `#undo-notice`** naming the
   step (one box, rewritten). → §{EVERY UNDO AND REDO SAYS WHICH STEP IT TOOK (v17.6)}
   A selection is put down by a second click, Escape, the ✕ Deselect map
-  control, or a View-Mode map click. → §{A SELECTION CAN BE PUT DOWN (v17.6)}
+  control, or a View-Mode map click. **View Mode adds nothing**, a fix click
+  included (v17.15). → §{A SELECTION CAN BE PUT DOWN (v17.6)}
 - **Track and map-only view**: no dashed track; track weight is a setting;
   New plan and active-plan controls on the map; 1-9 and , . pick plans.
   → §{The track, and reaching a plan from the map (v16.50-v16.51, roadmap 7 - 9)}

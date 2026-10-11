@@ -49,11 +49,17 @@ export const OFP_COLUMNS = [
   { key: 'mt',       label: 'MT',      group: null,             totalKey: null },
   { key: 'wv',       label: 'Dir/Vel', group: 'WIND',           totalKey: null },
   { key: 'wca',      label: 'WCA',     group: 'WIND',           totalKey: null },
-  { key: 'accDist',  label: 'Dist',    group: 'ACC',            totalKey: 'dist' },
-  { key: 'accTime',  label: 'Time',    group: 'ACC',            totalKey: 'time' },
+  // THE ACC TOTALS ARE THE ACCUMULATED FIGURES (v17.15, the author: "the total
+  // accumulated distance and time should be written on the 'total' cells.
+  // Exception is the intermediate time, where this flight's time should be
+  // totaled. If i want to see sector total distance, i can look in the flight
+  // plan page"), and the fuel likewise ("you should do the same with the
+  // fuel"). The Intermediate Time total stays this sector's time.
+  { key: 'accDist',  label: 'Dist',    group: 'ACC',            totalKey: 'accDist' },
+  { key: 'accTime',  label: 'Time',    group: 'ACC',            totalKey: 'accTime' },
   { key: 'ff',       label: 'FF',      group: 'Fuel',           totalKey: null },
   { key: 'legBurn',  label: 'Int',     group: 'Fuel',           totalKey: null },
-  { key: 'accBurn',  label: 'Acc',     group: 'Fuel',           totalKey: 'burn' },
+  { key: 'accBurn',  label: 'Acc',     group: 'Fuel',           totalKey: 'accBurn' },
   { key: 'to',       label: 'To',      group: null,             totalKey: 'label' },
   { key: 'msa',      label: 'MSA',     group: 'Altitude',       totalKey: null },
   { key: 'pl',       label: 'PL',      group: 'Altitude',       totalKey: null },
@@ -196,8 +202,11 @@ export function paperRoundSectors(sectors) {
     const remAfter = lastRem !== null ? lastRem : round1(Number(meta.fuelRem) - remSurplus);
     meta.fuelRem = isFinite(remAfter) ? remAfter.toFixed(1) : meta.fuelRem;
     if (meta.totals) {
+      // accDist is the flight's printed distance so far - the sum of the
+      // rounded legs, the figure the ACC Dist column above it ends on.
       meta.totals = Object.assign({}, meta.totals, {
-        dist: distText(round1(secDist)), burn: String(secBurn), rem: meta.fuelRem
+        dist: distText(round1(secDist)), accDist: distText(round1(accDist)),
+        burn: String(secBurn), accBurn: String(accBurn), rem: meta.fuelRem
       });
     }
     return Object.assign({}, s, { meta, rows });
@@ -277,7 +286,8 @@ export function ofpRowCells(row) {
  *
  * @param {{title?: string, dep?: string, dest?: string, date?: string,
  *          reg?: string, fuelDep?: string, fuelRem?: string,
- *          totals?: {dist: string, time: string, burn: string, rem: string}}} meta
+ *          totals?: {dist: string, time: string, burn: string, rem: string,
+ *                    accDist?: string, accTime?: string, accBurn?: string}}} meta
  * @param {any[]} rows
  * @returns {{index: number, of: number, dep: string, dest: string, date: string,
  *            reg: string, fuelDep: string, fuelRem: string,
@@ -304,6 +314,7 @@ export function buildOfpSheets(meta, rows) {
       lines: OFP_ROWS_PER_SHEET,
       totals: isLast && t
         ? { label: 'Total', dist: t.dist, time: t.time, burn: t.burn,
+            accDist: t.accDist || BLANK, accTime: t.accTime || BLANK, accBurn: t.accBurn || BLANK,
             rem: t.rem, act: BLANK }
         : null
     });

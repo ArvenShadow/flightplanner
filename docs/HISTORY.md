@@ -10,7 +10,54 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## FOUR FIXES FROM THE AUTHOR: VIEW MODE, ECMWF, THE TOTAL LINE, AND NO WIND ON THE DISTANCES (v17.15)
+
+The author, one message: *"When in view mode, i can still click on fixes to
+create waypoints, that shouldnt happen. Also make ECMWF the standard weather
+model. On the OFP, the total accumulated distance and time should be written on
+the "total" cells. Exception is the intermediate time, where this flight's time
+should be totaled. If i want to see sector total distance, i can look in the
+flight plan page instead of the OFP. Also, we dont usually correct for wind on
+our TO/LDG distances, so just drop the headwind/tailwind calculations, instead
+make a setting that allows that to be toggled (normal should then be off)"*
+
+- **VIEW MODE ADDS NO FIX.** The map's own click already returned in View Mode;
+  a fix marker does not bubble its click to the map, so `clickAnchor` never
+  heard of it - an old rule not applied to a new surface. It now returns first
+  in View Mode (putting a selection down, as a chart click does there), which
+  covers the marker and the search's pick alike, and re-checks after the
+  aerodrome question's await (rule 7). Tested on a real marker and an aerodrome;
+  removing the guard fails the test.
+- **ECMWF IS THE DEFAULT MODEL.** `ecmwf_ifs025` is the first and selected
+  option (it was "Auto"/`best_match`); the select is not stored, so every fresh
+  page starts there. Verified live on 2026-10-11 before building: Open-Meteo
+  returns wind, temperature and geopotential height on pressure levels for it,
+  with data to ~15.6 days (the guide said 16 for Auto; it now says ~15 for ECMWF).
+- **THE TOTAL LINE (SUPERSEDES v16.85).** The ACC Dist, ACC Time and fuel Acc
+  Total cells print the flight's ACCUMULATED figures (`totals.accDist` /
+  `accTime` / `accBurn`; on paper the sums of the rounded legs, the figures the
+  columns end on). The fuel was asked for in a follow-up: *"sorry shoulda
+  specified that you should do the same with the fuel"*. Only the Intermediate
+  Time total stays this sector's flight time. `totals.burn` (the sector's burn)
+  is kept - it is page 2's per-sector trip fuel (v17.12), it is just no longer
+  printed on page 1. The v16.85 test was rewritten deliberately.
+- **NO WIND CORRECTION ON THE DISTANCES BY DEFAULT.** `runwayDistance` takes
+  `windCorrection`; the app passes the new `perfWindCorr` profile setting
+  (Settings -> Take-off & landing distance, default OFF, in PROFILE_KEYS - a
+  planning method, not a person or a place). Off, the wind changes no distance
+  and none is needed to work one out; the card says "wind not corrected", page
+  2's wind-correction box prints 0, the components are still shown. **The
+  tailwind limit is not a correction**: a known tailwind past 10 kt is still
+  refused either way. The module's own default (absent = corrected) is unchanged
+  so the workbook cross-checks still test the school's method.
+- Found on the way: with no wind given and the correction off, the card's wind
+  text read `c.wind.variable` off a null - it now says "no wind given".
+- Also found: `verify:fixes` had failed since v17.6 - its list of map controls
+  that start hidden did not have the ✕ Deselect button (hidden until a waypoint
+  is selected). Added; the check passes again.
+
 ## ALTERNATE AND EXTRA FUEL ARE THE PILOT'S, AND PAGE 2 PRINTS THE TOTAL REQUIRED (v17.14)
+
 
 The author: *"in the mass & balance page, let me manually put in alternate and
 extra fuel. The time will estimate 12gph. Also, the total fuel required cells

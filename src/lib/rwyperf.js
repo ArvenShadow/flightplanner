@@ -227,6 +227,8 @@ export function windFactor(headKt) {
  * @property {number} braking           6..0, OFP!M26
  * @property {string} surface           AD 2.12 CODE_COMPOSITION
  * @property {number|null} availableM  TODA (take-off) or LDA (landing)
+ * @property {boolean} [windCorrection] false: no headwind/tailwind correction
+ *   (the app's default since v17.15); absent or true: the school's sheet.
  */
 
 /**
@@ -252,8 +254,17 @@ export function runwayDistance(x) {
   const refuse = (/** @type {string} */ why, /** @type {'input'|'limit'|'surface'} */ kind) =>
     Object.assign(base, { refused: why, refusedKind: kind });
 
-  for (const [name, v] of /** @type {[string, number][]} */ ([['QNH', x.qnhHpa], ['temperature', x.tempC],
-    ['elevation', x.elevFt], ['wind component', x.headKt]])) {
+  // WIND CORRECTION IS THE PILOT'S SETTING, OFF BY DEFAULT (v17.15, the author:
+  // "we dont usually correct for wind on our TO/LDG distances, so just drop
+  // the headwind/tailwind calculations, instead make a setting that allows
+  // that to be toggled (normal should then be off)"). Off, the wind changes no
+  // distance and is not needed to work one out. THE TAILWIND LIMIT IS NOT A
+  // CORRECTION: a known tailwind past it is still refused either way.
+  const correct = x.windCorrection !== false;
+  const known = /** @type {[string, number][]} */ ([['QNH', x.qnhHpa], ['temperature', x.tempC],
+    ['elevation', x.elevFt]]);
+  if (correct) known.push(['wind component', x.headKt]);
+  for (const [name, v] of known) {
     if (!Number.isFinite(Number(v)) || v === null) return refuse(`the ${name} is not known`, 'input');
   }
   const surface = String(x.surface || '').trim().toUpperCase();
@@ -264,8 +275,10 @@ export function runwayDistance(x) {
   const bf = BRAKING_FACTORS[Number(x.braking)];
   if (Number(x.braking) === 0) return refuse('braking action 0: operations prohibited', 'limit');
   if (!bf) return refuse('braking action must be 1 to 6', 'input');
-  const wf = windFactor(x.headKt);
-  if (wf === null) return refuse(`a ${-x.headKt} kt tailwind is past the POH's ${TAILWIND_LIMIT_KT} kt limit`, 'limit');
+  const headKnown = Number.isFinite(Number(x.headKt)) && x.headKt !== null;
+  const wfPoh = headKnown ? windFactor(x.headKt) : 1;
+  if (wfPoh === null) return refuse(`a ${-x.headKt} kt tailwind is past the POH's ${TAILWIND_LIMIT_KT} kt limit`, 'limit');
+  const wf = correct ? wfPoh : 1;
 
   const poh = pohDistanceFt(x.kind, x.weightLb, paFt, Number(x.tempC));
   // The mass not being known is the pilot not having picked an aircraft; every
@@ -284,6 +297,7 @@ export function runwayDistance(x) {
   const required = Math.ceil(corrected * base.factor - 1e-9);
   const available = x.availableM;
   return Object.assign(base, {
+    windCorrected: correct,
     uncorrectedM: uncorrected, windCorrM: wind, brakingCorrM: braking, surfaceCorrM: surfaceCorr,
     correctedM: corrected, requiredM: required,
     marginM: Number.isFinite(Number(available)) && available !== null ? Number(available) - required : NaN,
