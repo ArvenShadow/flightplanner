@@ -48,7 +48,8 @@ await page.evaluate(() => { closeHelpModal(); });
 // slider, which follows its layer) has no box by design. So hidden controls
 // are not measured - but the set of them is ASSERTED, or this would quietly
 // excuse a button that vanished by accident.
-const EXPECT_HIDDEN = ['vac-opacity-ctl'];   // shown only while the VAC is on
+const EXPECT_HIDDEN = ['vac-opacity-ctl',   // shown only while the VAC is on
+  'deselect-btn'];                            // shown only while a waypoint is selected (v17.6)
 const ctls = await page.evaluate(() => [...document.querySelectorAll('#map-controls .map-ctl')]
   .map((b) => { const r = b.getBoundingClientRect();
     return { id: b.id, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height),

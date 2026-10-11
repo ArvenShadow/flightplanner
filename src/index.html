@@ -442,7 +442,7 @@
           <h3>💨 Winds</h3>
           <ul style="margin-left:16px;">
             <li>Open the <b>Wind Matrix</b> (💨 button, or click any W/V cell) and <b>Tab</b> through Dir → Spd → OAT for every leg without touching the mouse.</li>
-            <li><b>🌐 Fetch Forecast Winds</b> pulls live/forecast winds &amp; OAT from Open-Meteo (up to 16 days ahead): per-leg average at your planned altitude, interpolated between pressure levels and forecast hours. Pick a specific model (ECMWF / ICON / GFS) to know exactly what you're flying on, or <b>Compare</b> to fill the three-model mean and see how much the models disagree — big spread = uncertain winds. It only fills the matrix — you review, then Save &amp; Apply. Requires internet.</li>
+            <li><b>🌐 Fetch Forecast Winds</b> pulls live/forecast winds &amp; OAT from Open-Meteo (up to 16 days ahead): per-leg average at your planned altitude, interpolated between pressure levels and forecast hours. <b>ECMWF IFS 0.25° is the default</b> (its winds aloft reach about 15 days ahead); pick another model (ICON / GFS, or Auto) if you prefer, or <b>Compare</b> to fill the three-model mean and see how much the models disagree — big spread = uncertain winds. It only fills the matrix — you review, then Save &amp; Apply. Requires internet.</li>
             <li>Winds apply per-leg; WCA, MH and GS update instantly.</li>
             <li>The wind modal's <b>Flight date</b> is the same date as the planner's <b>Flight Date</b> field — they stay in sync, so sun times and fetched winds always describe the same day. If your Flight Date is outside the forecast range (today … +15 days) the modal says so instead of silently fetching a different day.</li>
           </ul>
@@ -494,12 +494,12 @@
             <li><b>The printed OFP rounds for easy copying</b>: each leg's <b>fuel</b> and <b>distance</b> are rounded to the <b>nearest whole number</b>, up or down (1.1 gal prints 1, 1.6 prints 2). A leg burning under 1 gal still prints 1, and a very short leg prints 0.5 NM rather than 0. The <b>wind direction</b> prints to the <b>nearest 10&deg;</b> (043/09 prints 040/09, 145/11 prints 150/11; a north wind is 360, calm is 000/00), while the heading, ground speed and fuel are still worked from the exact wind. The <b>Acc</b> columns and the <b>Total</b> line add up those printed figures, and <b>EST fuel remaining</b> falls with them, so a column checked by hand adds up. <b>Page 2 (Mass &amp; Balance) is weighed from the same rounded fuel</b>, so its trip fuel is page 1's total and the take-off and landing masses follow from it - the whole printout is one rounded copy, easy to copy by hand. The fuel at the first engine start and after a refuel are printed as you entered them. It is for show only: the fuel is still worked from the real distance, and the screen, the M&amp;B tab and the red banner keep checking the exact figures.</li>
               <ul>
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
-                <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the whole-flight total. The <b>Total line</b> at the foot of each sheet is the opposite — it is <b>that sector's own</b> distance, time and fuel, which is what the sheet's DEP and DEST describe. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
+                <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the whole-flight total. On the <b>Total line</b> at the foot of each sheet, the <b>ACC distance and time</b> cells repeat the <b>accumulated</b> figures (the flight so far), while the <b>Intermediate Time</b> total and the <b>fuel</b> total are <b>that sector's own</b> - its flight time and what it burned. The sector's own distance is on the flight plan page. Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
                 <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>CREW, PASSENGERS and PIC</b> — crew are people, and the planner holds no one's name. <b>Reg</b> is filled from the aircraft you pick on the Mass &amp; Balance tab, and is blank until you pick one — a tail number identifies a machine, not a person.</li>
                 <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. <b>Alternate and extra fuel</b> are typed on the M&amp;B tab (US gal, timed at 12 gal/h, not stored) and printed with the <b>total fuel required</b> - trip + alternate + extra + final reserve; a box you leave empty stays empty and adds nothing. Left blank for your pen: contingency fuel (not counted in the total), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. <b>Trip fuel is all the fuel the plan uses</b>, a touch &amp; go's ground time included - on a sector's own page too, which says so beside its title. On a whole-flight sheet the fuel taken on at a refuelling stop is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
                 <li><b>Choosing an aircraft loads its standard baggage</b> - 7.3 lb at A and 0.7 lb at C on every aircraft, and LN-TRE's 22.7 lb at B, as the school's workbook does. They are ordinary baggage lines you can see and type over; choosing a tail again resets them.</li>
-                <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, the wind correction (no headwind credit under 9 kt, +10% per 2 kt of tailwind, nothing past 10 kt), braking action, then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
+                <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, braking action, <b>no wind correction by default</b> (turn it on in <b>Settings &rarr; Take-off &amp; landing distance</b> to apply the sheet's: no headwind credit under 9 kt, +10% per 2 kt of tailwind; a tailwind past 10 kt is refused either way), then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
                 <li><b>Each distance is drawn on a little runway.</b> The strip is the declared <b>TODA</b> (take-off) or <b>LDA</b> (landing) of the runway end you picked, and the POH distance and the factored requirement are measured along it <b>to scale</b> from where the run starts - a requirement longer than the strip runs off the end in red and says by how much. The width and the markings are enlarged so they can be seen. The markings are the EASA ones (CS ADR-DSN): <b>threshold stripes</b> counted by the published runway width (18 m: 4, 23 m: 6, 30 m: 8, 45 m: 12, 60 m: 16 - a width not in that table, such as ENRO's 40 m, gets none and says why), the <b>runway number</b> read from the approach, and the <b>centre line</b>. An unpaved strip is drawn without paint. The strip is not the physical runway: the AIP does not say where on the surface each declared distance begins, so the picture does not guess. The wind box beside it is the wind the figure was worked with, split into head/tail and cross; a tailwind is red. The figures in the text remain the authority.</li>
                 <li>Wind, QNH and temperature come from the latest METAR when you have fetched it, and you can type over any of them. <b>If the METAR has a TEMPO group with a wind, that wind is the one used</b>, and the card says so. <b>Type a tower or ATIS wind as TRUE</b> - those are magnetic. None of these values is saved: yesterday's QNH is a wrong QNH. The landing table exists for 2950 lb only, so it is used as published for every landing weight - a lighter aeroplane lands shorter, so it errs on the safe side. ENAS is gravel, and the POH has no gravel correction, so no distance is given there.</li>
               </ul>
@@ -581,8 +581,12 @@
             <label style="font-size:11px; font-weight:700;">Flight date:</label>
             <input type="date" id="wind-fetch-date" onchange="syncFlightDateFromWindPicker()" title="Same date as the planner's Flight Date field — changing it here updates the daylight card too." style="padding:3px 6px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-input); color:var(--text-main); font-size:11px;">
             <select id="wind-model" title="Which forecast model supplies the winds aloft. 'Compare' fetches three models, fills the mean and reports their disagreement." style="padding:3px 6px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-input); color:var(--text-main); font-size:11px;">
+              <!-- ECMWF IS THE DEFAULT (v17.15, the author: "make ECMWF the
+                   standard weather model"). Verified 2026-10-11 against
+                   Open-Meteo: ecmwf_ifs025 returns wind, temperature and
+                   geopotential height on pressure levels, ~15 days ahead. -->
+              <option value="ecmwf_ifs025" selected>ECMWF IFS 0.25°</option>
               <option value="best_match">Auto (best available)</option>
-              <option value="ecmwf_ifs025">ECMWF IFS 0.25°</option>
               <option value="icon_seamless">DWD ICON</option>
               <option value="gfs_seamless">NOAA GFS</option>
               <option value="COMPARE3">Compare: mean of ECMWF+ICON+GFS</option>
@@ -976,6 +980,29 @@
               next one for you — departing from that aerodrome's published field elevation, with
               its ground time editable in the new plan's header. Turn it off if you would rather
               add sectors yourself. <b>Fly-by never opens a plan</b>: nothing happens there.
+              </div>
+            </details>
+          </div>
+
+          <div class="setting-section">
+            <h3>Take-off &amp; landing distance</h3>
+            <div class="setting-row">
+              <label>Wind correction:</label>
+              <div>
+                <select id="set-perf-wind" style="width:210px;">
+                  <option value="no">Off - no wind correction</option>
+                  <option value="yes">On - POH headwind / tailwind</option>
+                </select>
+              </div>
+            </div>
+            <details class="setting-help">
+              <summary>Correcting the distances for the wind</summary>
+              <div>
+              <b>Off by default</b>: the take-off and landing distances on the M&amp;B tab and on
+              page 2 are worked with no headwind or tailwind correction. Turn it on to apply the
+              POH notes the school sheet uses (headwind from 9 kt: -10% per 9 kt; tailwind: +10%
+              per 2 kt). Either way a tailwind past the POH's 10 kt limit is still refused, and
+              the wind component is still shown.
               </div>
             </details>
           </div>
@@ -1482,7 +1509,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.14';
+    const APP_VERSION = '17.15';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4899,7 +4926,7 @@
     async function fetchForecastWinds() {
       const dateStr = document.getElementById('wind-fetch-date').value
         || localDateStrOf(Date.now());
-      const modelSel = document.getElementById('wind-model') ? document.getElementById('wind-model').value : 'best_match';
+      const modelSel = document.getElementById('wind-model') ? document.getElementById('wind-model').value : 'ecmwf_ifs025';
       const pts = buildWindSamplePoints(flights, legStartTimes);
       if (pts.length === 0) {
         windFetchStatus('No legs plotted yet - add waypoints first.', true);
@@ -5808,6 +5835,11 @@
      * civilName() in anchors.js.
      */
     async function clickAnchor(a) {
+      // VIEW MODE ADDS NOTHING (v17.15, the author: "When in view mode, i can
+      // still click on fixes to create waypoints, that shouldnt happen"). A fix
+      // click does what a click on the empty chart does there - puts the
+      // selection down - and the search's pick only centres the map.
+      if (isDoneMode) { if (highlightedWaypoint) clearWaypointSelection(); return; }
       if (!a || a.kind !== 'AD') { addAnchorWaypoint(a); return; }
       const civil = civilName(a);
       const elev = typeof a.elevFt === 'number' ? ' (' + a.elevFt + ' ft)' : '';
@@ -5841,7 +5873,9 @@
           { id: 'cancel', label: 'Cancel' }
         ]
       });
-      if (!chosen || chosen.id === 'cancel') return;
+      // Re-read after the await (rule 7): View Mode may have been switched on
+      // while the question was open.
+      if (!chosen || chosen.id === 'cancel' || isDoneMode) return;
       if (chosen.id === 'flyby') { addAnchorWaypoint(a, { flyby: true }); return; }
       if (chosen.id === 'departure') { addAnchorWaypoint(a, { departure: true }); return; }
       await addAerodromeStop(a, chosen.id);
@@ -6512,6 +6546,8 @@
       updateVacOpacity();
       document.getElementById('set-auto-plan').value =
         normaliseBool(aircraftProfile.autoPlanAfterStop, true) ? 'yes' : 'no';
+      document.getElementById('set-perf-wind').value =
+        normaliseBool(aircraftProfile.perfWindCorr, false) ? 'yes' : 'no';
       updateRouteWeightPreview();
       const skinSel = document.getElementById('map-skin');
       if (skinSel && !skinSel.options.length) {
@@ -7210,7 +7246,10 @@
             reg: mbPrefs.reg || '',
             fuelDep: (Number((document.getElementById('fuel-dep') || {}).value) || 0).toFixed(1),
             fuelRem: runningFuelRemaining.toFixed(1),
-            // THE TOTAL LINE IS THIS SECTOR'S, all three figures alike. The
+            // THE TOTAL LINE WAS THIS SECTOR'S, all three figures alike, until
+            // v17.15 (see below): the ACC Dist and ACC Time cells now print the
+            // flight's accumulated figures; the fuel burn and the Intermediate
+            // Time stay the sector's. The v16.85 reasoning for the burn: the
             // sheet carries one DEP and one DEST, so "Total" under it means
             // what this sector cost - and dist and time already said that
             // while burn was quietly reporting the whole mission. Invisible
@@ -7219,7 +7258,11 @@
             // 12.3 gal where the sector had actually burned 5.4.
             // `rem` stays the running figure on purpose: fuel remaining is a
             // STATE at the end of the sector, not a sum over it.
+            // accDist / accTime are the FLIGHT's so far, for the ACC columns'
+            // Total cells (v17.15); `time` stays the sector's, for the
+            // Intermediate Time total. `dist` is kept for the plan's own use.
             totals: { dist: sectorDist.toFixed(1), time: formatTimeHHMM(sectorTime),
+                      accDist: runningAccDist.toFixed(1), accTime: formatTimeHHMM(runningAccTime),
                       burn: sectorBurn.toFixed(1), rem: runningFuelRemaining.toFixed(1) }
           },
           rows: printRows,
@@ -7574,6 +7617,7 @@
         routeWeight: Number(document.getElementById('map-route-weight').value)
       });
       aircraftProfile.autoPlanAfterStop = document.getElementById('set-auto-plan').value !== 'no';
+      aircraftProfile.perfWindCorr = document.getElementById('set-perf-wind').value === 'yes';
       // The corridor radius is applied live as it is typed, but Save must also
       // commit it: a pilot who edits the box and presses Save & Recalculate
       // without leaving the field would otherwise lose the change.
@@ -9445,7 +9489,9 @@
           const res = runwayDistance({
             kind, weightLb: kind === 'takeoff' && sector ? sector.takeoff.weightLb : null,
             elevFt: ad.elevFt, qnhHpa: qnh, tempC: oat, headKt: wind ? wind.headKt : NaN,
-            braking, surface: opt.rw.surface, availableM: available
+            braking, surface: opt.rw.surface, availableM: available,
+            // Off unless the pilot turned it on (v17.15) - see runwayDistance.
+            windCorrection: normaliseBool(aircraftProfile.perfWindCorr, false)
           });
           out.push(Object.assign(base, {
             icao: ad.icao, name: ad.name, elevFt: ad.elevFt, options, opt, wind, windDir, windKt, qnh, oat,
@@ -9578,11 +9624,17 @@
           // Built by src/lib/rwydiagram.js; the figure line above stays the
           // authority.
           h += runwayDiagramHtml(c);
-          const wtxt = c.wind.variable ? 'VRB, priced as a ' + (-c.wind.headKt) + ' kt tailwind'
+          // With the wind correction off (the default since v17.15) a distance
+          // needs no wind at all, so c.wind may be null here.
+          const wtxt = !c.wind ? 'no wind given'
+            : c.wind.variable ? (r.windCorrected ? 'VRB, priced as a ' + (-c.wind.headKt) + ' kt tailwind' : 'VRB ' + c.wind.crossKt + ' kt')
             : (c.wind.headKt >= 0 ? c.wind.headKt + ' kt head' : (-c.wind.headKt) + ' kt tail') +
               (c.wind.crossKt ? ', ' + c.wind.crossKt + ' kt cross from the ' + (c.wind.crossFrom === 'L' ? 'left' : 'right') : '');
+          const windTxt = r.windCorrected
+            ? ' m, wind ' + (r.windCorrM >= 0 ? '+' : '') + f0(r.windCorrM)
+            : ' m, wind not corrected (Settings)';
           h += '<div class="perf-note">PA ' + f0(r.paFt) + ' ft · ' + esc(wtxt) + ' · POH ' + f0(r.uncorrectedM) +
-            ' m, wind ' + (r.windCorrM >= 0 ? '+' : '') + f0(r.windCorrM) + ', braking +' + f0(r.brakingCorrM) +
+            windTxt + ', braking +' + f0(r.brakingCorrM) +
             (r.surfaceCorrM ? ', grass +' + f0(r.surfaceCorrM) : '') + ' = ' + f0(r.correctedM) + ' m × ' + r.factor + '</div>';
         }
         if (src) h += '<div class="perf-note">' + src + '</div>';

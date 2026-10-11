@@ -1584,8 +1584,23 @@ TA('Compare survives one model failing (mean of remaining two)', async () => {
   assert(st.includes('unavailable'), 'missing model not reported: ' + st);
   assert(Number(doc.getElementById('wmodal-spd-0-1').value) === 21, 'two-model mean wrong');
   assert(st.includes('good agreement'), 'small spread should read as agreement: ' + st);
-  doc.getElementById('wind-model').value = 'best_match';
+  doc.getElementById('wind-model').value = 'ecmwf_ifs025';
   w.closeWindModal();
+});
+
+T('ECMWF is the weather model a fresh page fetches from (v17.15)', () => {
+  // The author: "make ECMWF the standard weather model". Read from the BUILT
+  // page's markup, not the live select an earlier test may have changed.
+  const html = require('fs').readFileSync('./site/index.html', 'utf8');
+  const sel = /<select id="wind-model"[\s\S]*?<\/select>/.exec(html);
+  assert(sel, 'no wind-model select in the built page');
+  const fresh = new JSDOM('<!doctype html><body>' + sel[0] + '</body>').window.document.getElementById('wind-model');
+  assert(fresh.value === 'ecmwf_ifs025', 'a fresh page defaults to ' + fresh.value + ', not ECMWF');
+  assert(fresh.options[0].value === 'ecmwf_ifs025', 'ECMWF is not the first choice offered');
+  assert([...fresh.options].some((o) => o.value === 'best_match'), 'Auto is no longer offered at all');
+  // and the URL it builds asks Open-Meteo for that model by name
+  assert(ev(`buildOpenMeteoUrl([{ lat: 69, lng: 18 }], '2026-10-11', document.getElementById('wind-model').value)`).includes('&models=ecmwf_ifs025'),
+    'the default fetch does not name ECMWF');
 });
 
 console.log('\n=== 30. View / Edit mode labels ===');
@@ -4857,6 +4872,37 @@ T('the fixes layer draws clickable markers and keeps its own attribution', () =>
   assert(ev('fixLayers.length') === 0, 'turning the layer off left markers behind');
   assert(attr.style.display === 'none', 'the attribution outlived the layer');
 });
+TA('in View Mode a fix click adds nothing - reporting point, aerodrome or search pick (v17.15)', async () => {
+  // The author: "When in view mode, i can still click on fixes to create
+  // waypoints, that shouldnt happen."
+  ev(SEED);
+  ev("window.__stubZoom = 10; window.__stubBounds = { south: 68.8, west: 17.2, north: 69.9, east: 19.6 };");
+  ev('aircraftProfile.fixesOn = true; drawFixes();');
+  const before = ev('flights[activeFlightIndex].waypoints.length');
+  const undoBefore = ev('undoStack.length');
+  ev('toggleDoneMode();');
+  try {
+    assert(ev('isDoneMode'), 'the fixture is not in View Mode');
+    // a reporting point, by its real marker
+    ev("(function(){ var l = fixLayers.find(function(x){ return x._tip.indexOf('SODA') >= 0; }); l._h.click(); })()");
+    // an aerodrome: no question is asked at all
+    const entc = moduleExports.anchors.buildAnchors(aipDataset()).find((x) => x.kind === 'AD' && x.icao === 'ENTC');
+    assert(entc, 'the fixture has no ENTC aerodrome anchor');
+    // A question would leave the promise waiting on an answer; none is asked.
+    const r = await Promise.race([ev(`clickAnchor(${JSON.stringify(entc)})`).then(() => 'done'),
+      new Promise((res) => setTimeout(() => res('asked'), 300))]);
+    assert(r === 'done', 'View Mode still asked what happens at the aerodrome');
+    assert(ev('flights[activeFlightIndex].waypoints.length') === before, 'View Mode added a waypoint from a fix');
+    assert(ev('undoStack.length') === undoBefore, 'View Mode pushed an undo step for a fix it did not add');
+  } finally {
+    ev('if (isDoneMode) toggleDoneMode(); aircraftProfile.fixesOn = false; drawFixes();');
+  }
+  // and Edit Mode still adds one
+  ev("aircraftProfile.fixesOn = true; drawFixes();");
+  ev("(function(){ var l = fixLayers.find(function(x){ return x._tip.indexOf('SODA') >= 0; }); l._h.click(); })()");
+  assert(ev('flights[activeFlightIndex].waypoints.length') === before + 1, 'Edit Mode no longer adds a fix');
+  ev('undoLast(true); aircraftProfile.fixesOn = false; drawFixes();');
+});
 T('the fix symbol is a validated setting, and a bad value degrades safely', () => {
   const A = moduleExports.anchors;
   // The reporting-point default is ORANGE on purpose: nothing on either base
@@ -6556,26 +6602,35 @@ TA('the ACC columns all measure the same thing: the mission so far', async () =>
     ' NM to the accumulated distance but is ' + firstTwo[17] + ' NM long');
 });
 
-TA('the Total line is this sector, all three figures alike', async () => {
-  // The sheet carries ONE departure and ONE arrival, so "Total" under it means
-  // what THIS sector cost. Distance and time already said that; fuel was
-  // quietly reporting the whole mission, which is invisible on a one-sector
-  // flight because the two are then the same number.
+TA('the Total line: ACC distance and time are the flight\'s so far; fuel and Intermediate Time are the sector\'s', async () => {
+  // UPDATED DELIBERATELY AT v17.15. Until then every figure on the Total line
+  // was the SECTOR's (v16.85). The author: "the total accumulated distance and
+  // time should be written on the 'total' cells. Exception is the
+  // intermediate time, where this flight's time should be totaled. If i want
+  // to see sector total distance, i can look in the flight plan page instead
+  // of the OFP." The fuel burn was not part of that, and stays the sector's.
   ev(TWO_SECTORS);
   const sheets = ofpSheets();
   assert(sheets.length === 2, 'expected two sheets, got ' + sheets.length);
   const endOne = sheets[0].filled.slice(-1)[0], endTwo = sheets[1].filled.slice(-1)[0];
-  const totTwo = sheets[1].total;
+  const totOne = sheets[0].total, totTwo = sheets[1].total;
   assert(totTwo.some(Boolean), 'the sheet has no Total line');
-  // The ACC columns run across the mission, so what sector 2 cost is the
-  // DIFFERENCE between the two sheets' final accumulated values.
+  // ACC Dist / ACC Time: the column's own last figure, i.e. the flight so far -
+  // on sector 2 that is MORE than sector 2 flew, which is what tells them apart.
+  for (const [tot, end, n] of [[totOne, endOne, 1], [totTwo, endTwo, 2]]) {
+    assert(tot[7] === end[7], 'sector ' + n + ': Total ACC Dist ' + tot[7] + ' is not the accumulated ' + end[7]);
+    assert(tot[8] === end[8], 'sector ' + n + ': Total ACC Time ' + tot[8] + ' is not the accumulated ' + end[8]);
+  }
   const sectorDist = Number(endTwo[7]) - Number(endOne[7]);
+  assert(Number(totTwo[7]) - sectorDist > 1, 'the fixture cannot tell the flight\'s distance from the sector\'s');
+  // Intermediate Time: this sector's flight time, not the accumulated one.
+  const secTime = ev('ofpPrintModel[1].meta.totals.time');
+  assert(totTwo[18] === secTime && totTwo[18] !== totTwo[8],
+    'the Intermediate Time total is ' + totTwo[18] + ', not this sector\'s ' + secTime + ' (ACC ' + totTwo[8] + ')');
+  // Fuel stays the sector's: the DIFFERENCE between the two sheets' final Acc.
   const sectorBurn = Number(endTwo[11]) - Number(endOne[11]);
-  assert(Math.abs(Number(totTwo[7]) - sectorDist) < 0.11,
-    'the Total distance is ' + totTwo[7] + ' but this sector flew ' + sectorDist.toFixed(1));
   assert(Math.abs(Number(totTwo[11]) - sectorBurn) < 0.11,
-    'the Total fuel is ' + totTwo[11] + ' but this sector burned ' + sectorBurn.toFixed(1) +
-    ' - the Total line is mixing sector figures with mission ones');
+    'the Total fuel is ' + totTwo[11] + ' but this sector burned ' + sectorBurn.toFixed(1));
   // Fuel REMAINING is a state at the end of the sector, not a sum over it, so
   // it stays the running figure and must match the last row's EST.
   assert(totTwo[22] === endTwo[22],
@@ -13111,6 +13166,56 @@ T('trip fuel is ALL the fuel used: a touch & go\'s ground time is in it, a refue
   }
 });
 
+T('the take-off and landing distances are not wind-corrected unless the setting says so (v17.15)', () => {
+  // The author: "we dont usually correct for wind on our TO/LDG distances, so
+  // just drop the headwind/tailwind calculations, instead make a setting that
+  // allows that to be toggled (normal should then be off)".
+  const R = moduleExports.rwy;
+  const x = { kind: 'takeoff', weightLb: 2900, elevFt: 254, qnhHpa: 1013, tempC: 10, braking: 6, surface: 'ASPH', availableM: 2000 };
+  const calm = R.runwayDistance(Object.assign({}, x, { headKt: 0 }));
+  const offHead = R.runwayDistance(Object.assign({}, x, { headKt: 18, windCorrection: false }));
+  const onHead = R.runwayDistance(Object.assign({}, x, { headKt: 18 }));
+  assert(offHead.windCorrM === 0 && offHead.requiredM === calm.requiredM && offHead.windCorrected === false,
+    'with the correction off an 18 kt headwind still moved the distance: ' + offHead.requiredM + ' vs ' + calm.requiredM);
+  assert(onHead.windCorrected === true && onHead.windCorrM < 0 && onHead.requiredM < calm.requiredM,
+    'with the correction on the headwind credit is gone: ' + onHead.windCorrM);
+  const offTail = R.runwayDistance(Object.assign({}, x, { headKt: -6, windCorrection: false }));
+  assert(offTail.requiredM === calm.requiredM, 'a 6 kt tailwind still lengthened an uncorrected distance');
+  // No wind given: off needs none; on still asks for it.
+  const offNone = R.runwayDistance(Object.assign({}, x, { headKt: NaN, windCorrection: false }));
+  assert(!offNone.refused && offNone.requiredM === calm.requiredM, 'an uncorrected distance waited for a wind: ' + offNone.refused);
+  assert(R.runwayDistance(Object.assign({}, x, { headKt: NaN })).refusedKind === 'input', 'a corrected distance worked without a wind');
+  // THE TAILWIND LIMIT IS NOT A CORRECTION: still refused with the correction off.
+  const past = R.runwayDistance(Object.assign({}, x, { headKt: -12, windCorrection: false }));
+  assert(past.refusedKind === 'limit' && /tailwind/.test(past.refused), 'a 12 kt tailwind passed with the correction off: ' + JSON.stringify(past.refused));
+
+  // The app: off by default, on through Settings, and the setting travels like the others.
+  assert(ev('PROFILE_KEYS.includes("perfWindCorr")'), 'the setting is not in PROFILE_KEYS');
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev(`delete aircraftProfile.perfWindCorr; mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); perfInputs = {};
+      lastWeather = { icaos: ['ENDU', 'ENTC'], tafs: {}, metars: {
+        ENDU: 'ENDU 281150Z 29012KT 9999 FEW040 10/05 Q1005',
+        ENTC: 'ENTC 281150Z 18008KT 9999 SCT030 08/04 Q1003' } };`);
+  w.renderAllFlightTables();
+  try {
+    let dep = ev('runwayChecks[0]');
+    assert(dep.wind && dep.wind.headKt === 12, 'the fixture has no headwind: ' + JSON.stringify(dep.wind));
+    assert(dep.res.windCorrected === false && dep.res.windCorrM === 0, 'the default corrects for the wind: ' + dep.res.windCorrM);
+    assert(/wind not corrected/.test(doc.getElementById('mb-perf').textContent), 'the card does not say the wind is not corrected');
+    const offReq = dep.res.requiredM;
+    ev('openSettingsModal();');
+    assert(doc.getElementById('set-perf-wind').value === 'no', 'Settings does not show the correction as off by default');
+    doc.getElementById('set-perf-wind').value = 'yes';
+    ev('saveSettings();');
+    dep = ev('runwayChecks[0]');
+    assert(ev('aircraftProfile.perfWindCorr') === true && dep.res.windCorrected === true && dep.res.windCorrM < 0 && dep.res.requiredM < offReq,
+      'turning the setting on did not apply the headwind credit: ' + JSON.stringify([dep.res.windCorrM, dep.res.requiredM, offReq]));
+  } finally {
+    ev('aircraftProfile.perfWindCorr = false; if (typeof closeSettingsModal === "function") closeSettingsModal(); mbPrefs.reg = null; perfInputs = {}; lastWeather = null; renderAllFlightTables();');
+  }
+});
+
 T('each sector end is checked against its own runway, from the METAR unless typed over', () => {
   // UPDATED DELIBERATELY AT v16.96: this test used to assert the tab SAID the
   // distances were not computed. They are now, and it says so.
@@ -13135,8 +13240,9 @@ T('each sector end is checked against its own runway, from the METAR unless type
     'the take-off was not checked against TODA: ' + JSON.stringify(dep.res).slice(0, 200));
   // The take-off mass is the sector's own, from the M&B pass.
   const sector0 = ev('massBalanceMission.sectors[0].takeoff.weightLb');
+  // (No wind correction: the app's default since v17.15.)
   const again = moduleExports.rwy.runwayDistance({ kind: 'takeoff', weightLb: sector0, elevFt: 254, qnhHpa: 1005, tempC: 10,
-    headKt: 12, braking: 6, surface: 'ASPH', availableM: dep.opt.end.toda });
+    headKt: 12, braking: 6, surface: 'ASPH', availableM: dep.opt.end.toda, windCorrection: false });
   assert(again.requiredM === dep.res.requiredM, 'the tab did not use the sector take-off mass: ' + again.requiredM + ' vs ' + dep.res.requiredM);
   // A typed value wins over the METAR, and clearing the box gives it back.
   ev(`perfInputs = { [runwayChecks[0].key]: { qnh: '980' } };`);

@@ -40,6 +40,9 @@ export const PROFILE_KEYS = [
   'fixAdColor', 'fixRpColor', 'fixAdShape', 'fixRpShape', 'fixStyle', 'fixSize', 'fixLabels',
   // Whether a touch & go or a full stop opens the next sector for you (v16.54).
   'autoPlanAfterStop',
+  // Whether the take-off and landing distances are corrected for the wind
+  // (v17.15, off by default). A planning method, not a person or a place.
+  'perfWindCorr',
   // The corridor ring (v16.61): a map-display preference, exactly like the fix
   // style and the track weight, and re-validated on every read for the same
   // reason - it can arrive from a settings file somebody else wrote.
