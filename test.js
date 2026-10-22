@@ -7572,6 +7572,26 @@ T('the tile cache is back to a size the browser will actually keep', () => {
   assert(/must-revalidate/.test(vfr), 'the reason the buffer matters is undocumented');
 });
 
+T('the date and time pickers\' icons follow the theme, so they can be seen in dark mode (v17.16)', () => {
+  // The author: "the clock symbol for ETD and calendar symbol for date of
+  // flight are really hard to see on dark mode as they are black with a dark
+  // background". The browser draws those icons in the colour scheme it thinks
+  // the page has; only `color-scheme` tells it. jsdom cannot render them, so
+  // this guards the rule in the ONE style block the built page carries, and
+  // that it reaches every date and time field, not just the two named.
+  const style = /<style>([\s\S]*?)<\/style>/.exec(APP_SRC);
+  assert(style, 'the built page has no style block');
+  const dark = /body\.dark-mode input\[type="date"\],\s*body\.dark-mode input\[type="time"\]\s*\{\s*color-scheme:\s*dark;?\s*\}/.test(style[1]);
+  const light = /body\.light-mode input\[type="date"\],\s*body\.light-mode input\[type="time"\]\s*\{\s*color-scheme:\s*light;?\s*\}/.test(style[1]);
+  assert(dark, 'dark mode does not tell the browser the date/time fields are dark');
+  assert(light, 'light mode does not pin the date/time fields to the light scheme');
+  const fields = [...doc.querySelectorAll('input[type="date"], input[type="time"]')];
+  assert(fields.length >= 3 && fields.some((f) => f.id === 'def-etd') && fields.some((f) => f.id === 'def-date')
+    && fields.some((f) => f.id === 'wind-fetch-date'), 'the fixture lost a date or time field: ' + fields.map((f) => f.id));
+  // The rule is by TYPE, so nothing can opt a field out by id.
+  assert(!/#def-etd[^{]*\{[^}]*color-scheme|#def-date[^{]*\{[^}]*color-scheme/.test(style[1]),
+    'a date/time field carries its own color-scheme - the type rule is the one that must hold');
+});
 T('every map control is in the stack, so none can be invisible', () => {
   // Two buttons shipped invisible: the map controls were positioned one by
   // one by id with hardcoded top offsets, so a new button with no rule of

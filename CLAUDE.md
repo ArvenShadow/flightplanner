@@ -498,7 +498,9 @@ three cheap disciplines applied every time the page is touched:
   not attempted. → §{SKINS, and the plan for restyling the whole shell (v16.65)}
   and → §{SIZE IS ITS OWN SETTING: BOLD AND COMPACT GO WITH ANY STYLE (v17.3)}
 - **Colours are tokens** on `:root` per theme; the printed form stays literal
-  black. The build lints CSS for undefined `var()`s. → §{Restyling has to be cheap before it can be safe (v16.64)}
+  black. Date/time fields declare `color-scheme` per theme so the browser's
+  picker icons are visible in dark mode (v17.16).
+  → §{THE DATE AND TIME PICKER ICONS FOLLOW THE THEME (v17.16)} The build lints CSS for undefined `var()`s. → §{Restyling has to be cheap before it can be safe (v16.64)}
 - **The SERA VMC-minima modal is gone**; the daylight card stays.
   → §{THE SERA VMC-MINIMA MODAL IS GONE (the author: "it doesnt add anything other than extra space")}
 

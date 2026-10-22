@@ -10,7 +10,26 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE DATE AND TIME PICKER ICONS FOLLOW THE THEME (v17.16)
+
+The author: *"the clock symbol for ETD and calendar symbol for date of flight
+are really hard to see on dark mode as they are black with a dark background.
+Please make them easier to see"*
+
+- **CAUSE**: the clock and the calendar are drawn by the browser, not by the
+  stylesheet, in the colour scheme it believes the page has. Nothing declared
+  one, so Chromium used light and drew them black on the dark `--bg-input`.
+  Measured before the fix: `getComputedStyle(#def-etd).colorScheme` was
+  `normal` under `body.dark-mode`.
+- **FIX**: one `color-scheme` rule per theme on every `input[type="date"]` and
+  `input[type="time"]` (`dark` under `body.dark-mode`, `light` under
+  `body.light-mode`), so the wind picker's date field matches too. It also
+  turns the native date and time pop-ups dark. Screenshotted in Chromium
+  before and after: the icons are light on the dark field now. By TYPE, not by
+  id, and a test guards that no field opts out with its own rule.
+
 ## FOUR FIXES FROM THE AUTHOR: VIEW MODE, ECMWF, THE TOTAL LINE, AND NO WIND ON THE DISTANCES (v17.15)
+
 
 The author, one message: *"When in view mode, i can still click on fixes to
 create waypoints, that shouldnt happen. Also make ECMWF the standard weather
