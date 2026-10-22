@@ -463,7 +463,7 @@
         <div class="setting-section">
           <h3>🗺 Map Tools</h3>
           <ul style="margin-left:16px;">
-            <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail.
+            <li><b>📏 Ruler</b>: click points to measure true &amp; magnetic track, leg and total distance — each segment gets a chip on the map (MT · distance, hover for true track) plus a running-total chip at the last point, and the banner shows the full detail. While the ruler runs, every route and every fix is <b>faded and ignores the mouse</b>, so a point can be placed on top of them.
               <br><b>It previews as you move.</b> After the first click a dashed band follows the cursor from that point, with a chip showing the track and distance and — from the second point on — what the running total <i>would</i> become. Nothing is committed until you click, so you can measure a distance from a starting position, read it, and move on without leaving a mark. The preview is the <i>same</i> arithmetic as the click, so what you read is what you get. It needs a mouse (a touch screen has no cursor to follow), it clears when the pointer leaves the map, and its chip hides only at the <b>Far</b> declutter level — the banner shows the figures at every zoom.
               <br><b>Escape and Ctrl+Z belong to the ruler while it is running.</b> <b>Ctrl+Z</b> takes back the last point you placed (to put one back, just click the map again — the ruler has no separate redo because it does not need one). <b>Escape</b> clears the whole measurement, and pressing it again on an empty ruler <i>stops</i> the ruler — it backs out one level at a time, the way Escape does everywhere else here. Neither touches your plan's undo history: the ruler measures, it never edits the route. With the ruler running, Ctrl+Z will say so rather than quietly undoing a plan edit; stop the ruler and it is ordinary undo again.</li>
             <li><b>TOC/TOD labels</b> include the distance from a named waypoint (e.g. "▲ TOC 2500' · 3.8 NM after ENDU") so you can mark them with a ruler on your chart. Out-and-back legs place their labels on opposite sides of the line.</li>
@@ -1509,7 +1509,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.17';
+    const APP_VERSION = '17.18';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -3036,6 +3036,14 @@
         banner.style.display = 'none';
         clearRuler();
       }
+      // THE MAP IS THE RULER'S WHILE IT RUNS (v17.18, the author: "make all
+      // routes transparent (same as a non-active leg) and ignored so i can
+      // actually click around without it highlighting or anything, same goes
+      // for any fixes"). Every route is redrawn dimmed and deaf, and every fix
+      // without its card or its click, so a ruler point lands wherever the
+      // pointer is. Both redraws read isRulerMode; stopping puts it all back.
+      refreshMap();
+      drawFixes();
     }
 
     let rulerTotalMarker = null;
@@ -3609,7 +3617,9 @@
         // responding to the mouse, so a backtracking route (e.g. ENDU-ENEV-
         // ENDU) can be drawn straight over another without grabbing its
         // waypoints or lines. In VIEW mode all flights show at full strength.
-        const dimmed = !isDoneMode && fIdx !== activeFlightIndex;
+        // WITH THE RULER RUNNING, EVERY route is dimmed and deaf (v17.18), so
+        // nothing on it takes the click that places a ruler point.
+        const dimmed = isRulerMode || (!isDoneMode && fIdx !== activeFlightIndex);
 
         // The drawn path, vias included -> src/lib/legs.js. Every live drag
         // redraws from the same function, so a drag can never straighten a
@@ -5313,7 +5323,7 @@
         if (path.length < 1) return;
         // Same rule as the route line: an inactive plan's corridor fades, or
         // several overlapping bands would be a wash.
-        const dimmed = !isDoneMode && fIdx !== activeFlightIndex;
+        const dimmed = isRulerMode || (!isDoneMode && fIdx !== activeFlightIndex);
         const pieces = corridorPieces(path, r);
         if (!pieces.length) return;
         // ROUTE COLOUR OR ONE OF YOUR OWN (v16.62). The band is background, not
@@ -5684,9 +5694,15 @@
       // in src/lib/anchors.js, which validates every field. It is read here
       // rather than cached so a Save redraws with the new symbol immediately.
       const st = normaliseFixStyle(aircraftProfile);
+      // WHILE THE RULER RUNS a fix is a symbol and nothing more (v17.18): no
+      // card on hover, no click, dimmed like the routes, so the click that
+      // lands on it reaches the map and places the point.
+      const deaf = isRulerMode;
       for (const a of shown) {
         const mk = fixMarkerHtml(a, st);
         const m = L.marker([a.lat, a.lng], {
+          interactive: !deaf,
+          opacity: deaf ? 0.35 : 1,
           icon: L.divIcon({
             // The kind is on the icon, not only in the markup: with the labels
             // turned off there is otherwise nothing to tell an aerodrome from a
@@ -5699,8 +5715,10 @@
           zIndexOffset: -200,
           keyboard: false
         }).addTo(map);
-        m.bindTooltip(fixCardHTML(a), { className: 'fix-tip', direction: 'top', offset: [0, -6] });
-        m.on('click', function() { clickAnchor(a); });
+        if (!deaf) {
+          m.bindTooltip(fixCardHTML(a), { className: 'fix-tip', direction: 'top', offset: [0, -6] });
+          m.on('click', function() { clickAnchor(a); });
+        }
         fixLayers.push(m);
       }
       if (label) {

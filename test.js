@@ -480,6 +480,56 @@ T('ruler updates banner AND drops measurement chips on the map', () => {
   w.toggleRulerMode();
   assert(ev('rulerMarkers.length') === 0 && ev('rulerTotalMarker') === null, 'chips not cleared');
 });
+T('while the ruler runs, every route and every fix is dimmed and deaf, and it all comes back after (v17.18)', () => {
+  // The author: "make all routes transparent (same as a non-active leg) and
+  // ignored so i can actually click around without it highlighting or
+  // anything, same goes for any fixes. (When hovering over a fix it just
+  // highlights it and wont let me place a ruler mark.)"
+  // Two flights (SEED2 is declared further down the file): the active one is
+  // normally full strength, the other already dimmed.
+  ev(`flights = [
+    { id: 1, title: "F1", depElev: 254, waypoints: [
+      { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 254,  oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12 } ]},
+    { id: 2, title: "F2", depElev: 229, waypoints: [
+      { lat: 69.67895054, lng: 18.91143033, name: "ENTC", alt: 229,  oat: 10, wdir: 0, wspd: 0, var: -12 },
+      { lat: 69.05505349, lng: 18.54466865, name: "ENDU", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 } ]}
+  ]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  ev("window.__stubZoom = 10; window.__stubBounds = { south: 68.8, west: 17.2, north: 69.9, east: 19.6 };");
+  ev('aircraftProfile.fixesOn = true; if (isRulerMode) toggleRulerMode(); refreshMap(); drawFixes();');
+  const routes = () => ev('JSON.stringify(polylines.map(p => [p._opts.opacity, p._opts.interactive]))');
+  const hits = () => ev('JSON.stringify(hitLines.map(h => h._opts.interactive))');
+  const wps = () => ev('JSON.stringify(markers.map(m => [m._opts.opacity, m._opts.interactive]))');
+  const fixes = () => ev('JSON.stringify(fixLayers.map(m => [m._opts.interactive !== false, !!m._tip, !!(m._h && m._h.click), m._opts.opacity]))');
+  // Before: the active route is full strength and takes the mouse; fixes have cards and clicks.
+  assert(/\[0\.95,true\]/.test(routes()) && /true/.test(hits()), 'the fixture has no live route to dim: ' + routes() + ' ' + hits());
+  assert(ev('fixLayers.length') > 0 && /\[true,true,true,/.test(fixes()), 'the fixture has no live fix: ' + fixes().slice(0, 80));
+  w.toggleRulerMode();
+  try {
+    assert(ev('isRulerMode'), 'not in ruler mode');
+    // EVERY route: dimmed to the non-active strength, and deaf.
+    assert(ev('polylines.length') >= 2 && ev('polylines.every(p => p._opts.opacity === 0.35 && p._opts.interactive === false)'),
+      'a route is still live under the ruler: ' + routes());
+    assert(ev('hitLines.every(h => h._opts.interactive === false)'), 'a hit line still takes the mouse: ' + hits());
+    assert(ev('markers.length') > 0 && ev('markers.every(m => m._opts.opacity === 0.35 && m._opts.interactive === false)'),
+      'a waypoint marker is still live under the ruler: ' + wps());
+    // EVERY fix: no card, no click, dimmed.
+    assert(ev('fixLayers.length') > 0 && ev('fixLayers.every(m => m._opts.interactive === false && !m._tip && !(m._h && m._h.click) && m._opts.opacity === 0.35)'),
+      'a fix still has its card or its click under the ruler: ' + fixes().slice(0, 120));
+    // ...and a click where a fix sits reaches the map and places a point.
+    const a = ev('[fixLayers[0]._latlng[0], fixLayers[0]._latlng[1]]');
+    w.__mapHandlers.click({ latlng: { lat: a[0], lng: a[1] } });
+    assert(ev('rulerPoints.length') === 1, 'the click on a fix did not place a ruler point');
+  } finally {
+    ev('if (isRulerMode) toggleRulerMode();');
+  }
+  // After: everything back as it was.
+  assert(/\[0\.95,true\]/.test(routes()) && /true/.test(hits()), 'the active route did not come back: ' + routes());
+  assert(ev('markers.some(m => m._opts.opacity === 1 && m._opts.interactive === true)'), 'the waypoint markers did not come back');
+  assert(/\[true,true,true,/.test(fixes()), 'the fixes did not get their cards and clicks back: ' + fixes().slice(0, 80));
+  ev('aircraftProfile.fixesOn = false; drawFixes();');
+  ev(SEED);
+});
 T('zero-length ruler click adds no segment chip', () => {
   w.toggleRulerMode();
   w.__mapHandlers.click({ latlng: { lat: 69.0, lng: 18.0 } });
