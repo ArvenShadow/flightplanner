@@ -10,6 +10,29 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE MAP IS THE RULER'S WHILE IT RUNS (v17.18)
+
+The author: *"when in ruler mode, please make all routes transparent (same as a
+non-active leg) and ignored so i can actually click around without it
+highlighting or anything, same goes for any fixes. (When hovering over a fix it
+just highlights it and wont let me place a ruler mark.)"*
+
+- **CAUSE**: the route line, its 20 px hit line, the waypoint markers and the
+  fix markers all took the mouse in ruler mode exactly as in edit mode. Their
+  handlers returned early on `isRulerMode`, so nothing was EDITED - but the
+  click was consumed before it reached the map, so no ruler point was placed,
+  and a fix still showed its card. An old rule (edit-mode dimming of the
+  non-active routes, v16.49) not applied to a new surface.
+- **FIX**: `dimmed` in `refreshMap` (and the corridor's) is now
+  `isRulerMode || (edit mode && not the active flight)`, so with the ruler on
+  EVERY route is drawn at the non-active strength (0.35) and non-interactive:
+  line, hit line, waypoint markers, via markers, TOC/TOD marks. `drawFixes`
+  draws a fix at 0.35, non-interactive, with no card and no click handler.
+  `toggleRulerMode` redraws both on the way in and on the way out.
+- A Leaflet layer that is `interactive: false` has no pointer events, so the
+  click that lands on it reaches the map; verified in Chromium (a click on a
+  fix symbol with the ruler on places a ruler point and opens nothing).
+
 ## THE LAPS ARE EDITED FROM THE PATTERN BOX ON THE MAP (v17.17)
 
 The author: *"let me also be able to change how many laps in pattern on the map

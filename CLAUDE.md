@@ -303,7 +303,8 @@ three cheap disciplines applied every time the page is touched:
   → §{The corridor ring (v16.61-v16.62, roadmap item 2)}
 - **The ruler** previews to the cursor with the commit's own arithmetic;
   Escape backs out one level, the undo chord removes the last point and
-  never falls through to the plan. → §{THE RULER PREVIEWS, AND MEASURING IT FOUND THE RULER DRAWING THE WRONG LINE (v16.91)}
+  never falls through to the plan. While it runs, every route and fix is
+  dimmed and deaf (v17.18). → §{THE MAP IS THE RULER'S WHILE IT RUNS (v17.18)} → §{THE RULER PREVIEWS, AND MEASURING IT FOUND THE RULER DRAWING THE WRONG LINE (v16.91)}
   and → §{ESCAPE AND UNDO BELONG TO THE RULER WHILE IT IS RUNNING (v16.92)}
 
 ### AIP data (Avinor eAIP, imported at build time)
