@@ -393,7 +393,7 @@
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
             <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>landing</b> that is inside the hours but within <b>30 minutes</b> of a closing (or an opening) gets a small <b>amber</b> label on the card and a chip in that sector's header — "ENDU ATS closes 18 min after ETA" — so a headwind or a late start cannot quietly turn it into a closed arrival. It is a heads-up, not a finding: the red banner is for a landing that is outside the hours as planned. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> (ippc.no cannot be read by a browser page): check them before flight.</li>
-            <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (A circuit stop can only be deleted: its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
+            <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (Right-click the <b>circuit box</b> to change its <b>laps</b> and circuit altitude, or delete it; it cannot be renamed, since its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
             <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only. <b>To deselect</b>, click the selected waypoint again, press <b>Escape</b>, or use the <b>✕ Deselect</b> button that appears in the map controls while something is selected (in View Mode a click on the empty map does it too).
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
               <br><b>Four rules apply to every binding.</b> <b>Ctrl</b> means Ctrl <i>or</i> ⌘, so one binding works on either keyboard. While a dialog or modal is open, <i>only</i> Escape and that dialog's own keys work — nothing fires behind it. Inside a text field the keys keep their normal text-editing meaning (<b>Ctrl+S</b> is the deliberate exception: the browser's own Ctrl+S saves the web page, which is never what you want here). And <b>Escape cannot be rebound</b> — it is the way out of a dialog, out of a half-finished line drag and out of the ruler, so moving it could leave you with no way back. (Whatever you bind <b>undo</b> to follows the ruler too: while the ruler is running that key removes the last ruler point.)
@@ -1509,7 +1509,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.15';
+    const APP_VERSION = '17.17';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4463,13 +4463,19 @@
       // before the flag existed, or a point clicked onto the field by hand, is
       // told apart from a landing - the planner does not guess which it is.
       const flybyAd = !isPat && !wp.stop && wp.anchor !== 'AIP-RP' ? aerodromeAt(wp) : null;
+      // THE LAPS ARE EDITED HERE TOO (v17.17, the author: "let me also be able
+      // to change how many laps in pattern on the map by right clicking the
+      // pattern box"). The minutes per lap are the profile's (Flight Defaults),
+      // the same figure the plan table prices a lap at.
       const r = await ask({
         title: (isPat ? 'Circuit stop' : 'Waypoint ' + (wpIdx + 1)) + ': ' + wp.name,
         message: isPat
-          ? (wp.laps || 3) + ' laps.'
+          ? 'Laps and circuit altitude for this stop.'
           : toDMM(wp.lat, true) + ' ' + toDMM(wp.lng, false),
         fields: [
-          ...(isPat ? [] : [{ id: 'name', label: 'Waypoint name', value: wp.name }]),
+          ...(isPat ? [{ id: 'laps', label: 'Laps', value: String(wp.laps || 3), type: 'number', step: '1',
+            hint: aircraftProfile.patternTime + ' min per lap (Flight Defaults)' }]
+            : [{ id: 'name', label: 'Waypoint name', value: wp.name }]),
           { id: 'alt', label: 'Altitude (ft AMSL)', value: String(wp.alt),
             type: 'number', step: '500', hint: altHint }
         ],
@@ -4520,15 +4526,29 @@
         say('That is not an altitude - nothing was changed.', 'error');
         return;
       }
+      // THE LAPS, on a circuit stop only (v17.17): a whole number of at least
+      // one, the same reading as the plan table's box and the import. Anything
+      // else is refused, not coerced - `parseInt('')` is NaN and a circuit of 0
+      // laps would quietly cost nothing.
+      const rawLaps = wp.isPattern && vals.laps !== undefined ? String(vals.laps).trim() : '';
+      const laps = rawLaps === '' ? null : parseInt(rawLaps, 10);
+      if (rawLaps !== '' && (!Number.isFinite(laps) || laps < 1 || String(laps) !== rawLaps)) {
+        say('That is not a number of laps (1 or more) - nothing was changed.', 'error');
+        return;
+      }
       const nameChanged = wantName !== null && wantName !== '' && wantName !== wp.name;
       const altChanged = ft !== null && ft !== wp.alt;
-      if (!nameChanged && !altChanged) return;
+      const lapsChanged = laps !== null && laps !== wp.laps;
+      if (!nameChanged && !altChanged && !lapsChanged) return;
       const idxs = altChanged
         ? (wp.isPattern ? [wpIdx] : levelFromIndices(fl.waypoints, wpIdx))
         : [];
       const shortBefore = shortDescentLegs(fl);
-      pushUndoState(nameChanged && altChanged ? 'edit a waypoint'
+      pushUndoState(lapsChanged && altChanged ? 'edit a circuit stop'
+        : lapsChanged ? 'change the number of laps'
+        : nameChanged && altChanged ? 'edit a waypoint'
         : nameChanged ? 'rename a waypoint' : 'set the altitude from ' + wp.name);
+      if (lapsChanged) wp.laps = laps;
       if (nameChanged) renameWaypoint(fIdx, wpIdx, wantName, true);
       if (altChanged) idxs.forEach((i) => { fl.waypoints[i].alt = ft; });
       // The first waypoint's altitude IS the departure elevation; keep them in

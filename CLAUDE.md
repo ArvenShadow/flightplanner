@@ -261,8 +261,10 @@ three cheap disciplines applied every time the page is touched:
   "Set altitude from here" skips the destination (the last NON-circuit fix)
   and circuit and stop fixes. → §{A TOUCH & GO WITH CIRCUITS KEEPS ITS LANDING ALTITUDE (v17.9)}
   → §{Dragging the corners, and setting an altitude for a phase (v16.73)}
-  The waypoint dialog edits name and altitude together; Enter commits.
+  The waypoint dialog edits name and altitude together; Enter commits. On a
+  circuit stop it edits LAPS and altitude (v17.17; 0 or a fraction refused).
   → §{The waypoint box, and a TOC dragged past what the aircraft can climb (v16.74)}
+  → §{THE LAPS ARE EDITED FROM THE PATTERN BOX ON THE MAP (v17.17)}
 - **Via-leg rows** show the DIRECT waypoint-to-waypoint TT/MT/MH; the flown
   per-segment tracks are in the sub-line. → §{Via-leg row semantics (v16.4, user decision)}
 - **TOC/TOD marks**: kept when a descent fills a whole leg (`atWaypoint`),
@@ -498,7 +500,9 @@ three cheap disciplines applied every time the page is touched:
   not attempted. → §{SKINS, and the plan for restyling the whole shell (v16.65)}
   and → §{SIZE IS ITS OWN SETTING: BOLD AND COMPACT GO WITH ANY STYLE (v17.3)}
 - **Colours are tokens** on `:root` per theme; the printed form stays literal
-  black. The build lints CSS for undefined `var()`s. → §{Restyling has to be cheap before it can be safe (v16.64)}
+  black. Date/time fields declare `color-scheme` per theme so the browser's
+  picker icons are visible in dark mode (v17.16).
+  → §{THE DATE AND TIME PICKER ICONS FOLLOW THE THEME (v17.16)} The build lints CSS for undefined `var()`s. → §{Restyling has to be cheap before it can be safe (v16.64)}
 - **The SERA VMC-minima modal is gone**; the daylight card stays.
   → §{THE SERA VMC-MINIMA MODAL IS GONE (the author: "it doesnt add anything other than extra space")}
 

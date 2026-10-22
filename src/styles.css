@@ -1134,6 +1134,16 @@ svg.leaflet-image-layer.leaflet-interactive path {
     .input-group { display: flex; flex-direction: column; flex: 1; min-width: 65px; }
     .input-group label { font-size: 9px; font-weight: 700; color: var(--text-muted); margin-bottom: 2px; text-transform: uppercase; }
     .input-group input { padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; text-align: center; background: var(--bg-input); color: var(--text-main); }
+    /* THE PICKER ICON FOLLOWS THE THEME (v17.16, the author: "the clock symbol
+       for ETD and calendar symbol for date of flight are really hard to see on
+       dark mode as they are black with a dark background"). The clock and the
+       calendar are drawn by the BROWSER, not by this stylesheet, in the colour
+       scheme it believes the page has - light unless told otherwise - so they
+       came out black on the dark input. `color-scheme` is the one property
+       that tells it; it also turns the native date and time pop-ups dark.
+       Every date and time field, so the wind picker's date matches. */
+    body.dark-mode input[type="date"], body.dark-mode input[type="time"] { color-scheme: dark; }
+    body.light-mode input[type="date"], body.light-mode input[type="time"] { color-scheme: light; }
     
     /* Multi-Flight Plan Section */
     /* The empty state (QoL 5). Deliberately quiet - it is a hint, not a

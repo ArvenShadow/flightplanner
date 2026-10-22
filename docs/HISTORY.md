@@ -10,7 +10,46 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE LAPS ARE EDITED FROM THE PATTERN BOX ON THE MAP (v17.17)
+
+The author: *"let me also be able to change how many laps in pattern on the map
+by right clicking the pattern box"*
+
+- The pattern box's right-click already opened the circuit-stop dialog (v16.74:
+  circuit altitude, delete). It now has a **Laps** field first, with the
+  profile's minutes per lap as its hint, so the dialog is the map's version of
+  the plan table's laps box. The message no longer repeats the count - the field
+  holds it.
+- `applyWaypointEdit` reads it on a circuit stop only: a whole number of 1 or
+  more, the same reading as the table's box and the import's `normalise`;
+  anything else (0, -2, 2.5, text) is REFUSED with a message, not coerced - a
+  circuit of 0 laps would quietly cost nothing. Laps and altitude together are
+  ONE undo step ("edit a circuit stop"); laps alone is "change the number of
+  laps", the table's own label.
+- Tested through the marker's real contextmenu handler: the box redraws with
+  the new count, the sector's minutes grow, one undo puts both back.
+
+## THE DATE AND TIME PICKER ICONS FOLLOW THE THEME (v17.16)
+
+
+The author: *"the clock symbol for ETD and calendar symbol for date of flight
+are really hard to see on dark mode as they are black with a dark background.
+Please make them easier to see"*
+
+- **CAUSE**: the clock and the calendar are drawn by the browser, not by the
+  stylesheet, in the colour scheme it believes the page has. Nothing declared
+  one, so Chromium used light and drew them black on the dark `--bg-input`.
+  Measured before the fix: `getComputedStyle(#def-etd).colorScheme` was
+  `normal` under `body.dark-mode`.
+- **FIX**: one `color-scheme` rule per theme on every `input[type="date"]` and
+  `input[type="time"]` (`dark` under `body.dark-mode`, `light` under
+  `body.light-mode`), so the wind picker's date field matches too. It also
+  turns the native date and time pop-ups dark. Screenshotted in Chromium
+  before and after: the icons are light on the dark field now. By TYPE, not by
+  id, and a test guards that no field opts out with its own rule.
+
 ## FOUR FIXES FROM THE AUTHOR: VIEW MODE, ECMWF, THE TOTAL LINE, AND NO WIND ON THE DISTANCES (v17.15)
+
 
 The author, one message: *"When in view mode, i can still click on fixes to
 create waypoints, that shouldnt happen. Also make ECMWF the standard weather
