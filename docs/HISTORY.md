@@ -10,7 +10,27 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE LAPS ARE EDITED FROM THE PATTERN BOX ON THE MAP (v17.17)
+
+The author: *"let me also be able to change how many laps in pattern on the map
+by right clicking the pattern box"*
+
+- The pattern box's right-click already opened the circuit-stop dialog (v16.74:
+  circuit altitude, delete). It now has a **Laps** field first, with the
+  profile's minutes per lap as its hint, so the dialog is the map's version of
+  the plan table's laps box. The message no longer repeats the count - the field
+  holds it.
+- `applyWaypointEdit` reads it on a circuit stop only: a whole number of 1 or
+  more, the same reading as the table's box and the import's `normalise`;
+  anything else (0, -2, 2.5, text) is REFUSED with a message, not coerced - a
+  circuit of 0 laps would quietly cost nothing. Laps and altitude together are
+  ONE undo step ("edit a circuit stop"); laps alone is "change the number of
+  laps", the table's own label.
+- Tested through the marker's real contextmenu handler: the box redraws with
+  the new count, the sector's minutes grow, one undo puts both back.
+
 ## THE DATE AND TIME PICKER ICONS FOLLOW THE THEME (v17.16)
+
 
 The author: *"the clock symbol for ETD and calendar symbol for date of flight
 are really hard to see on dark mode as they are black with a dark background.

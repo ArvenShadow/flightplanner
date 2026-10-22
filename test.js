@@ -7377,8 +7377,8 @@ T('a circuit stop is offered deletion only - renaming it would break the PATTERN
   // a renamed circuit stop would silently stop being one.
   const raw = APP_SRC;
   const fn = raw.split('async function openWaypointMenu')[1].split('function deleteWaypointFromFlight')[0];
-  assert(/isPat \? \[\] : \[\{ id: 'rename'/.test(fn.replace(/\s+/g, ' ')) ||
-         /isPat \? \[\] :/.test(fn),
+  // v17.17: a circuit stop gets a LAPS field where a waypoint gets its name.
+  assert(/isPat \? \[\{ id: 'laps'[\s\S]*?\]\s*:\s*\[\{ id: 'name'/.test(fn),
     'the waypoint menu no longer withholds Rename from a circuit stop');
   assert(/isDoneMode/.test(fn), 'the waypoint menu is not disabled in done mode');
 });
@@ -8950,6 +8950,54 @@ TA('right-clicking a waypoint sets the altitude from there onward', async () => 
   await tick();
   assert(ev('flights[0].waypoints[1].alt') === 2500 && ev('flights[0].waypoints[2].alt') === 3000,
     'undo did not put both altitudes back');
+  ev(SEED);
+});
+
+TA('right-clicking the pattern box edits the laps, with the altitude, as one undo step (v17.17)', async () => {
+  // The author: "let me also be able to change how many laps in pattern on the
+  // map by right clicking the pattern box".
+  ev(`flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [
+        { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.679, lng: 18.911, name: 'ENTC', alt: 32, oat: 10, wdir: 0, wspd: 0, var: -12, stop: 'touch-go', stopMin: 5 },
+        { lat: 69.679, lng: 18.911, name: 'PATTERN', alt: 1000, oat: 10, wdir: 0, wspd: 0, var: -12, isPattern: true, laps: 3 }]}];
+      activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+  const lapsOnMap = () => ev('markers.map(m => m._opts && m._opts.icon && m._opts.icon.html || "").filter(h => /laps/.test(h)).join(" ")');
+  assert(/3 laps/.test(lapsOnMap()), 'the pattern box does not show its laps: ' + lapsOnMap());
+  const minutesBefore = ev('ofpPrintModel[0].sectorMin');
+  // The marker's own right-click reaches the menu.
+  ev(`(function(){ var m = markers.find(function(x){ return /laps/.test(x._opts.icon.html); }); m._h.contextmenu({ originalEvent: { preventDefault: function(){}, stopPropagation: function(){} } }); })()`);
+  await tick();
+  const lapsField = openDlg().querySelector('.dlg-input[data-field="laps"]');
+  assert(lapsField && lapsField.value === '3', 'the circuit-stop dialog has no laps field, or it is not the current laps');
+  assert(!openDlg().querySelector('.dlg-input[data-field="name"]'), 'a circuit stop was offered a rename');
+  assert(/min per lap/.test(openDlg().textContent), 'the dialog does not say what a lap costs in time');
+  typeInDialog('5', 'laps');
+  typeInDialog('1500', 'alt');
+  await answerDialog('Apply');
+  await tick();
+  assert(ev('flights[0].waypoints[2].laps') === 5 && ev('flights[0].waypoints[2].alt') === 1500,
+    'laps and altitude did not both apply: ' + ev('JSON.stringify(flights[0].waypoints[2])'));
+  assert(/5 laps/.test(lapsOnMap()), 'the pattern box did not redraw with the new laps: ' + lapsOnMap());
+  assert(ev('ofpPrintModel[0].sectorMin') > minutesBefore, 'the extra laps cost no time in the plan');
+  assert(ev('undoEntryLabel(undoStack[undoStack.length - 1])') === 'edit a circuit stop', 'the undo step is not named: ' + ev('undoEntryLabel(undoStack[undoStack.length - 1])'));
+  ev(`undoLast(true)`);
+  await tick();
+  assert(ev('flights[0].waypoints[2].laps') === 3 && ev('flights[0].waypoints[2].alt') === 1000, 'one undo did not put both back');
+  // Laps alone is its own step, named like the table's box.
+  ev(`openWaypointMenu(0, 2)`); await tick();
+  typeInDialog('2', 'laps'); await answerDialog('Apply'); await tick();
+  assert(ev('flights[0].waypoints[2].laps') === 2 && ev('undoEntryLabel(undoStack[undoStack.length - 1])') === 'change the number of laps',
+    'laps alone: ' + ev('flights[0].waypoints[2].laps') + ' / ' + ev('undoEntryLabel(undoStack[undoStack.length - 1])'));
+  // An unreadable count is refused, not coerced to 1 or 0.
+  for (const bad of ['0', '-2', 'abc', '2.5']) {
+    ev(`openWaypointMenu(0, 2)`); await tick();
+    typeInDialog(bad, 'laps'); await answerDialog('Apply'); await tick();
+    assert(ev('flights[0].waypoints[2].laps') === 2, '"' + bad + '" laps was accepted as ' + ev('flights[0].waypoints[2].laps'));
+  }
+  // An ordinary waypoint is not offered laps.
+  ev(`openWaypointMenu(0, 0)`); await tick();
+  assert(!openDlg().querySelector('.dlg-input[data-field="laps"]'), 'a plain waypoint got a laps field');
+  await answerDialog('Cancel'); await tick();
   ev(SEED);
 });
 
