@@ -5633,9 +5633,8 @@ T('a "be level by" target overrides a bottom-of-climb pin on the same leg', () =
   assert(both.tocDerivedBoc && Math.abs(both.climbStartNM - 20) < 0.05,
     'the BOC pin won over the target: ' + both.climbStartNM);
   assert(both.tocTargetMet, 'the target was not met');
-  const raw = APP_SRC;
-  assert(/leg-boc-note/.test(raw) && /syncLegBocState/.test(raw),
-    'the panel does not tell the pilot the BOC is derived');
+  // (Until v17.20 this also checked the leg panel's note beside its BOC box.
+  // The panel has no corner boxes any more - the marks are dragged.)
 });
 T('pins never produce impossible geometry - swept over generated routes', () => {
   // THE SWEEP IS THE TEST, the same way the v16.28 vanishing-TOD fix was
@@ -7567,65 +7566,97 @@ T('a circuit stop is offered deletion only - renaming it would break the PATTERN
     'the waypoint menu no longer withholds Rename from a circuit stop');
   assert(/isDoneMode/.test(fn), 'the waypoint menu is not disabled in done mode');
 });
-T('the leg panel reads the leg, pins from where you clicked, and previews the result', () => {
-  const L2 = moduleExports.legs;
+T('the leg panel reads the leg and previews it; it no longer places the climb or the descent (v17.20)', () => {
+  // REWRITTEN DELIBERATELY AT v17.20. The author: "the right click menu is
+  // still there, i said it was redundant no? The altitude to reach this point
+  // etc, can be dragged and dropped using the TOC/TODs. Dont need em." The
+  // three corner boxes and their Here buttons are gone; what the panel keeps is
+  // the leg's altitude, its descent rate, its MSA, and inserting on the leg.
   ev(SEED);
-  // Right-click part-way along the ENDU -> FINNSNES leg.
   ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
   assert(doc.getElementById('leg-modal').style.display === 'flex', 'the panel did not open');
   assert(/ENDU/.test(doc.getElementById('leg-modal-title').textContent), 'wrong leg');
-  // It shows the leg's own altitude, and no pins on a fresh route.
   assert(Number(doc.getElementById('leg-alt').value) === ev('flights[0].waypoints[1].alt'),
     'the altitude box does not show the leg altitude');
-  for (const id of ['leg-boc', 'leg-bod', 'leg-toc'])
-    assert(doc.getElementById(id).value === '', id + ' is pre-filled on an unpinned leg');
-  // The hint states the geometry the gesture landed on.
+  // GONE, and guarded so they stay gone - in the page and in the script.
+  for (const id of ['leg-boc', 'leg-bod', 'leg-toc', 'leg-boc-here', 'leg-bod-here', 'leg-toc-here', 'leg-boc-note'])
+    assert(!doc.getElementById(id), id + ' is back in the leg panel');
+  assert(!/Clear pins|Start the climb:|Be level by:|Level off:/.test(doc.getElementById('leg-modal').textContent), 'a corner control is back in the panel');
+  for (const fn of ['pinLegHere', 'clearLegPins', 'syncLegBocState'])
+    assert(ev('typeof ' + fn) === 'undefined', fn + ' is defined again');
+  // The hint still states where on the leg the right-click landed (inserting uses it).
   const hint = doc.getElementById('leg-hint').textContent;
   assert(/NM along the flown path/.test(hint) && /NM after ENDU/.test(hint) && /NM before FINNSNES/.test(hint), hint);
-
-  // "Here" turns the click into the number - that is the point of the gesture.
-  ev("pinLegHere('boc');");
-  const boc = Number(doc.getElementById('leg-boc').value);
-  assert(boc > 0.5 && boc < ev('computeFlightSchedule(flights[0])[0].distNM'),
-    'the BOC "Here" button produced ' + boc);
-  ev("pinLegHere('bod');");
-  assert(Number(doc.getElementById('leg-bod').value) > 0.5, 'the BOD "Here" button produced nothing');
-
-  // The PREVIEW is computed through the real engine on a copy, so it cannot
-  // disagree with what Apply will do.
+  // The PREVIEW is computed through the real engine on a copy.
   const pv = doc.getElementById('leg-preview').textContent;
-  assert(/Climb/.test(pv) && /starts/.test(pv), 'the preview does not describe the pinned climb: ' + pv);
-  assert(/NM after ENDU/.test(pv), 'the preview does not say where the climb starts: ' + pv);
-
-  // Apply writes the pins onto the leg's TO waypoint and the schedule honours
-  // them - and it is undoable like every other edit.
-  const before = ev('flights[0].waypoints[1].alt');
-  ev('saveLegSettings();');
-  assert(doc.getElementById('leg-modal').style.display !== 'flex', 'the panel stayed open after Apply');
-  // v16.76: THE OBSERVABLE BEHAVIOUR IS THE CLIMB START, not the stored field.
-  // A 12 NM "hold, then climb" is now one attain-by target 12 NM plus a climb
-  // length further on, so asserting the raw field would be asserting the
-  // representation - which is exactly what was replaced.
-  assert(ev('flights[0].waypoints[1].altAtNM') > boc,
-    'the panel did not write the one attain-by target: ' + ev('flights[0].waypoints[1].altAtNM'));
-  const S = L2.computeFlightSchedule({ id: 1, waypoints: JSON.parse(ev('JSON.stringify(flights[0].waypoints)')) })[0];
-  assert(Math.abs(S.climbStartNM - boc) < 0.15,
-    'the climb does not start where the panel was told: ' + S.climbStartNM + ' vs ' + boc);
-  assert(ev('flights[0].waypoints[1].alt') === before, 'Apply changed the altitude it was only showing');
-  ev('undoLast(true);');
-  assert(!ev('flights[0].waypoints[1].altAtNM'), 'applying the target was not undoable');
+  assert(/Leg/.test(pv) && /Altitude/.test(pv) && /Climb/.test(pv), 'the preview does not describe the leg: ' + pv);
+  ev('closeLegModal();');
 });
-T('clearing the pins puts the leg back on the derived schedule', () => {
+T('Apply on the leg panel keeps a dragged climb where it was dragged; the panel can put it back (v17.20)', () => {
   ev(SEED);
-  ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
-  ev("pinLegHere('boc'); pinLegHere('bod'); pinLegHere('toc'); saveLegSettings();");
-  assert(ev('flights[0].waypoints[1].altAtNM') > 0, 'the target was not applied');
-  ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
-  ev('clearLegPins(); saveLegSettings();');
+  // A target as a drag leaves it: one attain-by distance on the leg's TO waypoint.
+  ev('flights[0].waypoints[1].altAtNM = 12; refreshMap(); renderAllFlightTables();');
+  const open = () => ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
+  open();
+  assert(doc.getElementById('leg-reset-row').style.display !== 'none', 'a dragged leg is not offered the way back');
+  // Change only the altitude and Apply: the drag's target must survive it.
+  doc.getElementById('leg-alt').value = '3000';
+  ev('saveLegSettings();');
+  assert(ev('flights[0].waypoints[1].alt') === 3000 && ev('flights[0].waypoints[1].altAtNM') === 12,
+    'Apply undid the drag: altAtNM ' + ev('flights[0].waypoints[1].altAtNM'));
+  open();
+  ev('resetLegTarget();');
+  assert(doc.getElementById('leg-modal').style.display !== 'flex', 'the panel stayed open after the reset');
   // Cleared means ABSENT, not zero, so a saved route reads identically to one
-  // made before pins existed.
+  // made before targets existed.
   for (const k of ['altAtNM', 'bocNM', 'bodNM', 'tocNM'])
     assert(ev('flights[0].waypoints[1].' + k) === null, k + ' is ' + ev('flights[0].waypoints[1].' + k));
+  ev('undoLast(true);');
+  assert(ev('flights[0].waypoints[1].altAtNM') === 12, 'putting it back was not undoable');
+  // A leg nobody dragged is not offered it.
+  ev(SEED); open();
+  assert(doc.getElementById('leg-reset-row').style.display === 'none', 'an undragged leg is offered a reset');
+  ev('closeLegModal();');
+});
+TA('the MSA can be set from both right-click menus: the leg panel and the waypoint menu (v17.20)', async () => {
+  // The author: "i want to be able to set MSA in the right click menu".
+  try {
+    ev(SEED);
+    const open = () => ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
+    open();
+    const box = doc.getElementById('leg-msa');
+    assert(box && box.value === '', 'the leg panel has no empty MSA box');
+    box.value = '3600'; ev('saveLegSettings();');
+    assert(ev('flights[0].waypoints[1].msa') === 3600, 'the leg panel did not store the MSA');
+    assert(doc.querySelector('#tbody-flight-0 tr .msa-input').value === '3600', 'the plan table does not show the MSA set in the panel');
+    assert(ofpSheets()[0].filled[0][13] === '3600', 'the MSA set in the panel is not printed');
+    open();
+    assert(doc.getElementById('leg-msa').value === '3600', 'the panel does not show the stored MSA');
+    // Unreadable: refused, the panel stays open, nothing changes.
+    doc.getElementById('leg-msa').value = '999999'; ev('updateLegPreview();');
+    assert(/An MSA must be 1 to 30000 ft/.test(doc.getElementById('leg-preview').textContent), 'a bad MSA is not flagged in the preview');
+    ev('saveLegSettings();');
+    assert(ev('flights[0].waypoints[1].msa') === 3600 && doc.getElementById('leg-modal').style.display === 'flex', 'a bad MSA was applied');
+    doc.getElementById('leg-msa').value = ''; ev('saveLegSettings();');
+    assert(ev('"msa" in flights[0].waypoints[1]') === false, 'emptying the panel\'s box did not clear the MSA');
+
+    // The waypoint menu: the MSA of the leg ENDING at that waypoint.
+    let pr = w.openWaypointMenu(0, 1); await tick();
+    const f = openDlg().querySelector('.dlg-input[data-field="msa"]');
+    assert(f && f.value === '' && /ENDU to FINNSNES/.test(openDlg().textContent), 'the waypoint menu has no MSA field naming its leg');
+    typeInDialog('4100', 'msa'); await answerDialog('Apply'); await pr; await tick();
+    assert(ev('flights[0].waypoints[1].msa') === 4100 && ev('undoEntryLabel(undoStack[undoStack.length - 1])') === 'change an MSA',
+      'the waypoint menu did not store the MSA as its own step');
+    assert(ev('flights[0].waypoints[1].alt') === 2500 && ev('flights[0].waypoints[2].msa') === undefined, 'setting an MSA changed an altitude or another leg');
+    pr = w.openWaypointMenu(0, 1); await tick(); typeInDialog('999999', 'msa'); await answerDialog('Apply'); await pr; await tick();
+    assert(ev('flights[0].waypoints[1].msa') === 4100, 'an out-of-range MSA overwrote the stored one');
+    pr = w.openWaypointMenu(0, 1); await tick(); typeInDialog('', 'msa'); await answerDialog('Apply'); await pr; await tick();
+    assert(ev('"msa" in flights[0].waypoints[1]') === false, 'emptying the menu\'s field did not clear the MSA');
+    // The departure ends no leg: no MSA field.
+    pr = w.openWaypointMenu(0, 0); await tick();
+    assert(!openDlg().querySelector('.dlg-input[data-field="msa"]'), 'the departure was offered an MSA');
+    answerDialog('Cancel'); await pr;
+  } finally { ev('if (typeof closeLegModal === "function") closeLegModal();'); ev(SEED); }
 });
 T('a circuit on its own fix has no ground track, so the panel refuses it', () => {
   ev(SEED);

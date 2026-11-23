@@ -75,73 +75,33 @@ check(/NM after ENDU/.test(panel.hint) && /NM before MID/.test(panel.hint),
 check(await page.evaluate(() => flights[0].waypoints.length) === before,
   'right-clicking did not alter the route by itself');
 
-// ---- "Here" turns the gesture into the number ------------------------------
-await page.evaluate(() => document.getElementById('leg-boc-here').click());
-await page.waitForTimeout(200);
-const seeded = await page.evaluate(() => ({
-  boc: document.getElementById('leg-boc').value,
-  preview: document.getElementById('leg-preview').innerText.replace(/\n+/g, ' | ')
-}));
-check(Number(seeded.boc) > 1, 'the Here button seeded the BOC: ' + seeded.boc);
-check(/BOC|Climb/i.test(seeded.preview) && /starts/i.test(seeded.preview),
-  'the preview describes the pinned climb: ' + seeded.preview);
-console.log('        preview: ' + seeded.preview);
-
-// A target the profile cannot meet must be WARNED about before applying, and
-// the warning must carry the rate it would actually need. The BOC is cleared
-// first: with a BOC of 20 NM and a target of 3 NM the two pins CONTRADICT each
-// other, which is a different message and is checked separately below.
-await page.evaluate(() => {
-  document.getElementById('leg-boc').value = '';
-  document.getElementById('leg-toc').value = '4';
-  updateLegPreview();
+// ---- v17.20: THE PANEL NO LONGER PLACES THE CLIMB OR THE DESCENT -----------
+// The author: "The altitude to reach this point etc, can be dragged and dropped
+// using the TOC/TODs. Dont need em." The corner boxes and their Here buttons
+// are gone; the marks are dragged. What the panel keeps must be on screen.
+const kept = await page.evaluate(() => {
+  const vis = (id) => { const e = document.getElementById(id); if (!e) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  return { gone: ['leg-boc', 'leg-bod', 'leg-toc', 'leg-boc-here', 'leg-bod-here', 'leg-toc-here'].filter((id) => document.getElementById(id)),
+           alt: vis('leg-alt'), rod: vis('leg-rod'), msa: vis('leg-msa'), near: vis('leg-nearby-ads'),
+           reset: getComputedStyle(document.getElementById('leg-reset-row')).display,
+           preview: document.getElementById('leg-preview').innerText.replace(/\n+/g, ' | ') };
 });
-await page.waitForTimeout(150);
-const warned = await page.evaluate(() => {
-  const w = document.querySelector('#leg-preview .leg-warn');
-  return w ? { text: w.innerText, h: Math.round(w.getBoundingClientRect().height) } : null;
-});
-check(!!warned && /ft\/min/.test(warned.text) && warned.h > 10,
-  'an impossible "be level by" is warned about, with the rate it would need: ' + (warned ? warned.text : 'no warning'));
+check(kept.gone.length === 0, 'the corner boxes are gone from the panel: ' + JSON.stringify(kept.gone));
+check(kept.alt && kept.rod && kept.msa && kept.near, 'altitude, descent rate, MSA and nearby aerodromes are shown: ' + JSON.stringify(kept));
+check(kept.reset === 'none', 'a leg nobody dragged is not offered a reset');
+check(/Climb/i.test(kept.preview), 'the preview describes the leg: ' + kept.preview);
+console.log('        preview: ' + kept.preview);
 
-// A "be level by" target OWNS the bottom of climb, so the BOC box must stop
-// taking input and say so - two settings for one corner is how a contradiction
-// arises in the first place.
-const owned = await page.evaluate(() => ({
-  disabled: document.getElementById('leg-boc').disabled,
-  note: getComputedStyle(document.getElementById('leg-boc-note')).display
-}));
-check(owned.disabled && owned.note !== 'none',
-  'the BOC box is derived and says so while a target is set: ' + JSON.stringify(owned));
-
-// back to just the BOC for the rest of the run. updateLegPreview() must run
-// BEFORE the click: it is what re-enables the button, and clicking a disabled
-// one silently does nothing.
-await page.evaluate(() => {
-  document.getElementById('leg-toc').value = '';
-  updateLegPreview();
-  document.getElementById('leg-boc-here').click();
-  updateLegPreview();
-});
-// v16.76: THE BOC BOX IS ALWAYS A DERIVED DISPLAY. There is one target field
-// now, so the bottom of climb is never an input - reading it back as one fed
-// the derived value straight into the write.
-check(await page.evaluate(() => document.getElementById('leg-boc').readOnly),
-  'the BOC box is a derived, read-only display');
-
-await page.evaluate(() => saveLegSettings());   // Apply - the button is
-// wired to this; the GESTURE is what this file is testing, not the click target.
+// The MSA typed here reaches the plan table. Apply closes the panel.
+await page.evaluate(() => { document.getElementById('leg-msa').value = '3600'; saveLegSettings(); });
 await page.waitForTimeout(320);
 const applied = await page.evaluate(() => ({
-  target: flights[0].waypoints[1].altAtNM,
-  closed: getComputedStyle(document.getElementById('leg-modal')).display !== 'flex',
-  climbStart: computeFlightSchedule(flights[0])[0].climbStartNM
+  msa: flights[0].waypoints[1].msa,
+  box: document.querySelector('#tbody-flight-0 tr .msa-input').value,
+  closed: getComputedStyle(document.getElementById('leg-modal')).display !== 'flex'
 }));
 check(applied.closed, 'Apply closed the panel');
-// THE OBSERVABLE IS WHERE THE CLIMB STARTS, not the stored number: "start the
-// climb here" is the same attain-by target one climb-length further on.
-check(applied.target > 1 && applied.climbStart > 1,
-  'the target reached the schedule: target ' + applied.target + ', climb starts ' + applied.climbStart);
+check(applied.msa === 3600 && applied.box === '3600', 'the MSA typed in the panel is on the leg and in the plan table: ' + JSON.stringify(applied));
 
 // ---- an unreachable target on a LATER leg (v16.77) ------------------------
 // It is REPORTED and nothing is rewritten. This block used to check the offer
@@ -172,7 +132,10 @@ check(/MID/.test(onMid), 'the panel opened on the MID leg: ' + onMid);
 // altitude the climb passes through. The pilot retired it: "I set what altitude
 // i plan on using, not the exact altitude i will have at that point." So the
 // panel states the problem, offers no button, and MID keeps its 2500 ft.
-await page.evaluate(() => { document.getElementById('leg-toc').value = '5'; updateLegPreview(); });
+// The target is set the way a DRAG sets it (v17.20: the panel has no box for
+// it), and the panel is reopened so its preview reads it.
+await page.evaluate(() => { closeLegModal(); flights[0].waypoints[2].altAtNM = 5; refreshMap(); renderAllFlightTables();
+  openLegPanel(0, L.latLng(69.58, 18.5)); });
 await page.waitForTimeout(200);
 const reported = await page.evaluate(() => {
   const w = document.querySelector('#leg-preview .leg-warn');
@@ -187,8 +150,8 @@ check(/no altitude you typed is changed/.test(reported.text),
 check(!reported.hasButton,
   'the removed "raise the previous fix" button is still offered');
 check(reported.midAlt === 2500, 'MID was rewritten by a preview: ' + reported.midAlt + ' ft');
-// APPLYING IT MUST ALSO LEAVE MID ALONE. The panel commits the target it was
-// given; whether the climb reaches it is reported, never bargained for.
+// APPLYING MUST LEAVE MID ALONE - AND THE DRAGGED TARGET TOO (v17.20): Apply
+// on a leg that was dragged must not undo the drag.
 await page.evaluate(() => saveLegSettings());
 await page.waitForTimeout(320);
 const applied2 = await page.evaluate(() => ({
@@ -196,7 +159,7 @@ const applied2 = await page.evaluate(() => ({
   banner: getComputedStyle(document.getElementById('integrity-banner')).display
 }));
 check(applied2.midAlt === 2500, 'Apply rewrote MID: ' + applied2.midAlt + ' ft');
-check(applied2.pin === 5, 'the target was not stored: ' + applied2.pin);
+check(applied2.pin === 5, 'Apply changed the dragged target: ' + applied2.pin);
 
 // A REACHABLE TARGET ON THE SAME LEG IS HONOURED, and still touches no
 // altitude - which is the whole of the v16.76 one-field model.
@@ -206,9 +169,9 @@ const reach = await page.evaluate(() => {
 });
 const want = Math.round(reach.dist - 2);
 await page.evaluate((v) => {
+  flights[0].waypoints[2].altAtNM = v;        // as a drag leaves it
+  refreshMap(); renderAllFlightTables();
   openLegPanel(0, L.latLng(69.58, 18.5));   // the MID -> ENTC leg
-  document.getElementById('leg-toc').value = String(v);
-  updateLegPreview();
   saveLegSettings();
 }, want);
 await page.waitForTimeout(320);

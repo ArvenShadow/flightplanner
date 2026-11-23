@@ -10,6 +10,39 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE LEG PANEL NO LONGER PLACES THE CLIMB OR THE DESCENT, AND THE MSA IS IN BOTH RIGHT-CLICK MENUS (v17.20)
+
+The author, after v17.19 left the leg panel as it was: *"the right click menu is
+still there, i said it was redundant no? The altitude to reach this point etc,
+can be dragged and dropped using the TOC/TODs. Dont need em. Also, i want to be
+able to set MSA in the right click menu"*. (v17.19 had read an earlier answer,
+"Those can still be used yes", as keeping the whole panel. It meant the panel's
+insert-waypoint and descent-rate actions, not the corner boxes.)
+
+- **REMOVED from the leg panel**: the three corner boxes (Start the climb / Level
+  off / Be level by), their Here buttons, the "set by your target" note, the long
+  explanatory paragraph and the Clear pins button; `pinLegHere`,
+  `syncLegBocState` and `clearLegPins` with them. A test guards that the ids and
+  the functions stay gone. Dragging a mark is the one way to place a corner.
+- **KEPT**: the altitude at the next fix, the leg's descent rate (v17.9), the
+  live preview (still worked through the real engine, still reports an
+  unreachable dragged target), insert a waypoint, add a stop at a nearby
+  aerodrome (v17.19).
+- **APPLY NO LONGER TOUCHES THE ALTITUDE TARGET.** It used to rewrite `altAtNM`
+  from the boxes; with no boxes that would have CLEARED a dragged corner every
+  time the panel was applied for something else. The target is the drag's. The
+  way back is one button, shown only on a leg that has a target:
+  `resetLegTarget` (one undo step).
+- **THE MSA IN BOTH MENUS**: the leg panel has "MSA for this leg" (`leg-msa`),
+  and the waypoint menu has "MSA of the leg to here" for every waypoint that
+  ends a leg (not the departure, not a circuit), naming the leg it means. Both
+  read it with `normaliseMsaFt`, refuse an out-of-range figure and leave the
+  stored one, and clear it when emptied. It is the same `wp.msa` the plan
+  table's column edits.
+- `verify:leg` was reworked: it now sets a target the way a drag leaves it and
+  checks the panel REPORTS it and that Apply leaves it alone. The inline-handler
+  count in the page-script header went 160 -> 155.
+
 ## A LEG'S MSA IS TYPED BY THE PILOT, AND AN EXISTING ROUTE CAN BE RESHAPED (v17.19)
 
 The author, after being offered ideas: *"I want to set an MSA per leg and it
