@@ -482,8 +482,8 @@
             <li>Multiple flight plans draw in <b>different colours</b>, and in Edit Mode every plan except the active one fades and stops taking the mouse — so a return route drawn straight over its outbound cannot grab the wrong line. (Up to v16.49 every second track was also dashed; the colour and the fading do that job, so the dashes are gone.) <b>Track thickness is a Map setting</b>, 2–10 px: below 2 px the line is hard to follow across chart ink, above 10 px it covers the frequencies and MEF it is drawn over. The invisible grab area stays 20 px wide either way.</li>
             <li>The <b>🗺 Chart button</b> switches the base map between <b>Kartverket topo</b> and the <b>official ICAO VFR 1:500 000</b> chart, streamed from Avinor's public map service. <b>Both charts need internet</b> — neither is stored on your machine. The paper VFR chart is Lambert conformal conic (EUREF89, 59°40′/69°20′), but Avinor's service reprojects it server-side to Web Mercator — the same projection as the topo tiles — so <b>waypoints sit on exactly the same spot on both charts</b>; switching can never move a point. The small label at the bottom-left of the map always states which chart and projection you are looking at, including the chart's AIRAC edition when online. The choice is remembered with your settings.</li>
             <li><b>⬢ Airspace</b> draws the published airspace from <b>AIP Norge</b> — CTR and TIZ solid, TMA and TIA dashed, CTA finely dashed, the mandatory zones (RMZ/TMZ) in orange. <b>Hover any airspace</b> for a card showing its type, ICAO class, published vertical limits, and one row per <b>position</b> you would actually call — <b>ATIS, Approach, Tower</b>, or <b>Information</b> at an AFIS field. <b>A row is a position, not a service type</b>: Gardermoen publishes four approach positions (Final, Director, and Oslo Approach working TMA sectors E and W), so it gets a row each with its own frequency, rather than one row of six numbers you cannot attribute. Where a field publishes an arrival and a departure ATIS you get one row each. Nothing is drawn below zoom 7: at country zoom the polygons bury the chart you are trying to read. Clicking still adds a waypoint, so route building inside a TMA is unaffected — the information is on hover only. The choice is remembered with your settings.</li>
-            <li><b>Right-click the track</b> for that leg's settings: the altitude it is crossed at, and <b>where its climb and descent sit</b>. Three corners are yours to name — <b>start the climb</b> N&nbsp;NM after the fix (hold your current altitude, then go up), <b>be level by</b> N&nbsp;NM after it (which sets the start of the climb for you), and <b>level off</b> N&nbsp;NM before the next fix (get down early, then run in level). Both are pure geometry: the climb and descent are unchanged, they just move, so they are always flyable. The <b>Here</b> buttons turn the spot you right-clicked into the number. A live preview shows the leg's time, fuel and where each corner lands before you apply anything, and the pinned corners are drawn on the map as <b>BOC</b> and <b>BOD</b> marks beside the usual TOC and TOD. Right-clicking used to insert a waypoint outright; that is now the first action <i>in</i> the panel, at the exact point you clicked, so nothing was lost.</li>
-            <li><b>"Be level by" names the top of climb, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it <b>says so, and changes nothing</b> — you get the rate it would have needed, as a figure to judge, and the climb stays exactly where the POH puts it. <b>No altitude you entered is ever rewritten to make a corner fit</b>: until v16.76 the panel offered to raise the previous fix for you, and that offer is gone, because the altitude column is the level you plan to use rather than a promise about your exact height at a point. Move the target later, or raise the fix yourself — both are one edit. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
+            <li><b>Right-click the track</b> for that leg's settings: the <b>altitude</b> it is crossed at, its own <b>descent rate</b>, and its <b>MSA</b> (your own figure, the same one as the plan table's MSA column). A live preview shows the leg's time, fuel and where its climb and descent land. The panel also <b>inserts a waypoint</b> where you right-clicked and <b>adds a stop or fly-by at a nearby aerodrome</b>. <b>It no longer places the climb or the descent</b> — drag the TOC, TOD, BOC and BOD marks on the map for that; a leg whose mark you dragged gets a button here to put it back where the schedule works it out. The MSA can also be typed from a <b>waypoint's</b> right-click menu, for the leg ending at it.</li>
+            <li><b>A dragged top of climb names where you are level, and the bottom is worked backwards from it</b> — at <b>your</b> profile's own rate, so the climb's time, fuel and TAS are never invented; only its position moves. Ask to be level 20 NM out and the planner simply starts the climb later. Ask for something the climb cannot reach even starting from the leg's first fix and it <b>says so, and changes nothing</b> — you get the rate it would have needed, as a figure to judge, and the climb stays exactly where the POH puts it. <b>No altitude you entered is ever rewritten to make a corner fit</b>: until v16.76 the leg panel offered to raise the previous fix for you, and that offer is gone, because the altitude column is the level you plan to use rather than a promise about your exact height at a point. Move the target later, or raise the fix yourself — both are one edit. Nothing steeper than your profile is ever flown. A level-off that would fall inside a descent still running to a later, lower fix is <b>refused and named</b>, in the panel and the red banner, never quietly ignored.</li>
             <li><b>⌖ Fixes</b> draws the published <b>aerodromes</b> (from zoom 7) and <b>VFR reporting points</b> (from zoom 9) from <b>AIP Norge</b>. <b>Click one and it becomes a waypoint at its published coordinate</b> — no dialog, because the fix already has its published name — so a leg to SØRREISA is drawn to the point the chart states, not to wherever you managed to click. An <b>aerodrome</b> also brings its published field elevation, and as the first waypoint it sets the flight's departure elevation to it. Hover any fix for its published DMS. The symbols are yours to set — <b>Settings → Map</b> has the shape, colour, size, fill style and whether names are shown, with a live preview. Reporting points default to <b>orange</b> because nothing on either base chart is orange except the mandatory zones, so the symbol you are hunting for cannot be mistaken for published chart ink. <b>🔎 Find fix</b> searches by name or ICAO; the Norwegian letters are optional, so SORKJOSEN finds SØRKJOSEN, and matches are ordered by strength then by distance from the middle of your map. Clicking bare map still adds a waypoint the old way — the fixes are 9-pixel symbols and take only their own clicks. The choice is remembered with your settings.</li>
             <li><b>What the fixes layer will not do.</b> Reporting points come from the <b>coordinate table printed on each aerodrome's Visual Approach Chart</b>. <b>29 of the 53 aerodromes publish their points on the chart face only</b>, with no table to read — those aerodromes are still here and still anchor on their ARP, but they carry <b>no points</b>, and nothing is taken off a chart image. 243 points at 24 aerodromes is the whole of what the current edition states in machine-readable form; the VAC remains the reference for the rest. Every coordinate is checked against the chart's <i>own</i> printed lat/long graticule before it ships, and names that fail to decode are refused rather than shipped misspelt. The chart raster itself is <b>not</b> georeferenced, so there is no VAC overlay. <b>A planning aid — verify against the current AIP and NOTAM.</b></li>
             <li><b>Skins — the same planner, arranged differently.</b> <b>Settings → 🗺 Map → Look</b> offers <b>Default</b> (the shipped design), <b>Menu</b> (the plan collapses to a narrow rail and opens when you hover or tab into it, giving the map the whole window), <b>Compact</b> (smaller type and tighter rows for a 13&quot; laptop) and <b>Bold</b> (larger hit targets and heavier type for a touchscreen). A skin is <b>appearance only</b>: it never changes what a button does. Most of it is pure CSS; a skin may also <b>move a control into another panel</b> (Menu puts Undo, Redo and Settings on the map, since the plan is collapsed) — and that moves the <i>same</i> button, handler and all, then puts it back exactly where it came from when you switch away. It is a standing preference, and it travels in your exported settings; the <b>layout</b> selector in the header is a separate, per-session choice and still wins.</li>
@@ -643,46 +643,18 @@
             <div><input type="number" id="leg-rod" step="50" min="100" max="3000" style="width:80px;" oninput="updateLegPreview()"> ft/min
               <span style="font-size:9px; color:var(--text-muted);">blank = your profile's rate</span></div>
           </div>
+          <!-- THE LEG'S MSA (v17.20): the same figure as the plan table's MSA
+               column - the pilot's own, off the chart, never computed. -->
+          <div class="setting-row">
+            <label title="Minimum safe altitude for this leg - your own figure, off the chart. Not computed. Printed in the OFP's MSA column.">MSA for this leg:</label>
+            <div><input type="number" id="leg-msa" step="100" min="0" style="width:80px;"> ft
+              <span style="font-size:9px; color:var(--text-muted);">blank = none, prints an empty box</span></div>
+          </div>
         </div>
 
         <div class="setting-section">
-          <h3>Where the climb and descent sit <span style="font-weight:normal; text-transform:none; font-size:10px;">— on this leg</span></h3>
+          <h3>What that does to the leg</h3>
           <p style="font-size:10px; color:var(--text-muted); margin:0 0 8px; line-height:1.5;" id="leg-hint"></p>
-
-          <div class="setting-row">
-            <label title="Hold the current altitude, then climb">Start the climb:</label>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <input type="number" id="leg-boc" step="0.5" min="0" style="width:80px;" readonly
-                     title="Derived: where the climb has to begin to be level by your target. Set the target below.">
-              <span style="font-size:10px;">NM after <b id="leg-from-name2">the fix</b></span>
-              <button class="btn btn-outline btn-sm" id="leg-boc-here" onclick="pinLegHere('boc')">Here</button>
-              <span id="leg-boc-note" style="display:none; font-size:9px; color:var(--text-muted);">set by your target below</span>
-            </div>
-          </div>
-          <div class="setting-row">
-            <label title="Be level this far before the next fix, then run in level">Level off:</label>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <input type="number" id="leg-bod" step="0.5" min="0" style="width:80px;" oninput="updateLegPreview()">
-              <span style="font-size:10px;">NM before <b id="leg-to-name2">the fix</b></span>
-              <button class="btn btn-outline btn-sm" id="leg-bod-here" onclick="pinLegHere('bod')">Here</button>
-            </div>
-          </div>
-          <div class="setting-row">
-            <label title="Names the top of climb; the bottom of climb is worked backwards from it at your profile's rate">Be level by:</label>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <input type="number" id="leg-toc" step="0.5" min="0" style="width:80px;" oninput="updateLegPreview()">
-              <span style="font-size:10px;">NM after <b id="leg-from-name3">the fix</b></span>
-              <button class="btn btn-outline btn-sm" id="leg-toc-here" onclick="pinLegHere('toc')">Here</button>
-            </div>
-          </div>
-          <div style="font-size:10px; color:var(--text-muted); margin-top:2px; line-height:1.5;">
-            Blank or 0 means "as the schedule works it out" — climb from the fix, level exactly at the
-            next one. <b>"Be level by" names the top of climb</b> and the bottom of climb is worked
-            backwards from it at <b>your profile's own rate</b> — so the climb's time, fuel and TAS are
-            never invented, only its position moves. If the climb would have to begin before this leg,
-            the panel says what altitude the previous fix needs instead and offers to set it: that keeps
-            the altitude column honest about what is actually flown where.
-          </div>
           <div id="leg-preview" class="leg-preview"></div>
         </div>
 
@@ -696,11 +668,14 @@
             <label title="Adds the aerodrome to this leg and asks what happens there. A touch &amp; go or a full stop ends this plan at it; the rest of the route becomes the next flight plan.">Add a stop or fly-by at:</label>
             <div id="leg-nearby-ads" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
           </div>
+          <div class="setting-row" id="leg-reset-row" style="display:none;">
+            <label title="You dragged a TOC, TOD, BOC or BOD mark on this leg. This puts the climb and descent back where the schedule works them out.">Dragged climb / descent:</label>
+            <div><button class="btn btn-outline btn-sm" onclick="resetLegTarget()">Put it back where the schedule works it out</button></div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary btn-sm" onclick="closeLegModal()">Cancel</button>
-        <button class="btn btn-outline btn-sm" onclick="clearLegPins()">Clear pins</button>
         <button class="btn btn-success btn-sm" onclick="saveLegSettings()">Apply</button>
       </div>
     </div>
@@ -1299,7 +1274,7 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 160 inline on*= handlers - 125 written
+    // map, markers, undoStack...) plus 155 inline on*= handlers - 120 written
     // into the markup and 35 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1525,7 +1500,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.19';
+    const APP_VERSION = '17.20';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -4534,7 +4509,14 @@
             hint: aircraftProfile.patternTime + ' min per lap (Flight Defaults)' }]
             : [{ id: 'name', label: 'Waypoint name', value: wp.name }]),
           { id: 'alt', label: 'Altitude (ft AMSL)', value: String(wp.alt),
-            type: 'number', step: '500', hint: altHint }
+            type: 'number', step: '500', hint: altHint },
+          // THE MSA OF THE LEG ENDING HERE (v17.20, the author: "i want to be
+          // able to set MSA in the right click menu"). The departure and a
+          // circuit end no leg, so they have none.
+          ...(!isPat && wpIdx > 0 ? [{ id: 'msa', label: 'MSA of the leg to here (ft)',
+            value: typeof wp.msa === 'number' ? String(wp.msa) : '', type: 'number', step: '100',
+            hint: 'Your own figure, off the chart - not computed. Empty is none. From ' +
+              fl.waypoints[wpIdx - 1].name + ' to ' + wp.name + ' only' }] : [])
         ],
         buttons: [
           { id: 'apply', label: 'Apply', variant: 'primary' },
@@ -4966,19 +4948,30 @@
         say('That is not a number of laps (1 or more) - nothing was changed.', 'error');
         return;
       }
+      // THE MSA (v17.20), read as the plan table reads it; unreadable is refused.
+      const hasMsa = !wp.isPattern && wpIdx > 0 && vals.msa !== undefined;
+      const rawMsa = hasMsa ? String(vals.msa).trim() : '';
+      const msa = normaliseMsaFt(rawMsa);
+      if (hasMsa && rawMsa !== '' && msa === null) {
+        say('That is not an MSA (1 to ' + MSA_MAX_FT + ' ft) - nothing was changed.', 'error');
+        return;
+      }
       const nameChanged = wantName !== null && wantName !== '' && wantName !== wp.name;
       const altChanged = ft !== null && ft !== wp.alt;
       const lapsChanged = laps !== null && laps !== wp.laps;
-      if (!nameChanged && !altChanged && !lapsChanged) return;
+      const msaChanged = hasMsa && (msa === null ? wp.msa !== undefined : msa !== wp.msa);
+      if (!nameChanged && !altChanged && !lapsChanged && !msaChanged) return;
       const idxs = altChanged
         ? (wp.isPattern ? [wpIdx] : levelFromIndices(fl.waypoints, wpIdx))
         : [];
       const shortBefore = shortDescentLegs(fl);
-      pushUndoState(lapsChanged && altChanged ? 'edit a circuit stop'
+      pushUndoState(msaChanged && !nameChanged && !altChanged ? 'change an MSA'
+        : lapsChanged && altChanged ? 'edit a circuit stop'
         : lapsChanged ? 'change the number of laps'
         : nameChanged && altChanged ? 'edit a waypoint'
         : nameChanged ? 'rename a waypoint' : 'set the altitude from ' + wp.name);
       if (lapsChanged) wp.laps = laps;
+      if (msaChanged) { if (msa === null) delete wp.msa; else wp.msa = msa; }
       if (nameChanged) renameWaypoint(fIdx, wpIdx, wantName, true);
       if (altChanged) idxs.forEach((i) => { fl.waypoints[i].alt = ft; });
       // The first waypoint's altitude IS the departure elevation; keep them in
@@ -6555,30 +6548,23 @@
 
       document.getElementById('leg-modal-title').textContent =
         'Leg ' + from.name + ' \u2192 ' + to.name;
-      for (const id of ['leg-to-name', 'leg-to-name2']) document.getElementById(id).textContent = to.name;
-      for (const id of ['leg-from-name2', 'leg-from-name3']) document.getElementById(id).textContent = from.name;
+      document.getElementById('leg-to-name').textContent = to.name;
       document.getElementById('leg-alt').value = String(to.alt);
       const rodEl = document.getElementById('leg-rod');
       if (rodEl) {
         rodEl.value = to.rodFpm ? String(to.rodFpm) : '';
         rodEl.placeholder = String(Math.round(Number(aircraftProfile.rod) || 500));
       }
-      document.getElementById('leg-boc').value = to.bocNM ? String(to.bocNM) : '';
-      // SHOWN AS AN ATTAIN-BY, whichever box the pilot last used. One field,
-      // read back into the box that matches the leg's phase.
-      document.getElementById('leg-bod').value = to.bodNM ? String(to.bodNM) : '';
-      document.getElementById('leg-toc').value =
-        to.altAtNM ? String(to.altAtNM) : (to.tocNM ? String(to.tocNM) : '');
+      document.getElementById('leg-msa').value = typeof to.msa === 'number' ? String(to.msa) : '';
+      // A target set by dragging a mark is kept; the panel only offers to drop it.
+      const hasTarget = !!(to.altAtNM || to.bocNM || to.bodNM || to.tocNM);
+      const resetRow = document.getElementById('leg-reset-row');
+      if (resetRow) resetRow.style.display = hasTarget ? '' : 'none';
       document.getElementById('leg-hint').textContent =
         'The leg is ' + along.totalNM.toFixed(1) + ' NM along the flown path. You right-clicked ' +
         along.alongNM.toFixed(1) + ' NM after ' + from.name + ' (' +
         (along.totalNM - along.alongNM).toFixed(1) + ' NM before ' + to.name + ')' +
         (along.offTrackNM > 0.5 ? ', about ' + along.offTrackNM.toFixed(1) + ' NM off the track.' : '.');
-      // "Here" is meaningless for a corner you clicked past, so say so rather
-      // than offering a button that would clamp to the same place every time.
-      document.getElementById('leg-toc-here').disabled = along.alongNM <= 0.05;
-      document.getElementById('leg-boc-here').disabled = along.alongNM <= 0.05;
-      document.getElementById('leg-bod-here').disabled = along.totalNM - along.alongNM <= 0.05;
       updateLegPreview();
       legPanel.nearby = aerodromesNear(latlng, 3);
       renderLegNearbyAds();
@@ -6587,53 +6573,19 @@
 
     function closeLegModal() { closeModal('leg-modal'); legPanel = null; }
 
-    /** Turn the right-click position into the pin the button is for. */
-    function pinLegHere(which) {
-      if (!legPanel) return;
-      const after = legPanel.alongNM, before = legPanel.totalNM - legPanel.alongNM;
-      // "START THE CLIMB HERE" IS THE SAME TARGET, one climb-length further on
-      // (v16.76). The BOC box is a derived display, so the request goes into the
-      // one attain-by field like every other way of asking for a corner.
-      if (which === 'boc') {
-        const SLh = computeFlightSchedule(flights[legPanel.fIdx])[legPanel.legEnd - 1];
-        const climbLen = SLh && isFinite(SLh.climbDistNM) ? SLh.climbDistNM : 0;
-        document.getElementById('leg-toc').value =
-          Math.min(after + climbLen, legPanel.totalNM).toFixed(1);
-      }
-      if (which === 'toc') document.getElementById('leg-toc').value = after.toFixed(1);
-      if (which === 'bod') document.getElementById('leg-bod').value = before.toFixed(1);
-      updateLegPreview();
-    }
-
-    /** A "be level by" target OWNS the bottom of climb, so the BOC box shows
-     *  the derived value and stops taking input - two settings for one corner
-     *  is how the old contradiction warning came about. */
-    function syncLegBocState() {
-      const toc = document.getElementById('leg-toc').value.trim();
-      const boc = document.getElementById('leg-boc');
-      const hereBtn = document.getElementById('leg-boc-here');
-      const note = document.getElementById('leg-boc-note');
-      const derived = toc !== '' && Number(toc) > 0;
-      boc.disabled = derived;
-      if (hereBtn) hereBtn.disabled = derived || (legPanel && legPanel.alongNM <= 0.05);
-      if (note) note.style.display = derived ? '' : 'none';
-    }
-
     function readLegForm() {
-      const num = (id) => {
-        const v = document.getElementById(id).value;
-        if (String(v).trim() === '') return null;
-        const n = Number(v);
-        return isFinite(n) && n > 0 ? n : null;
-      };
       // A DESCENT RATE IS READ STRICTLY (v17.9): blank is "the profile's", a
       // figure outside DESCENT_FPM_MIN..MAX is NaN and refused at Apply.
       const rodRaw = String((document.getElementById('leg-rod') || {}).value || '').trim();
       const rodN = Number(rodRaw);
       const rodFpm = rodRaw === '' ? null
         : (isFinite(rodN) && rodN >= DESCENT_FPM_MIN && rodN <= DESCENT_FPM_MAX ? Math.round(rodN) : NaN);
-      return { alt: Number(document.getElementById('leg-alt').value),
-               bocNM: num('leg-boc'), bodNM: num('leg-bod'), tocNM: num('leg-toc'), rodFpm };
+      // THE MSA, read as the plan table reads it: blank is none, anything else
+      // that is not a whole number of feet in range is `false` and refused.
+      const msaRaw = String((document.getElementById('leg-msa') || {}).value || '').trim();
+      const msaN = normaliseMsaFt(msaRaw);
+      return { alt: Number(document.getElementById('leg-alt').value), rodFpm,
+               msa: msaRaw === '' ? null : (msaN === null ? false : msaN) };
     }
 
     /**
@@ -6645,14 +6597,14 @@
     function updateLegPreview() {
       const host = document.getElementById('leg-preview');
       if (!host || !legPanel) return;
-      syncLegBocState();
       const fl = flights[legPanel.fIdx];
       const form = readLegForm();
       const trial = {
         id: fl.id,
         waypoints: fl.waypoints.map((w, i) => i === legPanel.legEnd
-          ? Object.assign({}, w, { alt: form.alt, bocNM: form.bocNM, bodNM: form.bodNM, tocNM: form.tocNM,
-              rodFpm: Number.isFinite(form.rodFpm) ? form.rodFpm : null })
+          // The altitude target a drag set on this leg stays as it is (v17.20):
+          // the panel no longer has boxes for it.
+          ? Object.assign({}, w, { alt: form.alt, rodFpm: Number.isFinite(form.rodFpm) ? form.rodFpm : null })
           : Object.assign({}, w))
       };
       const sch = computeFlightSchedule(trial);
@@ -6670,10 +6622,6 @@
         rows.push(['Climb', (S.climbStartNM > 0.05 ? 'starts ' + f(S.climbStartNM) + ' NM after ' + S.from.name : 'from ' + S.from.name) +
           (S.tocDerivedBoc && S.tocTargetMet ? ' (set by your target)' : '') +
           ', tops out ' + (S.tocAlongNM != null ? f(S.tocAlongNM) + ' NM along' : 'beyond this leg')]);
-        if (S.tocDerivedBoc && S.tocTargetMet) {
-          const b = document.getElementById('leg-boc');
-          if (b) b.value = S.climbStartNM > 0.05 ? f(S.climbStartNM) : '0';
-        }
       }
       if (S.descDistNM > 0.05) {
         rows.push(['Descent', (S.todStartsHere ? 'starts ' + f(S.distNM - S.todBeforeNM) + ' NM along' : 'carried in from an earlier leg') +
@@ -6694,7 +6642,7 @@
           (S.climbRateReqFpm ? ', or need about ' + S.climbRateReqFpm +
             ' ft/min from there' : '') +
           '. Nothing steeper than your profile is ever invented, and no altitude ' +
-          'you typed is changed \u2014 move the target later, or raise ' +
+          'you typed is changed \u2014 drag the mark later, or raise ' +
           esc(S.from.name) + ' yourself.</div>';
       }
       if (S.bodRefused) {
@@ -6720,6 +6668,9 @@
       if (form.rodFpm !== null && !Number.isFinite(form.rodFpm)) {
         warn += '<div class="leg-warn">A descent rate must be ' + DESCENT_FPM_MIN + ' to ' + DESCENT_FPM_MAX + ' ft/min.</div>';
       }
+      if (form.msa === false) {
+        warn += '<div class="leg-warn">An MSA must be 1 to ' + MSA_MAX_FT + ' ft.</div>';
+      }
       host.innerHTML = rows.map((r) =>
         '<div class="lp-row"><span class="lp-k">' + esc(r[0]) + '</span><span class="lp-v">' + esc(r[1]) + '</span></div>'
       ).join('') + warn;
@@ -6733,11 +6684,24 @@
       updateLegPreview();
     }
 
-    function clearLegPins() {
-      document.getElementById('leg-boc').value = '';
-      document.getElementById('leg-bod').value = '';
-      document.getElementById('leg-toc').value = '';
-      updateLegPreview();
+    /**
+     * THE PANEL NO LONGER PLACES THE CLIMB OR THE DESCENT (v17.20, the author:
+     * "The altitude to reach this point etc, can be dragged and dropped using
+     * the TOC/TODs. Dont need em"). The three corner boxes are gone; dragging a
+     * mark is the one way to move one. What stays is the way BACK: a leg whose
+     * mark was dragged can be returned to where the schedule works it out.
+     */
+    function resetLegTarget() {
+      if (!legPanel) return;
+      const fl = flights[legPanel.fIdx];
+      const to = fl && fl.waypoints[legPanel.legEnd];
+      if (!to) { closeLegModal(); return; }
+      pushUndoState('put a climb or descent back where the schedule works it out');
+      to.altAtNM = null; to.bocNM = null; to.bodNM = null; to.tocNM = null;
+      closeLegModal();
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
     }
 
     function saveLegSettings() {
@@ -6750,40 +6714,17 @@
         say('A descent rate must be ' + DESCENT_FPM_MIN + ' to ' + DESCENT_FPM_MAX + ' ft/min - nothing was changed.', 'error');
         return;
       }
+      if (form.msa === false) {
+        say('That is not an MSA (1 to ' + MSA_MAX_FT + ' ft) - nothing was changed.', 'error');
+        return;
+      }
       pushUndoState('apply leg settings');
       if (isFinite(form.alt)) to.alt = form.alt;
       // Null clears it, so the leg goes back to the profile's rate.
       to.rodFpm = form.rodFpm;
-      // Stored as null rather than 0 when cleared, so a saved route carries no
-      // pin at all and reads identically to one made before pins existed.
-      // THE PANEL WRITES THE SAME ONE FIELD THE DRAG DOES (v16.76). It still
-      // shows three boxes, because a pilot who thinks in "hold for 12 NM" should
-      // be able to type that - but all three mean one thing, so they are folded
-      // into the single attain-by target here. LEAVING THE PANEL ON THE LEGACY
-      // PINS WOULD HAVE SHIPPED A REAL BUG: `legTarget` prefers `altAtNM`, so a
-      // leg that had been dragged would silently IGNORE anything typed here.
-      const SLp = computeFlightSchedule(fl)[legPanel.legEnd - 1];
-      const climbLen = SLp && isFinite(SLp.climbDistNM) ? SLp.climbDistNM : 0;
-      const descLen = SLp && isFinite(SLp.descDistNM) ? SLp.descDistNM : 0;
-      const legLen = SLp && isFinite(SLp.distNM) ? SLp.distNM : 0;
-      // THE BOC BOX IS A DERIVED DISPLAY, NOT AN INPUT (v16.38 made it one), so
-      // it must never be read back as the target. `updateLegPreview` writes the
-      // computed climb start into it - reading that as input fed the derived
-      // value straight back in, and a "clear" then re-applied a target one
-      // climb-length short of the one it had just removed. Caught by the
-      // clear-the-pins test.
-      let attain = null;
-      if (form.tocNM != null) attain = form.tocNM;                       // be level by here
-      else if (form.bodNM != null) attain = Math.max(0, legLen - form.bodNM);
-      void climbLen;
-      to.altAtNM = attain != null && attain > 0.05
-        ? Math.round(Math.min(attain, legLen || attain) * 10) / 10
-        : null;
-      // The legacy pins are cleared so there is exactly one answer on the leg.
-      to.bocNM = null;
-      to.bodNM = null;
-      to.tocNM = null;
-      void descLen;
+      if (form.msa === null) delete to.msa; else to.msa = form.msa;
+      // THE ALTITUDE TARGET IS NOT TOUCHED HERE (v17.20): it belongs to the
+      // drag, and Apply on a leg that was dragged must not undo the drag.
       closeLegModal();
       refreshMap();
       renderAllFlightTables();
