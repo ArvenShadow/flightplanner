@@ -1364,16 +1364,16 @@ T('compact mode hides secondary columns and fixes footer span', () => {
   const ccCells = doc.querySelectorAll('#flight-plans-container .cc').length;
   assert(ccCells > 0, 'no cc-tagged cells');
   const foot = doc.querySelector('#flight-plans-container tfoot td');
-  assert(foot.getAttribute('colspan') === '7', 'compact colspan got ' + foot.getAttribute('colspan'));
+  assert(foot.getAttribute('colspan') === '8', 'compact colspan got ' + foot.getAttribute('colspan'));
   assert(doc.getElementById('compact-btn').innerText.includes('Full'), 'button label not toggled');
   w.applyCompactCols(false);
   const foot2 = doc.querySelector('#flight-plans-container tfoot td');
-  assert(foot2.getAttribute('colspan') === '13', 'full colspan got ' + foot2.getAttribute('colspan'));
+  assert(foot2.getAttribute('colspan') === '14', 'full colspan got ' + foot2.getAttribute('colspan'));
 });
 T('compact state survives a re-render', () => {
   w.applyCompactCols(true);
   w.renderAllFlightTables();
-  assert(doc.querySelector('#flight-plans-container tfoot td').getAttribute('colspan') === '7', 'span lost on re-render');
+  assert(doc.querySelector('#flight-plans-container tfoot td').getAttribute('colspan') === '8', 'span lost on re-render');
   w.applyCompactCols(false);
 });
 T('REGRESSION: theme switch preserves layout and compact classes', () => {
@@ -1969,14 +1969,14 @@ T('default 3-minute column; header and value follow the setting', () => {
   assert(hdr3.includes('3m-NM'), 'default header wrong: needs 3m-NM');
   // leg 2 is level cruise: value must equal effGS * N / 60
   const res = ev('computeLegTotals(flights[0].waypoints[1], flights[0].waypoints[2])');
-  const cell3 = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')][1].cells[14].textContent;
+  const cell3 = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')][1].cells[15].textContent;
   assert(Math.abs(parseFloat(cell3) - res.effGS * 3 / 60) < 0.02, '3-min value wrong: ' + cell3);
   w.openSettingsModal();
   doc.getElementById('qol-minute-mark').value = '5';
   w.saveSettings();
   const hdr5 = doc.querySelector('#flight-plans-container thead').textContent;
   assert(hdr5.includes('5m-NM') && !hdr5.includes('3m-NM'), '5-min header wrong: ' + hdr5.slice(0, 120));
-  const cell5 = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')][1].cells[14].textContent;
+  const cell5 = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')][1].cells[15].textContent;
   assert(Math.abs(parseFloat(cell5) - res.effGS * 5 / 60) < 0.02, '5-min value wrong: ' + cell5);
   assert(Math.abs(parseFloat(cell5) / parseFloat(cell3) - 5 / 3) < 0.03, 'value did not scale 3->5');
 });
@@ -2434,7 +2434,7 @@ T('adding a via point does not change the row TT/MT (direct line), but distance 
   ev(SEED);
   const row = () => {
     const c = doc.querySelector('#tbody-flight-0 tr').cells;
-    return { tt: c[6].textContent.trim(), mt: c[8].textContent.trim(), dist: parseFloat(c[13].textContent) };
+    return { tt: c[7].textContent.trim(), mt: c[9].textContent.trim(), dist: parseFloat(c[14].textContent) };
   };
   const before = row();
   const directTT = Math.round(ev('calcTrueTrack(flights[0].waypoints[0].lat, flights[0].waypoints[0].lng, flights[0].waypoints[1].lat, flights[0].waypoints[1].lng)'));
@@ -2456,7 +2456,7 @@ T('removing the via restores the plain leg (row and distance identical to a via-
   ev('delete flights[0].waypoints[1].via; refreshMap(); renderAllFlightTables();');
   const c = doc.querySelector('#tbody-flight-0 tr').cells;
   const directTT = Math.round(ev('calcTrueTrack(flights[0].waypoints[0].lat, flights[0].waypoints[0].lng, flights[0].waypoints[1].lat, flights[0].waypoints[1].lng)'));
-  assert(c[6].textContent.trim() === directTT + '°', 'row TT wrong after via removal');
+  assert(c[7].textContent.trim() === directTT + '°', 'row TT wrong after via removal');
   ev(SEED);
 });
 T('guide states the direct-line convention and warns to steer by segment tracks', () => {
@@ -2472,7 +2472,7 @@ T('a CLB+CRZ leg shows the cruise TAS in the row; climb stays in time/fuel and t
   assert(r.profileTag === 'CLB+CRZ', 'seed leg 1 should be CLB+CRZ, got ' + r.profileTag);
   const crzTas = ev('cruisePerf(2500, ' + ev('flights[0].waypoints[1].oat') + ').tas');
   assert(r.dispTas === crzTas, 'row TAS should be cruise TAS ' + crzTas + ', got ' + r.dispTas);
-  const cell = doc.querySelector('#tbody-flight-0 tr').cells[5].textContent.trim();
+  const cell = doc.querySelector('#tbody-flight-0 tr').cells[6].textContent.trim();
   assert(cell === String(crzTas), 'TAS cell shows ' + cell + ', want ' + crzTas);
   const cp = ev('climbPerf(254, 2500, ' + ev('flights[0].waypoints[1].oat') + ')');
   assert(Math.abs(r.climbInfo.timeMin - cp.timeMin) < 0.05, 'climb time no longer accounted');
@@ -2577,7 +2577,7 @@ T("every level leg of the user's mission shows the same cruise FF", () => {
     const rows = [...doc.querySelectorAll(`#tbody-flight-${f} tr:not(.sub-leg-row)`)];
     rows.forEach(row => {
       if (!row.textContent.includes('CRZ') || row.textContent.includes('CLB') || row.textContent.includes('DES')) return;
-      const ff = parseFloat(row.cells[17].textContent);
+      const ff = parseFloat(row.cells[18].textContent);
       assert(Math.abs(ff - crzGph) < 0.06,
         `level leg FF ${ff} != cruise ${crzGph} (flight ${f + 1}: ${row.cells[0].textContent}->${row.cells[1].textContent})`);
       checked++;
@@ -2876,7 +2876,8 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
                     airspace: airspaceModule, anchors: anchorsModule, ofp: ofpModule,
                     vac: require('./src/lib/vac.js'),
                     keys: keysModule, corridor: corridorModule, rhumb: rhumbModule, skins: skinsModule,
-                    mb: mbModule, rwy: rwyModule, rwyd: rwydModule, pdf: pdfModule, hours: hoursModule };
+                    mb: mbModule, rwy: rwyModule, rwyd: rwydModule, pdf: pdfModule, hours: hoursModule,
+                    replan: require('./src/lib/replan.js') };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3140,6 +3141,11 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                               availableM: 2443, correctedM: 300, requiredM: 375, factor: 1.25, windDir: 290, windKt: 12,
                               wind: M.rwy.windAlongRunway(109.01, 290, 12) }),
                             M.rwyd.runwayFiguresHtml({ kind: 'landing', desig: '28', widthM: 45, surface: 'ASPH', availableM: 2443 })],
+    'replan.js': () => [M.replan.splitPlanAtStop([{ id: 1, waypoints: [{ lat: 1, lng: 1, name: 'A' }, { lat: 2, lng: 2, name: 'B' },
+                          { lat: 3, lng: 3, name: 'C' }] }], 0, 1, { kind: 'touch-go', newId: 2 }),
+                        M.replan.mergeStopIntoFlyby([{ id: 1, waypoints: [{ lat: 1, lng: 1 }, { lat: 2, lng: 2, stop: 'full-stop' }] }], 0, 1),
+                        M.replan.moveWaypoint([{ id: 1, waypoints: [{ lat: 1, lng: 1 }, { lat: 2, lng: 2 }, { lat: 3, lng: 3 }] }], 0, 1, 1),
+                        M.replan.dropToleranceNM(14, 10, 69)],
     'opshours.js': () => [M.hours.parseAtsHours('MON - FRI: 0700 - 1500 (0600 - 1400), SAT - SUN: NIL'),
                           M.hours.atsOpenAt(M.hours.parseAtsHours('H24'), Date.UTC(2026, 8, 27, 12)),
                           M.hours.norwaySeason(Date.UTC(2026, 0, 1)), M.hours.holidaysExcluded('Public HOL excluded'),
@@ -6623,6 +6629,135 @@ const TWO_SECTORS = `flights = [
       { lat: 70.6, lng: 18.5, name: 'ENSR', alt: 10,  oat: 0, wdir: 250, wspd: 20, var: -11 }] }];
     activeFlightIndex = 0; mbPrefs.reg = null; renderAllFlightTables();`;
 const ofpSheets = () => printDoc().sheets.filter((s) => s.kind === 'ofp').map(readOfp);
+TA('a leg\'s MSA is the pilot\'s own figure: typed in the plan, stored, and printed in the OFP\'s MSA cell (v17.19)', async () => {
+  // The author: "I want to set an MSA per leg and it reflects on the printed OFP."
+  const X = moduleExports.exch, F = moduleExports.ofp;
+  assert(X.normaliseMsaFt('3500') === 3500 && X.normaliseMsaFt(' 4200.4 ') === 4200, 'a typed MSA is not read');
+  for (const bad of ['', null, undefined, 'abc', '0', '-500', '250000']) {
+    assert(X.normaliseMsaFt(bad) === null, JSON.stringify(bad) + ' was read as an MSA: ' + X.normaliseMsaFt(bad));
+  }
+  assert(F.ofpRowCells({ from: 'A', to: 'B', msa: 3500 }).msa === '3500', 'the MSA cell does not print the figure');
+  for (const none of [undefined, null, NaN, 0]) {
+    assert(F.ofpRowCells({ from: 'A', to: 'B', msa: none }).msa === '', 'no MSA printed as ' + JSON.stringify(F.ofpRowCells({ from: 'A', to: 'B', msa: none }).msa));
+  }
+  ev(SEED);
+  try {
+    // Through the plan table's own box, on the first leg.
+    const box = () => doc.querySelector('#tbody-flight-0 tr .msa-input');
+    assert(box() && box().value === '', 'the plan table has no empty MSA box on a fresh leg');
+    assert([...doc.querySelectorAll('#flight-plans-container thead th')].some((th) => th.textContent.trim() === 'MSA'), 'no MSA column heading');
+    box().value = '3500'; box().dispatchEvent(new w.Event('change'));
+    assert(ev('flights[0].waypoints[1].msa') === 3500, 'the box did not store the MSA: ' + ev('flights[0].waypoints[1].msa'));
+    assert(box().value === '3500', 'the box does not show the stored MSA after the re-render');
+    assert(ev('undoEntryLabel(undoStack[undoStack.length - 1])') === 'change an MSA', 'the edit is not an undo step');
+    // The paper: column 13 of OFP_COLUMNS is MSA. Leg 1 carries it, leg 2 stays an empty box.
+    assert(F.OFP_COLUMNS[13].key === 'msa', 'the MSA column moved');
+    const rows = ofpSheets()[0].filled;
+    assert(rows[0][13] === '3500', 'the printed MSA cell of leg 1 is ' + JSON.stringify(rows[0][13]));
+    assert(!rows[1][13], 'a leg with no MSA printed ' + JSON.stringify(rows[1][13]));
+    // It survives the sanitiser every door goes through, and a bad one is dropped.
+    const kept = ev('sanitiseFlights(JSON.parse(JSON.stringify(flights)))[0].waypoints[1].msa');
+    assert(kept === 3500, 'the sanitiser dropped the MSA: ' + kept);
+    assert(ev('sanitiseFlights([{ waypoints: [{ lat: 1, lng: 2 }, { lat: 2, lng: 2, msa: "abc" }] }])[0].waypoints[1].msa') === undefined, 'a bad MSA survived the sanitiser');
+    // An unreadable figure is refused and the stored one stays; empty clears it.
+    box().value = '999999'; box().dispatchEvent(new w.Event('change'));
+    assert(ev('flights[0].waypoints[1].msa') === 3500, 'a refused MSA overwrote the stored one');
+    box().value = ''; box().dispatchEvent(new w.Event('change'));
+    assert(ev('"msa" in flights[0].waypoints[1]') === false, 'emptying the box did not clear the MSA');
+    // Splitting the leg keeps the MSA on both halves.
+    ev('flights[0].waypoints[1].msa = 4100; renderAllFlightTables();');
+    const pr = ev('insertWaypointOnLeg(0, { lat: 69.14, lng: 18.26 })');
+    await tick(); await answerDialog('Insert waypoint'); await pr;
+    assert(ev('flights[0].waypoints[1].msa') === 4100 && ev('flights[0].waypoints[2].msa') === 4100,
+      'the split leg lost its MSA: ' + ev('JSON.stringify(flights[0].waypoints.map(w => w.msa))'));
+  } finally { ev(SEED); }
+});
+T('replan.js: a waypoint becomes a stop and the rest of the route becomes the next plan - and back again (v17.19)', () => {
+  // The author: "be able to make a touch and go/landing instead of a waypoint
+  // flying by the airport (splitting the plan into two flight plans)" and "the
+  // option to remove a touch-n-go and revert to one longer flight plan".
+  const R = moduleExports.replan, X = moduleExports.exch;
+  const W = (name, lat, lng, extra) => Object.assign({ lat, lng, name, alt: 2500, oat: 5, wdir: 250, wspd: 12, var: -11 }, extra || {});
+  const route = () => [{ id: 1, title: 'A', depElev: 254, waypoints: [
+    W('ENDU', 69.055, 18.544, { alt: 254 }),
+    W('MID', 69.30, 18.60, { msa: 3100 }),
+    W('Tromso', 69.679, 18.911, { flyby: true, via: [[69.5, 18.7]] }),
+    W('NORTH', 69.90, 19.20, { via: [[69.8, 19.0]], altAtNM: 4, msa: 4200 }),
+    W('ENSR', 69.787, 20.959, { alt: 16 })] },
+    { id: 7, title: 'Later', depElev: 16, waypoints: [W('ENSR', 69.787, 20.959, { alt: 16 })] }];
+  const before = route(), frozen = JSON.stringify(before);
+  const entc = { lat: 69.6789, lng: 18.9114, name: 'ENTC', elevFt: 32 };
+
+  assert(R.canBecomeStop(before, 0, 2) && !R.canBecomeStop(before, 0, 0), 'the departure may not be a stop, a fly-by may');
+  const s = R.splitPlanAtStop(before, 0, 2, { kind: 'touch-go', newId: 8, at: entc });
+  assert(JSON.stringify(before) === frozen, 'the split changed the plan it was given');
+  assert(s && s.newPlanIdx === 1 && s.moved === 2 && s.flights.length === 3, 'the split did not make one new plan: ' + JSON.stringify(s && [s.newPlanIdx, s.moved]));
+  const [a, b, c] = s.flights;
+  // The stop ends plan 1, on the field.
+  const stop = a.waypoints[a.waypoints.length - 1];
+  assert(a.waypoints.length === 3 && stop.stop === 'touch-go' && stop.stopMin === 5 && stop.name === 'ENTC' && stop.alt === 32
+    && stop.lat === entc.lat && !('flyby' in stop) && stop.anchor === 'AIP-AD', 'the stop is not on the field: ' + JSON.stringify(stop));
+  assert(JSON.stringify(stop.via) === '[[69.5,18.7]]', 'the leg INTO the stop lost its via points');
+  // Plan 2 departs from it, at the field elevation, carrying the rest untouched.
+  assert(b.id === 8 && b.depElev === 32 && b.waypoints.length === 3 && b.waypoints[0].name === 'ENTC' && b.waypoints[0].alt === 32
+    && b.waypoints[0].lat === stop.lat && !b.waypoints[0].stop, 'the new plan does not depart from the stop: ' + JSON.stringify(b.waypoints[0]));
+  assert(b.waypoints[1].name === 'NORTH' && b.waypoints[1].altAtNM === 4 && b.waypoints[1].msa === 4200
+    && JSON.stringify(b.waypoints[1].via) === '[[69.8,19]]' && b.waypoints[2].name === 'ENSR', 'the moved legs lost what was typed for them');
+  assert(c.id === 7, 'a later plan was disturbed');
+  // IT IS THE SHAPE THE REST OF THE APP ALREADY UNDERSTANDS: the stop opened the next plan.
+  assert(X.sectorOpenedByStop(s.flights, 0, 2) === 1, 'the app would not see the new plan as the one this stop opened');
+  // A full stop: 10 minutes. With nothing after it, no plan is made.
+  const fs = R.splitPlanAtStop(before, 0, 4, { kind: 'full-stop', newId: 9 });
+  assert(fs && fs.newPlanIdx === -1 && fs.flights.length === 2 && fs.flights[0].waypoints[4].stop === 'full-stop'
+    && fs.flights[0].waypoints[4].stopMin === 10 && fs.flights[0].waypoints[4].alt === 16, 'a stop at the end: ' + JSON.stringify(fs && fs.newPlanIdx));
+  assert(R.splitPlanAtStop(before, 0, 0, { kind: 'touch-go', newId: 9 }) === null, 'the departure was made a stop');
+  assert(R.splitPlanAtStop(before, 0, 2, { kind: 'nonsense', newId: 9 }) === null, 'an unknown stop kind was accepted');
+  assert(R.splitPlanAtStop(s.flights, 0, 2, { kind: 'full-stop', newId: 9 }) === null, 'a stop was split a second time');
+
+  // AND BACK: the two plans join, the fly-by is at the altitude given - not on the runway.
+  const withLaps = R.addCircuitsAt(s.flights, 0, 2, { laps: 4, alt: 1000 });
+  assert(withLaps && withLaps.flights[0].waypoints[3].isPattern && withLaps.flights[0].waypoints[3].laps === 4
+    && withLaps.flights[0].waypoints[3].lat === entc.lat && R.hasCircuits(withLaps.flights, 0, 2), 'circuits were not added on the stop');
+  assert(R.addCircuitsAt(withLaps.flights, 0, 2, { laps: 2, alt: 1000 }) === null, 'a second circuit waypoint was stacked on the first');
+  assert(R.addCircuitsAt(s.flights, 0, 2, { laps: 0, alt: 1000 }) === null, 'a circuit of no laps was added');
+  const m = R.mergeStopIntoFlyby(withLaps.flights, 0, 2, { alt: 3000, name: 'Tromso', flyby: true });
+  assert(m && m.joinedPlanIdx === 1 && m.joined === 2 && m.circuits === 1 && m.flights.length === 2, 'the merge: ' + JSON.stringify(m && [m.joinedPlanIdx, m.joined, m.circuits]));
+  const j = m.flights[0].waypoints;
+  assert(j.map((w) => w.name).join('>') === 'ENDU>MID>Tromso>NORTH>ENSR', 'the joined route is ' + j.map((w) => w.name).join('>'));
+  assert(j[2].alt === 3000 && j[2].flyby === true && !('stop' in j[2]) && !('stopMin' in j[2]), 'the fly-by kept the landing: ' + JSON.stringify(j[2]));
+  assert(j[3].altAtNM === 4 && j[3].msa === 4200 && m.flights[1].id === 7, 'the joined legs lost their figures, or a later plan moved');
+  // A stop whose next plan is NOT its own (departs elsewhere) joins nothing.
+  const alone = route(); alone[0].waypoints[4].stop = 'full-stop'; alone[1].waypoints[0].lat = 60;
+  const m2 = R.mergeStopIntoFlyby(alone, 0, 4, { alt: 2000 });
+  assert(m2 && m2.joinedPlanIdx === -1 && m2.flights.length === 2 && !m2.flights[0].waypoints[4].stop, 'an unrelated plan was joined on');
+  assert(R.mergeStopIntoFlyby(before, 0, 2, {}) === null, 'a waypoint that is not a stop was merged');
+
+  // Touch & go <-> full stop: the minutes follow the kind; a refuel leaves with the full stop.
+  const full = R.setStopKind(s.flights, 0, 2, 'full-stop');
+  assert(full && full.flights[0].waypoints[2].stop === 'full-stop' && full.flights[0].waypoints[2].stopMin === 10, 'T&G -> full stop');
+  full.flights[0].waypoints[2].fuelAfterGal = 50;
+  const tg = R.setStopKind(full.flights, 0, 2, 'touch-go');
+  assert(tg && tg.flights[0].waypoints[2].stopMin === 5 && !('fuelAfterGal' in tg.flights[0].waypoints[2]), 'a touch & go kept a refuel');
+  assert(R.setStopKind(s.flights, 0, 2, 'touch-go') === null && R.setStopKind(before, 0, 1, 'full-stop') === null, 'a no-op or a non-stop was switched');
+
+  // Reordering: one place, ordinary waypoints only; the legs' own figures are cleared, the MSA above all.
+  assert(!R.canMoveWaypoint(before, 0, 1, -1) && !R.canMoveWaypoint(before, 0, 0, 1), 'the departure moved');
+  assert(!R.canMoveWaypoint(s.flights, 0, 1, 1), 'a waypoint moved past a stop');
+  assert(!R.canMoveWaypoint(before, 0, 3, 1) && !R.canMoveWaypoint(before, 0, 4, -1) && R.moveWaypoint(before, 0, 3, 1) === null,
+    'the destination was swapped into the middle of the route');
+  const mv = R.moveWaypoint(before, 0, 2, 1);
+  assert(mv && mv.newIdx === 3 && mv.flights[0].waypoints.map((w) => w.name).join('>') === 'ENDU>MID>NORTH>Tromso>ENSR', 'the swap');
+  const w3 = mv.flights[0].waypoints;
+  assert(!('via' in w3[2]) && !('altAtNM' in w3[2]) && !('msa' in w3[2]) && !('via' in w3[3]) && mv.cleared === 4,
+    'a moved leg kept figures typed for another leg: cleared ' + mv.cleared + ' ' + JSON.stringify(w3.slice(2, 5)));
+  assert(w3[1].msa === 3100, 'a leg that did not move lost its MSA');
+  assert(JSON.stringify(before) === frozen, 'an operation changed the plan it was given');
+
+  // The drop tolerance: 14 px at zoom 10 near Tromso is about a third of a mile.
+  const tol = R.dropToleranceNM(14, 10, 69.68);
+  assert(tol > 0.35 && tol < 0.45, 'the drop tolerance is ' + tol);
+  assert(Math.abs(R.dropToleranceNM(14, 11, 69.68) - tol / 2) < 1e-9 && R.dropToleranceNM(NaN, 10, 69) === 0, 'it does not halve per zoom level');
+});
 TA('the ACC columns all measure the same thing: the mission so far', async () => {
   // The form groups Dist and Time under one heading, ACC, and prints Fuel Acc
   // beside them. Accumulated across WHAT is the question, and the three
@@ -14727,6 +14862,219 @@ TA('the waypoint menu offers the fly-by toggle on an aerodrome, and not on a sto
     assert(ev('flights[0].waypoints[3].flyby') === true, 'the toggle did not mark the waypoint');
     assert(/Take off \/ land at ENTC \(not a fly-by\)/.test(await labels(3)), 'the toggle does not offer the way back');
   } finally { ev(SEED); }
+});
+
+// v17.19: reshaping a route that already exists - src/lib/replan.js does the
+// work and is tested on its own above; these drive the page's own controls.
+const RESHAPE_ROUTE = () => `flights = [{ id: 1, title: "Out", depElev: 254, waypoints: [
+    ${adWp('ENDU')},
+    { lat: 69.30, lng: 18.60, name: "MID", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11, msa: 3100 },
+    ${adWp('ENTC', { name: 'Tromsø', alt: 2500, flyby: true })},
+    { lat: 69.90, lng: 19.20, name: "NORTH", alt: 3000, oat: 10, wdir: 0, wspd: 0, var: -12, msa: 4200 },
+    ${adWp('ENSR')}] }];
+    activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+const menuLabels = async (f, i) => {
+  const pr = w.openWaypointMenu(f, i);
+  await tick();
+  const got = [...openDlg().querySelectorAll('.dlg-btn')].map((b) => b.textContent).join(' | ');
+  answerDialog('Cancel'); await pr;
+  return got;
+};
+const viaMenu = async (f, i, label) => { const pr = w.openWaypointMenu(f, i); await tick(); answerDialog(label); await pr; await tick(); };
+
+TA('the waypoint menu turns a fly-by into a touch & go, splitting the plan - and back into one (v17.19)', async () => {
+  try {
+    ev(RESHAPE_ROUTE());
+    doc.getElementById('def-alt').value = '2500';
+    // Only what a waypoint can do is offered: an en-route fix gets none of the stop options.
+    const mid = await menuLabels(0, 1);
+    assert(!/Touch & go|Full stop|Fly over instead|Add circuits/.test(mid), 'an en-route fix was offered a landing: ' + mid);
+    assert(/Later in the route/.test(mid) && !/Earlier in the route/.test(mid), 'MID should move later only (the departure stays first): ' + mid);
+    const fly = await menuLabels(0, 2);
+    assert(/Touch & go at ENTC/.test(fly) && /Full stop at ENTC/.test(fly) && /2 waypoints after it become the next flight plan/.test(fly),
+      'the fly-by at ENTC is not offered a landing with its consequence: ' + fly);
+    assert(!/Touch & go at|Full stop at/.test(await menuLabels(0, 0)), 'the departure was offered a landing');
+
+    await viaMenu(0, 2, 'Touch & go at ENTC');
+    assert(ev('flights.length') === 2, 'the plan did not split: ' + ev('flights.length'));
+    const stop = ev('flights[0].waypoints[2]');
+    const entcElev = aipDataset().aerodromes.find((x) => x.icao === 'ENTC').elevFt;
+    assert(stop.stop === 'touch-go' && stop.name === 'ENTC' && !stop.flyby && stop.alt === entcElev,
+      'the stop is not a touch & go on the field: ' + JSON.stringify(stop));
+    assert(ev('flights[0].waypoints.length') === 3 && ev('flights[1].waypoints.map(w => w.name).join(">")') === 'ENTC>NORTH>ENSR',
+      'the rest of the route is not the next plan: ' + ev('flights[1].waypoints.map(w => w.name).join(">")'));
+    assert(ev('flights[1].waypoints[1].msa') === 4200, 'the moved leg lost its MSA');
+    assert(ev('activeFlightIndex') === 0, 'the active plan jumped away from the one being edited');
+    // The app treats it as any stop-opened sector: ground time in the next header, and it prints as two sheets.
+    assert(/min/.test(doc.getElementById('flight-plans-container').textContent) && ev('ofpPrintModel.length') === 2, 'the split did not render as two sectors');
+    assert(ev('ofpPrintModel[1].prefixBurnRaw') > 0, 'the touch & go\'s ground time is not charged to the sector it opened');
+    assert(ev('undoEntryLabel(undoStack[undoStack.length - 1])') === 'make Tromsø a touch & go', 'the step is not named: ' + ev('undoEntryLabel(undoStack[undoStack.length - 1])'));
+
+    // ON THE STOP: switch the kind, add circuits, or fly over instead.
+    const st = await menuLabels(0, 2);
+    assert(/Fly over instead/.test(st) && /joins .+ back onto this plan/.test(st) && /Make it a full stop/.test(st) && /Add circuits here/.test(st),
+      'the stop\'s own options are missing: ' + st);
+    await viaMenu(0, 2, 'Make it a full stop');
+    assert(ev('flights[0].waypoints[2].stop') === 'full-stop' && ev('flights[0].waypoints[2].stopMin') === 10, 'the stop did not become a full stop');
+    assert(/Make it a touch & go/.test(await menuLabels(0, 2)), 'a full stop is not offered the way back to a touch & go');
+    await viaMenu(0, 2, 'Make it a touch & go');
+    const pr = w.openWaypointMenu(0, 2); await tick(); answerDialog('Add circuits here'); await tick();
+    typeInDialog('4'); await answerDialog('Add circuits'); await pr; await tick();
+    assert(ev('flights[0].waypoints[3] && flights[0].waypoints[3].isPattern && flights[0].waypoints[3].laps') === 4, 'the circuits were not added on the stop');
+    assert(ev('flights[1].waypoints[0].name') === 'ENTC' && ev('sectorOpenedByStop(flights, 0, 2)') === 1, 'circuits broke the link to the next sector');
+    assert(!/Add circuits here/.test(await menuLabels(0, 2)), 'a second set of circuits is offered on a stop that has them');
+
+    // AND BACK: one plan again, flown over at the planning altitude, named after the place.
+    await viaMenu(0, 2, 'Fly over instead');
+    assert(ev('flights.length') === 1, 'the plans did not join: ' + ev('flights.length'));
+    assert(ev('flights[0].waypoints.map(w => w.name).join(">")') === 'ENDU>MID>Tromsø>NORTH>ENSR', 'the joined route: ' + ev('flights[0].waypoints.map(w => w.name).join(">")'));
+    const over = ev('flights[0].waypoints[2]');
+    assert(over.alt === 2500 && over.flyby === true && !over.stop, 'the fly-by was left on the runway, or is still a landing: ' + JSON.stringify(over));
+    assert(ev('flights[0].waypoints[1].msa') === 3100 && ev('flights[0].waypoints[3].msa') === 4200, 'the round trip lost an MSA');
+    ev('undoLast(true)');
+    assert(ev('flights.length') === 2 && ev('flights[0].waypoints[2].stop') === 'touch-go', 'one undo did not put the landing and its plan back');
+  } finally { ev(SEED); }
+});
+
+TA('deleting a stop can join its two plans into one; a waypoint snaps to a fix and moves in the route (v17.19)', async () => {
+  try {
+    ev(RESHAPE_ROUTE());
+    await viaMenu(0, 2, 'Full stop at ENTC');
+    assert(ev('flights.length') === 2, 'fixture: the plan did not split');
+    const pr = w.deleteWaypointFromFlight(0, 2); await tick();
+    assert(/join the two plans/.test(openDlg().textContent), 'deleting a stop does not offer to join the plans');
+    answerDialog('join the two plans'); await pr; await tick();
+    assert(ev('flights.length') === 1 && ev('flights[0].waypoints.map(w => w.name).join(">")') === 'ENDU>MID>NORTH>ENSR',
+      'the stop was not removed with the plans joined: ' + ev('flights[0].waypoints.map(w => w.name).join(">")'));
+    ev('undoLast(true)');
+    assert(ev('flights.length') === 2 && ev('flights[0].waypoints[2].name') === 'ENTC', 'one undo did not put the stop and its plan back');
+
+    // Snap: a hand-placed waypoint near a reporting point takes its coordinate and name.
+    const soda = aipDataset().aerodromes.find((x) => x.icao === 'ENDU').points.find((q) => q.name === 'SODA');
+    ev(`flights = [{ id: 1, title: "A", depElev: 254, waypoints: [${adWp('ENDU')},
+        { lat: ${soda.lat + 0.01}, lng: ${soda.lng}, name: "WP2", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+        { lat: 69.40, lng: 18.9, name: "WP3", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11, msa: 3000, via: [[69.3, 18.8]] },
+        ${adWp('ENTC')}] }]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    const near = await menuLabels(0, 1);
+    assert(/Snap to SODA/.test(near) && /NM away/.test(near), 'no snap offered beside SODA: ' + near);
+    await viaMenu(0, 1, 'Snap to SODA');
+    const snapped = ev('flights[0].waypoints[1]');
+    assert(snapped.name === 'SODA' && snapped.lat === soda.lat && snapped.lng === soda.lng && snapped.anchor === 'AIP-RP', 'not snapped: ' + JSON.stringify(snapped));
+    assert(!/Snap to SODA/.test(await menuLabels(0, 1)), 'a waypoint already on the fix is offered the snap again');
+    // Move: SODA later, past WP3. The legs changed, so WP3's via points and MSA go - and the toast says so.
+    await viaMenu(0, 1, 'Later in the route');
+    assert(ev('flights[0].waypoints.map(w => w.name).join(">")') === 'ENDU>WP3>SODA>ENTC', 'the move: ' + ev('flights[0].waypoints.map(w => w.name).join(">")'));
+    assert(ev('"msa" in flights[0].waypoints[1]') === false && ev('"via" in flights[0].waypoints[1]') === false, 'a moved leg kept the MSA typed for the old one');
+    assert(ev('highlightedWaypoint && highlightedWaypoint.wpIdx') === 2, 'the moved waypoint is not the selected one');
+    assert(!/Later in the route/.test(await menuLabels(0, 2)), 'SODA was offered a move past the destination aerodrome: ' + await menuLabels(0, 2));
+    await viaMenu(0, 2, 'Earlier in the route');
+    assert(ev('flights[0].waypoints[1].name') === 'SODA', 'it did not move back earlier');
+  } finally { ev(SEED); }
+});
+
+TA('a waypoint dropped on a fix becomes it; dropped on an aerodrome it asks what happens and splits the plan (v17.19)', async () => {
+  // The author: "when dragging and dropping a waypoint(not a via) on a fix, it
+  // will rename and snap there. If its dragged and dropped to an airport, it
+  // will suggest the landing menu and create the next flight plan from there."
+  const drop = (i, lat, lng) => ev(`(function(){ var m = markers[${i}]; m._latlng = { lat: ${lat}, lng: ${lng} };
+    m._h.dragstart(); m._h.drag({ target: m }); m._h.dragend({ target: m }); })()`);
+  const soda = aipDataset().aerodromes.find((x) => x.icao === 'ENDU').points.find((q) => q.name === 'SODA');
+  const entc = aipDataset().aerodromes.find((x) => x.icao === 'ENTC');
+  const route = `flights = [{ id: 1, title: "A", depElev: 254, waypoints: [${adWp('ENDU')},
+      { lat: 69.20, lng: 18.30, name: "WP2", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      { lat: 69.50, lng: 18.70, name: "WP3", alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 },
+      ${adWp('ENSR')}] }]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+  try {
+    ev("window.__stubZoom = 10; window.__stubBounds = { south: 68.8, west: 17.2, north: 69.9, east: 19.6 };");
+    ev('aircraftProfile.fixesOn = true;'); ev(route); ev('drawFixes();');
+    const tol = moduleExports.replan.dropToleranceNM(14, 10, soda.lat);
+    // A NEAR MISS IS NOT A DROP ON IT: three tolerances away, nothing happens.
+    drop(1, soda.lat + (tol * 3) / 60, soda.lng); await tick();
+    assert(ev('flights[0].waypoints[1].name') === 'WP2' && !openDlg(), 'a waypoint dropped near, not on, a fix was snapped');
+    // On it (inside the tolerance): renamed, on the published coordinate.
+    drop(1, soda.lat + (tol * 0.5) / 60, soda.lng); await tick();
+    const s = ev('flights[0].waypoints[1]');
+    assert(s.name === 'SODA' && s.lat === soda.lat && s.lng === soda.lng && s.anchor === 'AIP-RP', 'the drop on SODA did not snap: ' + JSON.stringify(s));
+    // One undo (the drag's own step) puts it back where it was picked up - the near-miss position.
+    ev('undoLast(true)');
+    assert(ev('flights[0].waypoints[1].name') === 'WP2', 'the snap was not part of the drag\'s undo step');
+    // WITH THE FIXES LAYER OFF there is nothing to drop on.
+    ev('aircraftProfile.fixesOn = false; drawFixes();');
+    drop(1, soda.lat, soda.lng); await tick();
+    assert(ev('flights[0].waypoints[1].name') === 'WP2', 'a fix that is not drawn caught a drop');
+    ev('aircraftProfile.fixesOn = true; drawFixes();');
+
+    // ON AN AERODROME: the landing question; a touch & go splits the plan there.
+    ev(route);
+    drop(2, entc.lat, entc.lng); await tick();
+    assert(openDlg() && /dropped on ENTC/.test(openDlg().textContent) && /Touch & go/.test(openDlg().textContent) && /Full stop/.test(openDlg().textContent)
+      && /Fly-by/.test(openDlg().textContent), 'no landing question after a drop on ENTC');
+    answerDialog('Touch & go'); await tick(); await tick();
+    assert(ev('flights.length') === 2 && ev('flights[0].waypoints[2].stop') === 'touch-go' && ev('flights[0].waypoints[2].name') === 'ENTC'
+      && ev('flights[0].waypoints[2].alt') === entc.elevFt, 'the drop did not make the stop: ' + ev('JSON.stringify(flights[0].waypoints[2])'));
+    assert(ev('flights[1].waypoints.map(w => w.name).join(">")') === 'ENTC>ENSR' && ev('flights[1].depElev') === entc.elevFt, 'the next plan was not created from the stop');
+    ev('undoLast(true)');
+    assert(ev('flights.length') === 1 && ev('flights[0].waypoints[2].name') === 'WP3' && ev('flights[0].waypoints[2].lat') === 69.5,
+      'one undo did not put the waypoint back where it was picked up');
+    // Fly-by: named after the place, no split. "Leave it" changes nothing but the position.
+    drop(2, entc.lat, entc.lng); await tick(); answerDialog('Fly-by'); await tick(); await tick();
+    assert(ev('flights.length') === 1 && ev('flights[0].waypoints[2].flyby') === true && ev('flights[0].waypoints[2].alt') === 2500, 'the fly-by: ' + ev('JSON.stringify(flights[0].waypoints[2])'));
+    ev(route);
+    drop(2, entc.lat, entc.lng); await tick(); answerDialog('Leave it where I dropped it'); await tick();
+    assert(ev('flights[0].waypoints[2].name') === 'WP3' && ev('flights[0].waypoints[2].lat') === entc.lat && !ev('flights[0].waypoints[2].stop'), 'declining changed the waypoint');
+    // The FIRST waypoint is asked the departure question instead.
+    ev(route.replace('"WP2"', '"X"'));
+    ev('flights[0].waypoints[0].name = "DEP"; refreshMap();');
+    drop(0, entc.lat, entc.lng); await tick();
+    assert(/Departure/.test(openDlg().textContent) && !/Touch & go/.test(openDlg().textContent), 'the first waypoint was offered a landing');
+    answerDialog('Departure'); await tick(); await tick();
+    assert(ev('flights[0].waypoints[0].name') === 'ENTC' && ev('flights[0].depElev') === entc.elevFt && ev('flights[0].waypoints[0].alt') === entc.elevFt, 'the departure was not put on the field');
+  } finally { if (openDlg()) answerDialog('Leave'); ev('aircraftProfile.fixesOn = false; drawFixes();'); ev(SEED); }
+});
+
+TA('the leg panel adds a stop at a nearby aerodrome in the middle of a route (v17.19)', async () => {
+  // The author: "if i have a route, that has no flyby but a nearby airport, i
+  // can add a stop there in the middle of the flightplan instead of having the
+  // CTRL-Z everything after to make a new plan in between."
+  const entc = aipDataset().aerodromes.find((x) => x.icao === 'ENTC');
+  try {
+    ev(`flights = [{ id: 1, title: "A", depElev: 254, waypoints: [${adWp('ENDU')},
+        { lat: 69.60, lng: 18.60, name: "WEST", alt: 2500, oat: 10, wdir: 240, wspd: 12, var: -11 },
+        { lat: 69.75, lng: 19.40, name: "EAST", alt: 3000, oat: 8, wdir: 250, wspd: 15, var: -12, msa: 4200, via: [[69.70, 19.0]] },
+        ${adWp('ENSR')}] }]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    // Right-click the WEST -> EAST leg, near Tromsø.
+    ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.68, lng: 18.95 }, originalEvent: { preventDefault: function(){} } })`);
+    const host = doc.getElementById('leg-nearby-ads');
+    const btn = [...host.querySelectorAll('button')].find((b) => /^ENTC/.test(b.textContent));
+    assert(btn && /NM/.test(btn.textContent), 'the leg panel does not offer ENTC near the click: ' + host.textContent);
+    assert(host.querySelectorAll('button').length <= 3, 'the panel lists more than three aerodromes');
+    btn.click(); await tick();
+    assert(doc.getElementById('leg-modal').style.display !== 'flex', 'the leg panel stayed open over the question');
+    assert(/ENTC - what happens here/.test(openDlg().textContent), 'no question about what happens at ENTC');
+    answerDialog('Full stop'); await tick(); await tick();
+    assert(ev('flights.length') === 2, 'the stop did not split the plan: ' + ev('flights.length'));
+    assert(ev('flights[0].waypoints.map(w => w.name).join(">")') === 'ENDU>WEST>ENTC' && ev('flights[1].waypoints.map(w => w.name).join(">")') === 'ENTC>EAST>ENSR',
+      'the route: ' + ev('flights.map(f => f.waypoints.map(w => w.name).join(">")).join(" / ")'));
+    const stop = ev('flights[0].waypoints[2]');
+    assert(stop.stop === 'full-stop' && stop.lat === entc.lat && stop.alt === entc.elevFt && stop.wdir === 250 && stop.msa === 4200,
+      'the stop did not take the leg\'s own wind and MSA, or is not on the field: ' + JSON.stringify(stop));
+    assert(ev('flights[1].waypoints[1].msa') === 4200, 'the second half of the leg lost its MSA');
+    ev('undoLast(true)');
+    assert(ev('flights.length') === 1 && ev('flights[0].waypoints.length') === 4, 'one undo did not remove the stop and rejoin the route');
+    // A fly-by: an ordinary waypoint on the leg, at the leg's altitude, no split.
+    ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.68, lng: 18.95 }, originalEvent: { preventDefault: function(){} } })`);
+    [...doc.getElementById('leg-nearby-ads').querySelectorAll('button')].find((b) => /^ENTC/.test(b.textContent)).click(); await tick();
+    answerDialog('Fly-by'); await tick(); await tick();
+    assert(ev('flights.length') === 1 && ev('flights[0].waypoints[2].flyby') === true && ev('flights[0].waypoints[2].alt') === 3000, 'the fly-by: ' + ev('JSON.stringify(flights[0].waypoints[2])'));
+    // Far from any aerodrome the panel says so rather than offering one 200 NM away.
+    ev(`flights = [{ id: 1, title: "A", depElev: 0, waypoints: [
+        { lat: 72.0, lng: 5.0, name: "A", alt: 2500, oat: 0, wdir: 0, wspd: 0, var: 0 },
+        { lat: 72.5, lng: 6.0, name: "B", alt: 2500, oat: 0, wdir: 0, wspd: 0, var: 0 }] }]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`);
+    ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 72.25, lng: 5.5 }, originalEvent: { preventDefault: function(){} } })`);
+    assert(!doc.getElementById('leg-nearby-ads').querySelector('button') && /No published aerodrome within/.test(doc.getElementById('leg-nearby-ads').textContent),
+      'an aerodrome was offered in the middle of the Norwegian Sea');
+    ev('closeLegModal()');
+  } finally { if (openDlg()) answerDialog('Cancel'); ev('if (typeof closeLegModal === "function") closeLegModal();'); ev(SEED); }
 });
 
 // v17.2: three modern looks (Slate, Chart, Float) - see src/skins.css.

@@ -393,6 +393,17 @@
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
             <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>landing</b> that is inside the hours but within <b>30 minutes</b> of a closing (or an opening) gets a small <b>amber</b> label on the card and a chip in that sector's header — "ENDU ATS closes 18 min after ETA" — so a headwind or a late start cannot quietly turn it into a closed arrival. It is a heads-up, not a finding: the red banner is for a landing that is outside the hours as planned. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> (ippc.no cannot be read by a browser page): check them before flight.</li>
+            <li><b>MSA per leg</b>: the plan table's <b>MSA</b> column takes <b>your own figure</b> for each leg, read off the chart. Nothing computes it. It is saved with the route and printed in the OFP's MSA column; empty stays empty.</li>
+            <li><b>Reshaping a route you already planned</b> — all from the right-click menus, one Ctrl+Z each:
+              <ul>
+                <li><b>Land where you were flying past.</b> Right-click a waypoint at an aerodrome &rarr; <b>Touch &amp; go at&hellip;</b> or <b>Full stop at&hellip;</b>. The plan ends there and <b>everything after it becomes the next flight plan</b>, departing from the field elevation, with its ground time in its header.</li>
+                <li><b>And back.</b> Right-click a stop &rarr; <b>Fly over instead</b>: the landing goes, its circuits go, and the plan it opened is <b>joined back on</b>. The waypoint is put at your planning altitude — check the Alt column. The same menu <b>switches a touch &amp; go and a full stop</b> and <b>adds circuits</b>.</li>
+                <li><b>Deleting a stop</b> that opened a planned sector now also offers <b>Delete it and join the two plans</b> — one longer plan flown straight past.</li>
+                <li><b>A stop in the middle of a leg.</b> Right-click the <b>leg line</b>: the panel lists the nearest published aerodromes under <b>Add a stop or fly-by at</b>. Pick one and say what happens there.</li>
+                <li><b>Drag a waypoint onto a fix.</b> Dropped on a reporting point's symbol it <b>becomes that fix</b> (name and published coordinate). Dropped on an aerodrome it asks <b>Touch &amp; go / Full stop / Fly-by</b> and splits the plan there. The fixes layer must be on — you drop on what you can see. Via points are not affected.</li>
+                <li><b>Snap</b> and <b>reorder</b>: a waypoint within 3 NM of a reporting point is offered <b>Snap to&hellip;</b>; an en-route waypoint can move <b>Earlier / Later in the route</b>. The departure, the destination and stops stay put. Moving a waypoint clears the via points, altitude targets and <b>MSA</b> typed for the legs that changed — the message says how many.</li>
+              </ul>
+            </li>
             <li><b>Right-click a waypoint</b> to <b>rename</b> or <b>delete</b> it without leaving the map. (Right-click the <b>circuit box</b> to change its <b>laps</b> and circuit altitude, or delete it; it cannot be renamed, since its name is the marker that makes it a circuit.) Right-clicking the <i>line between</i> waypoints opens the leg panel instead — see below.</li>
             <li><b>Keyboard shortcuts, and they are yours.</b> <b>Settings → ⌨ Keyboard</b> lists every action the planner can do and lets you bind any of them to any keystroke — <b>click the shortcut box</b> on the row, press the key you want. While it is waiting, the <b>Clear</b> button becomes <b>Cancel</b>; Escape backs out too. Out of the box: <b>Ctrl+Z</b> / <b>Ctrl+Shift+Z</b> undo and redo (⌘ on Mac — the buttons <i>name the step</i> they will take back), <b>Ctrl+S</b> saves, <b>/</b> opens Find fix, <b>1</b>–<b>9</b> activate that flight plan, <b>,</b> and <b>.</b> step back and forward through the plans (stopping at the first and last rather than wrapping), and <b>Delete</b> removes the selected waypoint — click one on the map to select it, Edit Mode only, since View Mode is read-only. <b>To deselect</b>, click the selected waypoint again, press <b>Escape</b>, or use the <b>✕ Deselect</b> button that appears in the map controls while something is selected (in View Mode a click on the empty map does it too).
               <br><b>Most actions ship with no shortcut on purpose</b>, so the keyboard is yours rather than full of bindings nobody asked for: the airspace and fix layers, the base chart, the ruler, View Mode, a new plan, the wind matrix, Settings, this guide, Print and the layout are all in the list waiting to be claimed.
@@ -495,7 +506,7 @@
               <ul>
                 <li><b>What is filled:</b> From/To, TAS, TT, VAR, MT, wind, WCA, accumulated distance &amp; time, FF, leg and accumulated fuel, PL, MH, GS, leg distance &amp; time, ETO, estimated fuel remaining, the Total line, the date and the departure fuel.</li>
                 <li><b>The ACC columns count the whole flight</b>, not the sector: on a multi-sector flight the accumulated distance, time and fuel carry straight on from the sheet before, so the last line of the last sheet is the whole-flight total. On the <b>Total line</b> at the foot of each sheet, the <b>ACC distance and time</b> and the <b>Acc fuel</b> cells repeat the <b>accumulated</b> figures (the flight so far), while the <b>Intermediate Time</b> total is <b>that sector's own</b> flight time. The sector's own distance and fuel are on the flight plan page (and the sector's trip fuel on its page 2). Fuel remaining is a state rather than a sum, so it is the figure at the end of that sector.</li>
-                <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> (this tool has no terrain data — read it off your chart), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>CREW, PASSENGERS and PIC</b> — crew are people, and the planner holds no one's name. <b>Reg</b> is filled from the aircraft you pick on the Mass &amp; Balance tab, and is blank until you pick one — a tail number identifies a machine, not a person.</li>
+                <li><b>What is deliberately left blank</b>, because filling it would be a guess: <b>MSA</b> unless you type it (this tool has no terrain data — read it off your chart and enter it in the plan's <b>MSA</b> column; a leg you leave empty prints an empty box), <b>ATO / Diff / ACT</b> and the block, take-off and landing times (those are actuals you record in flight), <b>Freq</b> (AIP frequencies belong to airspace, not to a leg), the <b>alternate</b> line, and <b>CREW, PASSENGERS and PIC</b> — crew are people, and the planner holds no one's name. <b>Reg</b> is filled from the aircraft you pick on the Mass &amp; Balance tab, and is blank until you pick one — a tail number identifies a machine, not a person.</li>
                 <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. <b>Alternate and extra fuel</b> are typed on the M&amp;B tab (US gal, timed at 12 gal/h, not stored) and printed with the <b>total fuel required</b> - trip + alternate + extra + final reserve; a box you leave empty stays empty and adds nothing. Left blank for your pen: contingency fuel (not counted in the total), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. <b>Trip fuel is all the fuel the plan uses</b>, a touch &amp; go's ground time included - on a sector's own page too, which says so beside its title. On a whole-flight sheet the fuel taken on at a refuelling stop is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
                 <li><b>Choosing an aircraft loads its standard baggage</b> - 7.3 lb at A and 0.7 lb at C on every aircraft, and LN-TRE's 22.7 lb at B, as the school's workbook does. They are ordinary baggage lines you can see and type over; choosing a tail again resets them.</li>
@@ -680,6 +691,10 @@
           <div class="setting-row">
             <label>Insert a waypoint:</label>
             <div><button class="btn btn-outline btn-sm" onclick="insertWaypointFromLegPanel()">Insert one where I right-clicked</button></div>
+          </div>
+          <div class="setting-row">
+            <label title="Adds the aerodrome to this leg and asks what happens there. A touch &amp; go or a full stop ends this plan at it; the rest of the route becomes the next flight plan.">Add a stop or fly-by at:</label>
+            <div id="leg-nearby-ads" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
           </div>
         </div>
       </div>
@@ -1279,12 +1294,13 @@
     //   take-off / landing distance vs a runway -> src/lib/rwyperf.js
     //   the little runway drawn on that card    -> src/lib/rwydiagram.js
     //   ATS opening hours, is it open?  -> src/lib/opshours.js
+    //   splitting / joining plans at a stop -> src/lib/replan.js
     //
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 157 inline on*= handlers - 125 written
-    // into the markup and 32 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 160 inline on*= handlers - 125 written
+    // into the markup and 35 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -1509,7 +1525,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.18';
+    const APP_VERSION = '17.19';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2838,6 +2854,9 @@
         isPattern: false, laps: 3,
         via: via.slice(0, best.insertAt)
       };
+      // Both halves keep the MSA typed for the whole leg (v17.19): it covered
+      // all of it, so it still covers each part.
+      if (typeof after.msa === 'number') wp.msa = after.msa;
       after.via = via.slice(best.insertAt);
       fl.waypoints.splice(best.legEnd, 0, wp);
       refreshMap(); renderAllFlightTables(); saveActiveState();
@@ -3727,6 +3746,8 @@
               refreshMap();
               renderAllFlightTables();
               saveActiveState();
+              // Dropped ON a published fix? Then it becomes that fix (v17.19).
+              waypointDropped(fIdx, idx);
             });
           }
 
@@ -4473,6 +4494,32 @@
       // before the flag existed, or a point clicked onto the field by hand, is
       // told apart from a landing - the planner does not guess which it is.
       const flybyAd = !isPat && !wp.stop && wp.anchor !== 'AIP-RP' ? aerodromeAt(wp) : null;
+      // RESHAPING THE ROUTE FROM HERE (v17.19). Only what this waypoint can
+      // actually do is offered, so an ordinary en-route fix shows none of it.
+      const ident = waypointIdent(fIdx, wpIdx);
+      const stopAd = !isPat && !wp.stop && wpIdx > 0 && wp.anchor !== 'AIP-RP' ? anchorAdAt(wp) : null;
+      const laterLegs = fl.waypoints.slice(wpIdx + 1).filter((w) => !w.isPattern).length;
+      const opened = wp.stop ? sectorOpenedByStop(flights, fIdx, wpIdx) : -1;
+      const snapTo = !isPat && !wp.stop ? nearestReportingPoint(wp) : null;
+      const splitHint = laterLegs
+        ? 'the ' + laterLegs + ' waypoint' + (laterLegs === 1 ? '' : 's') + ' after it become' + (laterLegs === 1 ? 's' : '') + ' the next flight plan'
+        : 'ends this plan here';
+      const reshape = [
+        ...(stopAd ? [
+          { id: 'tg', label: '\ud83d\udd01 Touch & go at ' + (stopAd.icao || stopAd.name), hint: splitHint },
+          { id: 'fs', label: '\ud83d\udee9 Full stop at ' + (stopAd.icao || stopAd.name), hint: splitHint }
+        ] : []),
+        ...(wp.stop ? [
+          { id: 'overfly', label: '\u27a1 Fly over instead (no landing)',
+            hint: opened >= 0 ? 'joins ' + flightTitle(flights[opened]) + ' back onto this plan' : 'removes the landing' },
+          { id: 'switch', label: wp.stop === 'touch-go' ? '\ud83d\udee9 Make it a full stop' : '\ud83d\udd01 Make it a touch & go' },
+          ...(hasCircuits(flights, fIdx, wpIdx) ? [] : [{ id: 'circuits', label: '\ud83d\udd04 Add circuits here' }])
+        ] : []),
+        ...(snapTo ? [{ id: 'snap', label: '\ud83d\udccd Snap to ' + snapTo.a.name,
+          hint: snapTo.nm.toFixed(1) + ' NM away - takes its published coordinate and name' }] : []),
+        ...(canMoveWaypoint(flights, fIdx, wpIdx, -1) ? [{ id: 'earlier', label: '\u25b2 Earlier in the route' }] : []),
+        ...(canMoveWaypoint(flights, fIdx, wpIdx, 1) ? [{ id: 'later', label: '\u25bc Later in the route' }] : [])
+      ];
       // THE LAPS ARE EDITED HERE TOO (v17.17, the author: "let me also be able
       // to change how many laps in pattern on the map by right clicking the
       // pattern box"). The minutes per lap are the profile's (Flight Defaults),
@@ -4494,14 +4541,387 @@
           ...(flybyAd ? [{ id: 'flyby', label: wp.flyby
             ? '\u2708 Take off / land at ' + flybyAd.icao + ' (not a fly-by)'
             : '\u27a1 Fly-by ' + flybyAd.icao + ' (no landing)' }] : []),
+          ...reshape,
           { id: 'delete', label: isPat ? 'Delete this circuit stop' : 'Delete this waypoint', variant: 'danger' },
           { id: 'cancel', label: 'Cancel', variant: 'ghost' }
         ]
       });
       if (r.id === 'delete') { deleteWaypointFromFlight(fIdx, wpIdx); return; }
       if (r.id === 'flyby') { toggleFlyby(fIdx, wpIdx); return; }
+      // RESHAPING (v17.19): re-read after the await (rule 7) - by the plan's id
+      // and the waypoint's own name and position, not by the indices held above.
+      if (['tg', 'fs', 'overfly', 'switch', 'circuits', 'snap', 'earlier', 'later'].includes(r.id)) {
+        const at = findWaypoint(ident);
+        if (!at) { say('The plan changed while the menu was open - nothing was changed.', 'warn'); return; }
+        if (r.id === 'tg' || r.id === 'fs') makeStopAt(at.fIdx, at.wpIdx, r.id === 'tg' ? 'touch-go' : 'full-stop', anchorAdAt(at.wp));
+        else if (r.id === 'overfly') makeFlybyAt(at.fIdx, at.wpIdx);
+        else if (r.id === 'switch') switchStopKindAt(at.fIdx, at.wpIdx);
+        else if (r.id === 'circuits') await addCircuitsFromMenu(at.fIdx, at.wpIdx);
+        else if (r.id === 'snap') { const fix = nearestReportingPoint(at.wp); if (fix) snapWaypointToFix(at.fIdx, at.wpIdx, fix.a); }
+        else moveWaypointBy(at.fIdx, at.wpIdx, r.id === 'earlier' ? -1 : 1);
+        return;
+      }
       if (r.id !== 'apply') return;
       applyWaypointEdit(fIdx, wpIdx, r.values || {});
+    }
+
+    // =========================================================================
+    // RESHAPING A ROUTE THAT ALREADY EXISTS (v17.19) -> src/lib/replan.js
+    //
+    // The author: "I want more flexibility on a pre-planned route". Every change
+    // is worked out by a pure function over `flights` and applied here as ONE
+    // undo step; this block only finds the aerodrome, names the step, keeps the
+    // active plan pointing at the same plan, and says what happened.
+    // =========================================================================
+    /** The published aerodrome a waypoint is on (inside the circuit radius), as
+     *  the ANCHOR the fixes layer draws - its coordinate, ICAO name, elevation. */
+    function anchorAdAt(wp) {
+      if (!wp || !isFinite(wp.lat) || !isFinite(wp.lng)) return null;
+      let best = null, bestNM = Infinity;
+      for (const a of AIP_ANCHORS) {
+        if (a.kind !== 'AD') continue;
+        const d = roughNM([wp.lat, wp.lng], [a.lat, a.lng]);
+        if (d < bestNM) { bestNM = d; best = a; }
+      }
+      return bestNM <= PATTERN_AD_MAX_NM ? best : null;
+    }
+    /** How far the menu looks for a reporting point to snap to. */
+    const SNAP_OFFER_NM = 3;
+    /** The nearest published REPORTING POINT, when the waypoint is near one but
+     *  not already on it. Aerodromes are not offered here: landing or flying
+     *  over one is the stop / fly-by choice, which puts the waypoint on it too. */
+    function nearestReportingPoint(wp) {
+      if (!wp || !isFinite(wp.lat) || !isFinite(wp.lng)) return null;
+      let best = null, bestNM = Infinity;
+      for (const a of AIP_ANCHORS) {
+        if (a.kind === 'AD') continue;
+        const d = roughNM([wp.lat, wp.lng], [a.lat, a.lng]);
+        if (d < bestNM) { bestNM = d; best = a; }
+      }
+      if (!best || bestNM > SNAP_OFFER_NM) return null;
+      if (best.lat === wp.lat && best.lng === wp.lng && best.name === wp.name) return null;
+      return { a: best, nm: bestNM };
+    }
+    function nextFlightId() { return flights.reduce((max, f) => Math.max(max, f.id || 0), 0) + 1; }
+    /** A waypoint remembered across an await: the plan by ID, the waypoint by
+     *  its own name and position (rule 7 - an index is not an identity). */
+    function waypointIdent(fIdx, wpIdx) {
+      const fl = flights[fIdx], wp = fl && fl.waypoints[wpIdx];
+      return wp ? { id: fl.id, wpIdx, name: wp.name, lat: wp.lat, lng: wp.lng } : null;
+    }
+    function findWaypoint(ident) {
+      if (!ident) return null;
+      const fIdx = flights.findIndex((f) => f.id === ident.id);
+      const wp = fIdx >= 0 ? flights[fIdx].waypoints[ident.wpIdx] : null;
+      return wp && wp.name === ident.name && wp.lat === ident.lat && wp.lng === ident.lng
+        ? { fIdx, wpIdx: ident.wpIdx, wp } : null;
+    }
+    function redrawAfterReshape() {
+      refreshMap();
+      renderAllFlightTables();
+      saveActiveState();
+    }
+    /** A waypoint that moved gets the variation of where it now is - unless the
+     *  pilot typed one (MANUAL is never overwritten, v16.10). */
+    function reResolveVar(wp) {
+      if (!wp || wp.varSource === 'MANUAL') return;
+      const mv = resolveMagVar(wp.lat, wp.lng);
+      wp.var = mv.val; wp.varSource = mv.source;
+    }
+
+    /**
+     * Make an existing waypoint a touch & go or a full stop at aerodrome `a`.
+     * Whatever is flown after it becomes the next plan (splitPlanAtStop).
+     * @param {{noUndo?: boolean}} [o] noUndo: the caller already pushed the step
+     */
+    function makeStopAt(fIdx, wpIdx, kind, a, o) {
+      const was = flights[fIdx] && flights[fIdx].waypoints[wpIdx];
+      if (!was || !a || isDoneMode) return false;
+      const res = splitPlanAtStop(flights, fIdx, wpIdx, { kind, newId: nextFlightId(),
+        at: { lat: a.lat, lng: a.lng, name: a.name, elevFt: typeof a.elevFt === 'number' ? a.elevFt : null } });
+      if (!res) return false;
+      const what = kind === 'touch-go' ? 'a touch & go' : 'a full stop';
+      if (!(o && o.noUndo)) pushUndoState('make ' + was.name + ' ' + what);
+      flights = res.flights;
+      if (res.newPlanIdx >= 0 && activeFlightIndex > fIdx) activeFlightIndex++;
+      const stop = flights[fIdx].waypoints[wpIdx];
+      reResolveVar(stop);
+      highlightedWaypoint = null;
+      redrawAfterReshape();
+      const elev = typeof a.elevFt === 'number' ? ' at ' + a.elevFt + ' ft' : '';
+      if (res.newPlanIdx >= 0) {
+        const legs = flights[res.newPlanIdx].waypoints.filter((w) => !w.isPattern).length - 1;
+        say(stop.name + ' is ' + what + '. The ' + legs + ' leg' + (legs === 1 ? '' : 's') + ' after it ' +
+            (legs === 1 ? 'is' : 'are') + ' now ' + flightTitle(flights[res.newPlanIdx]) + ', departing ' + stop.name + elev +
+            '. Ground time is in its header; Ctrl+Z undoes it.', 'good', 8000);
+      } else if (normaliseBool(aircraftProfile.autoPlanAfterStop, true)) {
+        // Nothing was flown after it: the same as adding a stop at the end.
+        addNewFlightPlan(fIdx);
+        say(stop.name + ' is ' + what + '. Next sector opened, departing ' + stop.name + elev + '.', 'good', 6000);
+      } else {
+        say(stop.name + ' is ' + what + '.', 'good', 5000);
+      }
+      return true;
+    }
+
+    /** The way back: the stop is flown over and the plan it opened joins on. */
+    function makeFlybyAt(fIdx, wpIdx) {
+      const was = flights[fIdx] && flights[fIdx].waypoints[wpIdx];
+      if (!was || !was.stop || isDoneMode) return false;
+      const a = anchorAdAt(was);
+      // A fly-by is en route, at the planning altitude a new fly-by gets (v16.56)
+      // - never left on the runway. With no planning altitude set it keeps the
+      // figure it has, and the message says to set one.
+      const planAlt = Number((document.getElementById('def-alt') || {}).value);
+      const res = mergeStopIntoFlyby(flights, fIdx, wpIdx, {
+        alt: planAlt > 0 ? planAlt : undefined,
+        name: a ? (civilName(a) || was.name) : was.name,
+        flyby: !!a
+      });
+      if (!res) return false;
+      const joinedTitle = res.joinedPlanIdx >= 0 ? flightTitle(flights[res.joinedPlanIdx]) : null;
+      pushUndoState('fly over ' + was.name + ' instead of landing');
+      flights = res.flights;
+      if (res.joinedPlanIdx >= 0) {
+        if (activeFlightIndex === res.joinedPlanIdx) activeFlightIndex = fIdx;
+        else if (activeFlightIndex > res.joinedPlanIdx) activeFlightIndex--;
+      }
+      highlightedWaypoint = null;
+      redrawAfterReshape();
+      const wp = flights[fIdx].waypoints[wpIdx];
+      say(wp.name + ' is flown over at ' + wp.alt + ' ft - ' +
+          (planAlt > 0 ? 'change it in the Alt column if that is not the altitude you cross it at' : 'SET ITS ALTITUDE in the Alt column') + '. ' +
+          (joinedTitle ? joinedTitle + ' was joined on (' + res.joined + ' waypoint' + (res.joined === 1 ? '' : 's') + '). ' : '') +
+          (res.circuits ? 'Its circuits were removed. ' : '') + 'Ctrl+Z puts the landing back.', 'good', 9000);
+      return true;
+    }
+
+    function switchStopKindAt(fIdx, wpIdx) {
+      const was = flights[fIdx] && flights[fIdx].waypoints[wpIdx];
+      if (!was || !was.stop || isDoneMode) return false;
+      const to = was.stop === 'touch-go' ? 'full-stop' : 'touch-go';
+      const res = setStopKind(flights, fIdx, wpIdx, to);
+      if (!res) return false;
+      const hadRefuel = was.fuelAfterGal !== undefined && was.fuelAfterGal !== null;
+      pushUndoState('make ' + was.name + (to === 'touch-go' ? ' a touch & go' : ' a full stop'));
+      flights = res.flights;
+      redrawAfterReshape();
+      say(was.name + ' is now ' + (to === 'touch-go' ? 'a touch & go' : 'a full stop') + ': ' +
+          STOP_DEFAULT_MIN[to] + ' min' + (to === 'full-stop' ? ' on the ground, and the next sector pays start-up and taxi fuel' : '') +
+          (hadRefuel && to === 'touch-go' ? '. Its refuel was removed - a touch & go takes on no fuel' : '') + '.', 'good', 7000);
+      return true;
+    }
+
+    async function addCircuitsFromMenu(fIdx, wpIdx) {
+      const ident = waypointIdent(fIdx, wpIdx);
+      const lapsInput = await promptDialog('Traffic circuit', 'Number of laps', '3',
+        { message: 'Priced at your pattern time and fuel figures in Settings.', okLabel: 'Add circuits' });
+      if (lapsInput === null) return false;
+      const at = findWaypoint(ident);
+      if (!at) return false;
+      const raw = String(lapsInput).trim(), laps = parseInt(raw, 10);
+      if (!Number.isFinite(laps) || laps < 1 || String(laps) !== raw) {
+        say('That is not a number of laps (1 or more) - nothing was changed.', 'error');
+        return false;
+      }
+      const patAlt = patternAltitudeAt(at.wp.lat, at.wp.lng, AIP_ANCHORS);
+      const res = addCircuitsAt(flights, at.fIdx, at.wpIdx, { laps, alt: patAlt ? patAlt.alt : at.wp.alt });
+      if (!res) return false;
+      pushUndoState('add circuits');
+      flights = res.flights;
+      redrawAfterReshape();
+      say(laps + ' lap' + (laps === 1 ? '' : 's') + ' at ' + at.wp.name +
+          (patAlt ? ', circuit at ' + patAlt.alt + ' ft (derived - check the VAC)' : '') + '.', 'good', 6000);
+      return true;
+    }
+
+    /** Put a waypoint on a published reporting point: its coordinate, its name. */
+    function snapWaypointToFix(fIdx, wpIdx, a, o) {
+      const wp = flights[fIdx] && flights[fIdx].waypoints[wpIdx];
+      if (!wp || !a || wp.isPattern || wp.stop || isDoneMode) return false;
+      if (!(o && o.noUndo)) pushUndoState('snap ' + wp.name + ' to ' + a.name);
+      const old = wp.name;
+      wp.lat = a.lat; wp.lng = a.lng; wp.name = a.name;
+      wp.anchor = a.kind === 'AD' ? 'AIP-AD' : 'AIP-RP';
+      delete wp.flyby;
+      reResolveVar(wp);
+      redrawAfterReshape();
+      say((old === a.name ? a.name : old + ' is now ' + a.name) + ', on its published coordinate.', 'good', 5000);
+      return true;
+    }
+
+    function moveWaypointBy(fIdx, wpIdx, dir) {
+      if (isDoneMode) return false;
+      const res = moveWaypoint(flights, fIdx, wpIdx, dir);
+      if (!res) return false;
+      const name = flights[fIdx].waypoints[wpIdx].name;
+      pushUndoState('move ' + name + (dir < 0 ? ' earlier' : ' later') + ' in the route');
+      flights = res.flights;
+      highlightedWaypoint = { fIdx, wpIdx: res.newIdx };
+      redrawAfterReshape();
+      say(name + ' is now waypoint ' + (res.newIdx + 1) + '.' +
+          (res.cleared ? ' The legs around it changed, so ' + res.cleared + ' figure' + (res.cleared === 1 ? '' : 's') +
+            ' typed for the old legs (via points, altitude targets, MSA) ' + (res.cleared === 1 ? 'was' : 'were') + ' cleared.' : ''),
+          res.cleared ? 'warn' : 'good', 8000);
+      return true;
+    }
+
+    /** How close, in screen pixels, a drop has to be to a fix's symbol. */
+    const DROP_ON_FIX_PX = 14;
+    /** The fix a waypoint was dropped ON: one that is DRAWN (the layer is on and
+     *  the zoom shows it), within a few pixels of where the waypoint landed. */
+    function anchorUnderDrop(lat, lng) {
+      if (!fixesEnabled() || !AIP_ANCHORS.length) return null;
+      const b = typeof map.getBounds === 'function' ? map.getBounds() : null;
+      const zoom = typeof map.getZoom === 'function' ? map.getZoom() : 0;
+      if (!b) return null;
+      const shown = visibleAnchors(AIP_ANCHORS,
+        { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }, zoom);
+      const tol = dropToleranceNM(DROP_ON_FIX_PX, zoom, lat);
+      let best = null, bestNM = Infinity;
+      for (const a of shown) {
+        const d = roughNM([lat, lng], [a.lat, a.lng]);
+        if (d < bestNM) { bestNM = d; best = a; }
+      }
+      return best && bestNM <= tol ? best : null;
+    }
+
+    /**
+     * A WAYPOINT WAS DRAGGED AND LET GO (v17.19, the author: "when dragging and
+     * dropping a waypoint (not a via) on a fix, it will rename and snap there.
+     * If its dragged and dropped to an airport, it will suggest the landing menu
+     * and create the next flight plan from there").
+     *
+     * The drag's own undo step ('move a waypoint', pushed at dragstart) covers
+     * all of it, so one Ctrl+Z puts the waypoint back where it was picked up.
+     * A stop is left alone: it is already a landing at a named place.
+     */
+    async function waypointDropped(fIdx, wpIdx) {
+      const wp = flights[fIdx] && flights[fIdx].waypoints[wpIdx];
+      if (!wp || wp.isPattern || wp.stop || isDoneMode) return;
+      const a = anchorUnderDrop(wp.lat, wp.lng);
+      if (!a) return;
+      if (a.kind !== 'AD') { snapWaypointToFix(fIdx, wpIdx, a, { noUndo: true }); return; }
+      const ident = waypointIdent(fIdx, wpIdx);
+      const first = wpIdx === 0;
+      const elev = typeof a.elevFt === 'number' ? ' (' + a.elevFt + ' ft)' : '';
+      const civil = civilName(a);
+      const flyby = { id: 'flyby', label: '\u27a1 Fly-by',
+        hint: civil ? 'flown over, named ' + civil : 'flown over' };
+      const chosen = await ask({
+        title: wp.name + ' dropped on ' + (a.icao || a.name) + ' - what happens here?',
+        message: first
+          ? 'This is the first waypoint of the plan: it is where you take off from, or somewhere you pass.'
+          : 'A touch & go or a full stop ends this plan at the aerodrome' + elev +
+            '; whatever is flown after it becomes the next flight plan.',
+        buttons: first ? [
+          { id: 'departure', label: '\ud83d\udeeb Departure', variant: 'primary', hint: 'take off from here, on the field' + elev },
+          flyby,
+          { id: 'cancel', label: 'Leave it where I dropped it', variant: 'ghost' }
+        ] : [
+          { id: 'tg', label: '\ud83d\udd01 Touch & go', variant: 'primary', hint: STOP_DEFAULT_MIN['touch-go'] + ' min, then climb out again' },
+          { id: 'fs', label: '\ud83d\udee9 Full stop', hint: STOP_DEFAULT_MIN['full-stop'] + ' min on the ground, plus start-up and taxi fuel' },
+          flyby,
+          { id: 'cancel', label: 'Leave it where I dropped it', variant: 'ghost' }
+        ]
+      });
+      const at = findWaypoint(ident);
+      if (!chosen || chosen.id === 'cancel' || !at || isDoneMode) return;
+      if (chosen.id === 'tg' || chosen.id === 'fs') {
+        makeStopAt(at.fIdx, at.wpIdx, chosen.id === 'tg' ? 'touch-go' : 'full-stop', a, { noUndo: true });
+        return;
+      }
+      const w2 = at.wp;
+      w2.lat = a.lat; w2.lng = a.lng; w2.anchor = 'AIP-AD';
+      if (chosen.id === 'departure') {
+        w2.name = a.name; delete w2.flyby;
+        if (typeof a.elevFt === 'number') { w2.alt = a.elevFt; flights[at.fIdx].depElev = a.elevFt; }
+      } else {
+        w2.name = civil || a.name; w2.flyby = true;
+      }
+      reResolveVar(w2);
+      redrawAfterReshape();
+      say(chosen.id === 'departure' ? 'Departing ' + a.name + elev + '.' : w2.name + ' is flown over, on the published coordinate.', 'good', 5000);
+    }
+
+    /** How far from the right-click the leg panel looks for an aerodrome. */
+    const LEG_NEARBY_AD_NM = 25;
+    /** The aerodromes near where a leg was right-clicked, nearest first. */
+    function aerodromesNear(latlng, max) {
+      const out = [];
+      for (const a of AIP_ANCHORS) {
+        if (a.kind !== 'AD') continue;
+        const nm = roughNM([latlng.lat, latlng.lng], [a.lat, a.lng]);
+        if (nm <= LEG_NEARBY_AD_NM) out.push({ a, nm });
+      }
+      out.sort((x, y) => x.nm - y.nm);
+      return out.slice(0, max);
+    }
+    function renderLegNearbyAds() {
+      const host = document.getElementById('leg-nearby-ads');
+      if (!host || !legPanel) return;
+      const list = legPanel.nearby || [];
+      host.innerHTML = list.length
+        ? list.map((n, i) => '<button class="btn btn-outline btn-sm" onclick="insertStopFromLegPanel(' + i + ')" title="' +
+            esc(civilName(n.a) || n.a.name) + '">' + esc(n.a.icao || n.a.name) + ' \u00b7 ' + n.nm.toFixed(1) + ' NM</button>').join(' ')
+        : '<span style="font-size:10px; color:var(--text-muted);">No published aerodrome within ' + LEG_NEARBY_AD_NM +
+          ' NM of where you right-clicked.</span>';
+    }
+
+    /**
+     * A STOP IN THE MIDDLE OF A ROUTE THAT ALREADY EXISTS (v17.19, the author:
+     * "if i have a route, that has no flyby but a nearby airport, i can add a
+     * stop there in the middle of the flightplan instead of having the CTRL-Z
+     * everything after to make a new plan in between").
+     * The aerodrome goes into the leg that was right-clicked, then the usual
+     * question decides what happens there. One undo step.
+     */
+    async function insertStopFromLegPanel(i) {
+      if (!legPanel || isDoneMode) return;
+      const pick = (legPanel.nearby || [])[i];
+      const { fIdx, latlng } = legPanel;
+      const fl0 = flights[fIdx];
+      if (!pick || !fl0) return;
+      const a = pick.a, planId = fl0.id;
+      closeLegModal();
+      const elev = typeof a.elevFt === 'number' ? ' (' + a.elevFt + ' ft)' : '';
+      const civil = civilName(a);
+      const chosen = await ask({
+        title: (a.icao || a.name) + ' - what happens here?',
+        message: 'It goes into the leg you right-clicked. A touch & go or a full stop ends this plan at the aerodrome' +
+                 elev + ', and the rest of the route becomes the next flight plan.',
+        buttons: [
+          { id: 'tg', label: '\ud83d\udd01 Touch & go', variant: 'primary', hint: STOP_DEFAULT_MIN['touch-go'] + ' min, then climb out again' },
+          { id: 'fs', label: '\ud83d\udee9 Full stop', hint: STOP_DEFAULT_MIN['full-stop'] + ' min on the ground, plus start-up and taxi fuel' },
+          { id: 'flyby', label: '\u27a1 Fly-by', hint: civil ? 'an ordinary waypoint named ' + civil : 'an ordinary waypoint' },
+          { id: 'cancel', label: 'Cancel', variant: 'ghost' }
+        ]
+      });
+      if (!chosen || chosen.id === 'cancel' || isDoneMode) return;
+      // RE-READ AFTER THE AWAIT (rule 7): the plan by its id, the leg by position.
+      const fI = flights.findIndex((f) => f.id === planId);
+      const fl = fI >= 0 ? flights[fI] : null;
+      const best = fl ? findPathInsertion(fl.waypoints, latlng) : null;
+      if (!fl || !best) { say('The plan changed while the question was open - nothing was added.', 'warn'); return; }
+      const after = fl.waypoints[best.legEnd];
+      pushUndoState('add ' + (a.icao || a.name) + ' to the route');
+      const via = Array.isArray(after.via) ? after.via : [];
+      const wp = anchorWaypoint(a, { atField: false, alt: after.alt, oat: after.oat, wdir: after.wdir, wspd: after.wspd });
+      const mv = resolveMagVar(wp.lat, wp.lng);
+      wp.var = mv.val; wp.varSource = mv.source;
+      wp.isPattern = false; wp.laps = 3;
+      wp.via = via.slice(0, best.insertAt);
+      after.via = via.slice(best.insertAt);
+      if (typeof after.msa === 'number') wp.msa = after.msa;
+      fl.waypoints.splice(best.legEnd, 0, wp);
+      if (chosen.id === 'flyby') {
+        if (civil) wp.name = civil;
+        wp.flyby = true;
+        redrawAfterReshape();
+        say(wp.name + ' added as a fly-by at ' + wp.alt + ' ft.', 'good', 6000);
+        return;
+      }
+      makeStopAt(fI, best.legEnd, chosen.id === 'tg' ? 'touch-go' : 'full-stop', a, { noUndo: true });
     }
 
     /** Mark a waypoint as flown over, or back as a take-off / landing (v17.1).
@@ -4648,11 +5068,13 @@
             ' planned. Without the landing it departs from nowhere. Ctrl+Z puts back whatever you delete.',
           buttons: [
             { id: 'both', label: 'Delete both', variant: 'primary' },
+            { id: 'join', label: 'Delete ' + wp.name + ' and join the two plans',
+              hint: 'one longer plan, flown straight past' },
             { id: 'stop', label: 'Delete only ' + wp.name },
             { id: 'cancel', label: 'Cancel', variant: 'ghost' }
           ]
         });
-        if (r.id !== 'both' && r.id !== 'stop') return;
+        if (r.id !== 'both' && r.id !== 'stop' && r.id !== 'join') return;
         // RE-READ AFTER THE AWAIT (discipline rule 7): find both plans by id
         // and refuse if the waypoint is no longer the one that was asked about.
         fIdx = flights.findIndex((f) => f.id === ids.fl);
@@ -4663,6 +5085,25 @@
         }
         nextIdx = flights.findIndex((f) => f.id === ids.next);
         dropNext = r.id === 'both' && nextIdx >= 0;
+        // ONE LONGER PLAN (v17.19, the author: "the option to remove a
+        // touch-n-go and revert to one longer flight plan"): the stop goes, the
+        // plan it opened is appended, and the route runs straight on.
+        if (r.id === 'join') {
+          const res = mergeStopIntoFlyby(flights, fIdx, wpIdx, {});
+          if (!res) return;
+          const joinedTitle = res.joinedPlanIdx >= 0 ? flightTitle(flights[res.joinedPlanIdx]) : '';
+          pushUndoState('delete a stop and join the plans');
+          flights = res.flights;
+          flights[fIdx].waypoints.splice(wpIdx, 1);
+          if (res.joinedPlanIdx >= 0) {
+            if (activeFlightIndex === res.joinedPlanIdx) activeFlightIndex = fIdx;
+            else if (activeFlightIndex > res.joinedPlanIdx) activeFlightIndex--;
+          }
+          highlightedWaypoint = null;
+          redrawAfterReshape();
+          say('Removed ' + ids.name + '; ' + joinedTitle + ' was joined on, so it is one plan again. Ctrl+Z puts both back.', 'info', 7000);
+          return 'joined';
+        }
       }
       pushUndoState(dropNext ? 'delete a stop and the sector it opened' : 'delete a waypoint');
       flights[fIdx].waypoints.splice(wpIdx, 1);
@@ -6139,6 +6580,8 @@
       document.getElementById('leg-boc-here').disabled = along.alongNM <= 0.05;
       document.getElementById('leg-bod-here').disabled = along.totalNM - along.alongNM <= 0.05;
       updateLegPreview();
+      legPanel.nearby = aerodromesNear(latlng, 3);
+      renderLegNearbyAds();
       openModal('leg-modal');
     }
 
@@ -7031,10 +7474,11 @@
         table.innerHTML = `
           <thead>
             <tr>
-              <th style="width:10%">From</th>
-              <th style="width:10%">To</th>
+              <th style="width:8%">From</th>
+              <th style="width:8%">To</th>
               <th class="cc" style="width:6%">Profile</th>
               <th class="col-alt" style="width:5%">Alt</th>
+              <th class="col-alt" style="width:4%" title="Minimum safe altitude for the leg - YOUR figure, off the chart. Nothing computes it. Printed in the OFP's MSA column.">MSA</th>
               <th class="cc col-num" style="width:4%">OAT</th>
               <th class="cc" style="width:4%">TAS</th>
               <th class="cc" style="width:4%">TT</th>
@@ -7058,7 +7502,7 @@
           <tbody id="tbody-flight-${fIdx}"></tbody>
           <tfoot>
             <tr style="background:var(--bg-table-head); font-weight:700;">
-              <td colspan="${compactCols ? 7 : 13}" style="text-align:right; padding-right:6px;">SECTOR TOTAL</td>
+              <td colspan="${compactCols ? 8 : 14}" style="text-align:right; padding-right:6px;">SECTOR TOTAL</td>
               <td id="f-tot-dist-${fIdx}" class="calc-cell">0.0</td>
               <td class="cc">-</td>
               <td id="f-tot-time-${fIdx}" class="calc-cell">00:00</td>
@@ -7140,6 +7584,7 @@
               <td><b>${esc(to.name)}</b></td>
               <td class="cc"><span class="type-pattern">PATTERN</span></td>
               <td><input type="number" class="alt-input" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority; \u2191/\u2193 steps 100 ft)" onfocus="this.select()" onchange="pushUndoState('change the circuit altitude'); flights[${fIdx}].waypoints[${wpIdx}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+              <td>-</td>
               <td class="cc">${to.oat}°</td>
               <td class="cc">-</td>
               <td class="cc">-</td>
@@ -7233,7 +7678,7 @@
           printRows.push({ from: from.name, to: to.name, tas: res.dispTas, tt,
             var: Number(to.var), mt: mtNum, wdir: Number(to.wdir), wspd: Number(to.wspd),
             wca: res.rowWCA, accDist: runningAccDist, accTime: formatTimeHHMM(runningAccTime),
-            ff: effFF, legBurn, accBurn: runningAccBurn, alt: to.alt,
+            ff: effFF, legBurn, accBurn: runningAccBurn, alt: to.alt, msa: to.msa,
             mh: mtNum === null ? null : Math.round((mtNum + res.rowWCA + 360) % 360),
             gs: res.effGS, dist, time: formatTimeHHMM(legTime),
             eto: computeETO(runningAccTime) || '', rem: runningFuelRemaining,
@@ -7514,6 +7959,25 @@
       }
     }
 
+    /** The MSA box of a leg (v17.19). Empty clears it; anything that is not a
+     *  whole number of feet in range is refused, never coerced to 0. */
+    function setLegMsa(fIdx, wpIdx, raw) {
+      const wp = flights[fIdx] && flights[fIdx].waypoints[wpIdx];
+      if (!wp) return;
+      const txt = String(raw === null || raw === undefined ? '' : raw).trim();
+      const msa = normaliseMsaFt(txt);
+      if (txt !== '' && msa === null) {
+        say('That is not an MSA (1 to ' + MSA_MAX_FT + ' ft) - nothing was changed.', 'error');
+        renderAllFlightTables();
+        return;
+      }
+      if ((msa === null && wp.msa === undefined) || msa === wp.msa) return;
+      pushUndoState('change an MSA');
+      if (msa === null) delete wp.msa; else wp.msa = msa;
+      renderAllFlightTables();
+      saveActiveState();
+    }
+
     function createRowHTML(fromName, toName, type, altDisplay, oat, tas, tt, magVar, varIndicator, mt, wdir, wspd, wca, mh, gs, dist, threeMinNM, legTime, accTime, ff, legBurn, accBurn, remFuel, fIdx, wpIndex, showDelete) {
       const isHighlighted = (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === (wpIndex+1));
       const tr = document.createElement('tr');
@@ -7529,6 +7993,7 @@
         <td><b>${esc(toName)}</b></td>
         <td class="cc">${typeBadge}</td>
         <td><input type="number" class="alt-input" value="${flights[fIdx].waypoints[wpIndex+1].alt}" step="500" title="Target Alt (\u2191/\u2193 steps 500 ft)" onfocus="this.select()" onchange="pushUndoState('change an altitude'); flights[${fIdx}].waypoints[${wpIndex+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+        <td><input type="number" class="alt-input msa-input" value="${typeof flights[fIdx].waypoints[wpIndex+1].msa === 'number' ? flights[fIdx].waypoints[wpIndex+1].msa : ''}" step="100" min="0" title="MSA for this leg - your own figure, off the chart. Not computed. Printed in the OFP's MSA column; empty prints an empty box." onfocus="this.select()" onchange="setLegMsa(${fIdx}, ${wpIndex+1}, this.value)" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="cc"><input type="number" value="${oat}" title="OAT (\u2191/\u2193 steps 1 \u00b0C)" onfocus="this.select()" onchange="pushUndoState('change an OAT'); flights[${fIdx}].waypoints[${wpIndex+1}].oat=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="calc-cell cc">${tas}</td>
         <td class="calc-cell cc">${String(tt).padStart(3, '0')}°</td>
@@ -8094,7 +8559,7 @@
       if (parts.length === 0) return null;
       const tr = document.createElement('tr');
       tr.className = 'sub-leg-row no-select';
-      tr.innerHTML = `<td colspan="${compactCols ? 13 : 22}">↳ ${parts.map(esc).join(' &nbsp;|&nbsp; ')}</td>`;
+      tr.innerHTML = `<td colspan="${compactCols ? 14 : 23}">↳ ${parts.map(esc).join(' &nbsp;|&nbsp; ')}</td>`;
       return tr;
     }
 

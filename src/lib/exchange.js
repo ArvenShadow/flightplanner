@@ -172,6 +172,26 @@ function num(/** @type {any} */ v) {
   return typeof n === 'number' ? n : NaN;
 }
 
+/** The highest MSA a pilot can type for a leg, ft. A typo guard, nothing more:
+ *  it is far above anything a C182 plans and exists to refuse 250000. */
+export const MSA_MAX_FT = 30000;
+
+/**
+ * A LEG'S MSA AS THE PILOT TYPED IT (v17.19, the author: "I want to set an MSA
+ * per leg and it reflects on the printed OFP"). Whole feet, 1 to MSA_MAX_FT.
+ * `null` means none - an empty box, which prints as an empty cell for the pen.
+ * NOTHING COMPUTES THIS: the planner has no terrain data by decision, so the
+ * figure is the pilot's, off the chart.
+ * @param {unknown} v
+ * @returns {number|null}
+ */
+export function normaliseMsaFt(v) {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 1 || n > MSA_MAX_FT) return null;
+  return Math.round(n);
+}
+
 /**
  * ONE waypoint, rebuilt rather than patched.
  *
@@ -222,6 +242,9 @@ function sanitiseWaypoint(/** @type {any} */ w) {
   // file carries - but nothing writes them any more.
   const at = num(w.altAtNM);
   if (Number.isFinite(at) && at > 0) out.altAtNM = at;
+  // The MSA of the leg ENDING here (v17.19) - the pilot's own figure.
+  const msa = normaliseMsaFt(w.msa);
+  if (msa !== null) out.msa = msa;
   // A LEG'S OWN DESCENT RATE (v17.9): kept only inside the range the engine
   // accepts, so a file cannot carry a rate the schedule would silently ignore.
   const rod = num(w.rodFpm);

@@ -266,7 +266,9 @@ export function ofpRowCells(row) {
     legBurn: row.paper ? whole(row.legBurn) : one(row.legBurn),
     accBurn: row.paper ? whole(row.accBurn) : one(row.accBurn),
     to: row.to,
-    msa: BLANK,
+    // THE PILOT'S OWN MSA FOR THE LEG (v17.19), or an empty box for the pen.
+    // Never computed here: there is no terrain data, by decision.
+    msa: typeof row.msa === 'number' && row.msa > 0 ? whole(row.msa) : BLANK,
     pl: whole(row.alt),
     mh: row.mh === null || row.mh === undefined ? '---' : pad3(row.mh),
     gs: whole(row.gs),

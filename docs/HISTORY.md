@@ -10,6 +10,73 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## A LEG'S MSA IS TYPED BY THE PILOT, AND AN EXISTING ROUTE CAN BE RESHAPED (v17.19)
+
+The author, after being offered ideas: *"I want to set an MSA per leg and it
+reflects on the printed OFP."* *"Yes, change between T&G, Fullstop, reversing is
+genius (figure out an intuitive way to implement the option without making it in
+the way), switching between fullstop and T&G, and adding cirquits. Snapping,
+reordering is also nice. But also if i have a route, that has no flyby but a
+nearby airport, i can add a stop there in the middle of the flightplan instead
+of having the CTRL-Z everything after to make a new plan in between. Also the
+option to remove a touch-n-go and revert to one longer flight plan"* - *"when
+dragging and dropping a waypoint(not a via) on a fix, it will rename and snap
+there. If its dragged and dropped to an airport, it will suggest the landing
+menu and create the next flight plan from there."* The leg panel stays as it is
+(*"Those can still be used yes"*). ("Reversing" is the way back from a stop to a
+fly-by; reversing a route's direction was not asked for and is not built.)
+
+### The MSA
+
+- `wp.msa` on the waypoint the leg ENDS at, like every other per-leg figure;
+  whole feet, 1 to 30 000 (`normaliseMsaFt`, a typo guard), kept by the
+  sanitiser. A new **MSA** column after Alt in the plan table; `setLegMsa`
+  refuses an unreadable figure instead of coercing it. `ofpRowCells` prints it
+  in the form's MSA cell, an empty box when none. **NOTHING COMPUTES IT** - the
+  v16.41 "no terrain data by decision" rule stands; this supersedes only "MSA
+  is blank". Page 2's MSA box is still blank. Splitting a leg keeps the MSA on
+  both halves (it covered all of it).
+- The column cost width: at 1280 px "Dist (NM)" and "Burn (gal)" wrapped and the
+  header grew 12 px. From/To went 10% -> 8% and the header is one line again
+  (measured in Chromium: thead 23 px, FINNSNES still on one line).
+- Seven tests read plan cells by position and were shifted by one, deliberately.
+
+### Reshaping (`src/lib/replan.js`, pure; the page applies each as one undo step)
+
+- **`splitPlanAtStop`**: the waypoint becomes the stop that ends its plan, put
+  ON the aerodrome (coordinate, ICAO name, field elevation); what was flown
+  after it moves untouched into a new plan directly behind, departing from the
+  stop. That is exactly the shape `sectorOpenedByStop` (v17.4) recognises, so
+  ground time, taxi fuel, the print and "deleting a stop deletes its sector" all
+  apply with no new rule. Nothing after it: only the stop is made, and the page
+  opens the next sector as it always did.
+- **`mergeStopIntoFlyby`**: the way back. Circuits go, the next plan loses its
+  departure and is appended. The fly-by gets the PLANNING ALTITUDE (Flight
+  Defaults), never the runway's - the v16.56 bug - and the toast says to check
+  it. A next plan that is not this stop's is left alone.
+- **`setStopKind`** (minutes follow the kind; a refuel leaves with the full
+  stop), **`addCircuitsAt`** (one PATTERN on the fix, a second refused),
+  **`moveWaypoint`** (en-route waypoints only: departure first, DESTINATION
+  last - a test caught the first version swapping the destination inward; the
+  three changed legs lose via / target / rate / **MSA**, counted for the toast).
+- **Where it is offered, so it is not in the way**: only in the waypoint's
+  right-click menu and only what that waypoint can do - an en-route fix sees
+  none of the stop options. Deleting a stop gains "delete and join the plans".
+  The leg panel lists up to 3 aerodromes within 25 NM of the right-click
+  (`insertStopFromLegPanel`). No circuits question on a conversion: "Add
+  circuits here" is its own item.
+- **Drag and drop** (`waypointDropped`, from the marker's dragend): a drop within
+  14 px (`dropToleranceNM`, Web-Mercator ground resolution) of a fix that is
+  DRAWN snaps to it; an aerodrome asks the landing question (the first waypoint
+  is asked Departure / Fly-by). The drag's own undo step covers it. Stops and
+  circuits are left alone; via points use a different handler and are untouched.
+- Verified in Chromium with real mouse drags: onto BREIVIKA (renamed, on the
+  published coordinate) and onto ENTC (question, touch & go, plan split).
+- `verify:layout`: its number-cell probe expects 8 (was 6) and carries an MSA.
+  ITS DAYLIGHT-CARD CHECK FAILS ON UNMODIFIED MAIN in this container (442 px
+  into 422): the Chromium here is newer than the one it last passed on. Not
+  caused by this change (measured: identical before and after) and not fixed.
+
 ## THE MAP IS THE RULER'S WHILE IT RUNS (v17.18)
 
 The author: *"when in ruler mode, please make all routes transparent (same as a
