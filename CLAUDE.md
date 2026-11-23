@@ -292,6 +292,15 @@ three cheap disciplines applied every time the page is touched:
 - **Deleting a stop deletes the sector it opened** (found by position, not a
   stored link): an empty one silently, a planned one after asking; one undo
   step. → §{DELETING A STOP DELETES THE SECTOR IT OPENED (v17.4)}
+- **An existing route can be reshaped** (v17.19, `replan.js`, pure, one undo
+  step each): a waypoint at an aerodrome becomes a T&G / full stop and the rest
+  becomes the next plan; a stop becomes a fly-by and the plans join (at the
+  PLANNING altitude, never the runway's); switch kind; add circuits; snap to a
+  reporting point; move an en-route waypoint (departure, destination and stops
+  stay; changed legs lose via/target/MSA). Offered in the waypoint menu only
+  where it applies; the leg panel adds a stop at a nearby aerodrome; a waypoint
+  DROPPED on a drawn fix becomes it, on an aerodrome it asks.
+  → §{A LEG'S MSA IS TYPED BY THE PILOT, AND AN EXISTING ROUTE CAN BE RESHAPED (v17.19)}
 - **Daylight / VFR day**: SERA civil twilight (sun -6°); every takeoff and
   landing checked at its own aerodrome on its own date; Flight Date is never
   persisted. → §{Daylight / VFR day (v16.3)}
@@ -392,7 +401,9 @@ three cheap disciplines applied every time the page is touched:
   0 differing pixels on a blank sheet; figures shrink, never clip; one sector
   per sheet; a DO NOT USE band reaches the paper; Print opens a PDF tab.
   → §{THE PRINTOUT IS THE SCHOOL'S FORM, AND THE TAB LOOKS LIKE ITS PAGE 2 (v16.97)}
-  The blank-on-purpose decisions (MSA, actuals, Freq, crew) and the
+  **The MSA is the pilot's, per leg** (v17.19: `wp.msa`, the plan's MSA column,
+  printed; never computed). → §{A LEG'S MSA IS TYPED BY THE PILOT, AND AN EXISTING ROUTE CAN BE RESHAPED (v17.19)}
+  The blank-on-purpose decisions (MSA unless typed, actuals, Freq, crew) and the
   sector-per-sheet rule: → §{The company OFP form as the print output (v16.41, roadmap item 6 - the OFP half)}
 - **The paper rounds, the plan does not** (`paperRoundSectors`): leg fuel and
   leg distance to the NEAREST whole, up or down (v17.10 reverses v17.9's

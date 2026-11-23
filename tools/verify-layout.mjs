@@ -624,7 +624,7 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
     // a signed two-digit OAT and variation.
     flights = [{ id: 1, title: 'F1', depElev: 254, waypoints: [
       { lat: 69.055, lng: 18.544, name: 'ENDU', alt: 254, oat: 14, wdir: 240, wspd: 25, var: -11 },
-      { lat: 69.237, lng: 17.979, name: 'FINNSNES', alt: 12500, oat: -15, wdir: 240, wspd: 25, var: -11 },
+      { lat: 69.237, lng: 17.979, name: 'FINNSNES', alt: 12500, oat: -15, wdir: 240, wspd: 25, var: -11, msa: 13500 },
       { lat: 69.678, lng: 18.911, name: 'ENTC', alt: 2500, oat: 10, wdir: 240, wspd: 25, var: -12 }]}];
     activeFlightIndex = 0; refreshMap(); renderAllFlightTables();
   });
@@ -643,7 +643,8 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
   // Every divider position from the shipped default to the far end.
   for (const r of [null, 0.6, 0.72, 0.85]) {
     const m = await at(r);
-    check(m.n === 6, `the probe plan renders its number cells (${m.n})`);
+    // Alt, MSA (v17.19), OAT and VAR on each of the two legs.
+    check(m.n === 8, `the probe plan renders its number cells (${m.n})`);
     check(m.clipped.length === 0,
       `no number cell is clipped with the plan panel at ${m.side} px` +
       (m.clipped.length ? ': ' + m.clipped.join(', ') : ''));
