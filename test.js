@@ -1364,16 +1364,16 @@ T('compact mode hides secondary columns and fixes footer span', () => {
   const ccCells = doc.querySelectorAll('#flight-plans-container .cc').length;
   assert(ccCells > 0, 'no cc-tagged cells');
   const foot = doc.querySelector('#flight-plans-container tfoot td');
-  assert(foot.getAttribute('colspan') === '7', 'compact colspan got ' + foot.getAttribute('colspan'));
+  assert(foot.getAttribute('colspan') === '8', 'compact colspan got ' + foot.getAttribute('colspan'));
   assert(doc.getElementById('compact-btn').innerText.includes('Full'), 'button label not toggled');
   w.applyCompactCols(false);
   const foot2 = doc.querySelector('#flight-plans-container tfoot td');
-  assert(foot2.getAttribute('colspan') === '13', 'full colspan got ' + foot2.getAttribute('colspan'));
+  assert(foot2.getAttribute('colspan') === '14', 'full colspan got ' + foot2.getAttribute('colspan'));
 });
 T('compact state survives a re-render', () => {
   w.applyCompactCols(true);
   w.renderAllFlightTables();
-  assert(doc.querySelector('#flight-plans-container tfoot td').getAttribute('colspan') === '7', 'span lost on re-render');
+  assert(doc.querySelector('#flight-plans-container tfoot td').getAttribute('colspan') === '8', 'span lost on re-render');
   w.applyCompactCols(false);
 });
 T('REGRESSION: theme switch preserves layout and compact classes', () => {
@@ -1969,14 +1969,14 @@ T('default 3-minute column; header and value follow the setting', () => {
   assert(hdr3.includes('3m-NM'), 'default header wrong: needs 3m-NM');
   // leg 2 is level cruise: value must equal effGS * N / 60
   const res = ev('computeLegTotals(flights[0].waypoints[1], flights[0].waypoints[2])');
-  const cell3 = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')][1].cells[14].textContent;
+  const cell3 = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')][1].cells[15].textContent;
   assert(Math.abs(parseFloat(cell3) - res.effGS * 3 / 60) < 0.02, '3-min value wrong: ' + cell3);
   w.openSettingsModal();
   doc.getElementById('qol-minute-mark').value = '5';
   w.saveSettings();
   const hdr5 = doc.querySelector('#flight-plans-container thead').textContent;
   assert(hdr5.includes('5m-NM') && !hdr5.includes('3m-NM'), '5-min header wrong: ' + hdr5.slice(0, 120));
-  const cell5 = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')][1].cells[14].textContent;
+  const cell5 = [...doc.querySelectorAll('#tbody-flight-0 tr:not(.sub-leg-row)')][1].cells[15].textContent;
   assert(Math.abs(parseFloat(cell5) - res.effGS * 5 / 60) < 0.02, '5-min value wrong: ' + cell5);
   assert(Math.abs(parseFloat(cell5) / parseFloat(cell3) - 5 / 3) < 0.03, 'value did not scale 3->5');
 });
@@ -2434,7 +2434,7 @@ T('adding a via point does not change the row TT/MT (direct line), but distance 
   ev(SEED);
   const row = () => {
     const c = doc.querySelector('#tbody-flight-0 tr').cells;
-    return { tt: c[6].textContent.trim(), mt: c[8].textContent.trim(), dist: parseFloat(c[13].textContent) };
+    return { tt: c[7].textContent.trim(), mt: c[9].textContent.trim(), dist: parseFloat(c[14].textContent) };
   };
   const before = row();
   const directTT = Math.round(ev('calcTrueTrack(flights[0].waypoints[0].lat, flights[0].waypoints[0].lng, flights[0].waypoints[1].lat, flights[0].waypoints[1].lng)'));
@@ -2456,7 +2456,7 @@ T('removing the via restores the plain leg (row and distance identical to a via-
   ev('delete flights[0].waypoints[1].via; refreshMap(); renderAllFlightTables();');
   const c = doc.querySelector('#tbody-flight-0 tr').cells;
   const directTT = Math.round(ev('calcTrueTrack(flights[0].waypoints[0].lat, flights[0].waypoints[0].lng, flights[0].waypoints[1].lat, flights[0].waypoints[1].lng)'));
-  assert(c[6].textContent.trim() === directTT + '°', 'row TT wrong after via removal');
+  assert(c[7].textContent.trim() === directTT + '°', 'row TT wrong after via removal');
   ev(SEED);
 });
 T('guide states the direct-line convention and warns to steer by segment tracks', () => {
@@ -2472,7 +2472,7 @@ T('a CLB+CRZ leg shows the cruise TAS in the row; climb stays in time/fuel and t
   assert(r.profileTag === 'CLB+CRZ', 'seed leg 1 should be CLB+CRZ, got ' + r.profileTag);
   const crzTas = ev('cruisePerf(2500, ' + ev('flights[0].waypoints[1].oat') + ').tas');
   assert(r.dispTas === crzTas, 'row TAS should be cruise TAS ' + crzTas + ', got ' + r.dispTas);
-  const cell = doc.querySelector('#tbody-flight-0 tr').cells[5].textContent.trim();
+  const cell = doc.querySelector('#tbody-flight-0 tr').cells[6].textContent.trim();
   assert(cell === String(crzTas), 'TAS cell shows ' + cell + ', want ' + crzTas);
   const cp = ev('climbPerf(254, 2500, ' + ev('flights[0].waypoints[1].oat') + ')');
   assert(Math.abs(r.climbInfo.timeMin - cp.timeMin) < 0.05, 'climb time no longer accounted');
@@ -2577,7 +2577,7 @@ T("every level leg of the user's mission shows the same cruise FF", () => {
     const rows = [...doc.querySelectorAll(`#tbody-flight-${f} tr:not(.sub-leg-row)`)];
     rows.forEach(row => {
       if (!row.textContent.includes('CRZ') || row.textContent.includes('CLB') || row.textContent.includes('DES')) return;
-      const ff = parseFloat(row.cells[17].textContent);
+      const ff = parseFloat(row.cells[18].textContent);
       assert(Math.abs(ff - crzGph) < 0.06,
         `level leg FF ${ff} != cruise ${crzGph} (flight ${f + 1}: ${row.cells[0].textContent}->${row.cells[1].textContent})`);
       checked++;
@@ -6623,6 +6623,49 @@ const TWO_SECTORS = `flights = [
       { lat: 70.6, lng: 18.5, name: 'ENSR', alt: 10,  oat: 0, wdir: 250, wspd: 20, var: -11 }] }];
     activeFlightIndex = 0; mbPrefs.reg = null; renderAllFlightTables();`;
 const ofpSheets = () => printDoc().sheets.filter((s) => s.kind === 'ofp').map(readOfp);
+TA('a leg\'s MSA is the pilot\'s own figure: typed in the plan, stored, and printed in the OFP\'s MSA cell (v17.19)', async () => {
+  // The author: "I want to set an MSA per leg and it reflects on the printed OFP."
+  const X = moduleExports.exch, F = moduleExports.ofp;
+  assert(X.normaliseMsaFt('3500') === 3500 && X.normaliseMsaFt(' 4200.4 ') === 4200, 'a typed MSA is not read');
+  for (const bad of ['', null, undefined, 'abc', '0', '-500', '250000']) {
+    assert(X.normaliseMsaFt(bad) === null, JSON.stringify(bad) + ' was read as an MSA: ' + X.normaliseMsaFt(bad));
+  }
+  assert(F.ofpRowCells({ from: 'A', to: 'B', msa: 3500 }).msa === '3500', 'the MSA cell does not print the figure');
+  for (const none of [undefined, null, NaN, 0]) {
+    assert(F.ofpRowCells({ from: 'A', to: 'B', msa: none }).msa === '', 'no MSA printed as ' + JSON.stringify(F.ofpRowCells({ from: 'A', to: 'B', msa: none }).msa));
+  }
+  ev(SEED);
+  try {
+    // Through the plan table's own box, on the first leg.
+    const box = () => doc.querySelector('#tbody-flight-0 tr .msa-input');
+    assert(box() && box().value === '', 'the plan table has no empty MSA box on a fresh leg');
+    assert([...doc.querySelectorAll('#flight-plans-container thead th')].some((th) => th.textContent.trim() === 'MSA'), 'no MSA column heading');
+    box().value = '3500'; box().dispatchEvent(new w.Event('change'));
+    assert(ev('flights[0].waypoints[1].msa') === 3500, 'the box did not store the MSA: ' + ev('flights[0].waypoints[1].msa'));
+    assert(box().value === '3500', 'the box does not show the stored MSA after the re-render');
+    assert(ev('undoEntryLabel(undoStack[undoStack.length - 1])') === 'change an MSA', 'the edit is not an undo step');
+    // The paper: column 13 of OFP_COLUMNS is MSA. Leg 1 carries it, leg 2 stays an empty box.
+    assert(F.OFP_COLUMNS[13].key === 'msa', 'the MSA column moved');
+    const rows = ofpSheets()[0].filled;
+    assert(rows[0][13] === '3500', 'the printed MSA cell of leg 1 is ' + JSON.stringify(rows[0][13]));
+    assert(!rows[1][13], 'a leg with no MSA printed ' + JSON.stringify(rows[1][13]));
+    // It survives the sanitiser every door goes through, and a bad one is dropped.
+    const kept = ev('sanitiseFlights(JSON.parse(JSON.stringify(flights)))[0].waypoints[1].msa');
+    assert(kept === 3500, 'the sanitiser dropped the MSA: ' + kept);
+    assert(ev('sanitiseFlights([{ waypoints: [{ lat: 1, lng: 2 }, { lat: 2, lng: 2, msa: "abc" }] }])[0].waypoints[1].msa') === undefined, 'a bad MSA survived the sanitiser');
+    // An unreadable figure is refused and the stored one stays; empty clears it.
+    box().value = '999999'; box().dispatchEvent(new w.Event('change'));
+    assert(ev('flights[0].waypoints[1].msa') === 3500, 'a refused MSA overwrote the stored one');
+    box().value = ''; box().dispatchEvent(new w.Event('change'));
+    assert(ev('"msa" in flights[0].waypoints[1]') === false, 'emptying the box did not clear the MSA');
+    // Splitting the leg keeps the MSA on both halves.
+    ev('flights[0].waypoints[1].msa = 4100; renderAllFlightTables();');
+    const pr = ev('insertWaypointOnLeg(0, { lat: 69.14, lng: 18.26 })');
+    await tick(); await answerDialog('Insert waypoint'); await pr;
+    assert(ev('flights[0].waypoints[1].msa') === 4100 && ev('flights[0].waypoints[2].msa') === 4100,
+      'the split leg lost its MSA: ' + ev('JSON.stringify(flights[0].waypoints.map(w => w.msa))'));
+  } finally { ev(SEED); }
+});
 TA('the ACC columns all measure the same thing: the mission so far', async () => {
   // The form groups Dist and Time under one heading, ACC, and prints Fuel Acc
   // beside them. Accumulated across WHAT is the question, and the three

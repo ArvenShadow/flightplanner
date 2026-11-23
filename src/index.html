@@ -1283,8 +1283,8 @@
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 157 inline on*= handlers - 125 written
-    // into the markup and 32 generated into rows at render time - that need
+    // map, markers, undoStack...) plus 159 inline on*= handlers - 125 written
+    // into the markup and 34 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
     // comment said 61, which was true when it was written.)
@@ -1509,7 +1509,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.18';
+    const APP_VERSION = '17.19';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2838,6 +2838,9 @@
         isPattern: false, laps: 3,
         via: via.slice(0, best.insertAt)
       };
+      // Both halves keep the MSA typed for the whole leg (v17.19): it covered
+      // all of it, so it still covers each part.
+      if (typeof after.msa === 'number') wp.msa = after.msa;
       after.via = via.slice(best.insertAt);
       fl.waypoints.splice(best.legEnd, 0, wp);
       refreshMap(); renderAllFlightTables(); saveActiveState();
@@ -7035,6 +7038,7 @@
               <th style="width:10%">To</th>
               <th class="cc" style="width:6%">Profile</th>
               <th class="col-alt" style="width:5%">Alt</th>
+              <th class="col-alt" style="width:5%" title="Minimum safe altitude for the leg - YOUR figure, off the chart. Nothing computes it. Printed in the OFP's MSA column.">MSA</th>
               <th class="cc col-num" style="width:4%">OAT</th>
               <th class="cc" style="width:4%">TAS</th>
               <th class="cc" style="width:4%">TT</th>
@@ -7058,7 +7062,7 @@
           <tbody id="tbody-flight-${fIdx}"></tbody>
           <tfoot>
             <tr style="background:var(--bg-table-head); font-weight:700;">
-              <td colspan="${compactCols ? 7 : 13}" style="text-align:right; padding-right:6px;">SECTOR TOTAL</td>
+              <td colspan="${compactCols ? 8 : 14}" style="text-align:right; padding-right:6px;">SECTOR TOTAL</td>
               <td id="f-tot-dist-${fIdx}" class="calc-cell">0.0</td>
               <td class="cc">-</td>
               <td id="f-tot-time-${fIdx}" class="calc-cell">00:00</td>
@@ -7140,6 +7144,7 @@
               <td><b>${esc(to.name)}</b></td>
               <td class="cc"><span class="type-pattern">PATTERN</span></td>
               <td><input type="number" class="alt-input" value="${to.alt}" step="100" title="Circuit altitude (derived from field elevation - the VAC is the authority; \u2191/\u2193 steps 100 ft)" onfocus="this.select()" onchange="pushUndoState('change the circuit altitude'); flights[${fIdx}].waypoints[${wpIdx}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+              <td>-</td>
               <td class="cc">${to.oat}°</td>
               <td class="cc">-</td>
               <td class="cc">-</td>
@@ -7233,7 +7238,7 @@
           printRows.push({ from: from.name, to: to.name, tas: res.dispTas, tt,
             var: Number(to.var), mt: mtNum, wdir: Number(to.wdir), wspd: Number(to.wspd),
             wca: res.rowWCA, accDist: runningAccDist, accTime: formatTimeHHMM(runningAccTime),
-            ff: effFF, legBurn, accBurn: runningAccBurn, alt: to.alt,
+            ff: effFF, legBurn, accBurn: runningAccBurn, alt: to.alt, msa: to.msa,
             mh: mtNum === null ? null : Math.round((mtNum + res.rowWCA + 360) % 360),
             gs: res.effGS, dist, time: formatTimeHHMM(legTime),
             eto: computeETO(runningAccTime) || '', rem: runningFuelRemaining,
@@ -7514,6 +7519,25 @@
       }
     }
 
+    /** The MSA box of a leg (v17.19). Empty clears it; anything that is not a
+     *  whole number of feet in range is refused, never coerced to 0. */
+    function setLegMsa(fIdx, wpIdx, raw) {
+      const wp = flights[fIdx] && flights[fIdx].waypoints[wpIdx];
+      if (!wp) return;
+      const txt = String(raw === null || raw === undefined ? '' : raw).trim();
+      const msa = normaliseMsaFt(txt);
+      if (txt !== '' && msa === null) {
+        say('That is not an MSA (1 to ' + MSA_MAX_FT + ' ft) - nothing was changed.', 'error');
+        renderAllFlightTables();
+        return;
+      }
+      if ((msa === null && wp.msa === undefined) || msa === wp.msa) return;
+      pushUndoState('change an MSA');
+      if (msa === null) delete wp.msa; else wp.msa = msa;
+      renderAllFlightTables();
+      saveActiveState();
+    }
+
     function createRowHTML(fromName, toName, type, altDisplay, oat, tas, tt, magVar, varIndicator, mt, wdir, wspd, wca, mh, gs, dist, threeMinNM, legTime, accTime, ff, legBurn, accBurn, remFuel, fIdx, wpIndex, showDelete) {
       const isHighlighted = (highlightedWaypoint && highlightedWaypoint.fIdx === fIdx && highlightedWaypoint.wpIdx === (wpIndex+1));
       const tr = document.createElement('tr');
@@ -7529,6 +7553,7 @@
         <td><b>${esc(toName)}</b></td>
         <td class="cc">${typeBadge}</td>
         <td><input type="number" class="alt-input" value="${flights[fIdx].waypoints[wpIndex+1].alt}" step="500" title="Target Alt (\u2191/\u2193 steps 500 ft)" onfocus="this.select()" onchange="pushUndoState('change an altitude'); flights[${fIdx}].waypoints[${wpIndex+1}].alt=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
+        <td><input type="number" class="alt-input msa-input" value="${typeof flights[fIdx].waypoints[wpIndex+1].msa === 'number' ? flights[fIdx].waypoints[wpIndex+1].msa : ''}" step="100" min="0" title="MSA for this leg - your own figure, off the chart. Not computed. Printed in the OFP's MSA column; empty prints an empty box." onfocus="this.select()" onchange="setLegMsa(${fIdx}, ${wpIndex+1}, this.value)" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="cc"><input type="number" value="${oat}" title="OAT (\u2191/\u2193 steps 1 \u00b0C)" onfocus="this.select()" onchange="pushUndoState('change an OAT'); flights[${fIdx}].waypoints[${wpIndex+1}].oat=Number(this.value); refreshMap(); renderAllFlightTables(); saveActiveState();" ${isDoneMode ? 'disabled' : ''}></td>
         <td class="calc-cell cc">${tas}</td>
         <td class="calc-cell cc">${String(tt).padStart(3, '0')}°</td>
@@ -8094,7 +8119,7 @@
       if (parts.length === 0) return null;
       const tr = document.createElement('tr');
       tr.className = 'sub-leg-row no-select';
-      tr.innerHTML = `<td colspan="${compactCols ? 13 : 22}">↳ ${parts.map(esc).join(' &nbsp;|&nbsp; ')}</td>`;
+      tr.innerHTML = `<td colspan="${compactCols ? 14 : 23}">↳ ${parts.map(esc).join(' &nbsp;|&nbsp; ')}</td>`;
       return tr;
     }
 
