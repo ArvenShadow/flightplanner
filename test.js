@@ -13943,16 +13943,56 @@ T('wind is the school\'s rule, from TRUE directions, and a VRB wind is a tailwin
   assert(best.desig === '28', 'the default runway is not the one into wind: ' + best.desig);
 });
 
+T('the runway condition is a landing input only: the take-off card and page 2 carry none (v17.21)', () => {
+  // The author: "runway condition is ONLY applied at landing, not takeoff".
+  ev(SEED_STOP);
+  doc.getElementById('fuel-dep').value = '64';
+  ev(`mbPrefs.reg = "LN-TRB"; mbPrefs.loads = normaliseStationLoads({ pilotLb: 180 }); mbPrefs.view = "sector";
+      perfInputs = { '1:dep': { windDir: '0', windKt: '0', qnh: '1013', oat: '10', braking: '1' },
+                     '1:arr': { windDir: '0', windKt: '0', qnh: '1013', oat: '10', braking: '1' } }; lastWeather = null;`);
+  w.renderAllFlightTables();
+  try {
+    const checks = ev('runwayChecks');
+    const dep = checks.find((c) => c.i === 0 && c.role === 'dep'), arr = checks.find((c) => c.i === 0 && c.role === 'arr');
+    assert(dep && arr && dep.kind === 'takeoff' && arr.kind === 'landing' && !dep.res.refused && !arr.res.refused,
+      'the fixture has no worked take-off and landing: ' + JSON.stringify([dep && dep.res.refused, arr && arr.res.refused]));
+    // Braking action 1 (x2) was typed for BOTH: only the landing moves.
+    assert(dep.res.brakingCorrM === 0 && Math.abs(dep.res.correctedM - dep.res.uncorrectedM) < 1e-9, 'the take-off was corrected for the runway condition: +' + dep.res.brakingCorrM);
+    assert(arr.res.brakingCorrM > 100 && Math.abs(arr.res.brakingCorrM - arr.res.uncorrectedM) < 1e-6, 'the landing lost its braking correction: +' + arr.res.brakingCorrM);
+    // The cards: a braking box on the landing, none on the take-off.
+    const boxes = [...doc.querySelectorAll('#mb-perf select[data-field="braking"]')].map((e) => e.getAttribute('data-key'));
+    assert(boxes.includes('1:arr') && !boxes.some((k) => /:dep$/.test(k)), 'the braking boxes are on ' + JSON.stringify(boxes));
+    // Page 2: the take-off block's braking boxes stay empty; the landing's are filled.
+    const box = readMb(printDoc().sheets.filter((sh) => sh.kind === 'mb')[0]).box;
+    assert(!box.toBrk && !box.toBrkCorr, 'page 2 printed a take-off braking action: ' + JSON.stringify([box.toBrk, box.toBrkCorr]));
+    assert(box.ldBrk === '1' && Number(box.ldBrkCorr) > 100, 'page 2 lost the landing\'s braking action: ' + JSON.stringify([box.ldBrk, box.ldBrkCorr]));
+    assert(box.toUncorr && box.toCorr === box.toUncorr, 'the printed take-off is not its uncorrected POH figure: ' + JSON.stringify([box.toUncorr, box.toCorr]));
+  } finally {
+    ev('mbPrefs.reg = null; perfInputs = {}; lastWeather = null;'); w.renderAllFlightTables();
+  }
+});
 T('braking action, surface and the tailwind limit refuse rather than guess', () => {
   const P = moduleExports.rwy;
   const x = { kind: 'takeoff', weightLb: 2600, elevFt: 254, qnhHpa: 1013, tempC: 10, headKt: 0, braking: 6, surface: 'ASPH', availableM: 2443 };
   const d = (o) => P.runwayDistance(Object.assign({}, x, o));
   const good = d({});
   assert(!good.refused && good.brakingCorrM === 0 && good.surfaceCorrM === 0, 'a dry paved runway carried a correction');
-  const ba4 = d({ braking: 4 });
-  assert(Math.abs(ba4.brakingCorrM - 0.1 * good.correctedM) < 1e-9, 'braking action 4 is not +10%');
-  assert(/prohibited/.test(d({ braking: 0 }).refused || ''), 'braking action 0 was not refused as prohibited');
-  assert(d({ braking: 7 }).refused, 'braking action 7 was accepted');
+  // UPDATED DELIBERATELY AT v17.21 (the author: "runway condition is ONLY
+  // applied at landing, not takeoff"). These four asserts ran on a TAKE-OFF
+  // until then; braking action is now a landing correction and nothing else.
+  const l = (o) => P.runwayDistance(Object.assign({}, x, { kind: 'landing', weightLb: null }, o || {}));
+  const dryL = l();
+  const ba4 = l({ braking: 4 });
+  assert(!dryL.refused && dryL.brakingCorrM === 0 && Math.abs(ba4.brakingCorrM - 0.1 * dryL.correctedM) < 1e-9 && ba4.requiredM > dryL.requiredM,
+    'braking action 4 is not +10% on a landing');
+  assert(/prohibited/.test(l({ braking: 0 }).refused || ''), 'braking action 0 was not refused as prohibited for a landing');
+  assert(l({ braking: 7 }).refused, 'braking action 7 was accepted for a landing');
+  // A TAKE-OFF IGNORES IT ENTIRELY: every value gives the dry figure, none refuses.
+  for (const b of [6, 4, 2, 1, 0, 7, undefined, NaN]) {
+    const t = d({ braking: b });
+    assert(!t.refused && t.brakingCorrM === 0 && t.requiredM === good.requiredM,
+      'braking ' + b + ' changed or refused a take-off: ' + JSON.stringify([t.refused, t.brakingCorrM, t.requiredM, good.requiredM]));
+  }
   assert(/tailwind/.test(d({ headKt: -12 }).refused || ''), 'a 12 kt tailwind produced a distance');
   // ENAS is GRAVEL. The POH corrects for dry grass and nothing else.
   assert(/no correction for a GRAVEL/.test(d({ surface: 'GRAVEL' }).refused || ''), 'a gravel runway was priced as asphalt');

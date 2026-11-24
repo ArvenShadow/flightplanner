@@ -453,7 +453,9 @@ three cheap disciplines applied every time the page is touched:
   five stated departures (TRUE runway direction, TODA, VRB is a tailwind,
   above the table refused, rounds up). → §{PHASE D (v16.96): RUNWAYS FROM THE AIP, AND THE DISTANCE AGAINST THEM}
   **No wind correction by default** (v17.15, `perfWindCorr`, a Setting); the
-  10 kt tailwind limit is refused either way.
+  10 kt tailwind limit is refused either way. **Braking action (runway
+  condition) is applied to LANDINGS only** (v17.21, the author); a take-off
+  carries none, on the card or on page 2. → §{THE RUNWAY CONDITION IS A LANDING CORRECTION ONLY (v17.21)}
   POH tables are PA 0-8000 (the workbook stops at 5000); three deleted cells
   stay refused; landing is at MLW only.
   Each check is DRAWN (`rwydiagram.js`): the strip is the declared TODA/LDA,
