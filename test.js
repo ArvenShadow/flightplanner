@@ -1479,11 +1479,14 @@ T('vertical interpolation between pressure levels', () => {
   assert(ev('interpolateWindProfile([{h:500,dir:200,spd:10,temp:8},{h:1500,dir:250,spd:30,temp:2}], 100)').spd === 10, 'below-column clamp');
   assert(ev('interpolateWindProfile([{h:500,dir:200,spd:10,temp:8},{h:1500,dir:250,spd:30,temp:2}], 9000)').spd === 30, 'above-column clamp');
 });
-T('sample points: 3 per non-pattern leg at leg altitude', () => {
+T('sample points: 3 per non-pattern leg, read along the planned profile (v17.23)', () => {
   ev(SEED);
   const pts = ev('buildWindSamplePoints(flights, legStartTimes)');
   assert(pts.length === 6, '2 legs x 3 samples expected, got ' + pts.length);
-  assert(pts.every(p => p.altFt === 2500), 'wrong altitudes');
+  // Leg 1 climbs 254 -> 2500 ft: its first column starts low, its last is level.
+  assert(pts[0].altsFt[0] > 254 && pts[0].altsFt[0] < 2500, 'the climb is not sampled below its top: ' + pts[0].altsFt);
+  assert(pts[2].altsFt.every(a => a === 2500), 'the level part of leg 1 is not at 2500: ' + pts[2].altsFt);
+  assert(pts.every(p => p.altsFt.length === 4 && p.altsFt.every(a => a >= 30 && a <= 2500)), 'an altitude outside the plan');
   assert(new Set(pts.map(p => p.legKey)).size === 2, 'leg grouping wrong');
 });
 T('request URL contains everything the docs require', () => {
@@ -1529,6 +1532,61 @@ TA('fetch fills the wind matrix from a mocked multi-location response', async ()
   const st = doc.getElementById('wind-fetch-status').textContent;
   assert(st.includes('Filled 2 legs') && st.includes('Save'), 'status wrong: ' + st);
   w.closeWindModal();
+});
+TA('a leg that cruises high and descends to a field gets the cruise wind, not the ground wind (v17.23)', async () => {
+  // The author: "a long high altitude leg that has a descent down to ground.
+  // If the majority of the leg is in cruise and the last part is down to
+  // ground, choosing ground wind isnt that optimal".
+  const S = w, L = w;   // the bundle's exports are window globals
+  const wp = (lat, lng, alt, name) => ({ name, lat, lng, alt, wdir: 0, wspd: 0, oat: 5, variation: 0 });
+  // ~120 NM north at 8500 ft, landing at 30 ft.
+  const fl = { waypoints: [wp(67.0, 15.0, 8500, 'A'), wp(69.0, 15.0, 30, 'B')] };
+  const SL = L.computeFlightSchedule(fl)[0];
+  assert(SL && SL.todStartsHere && SL.todBeforeNM > 5 && SL.todBeforeNM < SL.distNM / 2, 'fixture: not a long cruise with a descent at the end');
+  // The profile function agrees with the schedule's own corners.
+  const tod = SL.distNM - SL.todBeforeNM;
+  assert(S.legAltitudeAt(SL, 0, 30) === 8500 && S.legAltitudeAt(SL, tod - 0.1, 30) === 8500, 'not at cruise level before the TOD');
+  assert(S.legAltitudeAt(SL, SL.distNM, 30) === 30, 'not at the field at the end');
+  const half = S.legAltitudeAt(SL, tod + SL.todBeforeNM / 2, 30);
+  assert(Math.abs(half - (8500 + 30) / 2) < 1, 'half way down the descent is not half the height: ' + half);
+  assert(S.legAltitudeAt(null, 5, 1234) === 1234, 'no schedule leg must fall back to the end altitude');
+  // A climb leg: entry held, then up, then level.
+  const up = L.computeFlightSchedule({ waypoints: [wp(67.0, 15.0, 30, 'A'), wp(69.0, 15.0, 6500, 'B')] })[0];
+  assert(S.legAltitudeAt(up, 0, 0) === 30 && S.legAltitudeAt(up, up.distNM, 0) === 6500, 'climb leg ends wrong');
+  const mid = S.legAltitudeAt(up, up.tocAlongNM / 2, 0);
+  assert(mid > 30 && mid < 6500, 'half way up the climb is not between the two: ' + mid);
+  // The sample points: start and mid columns entirely at cruise; the end column mixes.
+  const pts = S.buildWindSamplePoints([fl], {});
+  assert(pts.length === 3 && pts[0].altsFt.every(a => a === 8500) && pts[1].altsFt.every(a => a === 8500), 'the cruise columns are not at cruise level');
+  assert(pts[2].altsFt[pts[2].altsFt.length - 1] < 8500 && pts[2].altsFt.every(a => a >= 30), 'the end column does not follow the descent');
+  const all = pts.flatMap(p => p.altsFt);
+  const atCruise = all.filter(a => a === 8500).length / all.length;
+  assert(Math.abs(atCruise - tod / SL.distNM) < 1 / 12 + 1e-9, 'the share read at cruise (' + atCruise + ') is not the share flown there (' + (tod / SL.distNM) + ')');
+  // END TO END: surface 180/05, aloft 270/40. The old read gave ~180/05.
+  const mk = () => ({ elevation: 0, hourly: (() => {
+    const H = { time: [], wind_speed_10m: [], wind_direction_10m: [], temperature_2m: [] };
+    S.OM_LEVELS.forEach(Lv => { H['wind_speed_'+Lv+'hPa']=[]; H['wind_direction_'+Lv+'hPa']=[]; H['temperature_'+Lv+'hPa']=[]; H['geopotential_height_'+Lv+'hPa']=[]; });
+    for (let h = 0; h < 24; h++) {
+      H.time.push('2026-08-24T' + String(h).padStart(2,'0') + ':00');
+      H.wind_speed_10m.push(5); H.wind_direction_10m.push(180); H.temperature_2m.push(12);
+      S.OM_LEVELS.forEach((Lv, n) => {
+        H['geopotential_height_'+Lv+'hPa'].push(2400 + n * 100);   // all near/above 8000 ft
+        H['wind_speed_'+Lv+'hPa'].push(40); H['wind_direction_'+Lv+'hPa'].push(270); H['temperature_'+Lv+'hPa'].push(-6);
+      });
+    }
+    return H; })() });
+  try {
+    w.__fl = JSON.parse(JSON.stringify(fl));
+    ev('flights = [{ id: 1, title: "W", depElev: 8500, waypoints: window.__fl.waypoints.map(function(x){ return { lat: x.lat, lng: x.lng, name: x.name, alt: x.alt, oat: 5, wdir: 0, wspd: 0, var: 0 }; }) }]; activeFlightIndex = 0; refreshMap(); renderAllFlightTables();');
+    w.fetch = async () => ({ ok: true, json: async () => ev('buildWindSamplePoints(flights, legStartTimes)').map(mk) });
+    w.openWindModal();
+    doc.getElementById('wind-fetch-date').value = '2026-08-24';
+    await w.fetchForecastWinds();
+    const dir = Number(doc.getElementById('wmodal-dir-0-1').value), spd = Number(doc.getElementById('wmodal-spd-0-1').value);
+    assert(spd > 30 && dir > 255 && dir <= 270, 'a cruise leg ending in a descent was filled with ' + dir + '/' + spd + ', not mostly the 270/40 it is flown in');
+    assert(doc.getElementById('wind-fetch-status').textContent.includes('climb, cruise and descent'), 'the status line does not say how the wind was read');
+    assert(Number(doc.getElementById('wmodal-oat-0-1').value) < 0, 'the OAT was not read along the profile either');
+  } finally { w.closeWindModal(); delete w.__fl; ev(SEED); }
 });
 TA('fetch failure reports cleanly without applying anything', async () => {
   w.fetch = async () => { throw new Error('offline'); };

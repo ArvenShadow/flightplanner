@@ -228,7 +228,10 @@ three cheap disciplines applied every time the page is touched:
   §{Saved-route freshness (v16.10)}
 - **Winds aloft**: Open-Meteo pressure levels, u/v averaging, 3 samples a
   leg; **ECMWF IFS 0.25° is the default model** (v17.15). MET Nordic has no pressure levels. **Never assume calm wind**: a
-  missing wind or OAT is NaN and named on the banner.
+  missing wind or OAT is NaN and named on the banner. Each sample is read at
+  the altitudes FLOWN on its third of the leg (v17.23, `legAltitudeAt`), not at
+  the end fix's altitude; still one wind per leg.
+  → §{THE WIND IS READ ALONG THE PLANNED PROFILE, NOT AT THE END FIX'S ALTITUDE (v17.23)}
   → §{Winds aloft}
 - **Flight Defaults hold no departure elevation and no wind** (v17.6, the
   author): the elevation comes from the departure aerodrome (editable in the

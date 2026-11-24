@@ -10,6 +10,34 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE WIND IS READ ALONG THE PLANNED PROFILE, NOT AT THE END FIX'S ALTITUDE (v17.23)
+
+The author, on learning that a leg's wind was read at the altitude of the fix it
+ends at: *"thats pretty dumb considering a long high altitude leg that has a
+descent down to ground. If the majority of the leg is in cruise and the last
+part is down to ground, choosing ground wind isnt that optimal"*.
+
+- BEFORE: three places per leg (start / mid / end), all three read at `to.alt`.
+  A leg cruising at 8 500 ft and landing got the surface wind for all of it; a
+  climb leg got the top-of-climb wind (the smaller error of the two).
+- NOW: `legAltitudeAt(SL, dNM)` (winds.js, pure) reads the planned altitude at a
+  distance along the leg from the flight schedule's own corners (BOC, TOC, TOD,
+  BOD - the same ones the map draws). Each of the three columns is read at
+  `WIND_ALT_STEPS` = 4 altitudes over the third of the leg it stands for, so the
+  leg mean is weighted by the distance flown at each level. The OAT is averaged
+  the same way.
+- THE REQUEST IS UNCHANGED: a column already carries every pressure level, so
+  no extra location is fetched.
+- A LEVEL LEG IS UNCHANGED (the same altitude twelve times).
+- STATED APPROXIMATIONS: a climb and a descent are straight lines over distance;
+  the weight is distance, not time; there is still ONE wind per leg, because the
+  plan and the form carry one. The profile is the one planned with the winds
+  already in the plan, as the forecast hour always was.
+- No schedule leg, or a non-finite one, falls back to the end fix's altitude.
+- Tested: the profile function against the schedule's corners, the share of
+  samples at cruise against the share of the leg flown there, and end to end
+  with a 180/05 surface under 270/40 aloft.
+
 ## ENTER APPLIES THE LEG PANEL (v17.22)
 
 The author: *"when pressing enter after entering MSA in right click menu,

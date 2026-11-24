@@ -453,7 +453,7 @@
           <h3>💨 Winds</h3>
           <ul style="margin-left:16px;">
             <li>Open the <b>Wind Matrix</b> (💨 button, or click any W/V cell) and <b>Tab</b> through Dir → Spd → OAT for every leg without touching the mouse.</li>
-            <li><b>🌐 Fetch Forecast Winds</b> pulls live/forecast winds &amp; OAT from Open-Meteo (up to 16 days ahead): per-leg average at your planned altitude, interpolated between pressure levels and forecast hours. <b>ECMWF IFS 0.25° is the default</b> (its winds aloft reach about 15 days ahead); pick another model (ICON / GFS, or Auto) if you prefer, or <b>Compare</b> to fill the three-model mean and see how much the models disagree — big spread = uncertain winds. It only fills the matrix — you review, then Save &amp; Apply. Requires internet.</li>
+            <li><b>🌐 Fetch Forecast Winds</b> pulls live/forecast winds &amp; OAT from Open-Meteo (up to 16 days ahead): per-leg average <b>along the planned profile</b> — a leg that cruises high and descends to a field at the end is read mostly at the cruise level, not at the ground — interpolated between pressure levels and forecast hours. <b>ECMWF IFS 0.25° is the default</b> (its winds aloft reach about 15 days ahead); pick another model (ICON / GFS, or Auto) if you prefer, or <b>Compare</b> to fill the three-model mean and see how much the models disagree — big spread = uncertain winds. It only fills the matrix — you review, then Save &amp; Apply. Requires internet.</li>
             <li>Winds apply per-leg; WCA, MH and GS update instantly.</li>
             <li>The wind modal's <b>Flight date</b> is the same date as the planner's <b>Flight Date</b> field — they stay in sync, so sun times and fetched winds always describe the same day. If your Flight Date is outside the forecast range (today … +15 days) the modal says so instead of silently fetching a different day.</li>
           </ul>
@@ -606,7 +606,7 @@
           </div>
           <div id="wind-fetch-status" style="font-size:10px; font-weight:600; margin-top:5px; min-height:14px;"></div>
           <p style="font-size:9px; color:var(--text-muted); margin-top:4px;">
-            Leg-average wind &amp; OAT at each leg's planned altitude: three samples per leg (start / mid / end), vertically interpolated between model pressure levels using geopotential heights, time-interpolated between forecast hours, vector-averaged. Hour picked from your ETD + leg timing. Forecasts up to 16 days.
+            Leg-average wind &amp; OAT along each leg's planned climb, cruise and descent: three places per leg (start / mid / end), each read at the altitudes flown on its third of the leg, vertically interpolated between model pressure levels using geopotential heights, time-interpolated between forecast hours, vector-averaged. Hour picked from your ETD + leg timing. Forecasts up to 16 days.
             Note: winds <i>aloft</i> come from ~7–25 km grids (ICON-EU / ECMWF 0.25° / GFS) — high-resolution regional models like MET Nordic 1 km publish surface wind only, so "Auto" cannot say which model fed each value; pick a model explicitly to know, or use Compare to see how much they disagree.
             <a href="https://open-meteo.com/" target="_blank" style="color:var(--highlight-text);">Weather data by Open-Meteo.com</a> (CC BY 4.0).
           </p>
@@ -1500,7 +1500,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.22';
+    const APP_VERSION = '17.23';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -5354,12 +5354,19 @@
       const agg = {};
       for (let k = 0; k < pts.length; k++) {
         const pt = pts[k];
-        const wx = extractPointWeather(locs[k], forecastHourFor(pt.offsetMin, dateStr), pt.altFt);
-        if (!wx) continue;
-        const [u, v] = windToUV(wx.dir, wx.spd);
-        const g = agg[pt.legKey] || (agg[pt.legKey] = { u: 0, v: 0, t: 0, tn: 0, n: 0, fIdx: pt.fIdx, i: pt.i });
-        g.u += u; g.v += v; g.n++;
-        if (wx.temp != null) { g.t += wx.temp; g.tn++; }
+        // Every altitude the column is read at counts once, and every column
+        // carries the same number of them, so the leg mean is weighted by the
+        // DISTANCE flown at each level (v17.23).
+        const alts = Array.isArray(pt.altsFt) && pt.altsFt.length ? pt.altsFt : [pt.altFt];
+        const hour = forecastHourFor(pt.offsetMin, dateStr);
+        for (const altFt of alts) {
+          const wx = extractPointWeather(locs[k], hour, altFt);
+          if (!wx) continue;
+          const [u, v] = windToUV(wx.dir, wx.spd);
+          const g = agg[pt.legKey] || (agg[pt.legKey] = { u: 0, v: 0, t: 0, tn: 0, n: 0, fIdx: pt.fIdx, i: pt.i });
+          g.u += u; g.v += v; g.n++;
+          if (wx.temp != null) { g.t += wx.temp; g.tn++; }
+        }
       }
       const out = {};
       Object.keys(agg).forEach(k => {
@@ -5455,7 +5462,7 @@
         windFetchStatus('\u274c No legs could be filled from the response.', true);
       } else {
         const hr = Math.round(forecastHourFor(pts[0].offsetMin, dateStr));
-        windFetchStatus(`\u2705 Filled ${filled} leg${filled > 1 ? 's' : ''} \u00b7 leg-average winds at planned altitude \u00b7 ${dateStr} from ~${String(hr).padStart(2, '0')}:00 local \u00b7 model: <b>${WIND_MODEL_LABELS[modelSel] || modelSel}</b>. <b>Review, then Save &amp; Apply.</b>`, false);
+        windFetchStatus(`\u2705 Filled ${filled} leg${filled > 1 ? 's' : ''} \u00b7 leg-average winds along the planned climb, cruise and descent \u00b7 ${dateStr} from ~${String(hr).padStart(2, '0')}:00 local \u00b7 model: <b>${WIND_MODEL_LABELS[modelSel] || modelSel}</b>. <b>Review, then Save &amp; Apply.</b>`, false);
       }
     }
 

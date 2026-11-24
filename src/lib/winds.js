@@ -18,7 +18,7 @@
  * matrix fill stay in the page.
  */
 import { toRad, toDeg } from './performance.js';
-import { pathSegments, pointAlongSegments } from './legs.js';
+import { pathSegments, pointAlongSegments, computeFlightSchedule } from './legs.js';
 
 // The pressure levels requested from Open-Meteo, 1000-600 hPa. Both the
 // request builder and the response parser key off this list, so it lives
@@ -43,6 +43,52 @@ export function uvToWind(u, v) {
   return [dir, spd];
 }
 
+/** How many altitudes each of a leg's three columns is read at. Each column
+ *  stands for a third of the leg's distance, so a leg is read at 3 x this many
+ *  evenly spaced points along its planned profile. */
+export const WIND_ALT_STEPS = 4;
+
+/**
+ * THE ALTITUDE THE AIRCRAFT IS PLANNED AT, A GIVEN DISTANCE ALONG A LEG (v17.23).
+ *
+ * The author: "a long high altitude leg that has a descent down to ground. If
+ * the majority of the leg is in cruise and the last part is down to ground,
+ * choosing ground wind isnt that optimal". The fetch read every sample at the
+ * END fix's altitude, so that leg got the surface wind for all of it.
+ *
+ * Read off the flight schedule's own corners, the same ones the map marks and
+ * the leg totals use: entry altitude held to the bottom of climb, the climb,
+ * the level part, the descent, and the run-in after the bottom of descent.
+ * A climb and a descent are taken as straight lines over DISTANCE - close
+ * enough to choose a wind level by, and nothing else is computed from it.
+ * Without a schedule leg (or with one that is not finite) the answer is the
+ * end fix's altitude, which is what the fetch used before.
+ * @param {ScheduleLeg|null|undefined} SL @param {number} dNM @param {number} fallbackFt
+ * @returns {number} feet
+ */
+export function legAltitudeAt(SL, dNM, fallbackFt) {
+  if (!SL) return fallbackFt;
+  const dist = SL.distNM, entry = Number(SL.entryAlt), exit = Number(SL.exitAlt);
+  const climbA = SL.climbStartNM || 0, climbB = climbA + (SL.climbDistNM || 0);
+  const descB = dist - (SL.bodTailNM || 0), descA = Math.max(climbB, descB - (SL.descDistNM || 0));
+  const climbs = SL.climbDistNM > 0;
+  // What the climb reaches on THIS leg: the leg's altitude once it tops out,
+  // or wherever a climb still running has got to by the end fix.
+  const level = !climbs ? entry
+    : (SL.stillClimbing && !(SL.descDistNM > 0) ? exit : Number(SL.to.alt));
+  if (![dist, entry, exit, climbA, climbB, descA, descB, level].every(Number.isFinite)) return fallbackFt;
+  const d = Math.max(0, Math.min(dist, dNM));
+  if (climbs && d < climbB) {
+    if (d <= climbA) return entry;
+    return entry + (level - entry) * (d - climbA) / (climbB - climbA);
+  }
+  if (SL.descDistNM > 0 && d > descA) {
+    if (d >= descB || descB <= descA) return exit;
+    return level + (exit - level) * (d - descA) / (descB - descA);
+  }
+  return level;
+}
+
 // Three samples per non-pattern leg: start wp, geodesic midpoint, end wp.
 /** Three sample points per leg - start, midpoint, end - for every flight.
  *  Takes the flight list and the leg start-time map as ARGUMENTS: they are
@@ -54,6 +100,9 @@ export function buildWindSamplePoints(flights, legStartTimes) {
   /** @type {WindSamplePoint[]} */
   const pts = [];
   (flights || []).forEach((/** @type {Flight} */ fl, /** @type {number} */ fIdx) => {
+    /** @type {Array<ScheduleLeg|null>} */
+    let sched = [];
+    try { sched = computeFlightSchedule(fl); } catch (e) { sched = []; }
     for (let i = 0; i < fl.waypoints.length - 1; i++) {
       const from = fl.waypoints[i], to = fl.waypoints[i + 1];
       // The segment test below IS the pattern test (v16.83), and the more
@@ -65,8 +114,18 @@ export function buildWindSamplePoints(flights, legStartTimes) {
       const mid = pointAlongSegments(segs, totalD / 2);
       const legKey = fIdx + '-' + i;
       const offsetMin = (legStartTimes && legStartTimes[legKey]) || 0;
-      [[from.lat, from.lng], [mid.lat, mid.lng], [to.lat, to.lng]].forEach(([lat, lng]) => {
-        pts.push({ legKey, fIdx, i, lat, lng, altFt: to.alt, offsetMin });
+      // EACH COLUMN IS READ AT THE ALTITUDES FLOWN ON ITS THIRD OF THE LEG
+      // (v17.23). The request is unchanged - a column already carries every
+      // level - so this costs no extra location. A level leg gives the same
+      // altitude twelve times, which is the answer it always had.
+      [[from.lat, from.lng], [mid.lat, mid.lng], [to.lat, to.lng]].forEach(([lat, lng], col) => {
+        const altsFt = [];
+        for (let s = 0; s < WIND_ALT_STEPS; s++) {
+          const frac = (col + (s + 0.5) / WIND_ALT_STEPS) / 3;
+          altsFt.push(legAltitudeAt(sched[i], totalD * frac, to.alt));
+        }
+        const altFt = altsFt.reduce((a2, b2) => a2 + b2, 0) / altsFt.length;
+        pts.push({ legKey, fIdx, i, lat, lng, altFt, altsFt, offsetMin });
       });
     }
   });
