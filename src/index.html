@@ -341,7 +341,7 @@
           </div>
           <div class="mb-foot" style="margin:0 0 6px;">
             POH Figures 5-6 and the short-field landing table, worked the way the school's OFP sheet works
-            them: to 50 ft, wind and braking action applied, then &times;1.25 take-off / &times;1.43 landing,
+            them: to 50 ft, wind (if switched on) and, for a landing, braking action applied, then &times;1.25 take-off / &times;1.43 landing,
             against TODA and LDA from the AIP. Runway direction is TRUE, as a METAR wind is.
             The drawn runway is the declared TODA or LDA with the distances to scale along it; its
             width and markings are enlarged to be seen (markings per EASA CS ADR-DSN).
@@ -510,7 +510,7 @@
                 <li><b>Mass &amp; Balance</b> prints as page 2 once you pick an aircraft on the <b>&#9878; Mass &amp; Balance</b> tab, on the form's own page: the loading table, trip fuel, final reserve, fuel on board and endurance, V<sub>A</sub> and V<sub>GLIDE</sub>, the cruise level's POH figures, Min FLT, both aerodrome blocks and both distance blocks, and the take-off, landing and zero-fuel points <b>plotted on the form's own CG chart</b>. Its figures use the form's decimal comma. <b>Alternate and extra fuel</b> are typed on the M&amp;B tab (US gal, timed at 12 gal/h, not stored) and printed with the <b>total fuel required</b> - trip + alternate + extra + final reserve; a box you leave empty stays empty and adds nothing. Left blank for your pen: contingency fuel (not counted in the total), MSA, MDA/DA, max crosswind, runway state, the minima tables and the signatures. The one change to the form outside a written box: the landing H-Wind box has a stray "0" printed in it, which is covered when a headwind is written there. <b>Endurance and the final reserve time are at 12 gal/h</b>, the sheet's one planning fuel flow - 64 gal is 05:20 whatever you cruise at. <b>Trip fuel is all the fuel the plan uses</b>, a touch &amp; go's ground time included - on a sector's own page too, which says so beside its title. On a whole-flight sheet the fuel taken on at a refuelling stop is stated in the top margin, because the form has no line for it. With no aircraft picked, nothing is weighed and nothing is checked.</li>
                 <li><b>Last minute change</b>: type the fuel actually on board at preflight on the Mass &amp; Balance tab - planned 64 gal, dipped 60, type 60. Every mass, CG, endurance and take-off distance is then worked with the actual fuel, on the tab and on the printed page; the <b>Last Minute Change</b> line prints the difference with its sign, and the top margin says the page is for the actual fuel. The difference follows the fuel into the next sectors until a full stop refuels. The OFP's own fuel column stays the plan, because the plan is what the change is measured against. Running out of fuel with the actual figure raises the red banner. Not saved - it is today's fuel.</li>
                 <li><b>Choosing an aircraft loads its standard baggage</b> - 7.3 lb at A and 0.7 lb at C on every aircraft, and LN-TRE's 22.7 lb at B, as the school's workbook does. They are ordinary baggage lines you can see and type over; choosing a tail again resets them.</li>
-                <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, braking action, <b>no wind correction by default</b> (turn it on in <b>Settings &rarr; Take-off &amp; landing distance</b> to apply the sheet's: no headwind credit under 9 kt, +10% per 2 kt of tailwind; a tailwind past 10 kt is refused either way), then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
+                <li><b>Take-off and landing distances</b> are worked the way the school's OFP sheet works them: the POH figure to 50 ft, <b>braking action on landings only</b> (a take-off is not corrected for the runway condition, and its card and page 2 boxes carry none), <b>no wind correction by default</b> (turn it on in <b>Settings &rarr; Take-off &amp; landing distance</b> to apply the sheet's: no headwind credit under 9 kt, +10% per 2 kt of tailwind; a tailwind past 10 kt is refused either way), then &times;1.25 for take-off and &times;1.43 for landing, against <b>TODA</b> and <b>LDA</b> from the AIP. <b>A take-off is always a stationary start from the threshold, at the full length of the runway</b> - the school's policy - and that includes the take-off after a touch &amp; go; intersection departures are not offered. Four things differ from the sheet on purpose: the runway direction is the AIP's <b>true</b> bearing, because a METAR wind is true (the sheet's headings are magnetic); a <b>VRB</b> wind counts as a tailwind on both take-off and landing; above the POH table (8000 ft, 40 &deg;C, 3100 lb) nothing is computed instead of extrapolated; and the take-off is checked against TODA, where the sheet's "TODA" cell actually reads ASDA.</li>
                 <li><b>Each distance is drawn on a little runway.</b> The strip is the declared <b>TODA</b> (take-off) or <b>LDA</b> (landing) of the runway end you picked, and the POH distance and the factored requirement are measured along it <b>to scale</b> from where the run starts - a requirement longer than the strip runs off the end in red and says by how much. The width and the markings are enlarged so they can be seen. The markings are the EASA ones (CS ADR-DSN): <b>threshold stripes</b> counted by the published runway width (18 m: 4, 23 m: 6, 30 m: 8, 45 m: 12, 60 m: 16 - a width not in that table, such as ENRO's 40 m, gets none and says why), the <b>runway number</b> read from the approach, and the <b>centre line</b>. An unpaved strip is drawn without paint. The strip is not the physical runway: the AIP does not say where on the surface each declared distance begins, so the picture does not guess. The wind box beside it is the wind the figure was worked with, split into head/tail and cross; a tailwind is red. The figures in the text remain the authority.</li>
                 <li>Wind, QNH and temperature come from the latest METAR when you have fetched it, and you can type over any of them. <b>If the METAR has a TEMPO group with a wind, that wind is the one used</b>, and the card says so. <b>Type a tower or ATIS wind as TRUE</b> - those are magnetic. None of these values is saved: yesterday's QNH is a wrong QNH. The landing table exists for 2950 lb only, so it is used as published for every landing weight - a lighter aeroplane lands shorter, so it errs on the safe side. ENAS is gravel, and the POH has no gravel correction, so no distance is given there.</li>
               </ul>
@@ -1500,7 +1500,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.20';
+    const APP_VERSION = '17.21';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -8573,7 +8573,11 @@
         xwind: !w ? '' : (w.variable ? String(w.crossKt) : (w.crossKt === 0 ? '0' : w.crossKt + (w.crossFrom || ''))),
         paFt: pa, qnh: c.qnh, tempC: c.oat, daFt: densityAltitudeFt(pa, c.oat),
         hwindKt: w ? w.headKt : NaN,
-        uncorrM: r.uncorrectedM, windCorrM: r.windCorrM, braking: c.braking, brakingCorrM: r.brakingCorrM,
+        uncorrM: r.uncorrectedM, windCorrM: r.windCorrM,
+        // A take-off has no runway-condition correction (v17.21): its braking
+        // boxes on page 2 stay empty rather than printing a 6 and a 0.
+        braking: c.kind === 'landing' ? c.braking : NaN,
+        brakingCorrM: c.kind === 'landing' ? r.brakingCorrM : NaN,
         correctedM: r.correctedM, requiredM: r.requiredM, availableM: r.availableM, note
       };
     }
@@ -10032,10 +10036,14 @@
           ph('qnh', c.qnh) + ' inputmode="numeric"></label>';
         h += '<label>OAT °C<input data-key="' + k + '" data-field="oat" value="' + val(inp.oat) + '"' +
           ph('oat', c.oat) + ' inputmode="numeric"></label>';
-        h += '<label title="Braking action 6 (good) to 0 (prohibited), as on the school\'s form.">Braking' +
-          '<select data-key="' + k + '" data-field="braking">' + [6, 5, 4, 3, 2, 1, 0].map((b) =>
-          '<option value="' + b + '"' + (b === c.braking ? ' selected' : '') + '>' + b + '</option>').join('') +
-          '</select></label>';
+        // BRAKING ACTION IS A LANDING INPUT ONLY (v17.21): a take-off is not
+        // corrected for the runway condition, so its card has no box for it.
+        if (c.kind === 'landing') {
+          h += '<label title="Braking action 6 (good) to 0 (prohibited), as on the school\'s form. Applied to landings only.">Braking' +
+            '<select data-key="' + k + '" data-field="braking">' + [6, 5, 4, 3, 2, 1, 0].map((b) =>
+            '<option value="' + b + '"' + (b === c.braking ? ' selected' : '') + '>' + b + '</option>').join('') +
+            '</select></label>';
+        }
         h += '</div>';
         // The report's own time, as the METAR prints it, and its AGE: a
         // prefill from a three-hour-old report is not the weather (v16.21).
@@ -10080,7 +10088,7 @@
             ? ' m, wind ' + (r.windCorrM >= 0 ? '+' : '') + f0(r.windCorrM)
             : ' m, wind not corrected (Settings)';
           h += '<div class="perf-note">PA ' + f0(r.paFt) + ' ft · ' + esc(wtxt) + ' · POH ' + f0(r.uncorrectedM) +
-            windTxt + ', braking +' + f0(r.brakingCorrM) +
+            windTxt + (c.kind === 'landing' ? ', braking +' + f0(r.brakingCorrM) : '') +
             (r.surfaceCorrM ? ', grass +' + f0(r.surfaceCorrM) : '') + ' = ' + f0(r.correctedM) + ' m × ' + r.factor + '</div>';
         }
         if (src) h += '<div class="perf-note">' + src + '</div>';

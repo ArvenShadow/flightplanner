@@ -224,7 +224,7 @@ export function windFactor(headKt) {
  * @property {number} qnhHpa
  * @property {number} tempC
  * @property {number} headKt            from windAlongRunway
- * @property {number} braking           6..0, OFP!M26
+ * @property {number} [braking]         6..0, OFP!M26 - LANDING only (v17.21); ignored for a take-off
  * @property {string} surface           AD 2.12 CODE_COMPOSITION
  * @property {number|null} availableM  TODA (take-off) or LDA (landing)
  * @property {boolean} [windCorrection] false: no headwind/tailwind correction
@@ -272,8 +272,13 @@ export function runwayDistance(x) {
   if (!grass && !PAVED.test(surface)) {
     return refuse(`the POH publishes no correction for a ${surface || 'unknown'} surface`, 'surface');
   }
-  const bf = BRAKING_FACTORS[Number(x.braking)];
-  if (Number(x.braking) === 0) return refuse('braking action 0: operations prohibited', 'limit');
+  // THE RUNWAY CONDITION IS A LANDING CORRECTION ONLY (v17.21, the author:
+  // "runway condition is ONLY applied at landing, not takeoff"). A take-off
+  // carries no braking-action correction and does not read the figure at all,
+  // so nothing typed for it - 0 included - can change or refuse a take-off.
+  const landing = x.kind === 'landing';
+  const bf = landing ? BRAKING_FACTORS[Number(x.braking)] : 1;
+  if (landing && Number(x.braking) === 0) return refuse('braking action 0: operations prohibited', 'limit');
   if (!bf) return refuse('braking action must be 1 to 6', 'input');
   const headKnown = Number.isFinite(Number(x.headKt)) && x.headKt !== null;
   const wfPoh = headKnown ? windFactor(x.headKt) : 1;

@@ -10,6 +10,27 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE RUNWAY CONDITION IS A LANDING CORRECTION ONLY (v17.21)
+
+The author: *"runway condition is ONLY applied at landing, not takeoff"*.
+
+- Until now `runwayDistance` applied the braking-action factor (OFP!O26: 4 = x1.1,
+  3 = x1.2, 2 = x1.5, 1 = x2, 0 = prohibited) to BOTH distances, as the workbook's
+  sheet does (it has an M26 cell for take-off and a T26 for landing). The author
+  flies it and says how it is applied; this is a SIXTH stated departure from the
+  workbook's method.
+- **Take-off**: no braking factor, and the figure is not read at all - nothing
+  typed for it, 0 included, changes or refuses a take-off. Its card has no
+  Braking box, its working line no "braking +N", and page 2's take-off braking
+  boxes stay EMPTY (not "6" and "0").
+- **Landing**: unchanged - factor, braking action 0 refused as prohibited, an
+  out-of-range figure refused.
+- The grass correction is not the runway condition: it is the POH's surface
+  note and still applies to both.
+- The braking test's four asserts ran on a take-off; they were moved to a
+  landing deliberately, with a sweep showing every braking value leaves a
+  take-off at its dry figure.
+
 ## THE LEG PANEL NO LONGER PLACES THE CLIMB OR THE DESCENT, AND THE MSA IS IN BOTH RIGHT-CLICK MENUS (v17.20)
 
 The author, after v17.19 left the leg panel as it was: *"the right click menu is
