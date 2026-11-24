@@ -7618,6 +7618,42 @@ T('Apply on the leg panel keeps a dragged climb where it was dragged; the panel 
   assert(doc.getElementById('leg-reset-row').style.display === 'none', 'an undragged leg is offered a reset');
   ev('closeLegModal();');
 });
+TA('Enter in a box of either right-click menu applies it and closes the menu (v17.22)', async () => {
+  // The author: "when pressing enter after entering MSA in right click menu,
+  // nothing happens. Please make enter automatically apply and close the right
+  // click menu".
+  const enter = (el) => el.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  try {
+    ev(SEED);
+    const open = () => ev(`hitLines[0]._h.contextmenu({ latlng: { lat: 69.14, lng: 18.26 }, originalEvent: { preventDefault: function(){} } })`);
+    // THE LEG PANEL: from the MSA box, and from each of its other boxes.
+    open();
+    const msa = doc.getElementById('leg-msa');
+    msa.value = '3700'; enter(msa);
+    assert(ev('flights[0].waypoints[1].msa') === 3700, 'Enter in the MSA box did not apply it');
+    assert(doc.getElementById('leg-modal').style.display !== 'flex' && ev('legPanel') === null, 'Enter did not close the leg panel');
+    assert(ev('undoEntryLabel(undoStack[undoStack.length - 1])') === 'apply leg settings', 'Enter did not take the Apply path');
+    open(); doc.getElementById('leg-alt').value = '3000'; enter(doc.getElementById('leg-alt'));
+    assert(ev('flights[0].waypoints[1].alt') === 3000 && doc.getElementById('leg-modal').style.display !== 'flex', 'Enter in the altitude box did not apply and close');
+    // A refused figure keeps the panel open, so the typo is not thrown away.
+    open(); doc.getElementById('leg-msa').value = '999999'; enter(doc.getElementById('leg-msa'));
+    assert(ev('flights[0].waypoints[1].msa') === 3700 && doc.getElementById('leg-modal').style.display === 'flex', 'Enter applied a refused MSA, or closed the panel on it');
+    // Enter on a BUTTON is that button's own business, not Apply.
+    const before = ev('undoStack.length');
+    doc.getElementById('leg-msa').value = '3700';
+    enter(doc.querySelector('#leg-modal .modal-footer .btn-secondary'));
+    assert(ev('undoStack.length') === before && doc.getElementById('leg-modal').style.display === 'flex', 'Enter on the Cancel button applied the panel');
+    ev('closeLegModal();');
+    // With the panel closed the key does nothing.
+    enter(doc.getElementById('leg-msa'));
+    assert(ev('undoStack.length') === before, 'Enter applied a closed panel');
+    // THE WAYPOINT MENU already did this; guarded so it stays.
+    const pr = w.openWaypointMenu(0, 1); await tick();
+    typeInDialog('4300', 'msa');
+    enter(openDlg().querySelector('.dlg-input[data-field="msa"]')); await pr; await tick();
+    assert(ev('flights[0].waypoints[1].msa') === 4300 && !openDlg(), 'Enter in the waypoint menu\'s MSA box did not apply and close');
+  } finally { if (openDlg()) answerDialog('Cancel'); ev('if (legPanel) closeLegModal();'); ev(SEED); }
+});
 TA('the MSA can be set from both right-click menus: the leg panel and the waypoint menu (v17.20)', async () => {
   // The author: "i want to be able to set MSA in the right click menu".
   try {
