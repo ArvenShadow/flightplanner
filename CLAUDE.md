@@ -264,6 +264,7 @@ three cheap disciplines applied every time the page is touched:
   **The leg panel does not place corners** (v17.20): altitude, descent rate,
   MSA, insert, nearby stop, and "put a dragged corner back"; Apply never
   touches `altAtNM`. The MSA is also in the waypoint menu (the leg ending there).
+  Enter in a box applies and closes either menu (v17.22). → §{ENTER APPLIES THE LEG PANEL (v17.22)}
   → §{THE LEG PANEL NO LONGER PLACES THE CLIMB OR THE DESCENT, AND THE MSA IS IN BOTH RIGHT-CLICK MENUS (v17.20)}
   The waypoint dialog edits name and altitude together; Enter commits. On a
   circuit stop it edits LAPS and altitude (v17.17; 0 or a fraction refused).

@@ -10,6 +10,21 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## ENTER APPLIES THE LEG PANEL (v17.22)
+
+The author: *"when pressing enter after entering MSA in right click menu,
+nothing happens. Please make enter automatically apply and close the right click
+menu"*.
+
+- The WAYPOINT menu is a `dialog.js` dialog and has committed on Enter since
+  v16.74. The LEG panel is a hand-built modal with no key handling, so Enter in
+  its boxes did nothing - the same rule not applied to the other surface.
+- One keydown listener on `#leg-modal`: Enter from one of its INPUTs runs
+  `saveLegSettings` (the Apply button's own path). Enter on a focused button is
+  left to the button. A refused figure keeps the panel open, as Apply does.
+- Tested for the MSA and altitude boxes, a refused MSA, Enter on Cancel, a
+  closed panel, and the waypoint menu's MSA box.
+
 ## THE RUNWAY CONDITION IS A LANDING CORRECTION ONLY (v17.21)
 
 The author: *"runway condition is ONLY applied at landing, not takeoff"*.
