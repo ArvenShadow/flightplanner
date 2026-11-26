@@ -435,8 +435,11 @@ interface WindSamplePoint {
   i: number;
   lat: number;
   lng: number;
-  /** Leg altitude, feet - picks the pressure level to read. */
+  /** The mean of `altsFt`, feet - for display; the fetch reads `altsFt`. */
   altFt: number;
+  /** The altitudes this column is read at, feet: the planned profile over the
+   *  third of the leg the column stands for (v17.23). */
+  altsFt?: number[];
   /** Minutes after ETD, which picks the forecast hour. */
   offsetMin: number;
 }

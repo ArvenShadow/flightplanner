@@ -228,7 +228,10 @@ three cheap disciplines applied every time the page is touched:
   §{Saved-route freshness (v16.10)}
 - **Winds aloft**: Open-Meteo pressure levels, u/v averaging, 3 samples a
   leg; **ECMWF IFS 0.25° is the default model** (v17.15). MET Nordic has no pressure levels. **Never assume calm wind**: a
-  missing wind or OAT is NaN and named on the banner.
+  missing wind or OAT is NaN and named on the banner. Each sample is read at
+  the altitudes FLOWN on its third of the leg (v17.23, `legAltitudeAt`), not at
+  the end fix's altitude; still one wind per leg.
+  → §{THE WIND IS READ ALONG THE PLANNED PROFILE, NOT AT THE END FIX'S ALTITUDE (v17.23)}
   → §{Winds aloft}
 - **Flight Defaults hold no departure elevation and no wind** (v17.6, the
   author): the elevation comes from the departure aerodrome (editable in the
@@ -294,6 +297,8 @@ three cheap disciplines applied every time the page is touched:
   elevation and opens directly after the stop's plan. A fly-by is named from
   the published ATS callsign. → §{What happens at an aerodrome (v16.54-v16.59, roadmap item 17)}
   and → §{THE GROUND TIME BELONGS TO THE SECTOR IT DELAYS (v16.84)}
+  An EMPTY plan after a stop is owed nothing; the stop waits for the first
+  plan with a waypoint (v17.24). → §{AN EMPTY PLAN AFTER A STOP IS OWED NOTHING UNTIL IT HAS A WAYPOINT (v17.24)}
 - **Deleting a stop deletes the sector it opened** (found by position, not a
   stored link): an empty one silently, a planned one after asking; one undo
   step. → §{DELETING A STOP DELETES THE SECTOR IT OPENED (v17.4)}
