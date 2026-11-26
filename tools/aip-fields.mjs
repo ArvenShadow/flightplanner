@@ -84,6 +84,13 @@ function plainText(html) {
     .trim();
 }
 
+/** Is this span a value the edition marks as DELETED? The class is
+ *  `AmdtDeletedAIRAC` in the 2026-11-26 edition; any `AmdtDeleted*` counts.
+ *  @param {string|null} cls @returns {boolean} */
+function isDeletedClass(cls) {
+  return !!cls && /(?:^|\s)AmdtDeleted/.test(cls);
+}
+
 /** @param {string} attrs @returns {string|null} */
 function classOf(attrs) {
   const m = attrs.match(/class="([^"]*)"/i);
@@ -203,25 +210,45 @@ function valueOf(node) {
  *   - otherwise it describes the nearest preceding `SD` span.
  *
  * @param {string} html one eAIP page
+ * @param {{withdrawn?: number}} [stats] counts the markers dropped because the
+ *        value they describe is marked deleted in this edition
  * @returns {AipField[]}
  */
-export function extractFields(html) {
+export function extractFields(html, stats) {
   const source = String(html || '');
   const rowStarts = rowBoundaries(source);
   const nodes = spanNodes(source);
   /** @type {AipField[]} */
   const out = [];
   let lastSd = -1;
+  let lastDeleted = -1;
 
   nodes.forEach((node, index) => {
+    // A WITHDRAWN VALUE KEEPS ITS MARKER (found at 2026-11-26). The eAIP's
+    // tracked-change markup does not wrap a deleted value in <del>: it REPLACES
+    // the value span's class - `<span class=" AmdtDeletedAIRAC">118.305</span>`
+    // - and leaves the `sdParams` marker behind it untouched. With no SD span
+    // of its own, that marker fell to "the nearest preceding SD span" and took
+    // ITS value: ENGM's withdrawn tower row came through as a frequency of
+    // "MHZ". A marker sitting directly behind a deleted value describes a value
+    // that is no longer published, so the field is dropped, and counted.
+    if (isDeletedClass(node.cls)) { lastDeleted = index; return; }
     if (node.cls === 'SD') { lastSd = index; return; }
     if (node.cls !== 'sdParams') return;
 
     // rule 2: an enclosing SD span wins over the preceding one
     let owner = -1;
     for (let p = node.parent; p !== -1; p = nodes[p].parent) {
+      if (isDeletedClass(nodes[p].cls)) { owner = -2; break; }
       if (nodes[p].cls === 'SD') { owner = p; break; }
     }
+    if (owner === -1 && lastDeleted !== -1 && nodes[lastDeleted].end > 0 &&
+        nodes[lastDeleted].end <= node.start &&
+        (lastSd === -1 || nodes[lastSd].start < nodes[lastDeleted].start) &&
+        source.slice(nodes[lastDeleted].end, node.start).replace(/<\/?(?:del|ins)\b[^>]*>/gi, '').trim() === '') {
+      owner = -2;
+    }
+    if (owner === -2) { if (stats) stats.withdrawn = (stats.withdrawn || 0) + 1; return; }
     if (owner === -1) owner = lastSd;
 
     const marker = plainText(node.inner);

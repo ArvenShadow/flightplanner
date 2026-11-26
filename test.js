@@ -3429,6 +3429,36 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
 });
 
 console.log('\n=== 64. AIP airspace import (Avinor eAIP, v16.29) ===');
+T('a marker left behind a value the edition marks deleted is dropped, not given the previous value (v17.26)', () => {
+  // FOUND AT THE 2026-11-26 RE-IMPORT. The eAIP does not wrap a withdrawn value
+  // in <del>: it replaces the value span's class with AmdtDeletedAIRAC and
+  // leaves the sdParams marker behind it. That marker then took "the nearest
+  // preceding SD span" - and ENGM's withdrawn tower row became a frequency of
+  // "MHZ". This is the ENGM markup itself, whitespace trimmed.
+  const aip = require('./tools/aip-fields.mjs');
+  const sd = (v, m) => `<span class="SD" id="x">${v}</span><span class="sdParams" style="display: none;">${m}</span>`;
+  const del = (v, m) => `<span class=" AmdtDeletedAIRAC" id="y" title="Effective date: 26 NOV 2026. ">${v}</span><span class="sdParams" style="display: none;">${m}</span>`;
+  const html = `<tr><td><p><ins class=" AmdtInsertedAIRAC"> ${sd('120.105', 'TFREQUENCY;VAL_FREQ_TRANS;699')} ${sd('MHZ', 'TFREQUENCY;UOM_FREQ;699')}</ins> ` +
+    `${del('118.305', 'TFREQUENCY;VAL_FREQ_TRANS;971')} <del class=" AmdtDeletedAIRAC" id="z"> </del> ${del('MHZ', 'TFREQUENCY;UOM_FREQ;971')} </p></td>` +
+    `<td><p>${sd('H24', 'TFREQUENCY_STS;CUSTOM_ATT26;804')}</p></td></tr>`;
+  const stats = {};
+  const got = aip.extractFields(html, stats).map((f) => f.id + ':' + f.field + '=' + f.value);
+  assert(got.join() === '699:VAL_FREQ_TRANS=120.105,699:UOM_FREQ=MHZ,804:CUSTOM_ATT26=H24', 'fields: ' + got.join());
+  assert(stats.withdrawn === 2, 'withdrawn markers counted: ' + stats.withdrawn);
+  // A live value straight after a deleted one is still read, and a deleted
+  // value's marker is not confused with one that follows a live SD span.
+  const mixed = `<p>${del('OLD', 'TX;A;1')} ${sd('NEW', 'TX;A;2')} <span class=" AmdtDeletedAIRAC">prose</span> text ${sd('KEPT', 'TX;A;3')}</p>`;
+  assert(aip.extractFields(mixed).map((f) => f.id + '=' + f.value).join() === '2=NEW,3=KEPT', 'mixed: ' + JSON.stringify(aip.extractFields(mixed)));
+  // THE SHIPPED DATA: no frequency whose value is not a number, anywhere.
+  const set = aipDataset();
+  const bad = [];
+  for (const f of set.features.concat(set.sectors || [])) for (const sv of (f.services || [])) for (const q of (sv.freqs || [])) {
+    if (!/^\d{3}\.\d{1,3}$/.test(String(q.mhz))) bad.push(f.name + ' ' + sv.code + ' ' + q.mhz);
+  }
+  assert(!bad.length, 'a non-numeric frequency shipped: ' + bad.slice(0, 5).join('; '));
+  const rep = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  assert(typeof rep.withdrawnMarkers === 'number', 'the report does not count the withdrawn markers');
+});
 T('the eAIP field extractor survives the source structure', () => {
   const aip = require('./tools/aip-fields.mjs');
   const html = fs.readFileSync('test-fixtures/eaip-snippet.html', 'utf8');
@@ -3750,7 +3780,8 @@ T('a standby frequency is not offered as one to dial', () => {
   }
   // The tower row keeps BOTH of its real sector frequencies.
   const twr = A.serviceRows(engm).find((r) => r.tag === 'TWR');
-  assert(twr.freqs.join(',') === '118.305,120.105', 'ENGM tower: ' + twr.freqs.join(','));
+  // Order-independent: 2026-11-26 republished the table with the E sector first.
+  assert(twr.freqs.slice().sort().join(',') === '118.305,120.105', 'ENGM tower: ' + twr.freqs.join(','));
 });
 
 T('one position published under two spellings is one row', () => {
@@ -4819,8 +4850,17 @@ T('every shipped reporting point is corroborated by the chart it came from', () 
   // point inside that range was read correctly - a corrupted digit lands off
   // the sheet.
   const rep = JSON.parse(fs.readFileSync('tools/prepared/vac-report.json', 'utf8'));
-  assert(rep.checks.graticule === rep.checks.total,
-    rep.checks.graticule + '/' + rep.checks.total + ' points inside their chart graticule');
+  // EVERY POINT IS EITHER INSIDE ITS CHART'S GRATICULE OR ON A CHART NAMED AS
+  // HAVING NONE READABLE - never silently unchecked. EDITION-DEPENDENT, pinned:
+  // 2026-11-26 republished ENBO with its sideways latitude labels drawn as
+  // outlines instead of text (0 rotated text items against ENDU's 90), so its
+  // 11 points pass the name echo and the ARP bound only. Their coordinates are
+  // IDENTICAL to 2026-09-03, where all 11 passed the graticule check. If this
+  // list changes after an AIP update, look at the chart before editing it.
+  assert(rep.checks.graticule + rep.checks.noGraticulePoints === rep.checks.total,
+    rep.checks.graticule + ' + ' + rep.checks.noGraticulePoints + ' of ' + rep.checks.total + ' points accounted for');
+  assert(rep.checks.noGraticuleCharts.join() === 'ENBO' && rep.checks.noGraticulePoints === 11,
+    'charts with no readable graticule: ' + rep.checks.noGraticuleCharts + ' (' + rep.checks.noGraticulePoints + ' points), expected ENBO (11)');
   assert(!rep.refusedPoints.length, 'refused points shipped: ' + JSON.stringify(rep.refusedPoints));
   assert(!rep.unnamedRows.length, 'unnamed rows: ' + JSON.stringify(rep.unnamedRows));
   // The name check is a corroboration, not a gate: a point on the sheet edge
@@ -10546,6 +10586,16 @@ T('the untouched plan a stop opens is owed nothing until it has a waypoint of it
       ev(`delete flights[0].waypoints[1].stop; renderAllFlightTables();`);
       assert(tFly - mins() === (kind === 'full-stop' ? 10 : 5), 'the first added waypoint did not bring the ' + kind + ' time back: ' + (tFly - mins()));
     }
+    // A REFUEL DOES NOT WAIT (v17.26): typed for the untouched plan, it is on
+    // board at once - and it still adds no time and no burn.
+    ev(plans('full-stop', ''));
+    ev('addNewFlightPlan(0);');
+    const remBefore = parseFloat(txtOf('grand-final-rem'));
+    ev('flights[0].waypoints[1].fuelAfterGal = 80; renderAllFlightTables();');
+    assert(parseFloat(txtOf('grand-final-rem')) === 80 && remBefore < 80, 'a refuel typed for the untouched plan is not on board: ' + remBefore + ' -> ' + txtOf('grand-final-rem'));
+    assert(mins() === t0 && Math.abs(burn() - b0) < 0.05, 'the refuel brought the ground time or a burn with it');
+    ev(`flights[1].waypoints.push(${D}); renderAllFlightTables();`);
+    assert(parseFloat(txtOf('grand-final-rem')) < 80 && parseFloat(txtOf('grand-final-rem')) > 70, 'the planned sector did not start from the refuel: ' + txtOf('grand-final-rem'));
     // A plan that opens with CIRCUITS is flying, even with one waypoint.
     ev(plans('full-stop', `, { id: 2, title: 'B', depElev: 31, waypoints: [Object.assign(${C}, { isPattern: true, laps: 2, name: 'PATTERN', alt: 1000 })] }`));
     const withStop = mins();
@@ -12036,6 +12086,85 @@ T('the raster is display-only: no coordinate comes off a picture', () => {
   // The published points remain the ONLY source of fix coordinates.
   const vacPts = JSON.parse(fs.readFileSync('tools/prepared/vac-points.json', 'utf8'));
   assert(vacPts.points === 243, 'the reporting-point count moved: ' + vacPts.points);
+});
+
+T('a sheet whose latitude labels are not text: the minute ticks are found by their spacing, never by reading the picture (v17.27)', () => {
+  const G = require('./tools/vac-geo.mjs');
+  // A SYNTHETIC EDGE: a 16.2 pt lattice from 158.4, one tick missing, and
+  // stray marks between - Bodø's right edge carries 103 marks for ~35 ticks.
+  const lattice = [];
+  for (let k = 0; k < 34; k++) if (k !== 7) lattice.push({ pos: 158.4 + k * 16.2 + (k % 3 - 1) * 0.08, length: 3.1 });
+  const strays = [165.1, 171.9, 240.3, 250.9, 301.4, 398.2, 455.0, 512.7, 600.4, 640.2].map((pos) => ({ pos, length: 4.4 }));
+  const got = G.numberTicksByPitch([...lattice, ...strays], 16.25, 156.7, 710.9);
+  assert(!('reason' in got), 'a clean lattice among strays was refused: ' + JSON.stringify(got));
+  assert(got.ticks.length === 33 && Math.abs(got.pitch - 16.2) < 0.02, 'lattice: ' + got.ticks.length + ' ticks at ' + got.pitch);
+  assert(got.ticks[0].n === 0 && !got.ticks.some((t) => t.n === 7) && got.ticks.some((t) => t.n === 8 && Math.abs(t.pos - (158.4 + 8 * 16.2)) < 0.2),
+    'the missing tick was not counted across');
+  assert(!got.ticks.some((t) => strays.some((x) => x.pos === t.pos)), 'a stray mark was numbered as a tick');
+  // A lattice at TWICE the expected pitch is a 2-minute lattice: refused.
+  const twoMin = [];
+  for (let k = 0; k < 17; k++) twoMin.push({ pos: 158.4 + k * 32.4, length: 3.1 });
+  const sparse = G.numberTicksByPitch(twoMin, 16.2, 156.7, 710.9);
+  assert('reason' in sparse, 'a two-minute lattice was numbered as one-minute ticks');
+  // Marks with no lattice at all are refused.
+  const noise = [160, 171, 190.5, 203, 230, 262, 281, 333, 349, 420, 477, 503, 590, 622, 688].map((pos) => ({ pos, length: 3 }));
+  assert('reason' in G.numberTicksByPitch(noise, 16.2, 156.7, 710.9), 'noise was numbered');
+
+  // THE REAL SHEET (ENDU), with its latitude labels REMOVED from the text: the
+  // ticks found by spacing must be the very ticks the labels name, and the
+  // numbering - given the right parallel for tick 0 - must reproduce the
+  // labelled values exactly.
+  const { frame } = enduGeoreference();
+  const read = G.graticuleObservations(VAC_FIXTURE.segments, VAC_FIXTURE.textItems, frame);
+  assert(!('refused' in read), 'fixture: ENDU no longer reads');
+  // With its labels present this path refuses: it is only for a sheet with none.
+  assert('refused' in G.unlabelledLatitudeGraticule(VAC_FIXTURE.segments, VAC_FIXTURE.textItems, frame, 69.05),
+    'the inference ran on a sheet whose latitude labels are text');
+  const noLat = VAC_FIXTURE.textItems.filter((t) => !/^\d{1,2}°\d{2}'?[NS]$/.test(String(t.str).trim().replace(/[’′]/g, "'")));
+  const blind = G.graticuleObservations(VAC_FIXTURE.segments, noLat, frame);
+  assert('refused' in blind && blind.refused.every((r) => r.reason === 'no-labels' && /^0 /.test(r.detail)),
+    'fixture: stripping the latitude labels did not give the Bodø refusal');
+  const part = G.unlabelledLatitudeGraticule(VAC_FIXTURE.segments, noLat, frame, 69.05);
+  assert(!('refused' in part), 'ENDU without latitude labels was refused: ' + JSON.stringify(part.refused));
+  for (const edge of ['left', 'right']) {
+    const labelled = read.fit.filter((o) => o.kind === 'lat' && Math.abs(o.x - frame[edge]) < 1e-6);
+    assert(labelled.length >= 2, 'fixture: no labelled ' + edge + ' ticks');
+    const tick0 = part[edge].ticks.find((t) => Math.abs(t.pos - labelled[0].y) < 0.05);
+    assert(tick0, 'the labelled ' + edge + ' tick at ' + labelled[0].y + ' is not on the lattice found by spacing');
+    const base = Math.round(labelled[0].value * 60) - tick0.n;
+    const obs = G.latitudeObservations(edge, part[edge].ticks, frame, base);
+    for (const l of labelled) {
+      const m = obs.fit.find((o) => Math.abs(o.y - l.y) < 0.05);
+      assert(m && Math.abs(m.value - l.value) < 1e-9, edge + ': the labelled tick at ' + l.y + ' (' + l.value + ') is not reproduced: ' + JSON.stringify(m));
+    }
+    assert(obs.fit.every((o) => Math.round(o.value * 60) % 10 === 0) && obs.holdout.every((o) => Math.round(o.value * 60) % 10 !== 0),
+      'the fit set is not exactly the whole-10-minute ticks');
+    // One minute out, and no labelled tick is reproduced - which is what lets
+    // the published points tell the candidates apart.
+    const wrong = G.latitudeObservations(edge, part[edge].ticks, frame, base + 1);
+    assert(!labelled.some((l) => wrong.fit.some((o) => Math.abs(o.y - l.y) < 0.05 && Math.abs(o.value - l.value) < 1e-9)), 'a numbering one minute out still matched');
+  }
+});
+
+T('the shipped charts: only a sheet with no latitude text has its latitude established, and it passed the cross-check (v17.27)', () => {
+  const snap = JSON.parse(fs.readFileSync('tools/prepared/vac-charts.json', 'utf8'));
+  const charts = Array.isArray(snap.data) ? snap.data : snap.charts;
+  const est = charts.filter((c) => c.graticule && c.graticule.inferredLatitude);
+  // EDITION-DEPENDENT, pinned: ENBO at 2026-11-26. A second sheet appearing
+  // here means Avinor exported another chart with outlined labels - look at it.
+  assert(est.map((c) => c.icao).join() === 'ENBO', 'charts with established latitude: ' + est.map((c) => c.icao));
+  for (const c of est) {
+    const inf = c.graticule.inferredLatitude;
+    assert(c.controlSource === 'published-points' && c.publishedPoints && c.publishedPoints.validationPoints.length >= 2,
+      c.icao + ' was not carried by its published points');
+    assert(typeof c.crossCheckM === 'number' && c.crossCheckM <= c.thresholds.maxCrossCheckM, c.icao + ' cross-check: ' + c.crossCheckM);
+    assert(inf.candidates > 20 && Math.abs(inf.pitchRatio - 1) < 0.03, c.icao + ': ' + JSON.stringify(inf));
+  }
+  const rep = JSON.parse(fs.readFileSync('data/vac-raster-report.json', 'utf8'));
+  assert(rep.refused.length === 0 && rep.prepared === 49, 'prepared ' + rep.prepared + ', refused ' + JSON.stringify(rep.refused));
+  // No record points at a superseded index (the build had Index/155 written in).
+  const aip = aipDataset();
+  assert(charts.every((c) => c.sourceUrl && c.sourceUrl.includes('/' + aip.editionLabel + '/')), 'a chart source URL is not this edition\'s');
 });
 
 T('two neighbouring sheets must agree about where the ground is', () => {
@@ -14792,7 +14921,7 @@ T('a take-off outside the published ATS hours reaches the banner; one inside the
     const card = doc.getElementById('hours-body');
     assert(card.querySelector('tr.hours-closed') && /CLOSED · SUN 0750-2130 UTC/.test(card.textContent), 'the card does not show it closed');
     assert(/NOTAMs are not fetched/.test(card.textContent) && /ippc\.no/.test(card.textContent), 'the card does not say NOTAMs are not fetched');
-    assert(/revised per AIRAC 2026-09-03/.test(card.textContent) && /Operational hours © Avinor AS/.test(card.textContent), 'the card does not name its source');
+    assert(/revised per AIRAC 2026-11-26/.test(card.textContent) && /Operational hours © Avinor AS/.test(card.textContent), 'the card does not name its source');
     // No ETD: nothing to check, nothing on the banner, and the card says why.
     doc.getElementById('def-etd').value = '';
     w.renderAllFlightTables();
@@ -14906,7 +15035,7 @@ T('hours that could not be read are shown raw and are never a banner finding', (
     assert(!ev('runIntegrityCheck()').some((p) => /ENRY/.test(p)), 'an undecoded entry raised the banner');
     const card = doc.getElementById('hours-body').textContent;
     const rawEl = doc.getElementById('hours-body').querySelector('.hours-src');
-    assert(rawEl && /^WEEK 33 - 18, MON: 0700 - 1900/.test(rawEl.textContent), 'the published text itself is not shown: ' + (rawEl && rawEl.textContent));
+    assert(rawEl && /^WEEK 33 - 18, MON - THU: 0700 - 2300/.test(rawEl.textContent), 'the published text itself is not shown: ' + (rawEl && rawEl.textContent));
     assert(/Not decoded/.test(card) && /Outside HR of OPS, O\/R to WingOps/.test(card),
       'the refusal or the remark is missing: ' + card.slice(0, 300));
   } finally {

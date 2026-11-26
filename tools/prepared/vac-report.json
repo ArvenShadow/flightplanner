@@ -132,7 +132,7 @@
       "icao": "ENSG",
       "chart": "AD 2 ENSG 6 - 1",
       "reason": "not-a-table",
-      "detail": "1 coordinate(s) at x 89.9 on page 1 - fewer than 2, so there is no column to read a name from"
+      "detail": "1 coordinate(s) at x 88.2 on page 1 - fewer than 2, so there is no column to read a name from"
     }
   ],
   "unnamedRows": [],
@@ -146,8 +146,12 @@
   "checks": {
     "nameEchoed": 237,
     "nameOnly": 7,
-    "graticule": 244,
-    "noGraticule": 0,
+    "graticule": 233,
+    "noGraticule": 1,
+    "noGraticuleCharts": [
+      "ENBO"
+    ],
+    "noGraticulePoints": 11,
     "total": 244
   }
 }

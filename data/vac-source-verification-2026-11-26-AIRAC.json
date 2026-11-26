@@ -1,9 +1,9 @@
 {
  "schema": 1,
- "editionLabel": "2026-09-03-AIRAC",
- "preparedFrom": "2026-09-03-AIRAC",
+ "editionLabel": "2026-11-26-AIRAC",
+ "preparedFrom": "2026-11-26-AIRAC",
  "preparationRevision": 1,
- "verifiedAtUtc": "2026-09-29T00:14:21.127Z",
+ "verifiedAtUtc": "2026-11-26T20:25:47.492Z",
  "method": "each manifest entry's AD 2.24 chart reference and graphic id, against the live edition",
  "charts": 49,
  "unchanged": 49,
@@ -42,7 +42,7 @@
   {
    "icao": "ENBO",
    "chart": "AD 2 ENBO 6 - 1",
-   "graphicId": "623101",
+   "graphicId": "662500",
    "verdict": "unchanged"
   },
   {
@@ -78,7 +78,7 @@
   {
    "icao": "ENDU",
    "chart": "AD 2 ENDU 6 - 1",
-   "graphicId": "623256",
+   "graphicId": "662505",
    "verdict": "unchanged"
   },
   {
@@ -90,7 +90,7 @@
   {
    "icao": "ENFL",
    "chart": "AD 2 ENFL 6 - 1",
-   "graphicId": "623117",
+   "graphicId": "662502",
    "verdict": "unchanged"
   },
   {
@@ -204,7 +204,7 @@
   {
    "icao": "ENRE",
    "chart": "AD 2 ENRE 6 - 1",
-   "graphicId": "623149",
+   "graphicId": "663547",
    "verdict": "unchanged"
   },
   {
@@ -234,7 +234,7 @@
   {
    "icao": "ENSG",
    "chart": "AD 2 ENSG 6 - 1",
-   "graphicId": "623161",
+   "graphicId": "662508",
    "verdict": "unchanged"
   },
   {

@@ -1500,7 +1500,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.25';
+    const APP_VERSION = '17.27';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -7385,6 +7385,18 @@
         // the table shows no row (one waypoint is no leg) while the array
         // holds one. The author: "nope. doesnt work." A plan is a sector once
         // it has something FLOWN - a second waypoint, or a circuit.
+        //
+        // A REFUEL IS NOT A DELAY, SO IT DOES NOT WAIT (v17.26, caught by
+        // verify:fixes - v17.25 deferred it with the minutes, and a refuel
+        // typed in the untouched plan's own header changed nothing on screen).
+        // The tanks hold the stated figure the moment the pilot states it; it
+        // adds no flight time and burns nothing. The stop stays queued, and
+        // setting the same figure again when the sector is planned is harmless
+        // because nothing is burned in between.
+        if (pendingStop && !planHasFlying(fl) && pendingStop.kind === 'full-stop' && pendingStop.refuelGal !== null) {
+          runningFuelRemaining = Number(convertFuel(pendingStop.refuelGal, fuelUnit).toFixed(1));
+          runningFuelGal = pendingStop.refuelGal;
+        }
         if (pendingStop && planHasFlying(fl)) {
           runningAccTime += pendingStop.min;
           sectorPrefixMin = pendingStop.min;
