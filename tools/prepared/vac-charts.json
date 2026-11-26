@@ -6,15 +6,15 @@
  "editionLabel": "2026-11-26-AIRAC",
  "preparationRevision": 1,
  "renderDpi": 600,
- "preparedAtUtc": "2026-11-26T19:44:52.860Z",
- "charts": 48,
+ "preparedAtUtc": "2026-11-26T20:25:40.406Z",
+ "charts": 49,
  "data": [
   {
    "icao": "ENAL",
    "chart": "AD 2 ENAL 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "4141c4e7cb14858ad943c3caf15c1efd5eb7a5305f65d98b47a15cf7562bcacc",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623091.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623091.pdf",
    "graphicId": "623091",
    "preparationRevision": 1,
    "file": "enal-2026-05-14-4141c4e7-r1.webp",
@@ -40,7 +40,8 @@
     "fitTicks": 19,
     "holdoutTicks": 135,
     "fitResidualM": 14.88,
-    "holdoutResidualM": 15.22
+    "holdoutResidualM": 15.22,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 14,
@@ -169,7 +170,7 @@
    "chart": "AD 2 ENAN 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "af0181940560c1a6e91a6b7d7bd6f17c5a7cc6156dbec5efb913c2af90202bc8",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623093.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623093.pdf",
    "graphicId": "623093",
    "preparationRevision": 1,
    "file": "enan-2026-05-14-af018194-r1.webp",
@@ -195,7 +196,8 @@
     "fitTicks": 20,
     "holdoutTicks": 135,
     "fitResidualM": 6.77,
-    "holdoutResidualM": 11.05
+    "holdoutResidualM": 11.05,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 9,
@@ -289,7 +291,7 @@
    "chart": "AD 2 ENAT 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "2f9149c469e91c36ae21abca1d4c7d80b8c656787be8c81162f99dc5899e3ef7",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623095.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623095.pdf",
    "graphicId": "623095",
    "preparationRevision": 1,
    "file": "enat-2026-05-14-2f9149c4-r1.webp",
@@ -315,7 +317,8 @@
     "fitTicks": 23,
     "holdoutTicks": 171,
     "fitResidualM": 19.27,
-    "holdoutResidualM": 20.06
+    "holdoutResidualM": 20.06,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -331,7 +334,7 @@
    "chart": "AD 2 ENBL 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "6d5098eb19b237790cd89ca2c35df3e383f37620f096381a00bab11b966e56be",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623097.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623097.pdf",
    "graphicId": "623097",
    "preparationRevision": 1,
    "file": "enbl-2026-05-14-6d5098eb-r1.webp",
@@ -357,7 +360,8 @@
     "fitTicks": 12,
     "holdoutTicks": 63,
     "fitResidualM": 10.66,
-    "holdoutResidualM": 10.33
+    "holdoutResidualM": 10.33,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -373,7 +377,7 @@
    "chart": "AD 2 ENBN 6 - 1",
    "chartDate": "2026-09-03",
    "sourcePdfSha256": "18f3805e6bf8de0a483fc7470caa0a24e6fbbac1e88a765c3f7e14e8e00a37ab",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/643887.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/643887.pdf",
    "graphicId": "643887",
    "preparationRevision": 1,
    "file": "enbn-2026-09-03-18f3805e-r1.webp",
@@ -399,7 +403,8 @@
     "fitTicks": 13,
     "holdoutTicks": 81,
     "fitResidualM": 2.36,
-    "holdoutResidualM": 3.2
+    "holdoutResidualM": 3.2,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -411,11 +416,151 @@
    }
   },
   {
+   "icao": "ENBO",
+   "chart": "AD 2 ENBO 6 - 1",
+   "chartDate": "2026-11-26",
+   "sourcePdfSha256": "df17657e02da2e8b3ed8c1879feffe27cef014be08a3635f8e6b2bc4813cf9e1",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/662500.pdf",
+   "graphicId": "662500",
+   "preparationRevision": 1,
+   "file": "enbo-2026-11-26-df17657e-r1.webp",
+   "bytes": 2718886,
+   "pixelWidth": 3967,
+   "pixelHeight": 4659,
+   "renderDpi": 600,
+   "targetCrs": "EPSG:3857",
+   "bounds": {
+    "west": 13.7436782,
+    "east": 15.0115783,
+    "south": 67.0150316,
+    "north": 67.589588
+   },
+   "controlSource": "published-points",
+   "framePdfPoints": {
+    "left": 61.9,
+    "right": 532.7,
+    "bottom": 156.7,
+    "top": 710.9
+   },
+   "graticule": {
+    "fitTicks": 22,
+    "holdoutTicks": 117,
+    "fitResidualM": 19.19,
+    "holdoutResidualM": 20.22,
+    "inferredLatitude": {
+     "baseMinute": 4021,
+     "rightOffset": 1,
+     "candidates": 175,
+     "pitchRatio": 1.0003
+    }
+   },
+   "publishedPoints": {
+    "matched": 11,
+    "unmatched": [],
+    "symbolPerimeterPt": 25.8,
+    "fitPoints": [
+     {
+      "name": "BJØRNØY LIGHT",
+      "lat": 67.419167,
+      "lng": 14.427778,
+      "pageX": 314.485,
+      "pageY": 546.144
+     },
+     {
+      "name": "CUTTY",
+      "lat": 67.252778,
+      "lng": 14.931944,
+      "pageX": 502.773,
+      "pageY": 383.297
+     },
+     {
+      "name": "KVALNES",
+      "lat": 67.2375,
+      "lng": 14.826944,
+      "pageX": 463.171,
+      "pageY": 368.537
+     },
+     {
+      "name": "LANDEGO WEST",
+      "lat": 67.389167,
+      "lng": 14.208889,
+      "pageX": 232.283,
+      "pageY": 517.883
+     },
+     {
+      "name": "MÅRNES",
+      "lat": 67.15,
+      "lng": 14.083333,
+      "pageX": 181.88,
+      "pageY": 285.914
+     },
+     {
+      "name": "SEINES",
+      "lat": 67.215833,
+      "lng": 14.380556,
+      "pageX": 294.805,
+      "pageY": 348.556
+     },
+     {
+      "name": "SKÅNLAND",
+      "lat": 67.172778,
+      "lng": 14.335556,
+      "pageX": 277.404,
+      "pageY": 306.854
+     },
+     {
+      "name": "TWINS",
+      "lat": 67.15,
+      "lng": 13.954167,
+      "pageX": 133.039,
+      "pageY": 286.693
+     }
+    ],
+    "validationPoints": [
+     {
+      "name": "HJARTØY",
+      "lat": 67.287222,
+      "lng": 14.291667,
+      "pageX": 262.164,
+      "pageY": 418.339
+     },
+     {
+      "name": "SALTSTRAUMEN",
+      "lat": 67.233333,
+      "lng": 14.636111,
+      "pageX": 391.289,
+      "pageY": 364.817
+     },
+     {
+      "name": "VOKKY",
+      "lat": 67.436111,
+      "lng": 13.974167,
+      "pageX": 145.159,
+      "pageY": 564.864
+     }
+    ],
+    "spanFraction": {
+     "x": 0.785,
+     "y": 0.47
+    },
+    "fitResidualM": 3.95,
+    "holdoutResidualM": 6.59,
+    "holdoutRmsM": 4.82
+   },
+   "crossCheckM": 10.65,
+   "warpReproductionM": 0.0017,
+   "thresholds": {
+    "maxGraticuleResidualM": 50,
+    "maxPublishedResidualM": 25,
+    "maxCrossCheckM": 80
+   }
+  },
+  {
    "icao": "ENBR",
    "chart": "AD 2 ENBR 6 - 2",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "13a5f8c1c707bdc8abe75eeac29a21db33ad0a5a3a9220c09d6fe528e7ba943a",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623103.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623103.pdf",
    "graphicId": "623103",
    "preparationRevision": 1,
    "file": "enbr-2026-05-14-13a5f8c1-r1.webp",
@@ -441,7 +586,8 @@
     "fitTicks": 14,
     "holdoutTicks": 72,
     "fitResidualM": 12.29,
-    "holdoutResidualM": 14.43
+    "holdoutResidualM": 14.43,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -457,7 +603,7 @@
    "chart": "AD 2 ENBR 6 - 3",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "f28c2d11b971b17501f49b2f282f66814a0ac949e0aa3b73aee35604a95e839d",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623105.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623105.pdf",
    "graphicId": "623105",
    "preparationRevision": 1,
    "file": "enbr-2026-05-14-f28c2d11-r1.webp",
@@ -483,7 +629,8 @@
     "fitTicks": 16,
     "holdoutTicks": 90,
     "fitResidualM": 9.54,
-    "holdoutResidualM": 16.74
+    "holdoutResidualM": 16.74,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -499,7 +646,7 @@
    "chart": "AD 2 ENBS 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "45b78840982d772647d1f88ecf0a84d0017533521b2e1cc29bf13f09bd1249f3",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623109.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623109.pdf",
    "graphicId": "623109",
    "preparationRevision": 1,
    "file": "enbs-2026-05-14-45b78840-r1.webp",
@@ -525,7 +672,8 @@
     "fitTicks": 15,
     "holdoutTicks": 90,
     "fitResidualM": 5.59,
-    "holdoutResidualM": 9.91
+    "holdoutResidualM": 9.91,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -541,7 +689,7 @@
    "chart": "AD 2 ENBV 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "dae00067a1df598045fabdb950bb3645e00f7166821974885d3f35a61cb20313",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623111.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623111.pdf",
    "graphicId": "623111",
    "preparationRevision": 1,
    "file": "enbv-2026-05-14-dae00067-r1.webp",
@@ -567,7 +715,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 10.8,
-    "holdoutResidualM": 11.19
+    "holdoutResidualM": 11.19,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -583,7 +732,7 @@
    "chart": "AD 2 ENCN 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "21c337f8493ab65c6f1ac27301625b61fd31d4d2eb0817f5e0eb8d34e19bdefe",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623260.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623260.pdf",
    "graphicId": "623260",
    "preparationRevision": 1,
    "file": "encn-2026-05-14-21c337f8-r1.webp",
@@ -609,7 +758,8 @@
     "fitTicks": 16,
     "holdoutTicks": 108,
     "fitResidualM": 5.33,
-    "holdoutResidualM": 5.9
+    "holdoutResidualM": 5.9,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 10,
@@ -710,7 +860,7 @@
    "chart": "AD 2 ENDU 6 - 1",
    "chartDate": "2026-11-26",
    "sourcePdfSha256": "727de883f9f306f9f21d0ee01186e1a9881418cf3035d0e24ef6f2c7136d2480",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/662505.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/662505.pdf",
    "graphicId": "662505",
    "preparationRevision": 1,
    "file": "endu-2026-11-26-727de883-r1.webp",
@@ -736,7 +886,8 @@
     "fitTicks": 26,
     "holdoutTicks": 189,
     "fitResidualM": 6.22,
-    "holdoutResidualM": 9.33
+    "holdoutResidualM": 9.33,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 19,
@@ -902,7 +1053,7 @@
    "chart": "AD 2 ENEV 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "eb3ac203d7c341a92625115c50e185fa0e90b8a35c136252e16f74b9980f9a8b",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623113.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623113.pdf",
    "graphicId": "623113",
    "preparationRevision": 1,
    "file": "enev-2026-05-14-eb3ac203-r1.webp",
@@ -928,7 +1079,8 @@
     "fitTicks": 19,
     "holdoutTicks": 135,
     "fitResidualM": 11.21,
-    "holdoutResidualM": 16.84
+    "holdoutResidualM": 16.84,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 12,
@@ -1043,7 +1195,7 @@
    "chart": "AD 2 ENFL 6 - 1",
    "chartDate": "2026-11-26",
    "sourcePdfSha256": "8d7337f950503e4a363511dd01c777f8189e6479bc2fb6d72465eb32d24ab401",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/662502.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/662502.pdf",
    "graphicId": "662502",
    "preparationRevision": 1,
    "file": "enfl-2026-11-26-8d7337f9-r1.webp",
@@ -1069,7 +1221,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 7.32,
-    "holdoutResidualM": 14.3
+    "holdoutResidualM": 14.3,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1085,7 +1238,7 @@
    "chart": "AD 2 ENGK 6 - 1",
    "chartDate": "2026-11-26",
    "sourcePdfSha256": "41f581b9e350235a6aa3249de860aa20d91308b221bb9379f9ef691b0d5770cb",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623258.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623258.pdf",
    "graphicId": "623258",
    "preparationRevision": 1,
    "file": "engk-2026-11-26-41f581b9-r1.webp",
@@ -1111,7 +1264,8 @@
     "fitTicks": 16,
     "holdoutTicks": 108,
     "fitResidualM": 6.34,
-    "holdoutResidualM": 6.74
+    "holdoutResidualM": 6.74,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1127,7 +1281,7 @@
    "chart": "AD 2 ENGM 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "9efc90a7cd688da8d066d6bfad6505936479aa6f6f073147342eec6413966a8b",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623422.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623422.pdf",
    "graphicId": "623422",
    "preparationRevision": 1,
    "file": "engm-2026-05-14-9efc90a7-r1.webp",
@@ -1153,7 +1307,8 @@
     "fitTicks": 17,
     "holdoutTicks": 117,
     "fitResidualM": 8.78,
-    "holdoutResidualM": 12.43
+    "holdoutResidualM": 12.43,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 8,
@@ -1240,7 +1395,7 @@
    "chart": "AD 2 ENHD 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "afdcc303e03963b5446b5d353c8b9d454c9ed646efa51154ce617c336fd2af55",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623089.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623089.pdf",
    "graphicId": "623089",
    "preparationRevision": 1,
    "file": "enhd-2026-05-14-afdcc303-r1.webp",
@@ -1266,7 +1421,8 @@
     "fitTicks": 17,
     "holdoutTicks": 117,
     "fitResidualM": 10.47,
-    "holdoutResidualM": 17.23
+    "holdoutResidualM": 17.23,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 13,
@@ -1391,7 +1547,7 @@
    "chart": "AD 2 ENHF 6 - 1",
    "chartDate": "2026-06-11",
    "sourcePdfSha256": "862b312a3d5d0c4c614d790528529246226f99f7ceb82e6b61c44706fda0ea90",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/638669.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/638669.pdf",
    "graphicId": "638669",
    "preparationRevision": 1,
    "file": "enhf-2026-06-11-862b312a-r1.webp",
@@ -1417,7 +1573,8 @@
     "fitTicks": 19,
     "holdoutTicks": 135,
     "fitResidualM": 4.66,
-    "holdoutResidualM": 4.45
+    "holdoutResidualM": 4.45,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1433,7 +1590,7 @@
    "chart": "AD 2 ENHK 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "8cd5bd2fb96976b97db87ec83922fcac828ea29ebec36599ce7d9c474fb82c3b",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623121.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623121.pdf",
    "graphicId": "623121",
    "preparationRevision": 1,
    "file": "enhk-2026-05-14-8cd5bd2f-r1.webp",
@@ -1459,7 +1616,8 @@
     "fitTicks": 17,
     "holdoutTicks": 117,
     "fitResidualM": 9.04,
-    "holdoutResidualM": 16.32
+    "holdoutResidualM": 16.32,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1475,7 +1633,7 @@
    "chart": "AD 2 ENHV 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "182c442b88e2484c89822779d4ef80bf2590bcb8584198ec39e739a693c75b3d",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623123.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623123.pdf",
    "graphicId": "623123",
    "preparationRevision": 1,
    "file": "enhv-2026-05-14-182c442b-r1.webp",
@@ -1501,7 +1659,8 @@
     "fitTicks": 14,
     "holdoutTicks": 81,
     "fitResidualM": 5.79,
-    "holdoutResidualM": 7.24
+    "holdoutResidualM": 7.24,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1517,7 +1676,7 @@
    "chart": "AD 2 ENKB 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "efe5d5d06eb2ffa8c92a07043ac7b2ee60cdde582ae61f7d8c7ca425b465cfcf",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623125.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623125.pdf",
    "graphicId": "623125",
    "preparationRevision": 1,
    "file": "enkb-2026-05-14-efe5d5d0-r1.webp",
@@ -1543,7 +1702,8 @@
     "fitTicks": 20,
     "holdoutTicks": 144,
     "fitResidualM": 10.67,
-    "holdoutResidualM": 15.1
+    "holdoutResidualM": 15.1,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 8,
@@ -1630,7 +1790,7 @@
    "chart": "AD 2 ENKR 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "33379264c12ce603def6b1d56e403382869ce06db84c6560a7f830092f802566",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623127.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623127.pdf",
    "graphicId": "623127",
    "preparationRevision": 1,
    "file": "enkr-2026-05-14-33379264-r1.webp",
@@ -1656,7 +1816,8 @@
     "fitTicks": 20,
     "holdoutTicks": 144,
     "fitResidualM": 11.96,
-    "holdoutResidualM": 16.79
+    "holdoutResidualM": 16.79,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 9,
@@ -1750,7 +1911,7 @@
    "chart": "AD 2 ENLK 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "51b8b05ee9a77b37423bba0699ea7255029554c8e50b6df31f5ee338c2661b5e",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623129.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623129.pdf",
    "graphicId": "623129",
    "preparationRevision": 1,
    "file": "enlk-2026-05-14-51b8b05e-r1.webp",
@@ -1776,7 +1937,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 7.79,
-    "holdoutResidualM": 12.84
+    "holdoutResidualM": 12.84,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1792,7 +1954,7 @@
    "chart": "AD 2 ENMH 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "82939c23e8322bc81f1e65674ed5ef86b5d71d8b957a9a2877b8d8b6f0c533e3",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623131.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623131.pdf",
    "graphicId": "623131",
    "preparationRevision": 1,
    "file": "enmh-2026-05-14-82939c23-r1.webp",
@@ -1818,7 +1980,8 @@
     "fitTicks": 16,
     "holdoutTicks": 108,
     "fitResidualM": 6.93,
-    "holdoutResidualM": 5.3
+    "holdoutResidualM": 5.3,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1834,7 +1997,7 @@
    "chart": "AD 2 ENML 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "70d89cec39153984ff41aa311483bd31d6113dae834b8f8c6a375aec6b1f3c11",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623133.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623133.pdf",
    "graphicId": "623133",
    "preparationRevision": 1,
    "file": "enml-2026-05-14-70d89cec-r1.webp",
@@ -1860,7 +2023,8 @@
     "fitTicks": 11,
     "holdoutTicks": 63,
     "fitResidualM": 6.09,
-    "holdoutResidualM": 7.76
+    "holdoutResidualM": 7.76,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1876,7 +2040,7 @@
    "chart": "AD 2 ENMS 6 - 1",
    "chartDate": "2026-09-03",
    "sourcePdfSha256": "e5380471057e4f962c5ed073b42ff2a374418a9202cd6c90a04b0de1ee160d52",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/643752.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/643752.pdf",
    "graphicId": "643752",
    "preparationRevision": 1,
    "file": "enms-2026-09-03-e5380471-r1.webp",
@@ -1902,7 +2066,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 3.09,
-    "holdoutResidualM": 4.58
+    "holdoutResidualM": 4.58,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1918,7 +2083,7 @@
    "chart": "AD 2 ENNA 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "b09d9d15c14af5e33fe9e85ae529e1cf3b096d07db1fe6b841c4b60325612e12",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623137.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623137.pdf",
    "graphicId": "623137",
    "preparationRevision": 1,
    "file": "enna-2026-05-14-b09d9d15-r1.webp",
@@ -1944,7 +2109,8 @@
     "fitTicks": 23,
     "holdoutTicks": 171,
     "fitResidualM": 13.05,
-    "holdoutResidualM": 18.08
+    "holdoutResidualM": 18.08,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -1960,7 +2126,7 @@
    "chart": "AD 2 ENNM 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "91281a0825af0326c093fd4508f41e8c299bc0148bb2ae70a43ff4a71fb49309",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623139.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623139.pdf",
    "graphicId": "623139",
    "preparationRevision": 1,
    "file": "ennm-2026-05-14-91281a08-r1.webp",
@@ -1986,7 +2152,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 7.75,
-    "holdoutResidualM": 11.94
+    "holdoutResidualM": 11.94,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2002,7 +2169,7 @@
    "chart": "AD 2 ENNO 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "ea4f38e93c0f6437f112f8ef35749d6a1b5ee27d3ad70efdefd4d4e54ef5d7e6",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623141.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623141.pdf",
    "graphicId": "623141",
    "preparationRevision": 1,
    "file": "enno-2026-05-14-ea4f38e9-r1.webp",
@@ -2028,7 +2195,8 @@
     "fitTicks": 13,
     "holdoutTicks": 81,
     "fitResidualM": 7.63,
-    "holdoutResidualM": 16.32
+    "holdoutResidualM": 16.32,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2044,7 +2212,7 @@
    "chart": "AD 2 ENOL 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "2dc45a3d39722e51ea5ff60eaea6e815d225e81d01ec342f83cd30b500394f6f",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623143.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623143.pdf",
    "graphicId": "623143",
    "preparationRevision": 1,
    "file": "enol-2026-05-14-2dc45a3d-r1.webp",
@@ -2070,7 +2238,8 @@
     "fitTicks": 21,
     "holdoutTicks": 144,
     "fitResidualM": 11.39,
-    "holdoutResidualM": 21.12
+    "holdoutResidualM": 21.12,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 15,
@@ -2208,7 +2377,7 @@
    "chart": "AD 2 ENOV 6 - 1",
    "chartDate": "2026-06-11",
    "sourcePdfSha256": "8344ca91229cd822b3df3139e0f5ccc1b61428e658dc1145ded84e7abf7a906a",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/638672.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/638672.pdf",
    "graphicId": "638672",
    "preparationRevision": 1,
    "file": "enov-2026-06-11-8344ca91-r1.webp",
@@ -2234,7 +2403,8 @@
     "fitTicks": 15,
     "holdoutTicks": 99,
     "fitResidualM": 5.56,
-    "holdoutResidualM": 5.48
+    "holdoutResidualM": 5.48,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 7,
@@ -2314,7 +2484,7 @@
    "chart": "AD 2 ENRA 6 - 1",
    "chartDate": "2026-06-11",
    "sourcePdfSha256": "5bde437fb064755551d8ef3b07f714a48b512bb679bc5dd046a452c36dd4f78e",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/638724.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/638724.pdf",
    "graphicId": "638724",
    "preparationRevision": 1,
    "file": "enra-2026-06-11-5bde437f-r1.webp",
@@ -2340,7 +2510,8 @@
     "fitTicks": 12,
     "holdoutTicks": 72,
     "fitResidualM": 5.07,
-    "holdoutResidualM": 11.92
+    "holdoutResidualM": 11.92,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2356,7 +2527,7 @@
    "chart": "AD 2 ENRE 6 - 1",
    "chartDate": "2026-11-26",
    "sourcePdfSha256": "564bf407dd3df3c38c7297351be415c55aff51236e013d661c814c7d02494519",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/663547.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/663547.pdf",
    "graphicId": "663547",
    "preparationRevision": 1,
    "file": "enre-2026-11-26-564bf407-r1.webp",
@@ -2382,7 +2553,8 @@
     "fitTicks": 15,
     "holdoutTicks": 99,
     "fitResidualM": 2.96,
-    "holdoutResidualM": 4.38
+    "holdoutResidualM": 4.38,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 10,
@@ -2483,7 +2655,7 @@
    "chart": "AD 2 ENRM 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "d50c4c5200b2fcbe33e64040c42f3a28dceb86d9d3631d910be296cfe9f56c93",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623153.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623153.pdf",
    "graphicId": "623153",
    "preparationRevision": 1,
    "file": "enrm-2026-05-14-d50c4c52-r1.webp",
@@ -2509,7 +2681,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 7.25,
-    "holdoutResidualM": 9.27
+    "holdoutResidualM": 9.27,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2525,7 +2698,7 @@
    "chart": "AD 2 ENRO 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "9b8e51ac274781ebbed15ff5e3563d97f40efc1eb6b53b7f2ca86bd43089533d",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623155.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623155.pdf",
    "graphicId": "623155",
    "preparationRevision": 1,
    "file": "enro-2026-05-14-9b8e51ac-r1.webp",
@@ -2551,7 +2724,8 @@
     "fitTicks": 21,
     "holdoutTicks": 144,
     "fitResidualM": 3.63,
-    "holdoutResidualM": 7.75
+    "holdoutResidualM": 7.75,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2567,7 +2741,7 @@
    "chart": "AD 2 ENRS 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "0b3808721d83ef97bf2d6b9dcfa712b9303f797d5d9e80bea0c8a88beb35004a",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623157.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623157.pdf",
    "graphicId": "623157",
    "preparationRevision": 1,
    "file": "enrs-2026-05-14-0b380872-r1.webp",
@@ -2593,7 +2767,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 2.31,
-    "holdoutResidualM": 3.86
+    "holdoutResidualM": 3.86,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2609,7 +2784,7 @@
    "chart": "AD 2 ENSD 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "29158607c8f89b40b742fd8656964716f8a5f1423067f1ff4ae7fdd49d0e0873",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623159.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623159.pdf",
    "graphicId": "623159",
    "preparationRevision": 1,
    "file": "ensd-2026-05-14-29158607-r1.webp",
@@ -2635,7 +2810,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 7.83,
-    "holdoutResidualM": 7.27
+    "holdoutResidualM": 7.27,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2651,7 +2827,7 @@
    "chart": "AD 2 ENSG 6 - 1",
    "chartDate": "2026-11-26",
    "sourcePdfSha256": "03d37288e96478580ebd9be751edd56aaaf6f8a40e579e846ce8f6af7b338ed8",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/662508.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/662508.pdf",
    "graphicId": "662508",
    "preparationRevision": 1,
    "file": "ensg-2026-11-26-03d37288-r1.webp",
@@ -2677,7 +2853,8 @@
     "fitTicks": 12,
     "holdoutTicks": 72,
     "fitResidualM": 3.93,
-    "holdoutResidualM": 9.4
+    "holdoutResidualM": 9.4,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2693,7 +2870,7 @@
    "chart": "AD 2 ENSH 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "441a2af0a4b7c65e8e08e526338f1d14df39ddb8a4a720d15aaf789d90868922",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623163.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623163.pdf",
    "graphicId": "623163",
    "preparationRevision": 1,
    "file": "ensh-2026-05-14-441a2af0-r1.webp",
@@ -2719,7 +2896,8 @@
     "fitTicks": 14,
     "holdoutTicks": 90,
     "fitResidualM": 6.09,
-    "holdoutResidualM": 13.92
+    "holdoutResidualM": 13.92,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2735,7 +2913,7 @@
    "chart": "AD 2 ENSK 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "9ae0a6564e75ffed1c958410daabb29ccd91d2ee19b3df3e1522e6d2683423a8",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623165.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623165.pdf",
    "graphicId": "623165",
    "preparationRevision": 1,
    "file": "ensk-2026-05-14-9ae0a656-r1.webp",
@@ -2761,7 +2939,8 @@
     "fitTicks": 12,
     "holdoutTicks": 72,
     "fitResidualM": 0.68,
-    "holdoutResidualM": 3.91
+    "holdoutResidualM": 3.91,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -2777,7 +2956,7 @@
    "chart": "AD 2 ENSO 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "6bb2792cf209be5a388883f0ffd9849d8551aaee192e66d37fe3d2053db77aa4",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623167.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623167.pdf",
    "graphicId": "623167",
    "preparationRevision": 1,
    "file": "enso-2026-05-14-6bb2792c-r1.webp",
@@ -2803,7 +2982,8 @@
     "fitTicks": 15,
     "holdoutTicks": 99,
     "fitResidualM": 13.53,
-    "holdoutResidualM": 21.03
+    "holdoutResidualM": 21.03,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 8,
@@ -2890,7 +3070,7 @@
    "chart": "AD 2 ENSR 6 - 1",
    "chartDate": "2026-09-03",
    "sourcePdfSha256": "c9d0f4d622f62bab8a9ac10c8c2d0524c3c18ebbb314d9703665878f0f035269",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/643749.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/643749.pdf",
    "graphicId": "643749",
    "preparationRevision": 1,
    "file": "ensr-2026-09-03-c9d0f4d6-r1.webp",
@@ -2916,7 +3096,8 @@
     "fitTicks": 15,
     "holdoutTicks": 99,
     "fitResidualM": 6.84,
-    "holdoutResidualM": 7.21
+    "holdoutResidualM": 7.21,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 8,
@@ -3003,7 +3184,7 @@
    "chart": "AD 2 ENSS 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "e74e79e2b609307d8516c71bce91bb67c9fbcb31e9dc94f9784c09f535c7ff3a",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623169.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623169.pdf",
    "graphicId": "623169",
    "preparationRevision": 1,
    "file": "enss-2026-05-14-e74e79e2-r1.webp",
@@ -3029,7 +3210,8 @@
     "fitTicks": 18,
     "holdoutTicks": 126,
     "fitResidualM": 8.62,
-    "holdoutResidualM": 17.67
+    "holdoutResidualM": 17.67,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -3045,7 +3227,7 @@
    "chart": "AD 2 ENST 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "da24c0f2aec4743743650b99fcbe71b5fab730a646e1bea4539a1a98e6fcfe07",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623171.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623171.pdf",
    "graphicId": "623171",
    "preparationRevision": 1,
    "file": "enst-2026-05-14-da24c0f2-r1.webp",
@@ -3071,7 +3253,8 @@
     "fitTicks": 15,
     "holdoutTicks": 99,
     "fitResidualM": 3.98,
-    "holdoutResidualM": 5.46
+    "holdoutResidualM": 5.46,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -3087,7 +3270,7 @@
    "chart": "AD 2 ENTC 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "864c552dba14af7f1fefbef08344728a1b7f3f45ea1a84d6ad2275ca8a45be64",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623173.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623173.pdf",
    "graphicId": "623173",
    "preparationRevision": 1,
    "file": "entc-2026-05-14-864c552d-r1.webp",
@@ -3113,7 +3296,8 @@
     "fitTicks": 23,
     "holdoutTicks": 162,
     "fitResidualM": 11.67,
-    "holdoutResidualM": 25.51
+    "holdoutResidualM": 25.51,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 13,
@@ -3235,7 +3419,7 @@
    "chart": "AD 2 ENTO 6 - 1",
    "chartDate": "2026-06-11",
    "sourcePdfSha256": "ed79431557d10970c68eee709866db0cf4de8e869cf2534460ba3f866ab1ad98",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/640881.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/640881.pdf",
    "graphicId": "640881",
    "preparationRevision": 1,
    "file": "ento-2026-06-11-ed794315-r1.webp",
@@ -3261,7 +3445,8 @@
     "fitTicks": 16,
     "holdoutTicks": 108,
     "fitResidualM": 3.78,
-    "holdoutResidualM": 5.5
+    "holdoutResidualM": 5.5,
+    "inferredLatitude": null
    },
    "publishedPoints": {
     "matched": 10,
@@ -3362,7 +3547,7 @@
    "chart": "AD 2 ENVA 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "35acefe5ed4a3f7cfec86cd260b7a23c87ee23be332b58768ed97ee606c1f9cd",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623181.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623181.pdf",
    "graphicId": "623181",
    "preparationRevision": 1,
    "file": "enva-2026-05-14-35acefe5-r1.webp",
@@ -3388,7 +3573,8 @@
     "fitTicks": 18,
     "holdoutTicks": 126,
     "fitResidualM": 10.5,
-    "holdoutResidualM": 15.11
+    "holdoutResidualM": 15.11,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -3404,7 +3590,7 @@
    "chart": "AD 2 ENVD 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "e09eeaa0b5302d3fb1352b9f5eafbbfa27f70c5abb649b59c44585668adc9b61",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623185.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623185.pdf",
    "graphicId": "623185",
    "preparationRevision": 1,
    "file": "envd-2026-05-14-e09eeaa0-r1.webp",
@@ -3430,7 +3616,8 @@
     "fitTicks": 15,
     "holdoutTicks": 99,
     "fitResidualM": 4.78,
-    "holdoutResidualM": 6.2
+    "holdoutResidualM": 6.2,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,
@@ -3446,7 +3633,7 @@
    "chart": "AD 2 ENZV 6 - 1",
    "chartDate": "2026-05-14",
    "sourcePdfSha256": "a8f3a51b5d2913e6e562eee105d0b1533922381339036003794cbe69f9ce3b87",
-   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-11-26-AIRAC/graphics/623189.pdf",
+   "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/156/2026-11-26-AIRAC/graphics/623189.pdf",
    "graphicId": "623189",
    "preparationRevision": 1,
    "file": "enzv-2026-05-14-a8f3a51b-r1.webp",
@@ -3472,7 +3659,8 @@
     "fitTicks": 18,
     "holdoutTicks": 117,
     "fitResidualM": 13.52,
-    "holdoutResidualM": 23.28
+    "holdoutResidualM": 23.28,
+    "inferredLatitude": null
    },
    "publishedPoints": null,
    "crossCheckM": null,

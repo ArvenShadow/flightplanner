@@ -3,10 +3,10 @@
  "editionLabel": "2026-11-26-AIRAC",
  "preparedFrom": "2026-11-26-AIRAC",
  "preparationRevision": 1,
- "verifiedAtUtc": "2026-11-26T19:49:52.789Z",
+ "verifiedAtUtc": "2026-11-26T20:25:47.492Z",
  "method": "each manifest entry's AD 2.24 chart reference and graphic id, against the live edition",
- "charts": 48,
- "unchanged": 48,
+ "charts": 49,
+ "unchanged": 49,
  "superseded": 0,
  "results": [
   {
@@ -37,6 +37,12 @@
    "icao": "ENBN",
    "chart": "AD 2 ENBN 6 - 1",
    "graphicId": "643887",
+   "verdict": "unchanged"
+  },
+  {
+   "icao": "ENBO",
+   "chart": "AD 2 ENBO 6 - 1",
+   "graphicId": "662500",
    "verdict": "unchanged"
   },
   {

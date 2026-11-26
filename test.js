@@ -12088,6 +12088,85 @@ T('the raster is display-only: no coordinate comes off a picture', () => {
   assert(vacPts.points === 243, 'the reporting-point count moved: ' + vacPts.points);
 });
 
+T('a sheet whose latitude labels are not text: the minute ticks are found by their spacing, never by reading the picture (v17.27)', () => {
+  const G = require('./tools/vac-geo.mjs');
+  // A SYNTHETIC EDGE: a 16.2 pt lattice from 158.4, one tick missing, and
+  // stray marks between - Bodø's right edge carries 103 marks for ~35 ticks.
+  const lattice = [];
+  for (let k = 0; k < 34; k++) if (k !== 7) lattice.push({ pos: 158.4 + k * 16.2 + (k % 3 - 1) * 0.08, length: 3.1 });
+  const strays = [165.1, 171.9, 240.3, 250.9, 301.4, 398.2, 455.0, 512.7, 600.4, 640.2].map((pos) => ({ pos, length: 4.4 }));
+  const got = G.numberTicksByPitch([...lattice, ...strays], 16.25, 156.7, 710.9);
+  assert(!('reason' in got), 'a clean lattice among strays was refused: ' + JSON.stringify(got));
+  assert(got.ticks.length === 33 && Math.abs(got.pitch - 16.2) < 0.02, 'lattice: ' + got.ticks.length + ' ticks at ' + got.pitch);
+  assert(got.ticks[0].n === 0 && !got.ticks.some((t) => t.n === 7) && got.ticks.some((t) => t.n === 8 && Math.abs(t.pos - (158.4 + 8 * 16.2)) < 0.2),
+    'the missing tick was not counted across');
+  assert(!got.ticks.some((t) => strays.some((x) => x.pos === t.pos)), 'a stray mark was numbered as a tick');
+  // A lattice at TWICE the expected pitch is a 2-minute lattice: refused.
+  const twoMin = [];
+  for (let k = 0; k < 17; k++) twoMin.push({ pos: 158.4 + k * 32.4, length: 3.1 });
+  const sparse = G.numberTicksByPitch(twoMin, 16.2, 156.7, 710.9);
+  assert('reason' in sparse, 'a two-minute lattice was numbered as one-minute ticks');
+  // Marks with no lattice at all are refused.
+  const noise = [160, 171, 190.5, 203, 230, 262, 281, 333, 349, 420, 477, 503, 590, 622, 688].map((pos) => ({ pos, length: 3 }));
+  assert('reason' in G.numberTicksByPitch(noise, 16.2, 156.7, 710.9), 'noise was numbered');
+
+  // THE REAL SHEET (ENDU), with its latitude labels REMOVED from the text: the
+  // ticks found by spacing must be the very ticks the labels name, and the
+  // numbering - given the right parallel for tick 0 - must reproduce the
+  // labelled values exactly.
+  const { frame } = enduGeoreference();
+  const read = G.graticuleObservations(VAC_FIXTURE.segments, VAC_FIXTURE.textItems, frame);
+  assert(!('refused' in read), 'fixture: ENDU no longer reads');
+  // With its labels present this path refuses: it is only for a sheet with none.
+  assert('refused' in G.unlabelledLatitudeGraticule(VAC_FIXTURE.segments, VAC_FIXTURE.textItems, frame, 69.05),
+    'the inference ran on a sheet whose latitude labels are text');
+  const noLat = VAC_FIXTURE.textItems.filter((t) => !/^\d{1,2}°\d{2}'?[NS]$/.test(String(t.str).trim().replace(/[’′]/g, "'")));
+  const blind = G.graticuleObservations(VAC_FIXTURE.segments, noLat, frame);
+  assert('refused' in blind && blind.refused.every((r) => r.reason === 'no-labels' && /^0 /.test(r.detail)),
+    'fixture: stripping the latitude labels did not give the Bodø refusal');
+  const part = G.unlabelledLatitudeGraticule(VAC_FIXTURE.segments, noLat, frame, 69.05);
+  assert(!('refused' in part), 'ENDU without latitude labels was refused: ' + JSON.stringify(part.refused));
+  for (const edge of ['left', 'right']) {
+    const labelled = read.fit.filter((o) => o.kind === 'lat' && Math.abs(o.x - frame[edge]) < 1e-6);
+    assert(labelled.length >= 2, 'fixture: no labelled ' + edge + ' ticks');
+    const tick0 = part[edge].ticks.find((t) => Math.abs(t.pos - labelled[0].y) < 0.05);
+    assert(tick0, 'the labelled ' + edge + ' tick at ' + labelled[0].y + ' is not on the lattice found by spacing');
+    const base = Math.round(labelled[0].value * 60) - tick0.n;
+    const obs = G.latitudeObservations(edge, part[edge].ticks, frame, base);
+    for (const l of labelled) {
+      const m = obs.fit.find((o) => Math.abs(o.y - l.y) < 0.05);
+      assert(m && Math.abs(m.value - l.value) < 1e-9, edge + ': the labelled tick at ' + l.y + ' (' + l.value + ') is not reproduced: ' + JSON.stringify(m));
+    }
+    assert(obs.fit.every((o) => Math.round(o.value * 60) % 10 === 0) && obs.holdout.every((o) => Math.round(o.value * 60) % 10 !== 0),
+      'the fit set is not exactly the whole-10-minute ticks');
+    // One minute out, and no labelled tick is reproduced - which is what lets
+    // the published points tell the candidates apart.
+    const wrong = G.latitudeObservations(edge, part[edge].ticks, frame, base + 1);
+    assert(!labelled.some((l) => wrong.fit.some((o) => Math.abs(o.y - l.y) < 0.05 && Math.abs(o.value - l.value) < 1e-9)), 'a numbering one minute out still matched');
+  }
+});
+
+T('the shipped charts: only a sheet with no latitude text has its latitude established, and it passed the cross-check (v17.27)', () => {
+  const snap = JSON.parse(fs.readFileSync('tools/prepared/vac-charts.json', 'utf8'));
+  const charts = Array.isArray(snap.data) ? snap.data : snap.charts;
+  const est = charts.filter((c) => c.graticule && c.graticule.inferredLatitude);
+  // EDITION-DEPENDENT, pinned: ENBO at 2026-11-26. A second sheet appearing
+  // here means Avinor exported another chart with outlined labels - look at it.
+  assert(est.map((c) => c.icao).join() === 'ENBO', 'charts with established latitude: ' + est.map((c) => c.icao));
+  for (const c of est) {
+    const inf = c.graticule.inferredLatitude;
+    assert(c.controlSource === 'published-points' && c.publishedPoints && c.publishedPoints.validationPoints.length >= 2,
+      c.icao + ' was not carried by its published points');
+    assert(typeof c.crossCheckM === 'number' && c.crossCheckM <= c.thresholds.maxCrossCheckM, c.icao + ' cross-check: ' + c.crossCheckM);
+    assert(inf.candidates > 20 && Math.abs(inf.pitchRatio - 1) < 0.03, c.icao + ': ' + JSON.stringify(inf));
+  }
+  const rep = JSON.parse(fs.readFileSync('data/vac-raster-report.json', 'utf8'));
+  assert(rep.refused.length === 0 && rep.prepared === 49, 'prepared ' + rep.prepared + ', refused ' + JSON.stringify(rep.refused));
+  // No record points at a superseded index (the build had Index/155 written in).
+  const aip = aipDataset();
+  assert(charts.every((c) => c.sourceUrl && c.sourceUrl.includes('/' + aip.editionLabel + '/')), 'a chart source URL is not this edition\'s');
+});
+
 T('two neighbouring sheets must agree about where the ground is', () => {
   // seamObservations is pure, so the rule is tested without a PDF: two toy
   // "charts" whose models differ by a known amount must report that amount.

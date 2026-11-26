@@ -72,14 +72,14 @@ step ends with a summary. Read all four. What "normal" looked like at
 - **build:vac** - `53 aerodromes, 24 with points, 243 points`, `refused points: 0`.
   The line `coordinates inside the chart's own graticule: 233/244 (1 chart(s)
   print no graticule)` is the Bodø problem described below.
-- **build:vac-raster** - one line per chart, then `48 chart(s) prepared, 1
+- **build:vac-raster** - one line per chart, then `49 chart(s) prepared, 0
   refused`. A refused chart is **not drawn**; it is not an error to fix by
   loosening a limit. Look at the reason and at the PDF.
 - **build:aip** - `212 airspace volumes`, `ACC sectors: 27 usable, 2 not`,
   `53 aerodromes, 243 reporting points`, `runways: 112 ends at 53 aerodromes,
   120 intersection take-off positions`, and the border line `67 published ->
-  51 resolved, 11 refused, 5 in airspace that is never drawn`. `vac charts: 48
-  prepared ..., 48 still current` - anything not "still current" is a chart
+  51 resolved, 11 refused, 5 in airspace that is never drawn`. `vac charts: 49
+  prepared ..., 49 still current` - anything not "still current" is a chart
   Avinor amended after step 3, so run step 3 again.
 - **build:hours** - `53 aerodromes, revised per AIRAC <the new date>`, and four
   aerodromes "shown raw, not decoded" (ENAS, ENHV, ENOL, ENRY). More than that
@@ -114,7 +114,9 @@ The cached page is `.aip-cache/<edition>-EN-AD-2.<ICAO>.html`.
    - the ATS hours revision date on the hours card (`revised per AIRAC ...`);
    - the raw hours text of an undecoded aerodrome (ENRY);
    - the Gardermoen tower frequencies;
-   - the charts with no readable graticule (`ENBO`, 11 points).
+   - the charts with no readable graticule (`ENBO`, 11 points);
+   - the charts whose latitude was established rather than read (`ENBO`), and
+     the prepared/refused chart counts (`49`, none).
 3. With a browser available: `npm install --no-save playwright`, then
    `npm run verify:vac` and `npm run verify:fixes`.
 4. Write what changed in `docs/HISTORY.md`, update the line in `CLAUDE.md`,
@@ -130,13 +132,22 @@ The cached page is `.aip-cache/<edition>-EN-AD-2.<ICAO>.html`.
   `tools/aip-fields.mjs`; `data/aip-report.json` now counts these
   (`withdrawnMarkers`, 41 at 2026-11-26) and a test refuses any non-numeric
   frequency. If Avinor changes its change-markup again, this is where to look.
-- **A chart is refused as `graticule-unreadable` (Bodø, 2026-11-26).** The new
+- **A chart whose latitude labels are not text (Bodø, 2026-11-26).** The new
   Bodø chart looks like the others on screen, but inside the PDF its sideways
   latitude labels are drawn as shapes, not stored as text (0 rotated text items
-  against Bardufoss's 90; checked with two PDF readers). The import places a
-  chart from its printed graticule, so it cannot place this one and the chart
-  is not drawn. Bodø's 11 reporting points are still imported from the
-  coordinate table, unchanged from the previous edition.
+  against Bardufoss's 90; checked with two PDF readers). v17.26 refused it.
+  Since v17.27 the import handles exactly this case: it finds the one-minute
+  ticks on the left and right edges by their even spacing, then tries every
+  possible value for the lowest tick and keeps the chart only if **exactly
+  one** passes all the usual checks against the published reporting points.
+  The raster line then reads `published-points ... cross NN m` like any other,
+  and the record carries `graticule.inferredLatitude`. It needs a sheet with a
+  coordinate table; one without stays refused. A test pins which charts were
+  placed this way (`ENBO`) - if another appears, look at it before accepting.
+- **The chart step wrote the wrong source link (2026-11-26).** The eAIP index
+  number was written into `build-vac-raster.mjs` (`Index/155`). It is now
+  discovered like the other steps do, and a test checks every chart's link
+  names the current edition.
 - **A frequency with no unit is prose, not a frequency** (v16.42) - de-icing
   and handling frequencies in free text. Dropped by the importer.
 - **Polaris ACC Sector 8 was withdrawn** (2026-09-03) - a real change that

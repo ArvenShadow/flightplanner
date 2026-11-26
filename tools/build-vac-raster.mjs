@@ -195,71 +195,129 @@ async function prepareChart(entry, published, graphicsBase) {
 
   const frame = G.chartFrame(geo.segments);
   if (!frame) return { ok: false, icao, chart: ref, reason: 'no-chart-frame' };
-  const grat = G.graticuleObservations(geo.segments, geo.textItems, frame);
-  if ('refused' in grat) {
-    return { ok: false, icao, chart: ref, reason: 'graticule-unreadable',
-      detail: grat.refused.map((r) => `${r.edge}: ${r.reason}${r.detail ? ' (' + r.detail + ')' : ''}`).join('; ') };
-  }
-  const gratModel = G.fitConformal(grat.fit, frame);
-  if (!gratModel) return { ok: false, icao, chart: ref, reason: 'graticule-fit-singular' };
-  const gratFit = G.observationResiduals(gratModel, grat.fit);
-  const gratHold = grat.holdout.length ? G.observationResiduals(gratModel, grat.holdout) : null;
-  if (!(gratFit.maxMetres <= G.MAX_GRATICULE_RESIDUAL_M)) {
-    return { ok: false, icao, chart: ref, reason: 'graticule-residual-too-large',
-      detail: `${gratFit.maxMetres.toFixed(1)} m > ${G.MAX_GRATICULE_RESIDUAL_M} m` };
-  }
-
-  // PUBLISHED POINTS are the primary control where the sheet prints a table.
-  // The graticule model supplies the CORRESPONDENCE - roughly where each point
-  // should be - and the published table supplies the PRECISION.
-  let source = 'graticule', model = gratModel, pointInfo = null, crossMax = null;
   const table = (published.get(icao) || []).filter((p) => p.chart === ref);
-  if (table.length >= G.MIN_FIT_POINTS + G.MIN_VALIDATION_POINTS) {
-    const symbols = G.chartTriangles(geo.segments, frame);
-    const matched = G.matchPublishedPoints(symbols, table,
-      (lat, lng) => G.project(gratModel, lat, lng, frame));
-    const { fit, holdout } = splitControls(matched.controls);
-    const span = G.controlSpanFraction(fit, frame);
-    const enough = fit.length >= G.MIN_FIT_POINTS && holdout.length >= G.MIN_VALIDATION_POINTS;
-    const spread = span.x >= G.MIN_CONTROL_SPAN_FRACTION && span.y >= G.MIN_CONTROL_SPAN_FRACTION;
-    if (enough && spread) {
-      const pm = G.fitConformal(controlObservations(fit), frame);
-      if (pm) {
-        const fitRes = controlResiduals(pm, fit), holdRes = controlResiduals(pm, holdout);
-        // THE CHECK A HOLDOUT CANNOT MAKE: fit and holdout share the anchor
-        // convention, so only a second, independently derived model sees a bias
-        // in it. Taking the symbol centroid instead of its bounding-box centre
-        // moves this to ~180 m.
-        let worst = 0;
-        for (const c of matched.controls) {
-          const a = G.evaluate(pm, c.x, c.y), b = G.evaluate(gratModel, c.x, c.y);
-          const per = G.metresPerDegree(a.lat);
-          worst = Math.max(worst, Math.hypot((a.lng - b.lng) * per.perLng, (a.lat - b.lat) * per.perLat));
+
+  /** Everything between "the graticule is read" and "the sheet is rendered":
+   *  the graticule model, the published-point model and every gate on them.
+   *  A function so the SAME gates can be run once per candidate when the
+   *  latitude values have to be established rather than read (v17.27).
+   *  @param {{fit: any[], holdout: any[]}} grat */
+  const solve = (grat) => {
+    const gratModel = G.fitConformal(grat.fit, frame);
+    if (!gratModel) return { ok: false, icao, chart: ref, reason: 'graticule-fit-singular' };
+    const gratFit = G.observationResiduals(gratModel, grat.fit);
+    const gratHold = grat.holdout.length ? G.observationResiduals(gratModel, grat.holdout) : null;
+    if (!(gratFit.maxMetres <= G.MAX_GRATICULE_RESIDUAL_M)) {
+      return { ok: false, icao, chart: ref, reason: 'graticule-residual-too-large',
+        detail: `${gratFit.maxMetres.toFixed(1)} m > ${G.MAX_GRATICULE_RESIDUAL_M} m` };
+    }
+
+    // PUBLISHED POINTS are the primary control where the sheet prints a table.
+    // The graticule model supplies the CORRESPONDENCE - roughly where each point
+    // should be - and the published table supplies the PRECISION.
+    let source = 'graticule', model = gratModel, pointInfo = null, crossMax = null;
+    if (table.length >= G.MIN_FIT_POINTS + G.MIN_VALIDATION_POINTS) {
+      const symbols = G.chartTriangles(geo.segments, frame);
+      const matched = G.matchPublishedPoints(symbols, table,
+        (lat, lng) => G.project(gratModel, lat, lng, frame));
+      const { fit, holdout } = splitControls(matched.controls);
+      const span = G.controlSpanFraction(fit, frame);
+      const enough = fit.length >= G.MIN_FIT_POINTS && holdout.length >= G.MIN_VALIDATION_POINTS;
+      const spread = span.x >= G.MIN_CONTROL_SPAN_FRACTION && span.y >= G.MIN_CONTROL_SPAN_FRACTION;
+      if (enough && spread) {
+        const pm = G.fitConformal(controlObservations(fit), frame);
+        if (pm) {
+          const fitRes = controlResiduals(pm, fit), holdRes = controlResiduals(pm, holdout);
+          // THE CHECK A HOLDOUT CANNOT MAKE: fit and holdout share the anchor
+          // convention, so only a second, independently derived model sees a bias
+          // in it. Taking the symbol centroid instead of its bounding-box centre
+          // moves this to ~180 m.
+          let worst = 0;
+          for (const c of matched.controls) {
+            const a = G.evaluate(pm, c.x, c.y), b = G.evaluate(gratModel, c.x, c.y);
+            const per = G.metresPerDegree(a.lat);
+            worst = Math.max(worst, Math.hypot((a.lng - b.lng) * per.perLng, (a.lat - b.lat) * per.perLat));
+          }
+          crossMax = worst;
+          if (holdRes.maxMetres > G.MAX_PUBLISHED_RESIDUAL_M) {
+            return { ok: false, icao, chart: ref, reason: 'published-holdout-too-large',
+              detail: `${holdRes.maxMetres.toFixed(1)} m > ${G.MAX_PUBLISHED_RESIDUAL_M} m` };
+          }
+          if (worst > G.MAX_CROSS_CHECK_M) {
+            return { ok: false, icao, chart: ref, reason: 'control-sources-disagree',
+              detail: `graticule and published points differ by ${worst.toFixed(1)} m ` +
+                `> ${G.MAX_CROSS_CHECK_M} m - one of them is anchored wrongly` };
+          }
+          source = 'published-points'; model = pm;
+          pointInfo = {
+            matched: matched.controls.length, unmatched: matched.unmatched,
+            symbolPerimeterPt: matched.consensusPerimeter,
+            fitPoints: fit.map((c) => ({ name: c.name, lat: c.lat, lng: c.lng, pageX: +c.x.toFixed(3), pageY: +c.y.toFixed(3) })),
+            validationPoints: holdout.map((c) => ({ name: c.name, lat: c.lat, lng: c.lng, pageX: +c.x.toFixed(3), pageY: +c.y.toFixed(3) })),
+            spanFraction: { x: +span.x.toFixed(3), y: +span.y.toFixed(3) },
+            fitResidualM: +fitRes.maxMetres.toFixed(2),
+            holdoutResidualM: +holdRes.maxMetres.toFixed(2),
+            holdoutRmsM: +holdRes.rmsMetres.toFixed(2)
+          };
         }
-        crossMax = worst;
-        if (holdRes.maxMetres > G.MAX_PUBLISHED_RESIDUAL_M) {
-          return { ok: false, icao, chart: ref, reason: 'published-holdout-too-large',
-            detail: `${holdRes.maxMetres.toFixed(1)} m > ${G.MAX_PUBLISHED_RESIDUAL_M} m` };
-        }
-        if (worst > G.MAX_CROSS_CHECK_M) {
-          return { ok: false, icao, chart: ref, reason: 'control-sources-disagree',
-            detail: `graticule and published points differ by ${worst.toFixed(1)} m ` +
-              `> ${G.MAX_CROSS_CHECK_M} m - one of them is anchored wrongly` };
-        }
-        source = 'published-points'; model = pm;
-        pointInfo = {
-          matched: matched.controls.length, unmatched: matched.unmatched,
-          symbolPerimeterPt: matched.consensusPerimeter,
-          fitPoints: fit.map((c) => ({ name: c.name, lat: c.lat, lng: c.lng, pageX: +c.x.toFixed(3), pageY: +c.y.toFixed(3) })),
-          validationPoints: holdout.map((c) => ({ name: c.name, lat: c.lat, lng: c.lng, pageX: +c.x.toFixed(3), pageY: +c.y.toFixed(3) })),
-          spanFraction: { x: +span.x.toFixed(3), y: +span.y.toFixed(3) },
-          fitResidualM: +fitRes.maxMetres.toFixed(2),
-          holdoutResidualM: +holdRes.maxMetres.toFixed(2),
-          holdoutRmsM: +holdRes.rmsMetres.toFixed(2)
-        };
       }
     }
+    return { ok: true, grat, gratModel, gratFit, gratHold, source, model, pointInfo, crossMax };
+  };
+
+  /** @type {any} */ let solved = null;
+  /** @type {null|{baseMinute: number, rightOffset: number, candidates: number, pitchRatio: number}} */
+  let inferredLatitude = null;
+  const read = G.graticuleObservations(geo.segments, geo.textItems, frame);
+  if (!('refused' in read)) {
+    solved = solve(read);
+  } else {
+    const why = read.refused.map((r) => `${r.edge}: ${r.reason}${r.detail ? ' (' + r.detail + ')' : ''}`).join('; ');
+    // THE LATITUDE LABELS ARE NOT TEXT (v17.27, Bodø at 2026-11-26). Only when
+    // BOTH latitude edges carry no label at all, the longitude edges read in
+    // full, and the sheet prints a coordinate table. See vac-geo.mjs.
+    const noLat = read.refused.length === 2 && read.refused.every((r) =>
+      (r.edge === 'left' || r.edge === 'right') && r.reason === 'no-labels' && /^0 /.test(r.detail || ''));
+    const enoughTable = table.length >= G.MIN_FIT_POINTS + G.MIN_VALIDATION_POINTS;
+    const meanLat = enoughTable ? table.reduce((a, p) => a + p.lat, 0) / table.length : Number.NaN;
+    const part = noLat && enoughTable ? G.unlabelledLatitudeGraticule(geo.segments, geo.textItems, frame, meanLat) : null;
+    if (!part || 'refused' in part) {
+      return { ok: false, icao, chart: ref, reason: 'graticule-unreadable', detail: why +
+        (part && 'refused' in part ? ' | ' + part.refused.map((r) => `${r.edge}: ${r.reason}${r.detail ? ' (' + r.detail + ')' : ''}`).join('; ') : '') };
+    }
+    // The pitch the lattice was found at, against a minute of latitude.
+    const pitchRatio = part.left.pitch / (part.lngPitch / Math.cos(meanLat * Math.PI / 180));
+    // Tick 0 is the lowest tick, so it lies at or below the southernmost
+    // published point and the highest tick at or above the northernmost.
+    const span = Math.max(...part.left.ticks.map((t) => t.n));
+    const lo = Math.floor(Math.max(...table.map((p) => p.lat)) * 60) - span - 3;
+    const hi = Math.ceil(Math.min(...table.map((p) => p.lat)) * 60) + 3;
+    const passed = [];
+    let tried = 0;
+    // The two edges are numbered separately - each from its own lowest mark,
+    // and a parallel does not meet both edges at the same height - so the
+    // right edge's tick 0 may be a few minutes from the left's.
+    for (let base = lo; base <= hi; base++) for (const off of [0, -1, 1, -2, 2, -3, 3]) {
+      tried++;
+      const l = G.latitudeObservations('left', part.left.ticks, frame, base);
+      const r = G.latitudeObservations('right', part.right.ticks, frame, base + off);
+      if (l.fit.length < G.MIN_LABELLED_MAJORS || r.fit.length < G.MIN_LABELLED_MAJORS) continue;
+      const got = solve({ fit: [...part.fit, ...l.fit, ...r.fit], holdout: [...part.holdout, ...l.holdout, ...r.holdout] });
+      // A candidate counts ONLY if the published points carried it through the
+      // cross-check: a graticule-only pass would be the candidate vouching for
+      // itself.
+      if (got.ok && got.source === 'published-points') passed.push({ base, off, got });
+    }
+    if (passed.length !== 1) {
+      return { ok: false, icao, chart: ref, reason: 'latitude-values-not-established',
+        detail: `${passed.length} of ${tried} candidate numberings pass every gate - exactly one must (${why})` };
+    }
+    solved = passed[0].got;
+    inferredLatitude = { baseMinute: passed[0].base, rightOffset: passed[0].off, candidates: tried,
+      pitchRatio: +pitchRatio.toFixed(4) };
   }
+  if (!solved.ok) return solved;
+  const { grat, gratModel, gratFit, gratHold, source, model, pointInfo, crossMax } = solved;
 
   // ---- raster ------------------------------------------------------------
   const s = RENDER_DPI / 72;
@@ -336,7 +394,11 @@ async function prepareChart(entry, published, graphicsBase) {
       graticule: {
         fitTicks: grat.fit.length, holdoutTicks: grat.holdout.length,
         fitResidualM: +gratFit.maxMetres.toFixed(2),
-        holdoutResidualM: gratHold ? +gratHold.maxMetres.toFixed(2) : null
+        holdoutResidualM: gratHold ? +gratHold.maxMetres.toFixed(2) : null,
+        // null = every value was read from a printed label. Otherwise the
+        // latitude values were ESTABLISHED: the ticks numbered by pitch and
+        // the one unknown settled as the only numbering that passes every gate.
+        inferredLatitude
       },
       publishedPoints: pointInfo,
       crossCheckM: crossMax === null ? null : +crossMax.toFixed(2),
@@ -358,7 +420,15 @@ async function main() {
 
   const vac = JSON.parse(await readFile('tools/prepared/vac-points.json', 'utf8'));
   const edition = vac.editionLabel;
-  const graphicsBase = `${ROOT}/no/AIP/View/Index/155/${edition}/graphics`;
+  // THE INDEX IS DISCOVERED, NOT WRITTEN DOWN (v17.27). This line said
+  // `Index/155` - the September index - so the 2026-11-26 run recorded a
+  // `sourceUrl` under the superseded index for every chart. The PDFs themselves
+  // came from the cache build:vac had filled from the right index, which is why
+  // nothing failed. Same discovery as build-aip and build-vac.
+  const where = await fetch(ROOT + '/no/AIP', { redirect: 'manual', headers: { 'user-agent': UA } });
+  const idx = (where.headers.get('location') || '').match(/\/View\/Index\/(\d+)/);
+  if (!idx) throw new Error('could not discover the current AIP index');
+  const graphicsBase = `${ROOT}/no/AIP/View/Index/${idx[1]}/${edition}/graphics`;
   /** @type {Map<string, any[]>} */
   const published = new Map();
   for (const a of vac.data) if (a.points.length) published.set(a.icao, a.points);

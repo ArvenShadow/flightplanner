@@ -581,6 +581,168 @@ export function graticuleObservations(segments, items, frame) {
 }
 
 /* ------------------------------------------------------------------ *
+ * A sheet whose LATITUDE labels are not text (v17.27)
+ * ------------------------------------------------------------------ */
+
+/** How far a mark may sit from the even lattice and still be a minute tick,
+ *  in points. Tick positions are snapped to a 0.24 pt grid (see MODEL_ORDER),
+ *  so a real tick is within about 0.15 pt; a stray mark lands anywhere. */
+export const MAX_TICK_LATTICE_PT = 0.3;
+/** How far the lattice pitch may differ from the one the longitude edges and
+ *  the sheet's latitude predict. Twice or half would be a 2' or 30" lattice. */
+export const MAX_PITCH_DEVIATION = 0.03;
+/** How many lattice positions along an edge must actually carry a mark. */
+export const MIN_LATTICE_FILL = 0.6;
+
+/**
+ * Pick the minute ticks out of everything standing on one edge, by their even
+ * spacing, and number them: tick 0 is the lowest, n counts whole pitches up.
+ *
+ * WHY THIS EXISTS AT ALL. A tick is major because a printed label points at
+ * it (see edgeTicks), and that rule stands wherever the labels can be read.
+ * The 2026-11-26 Bodø sheet draws its sideways latitude labels as OUTLINES,
+ * not text, so its left and right edges have ticks and no readable value.
+ * This does not read the labels off the picture, and it does not classify a
+ * tick by its drawn length. It establishes only what the marks themselves
+ * say - which of them sit on an even one-minute lattice - and leaves the ONE
+ * thing they cannot say, which parallel tick 0 is, to be settled against the
+ * published coordinate table by every gate the pipeline already has.
+ *
+ * An edge carries other ink too (Bodø's right edge has 103 marks for about 35
+ * ticks), so this is a search for the lattice, not a sort: the pitch is known
+ * to within MAX_PITCH_DEVIATION from the longitude edges, and the phase that
+ * puts the most marks on the lattice is taken.
+ *
+ * @param {Tick[]} ticks @param {number} expectedPitch points per minute of latitude
+ * @param {number} lo @param {number} hi the frame's extent along this edge
+ * @returns {{ticks: {pos: number, n: number}[], pitch: number} | {reason: string, detail?: string}}
+ */
+export function numberTicksByPitch(ticks, expectedPitch, lo, hi) {
+  const pos = [...new Set(ticks.map((t) => Number(t.pos.toFixed(2))))].sort((a, b) => a - b);
+  if (pos.length < 8 || !(expectedPitch > 2)) return { reason: 'few-ticks', detail: `${pos.length} found` };
+  /** @param {number} pitch @param {number} phase */
+  const onLattice = (pitch, phase) => {
+    /** @type {Map<number, {pos: number, off: number}>} */ const slots = new Map();
+    for (const p of pos) {
+      const k = Math.round((p - phase) / pitch), off = Math.abs(p - (phase + k * pitch));
+      if (off > MAX_TICK_LATTICE_PT) continue;
+      const had = slots.get(k);
+      if (!had || off < had.off) slots.set(k, { pos: p, off });
+    }
+    return slots;
+  };
+  /** @type {{count: number, pitch: number, phase: number}|null} */ let best = null;
+  for (let f = -MAX_PITCH_DEVIATION; f <= MAX_PITCH_DEVIATION + 1e-9; f += 0.0025) {
+    const pitch = expectedPitch * (1 + f);
+    for (const anchor of pos) {
+      const count = onLattice(pitch, anchor).size;
+      if (!best || count > best.count) best = { count, pitch, phase: anchor };
+    }
+  }
+  if (!best) return { reason: 'no-tick-pitch' };
+  // Refit pitch and phase on the marks the search put on the lattice.
+  let { pitch, phase } = best;
+  for (let pass = 0; pass < 3; pass++) {
+    const pts = [...onLattice(pitch, phase)].map(([k, v]) => ({ k, p: v.pos }));
+    const m = pts.length;
+    const sk = pts.reduce((a, b) => a + b.k, 0), sp = pts.reduce((a, b) => a + b.p, 0);
+    const skk = pts.reduce((a, b) => a + b.k * b.k, 0), skp = pts.reduce((a, b) => a + b.k * b.p, 0);
+    const den = m * skk - sk * sk;
+    if (!(den > 0)) return { reason: 'no-tick-pitch', detail: 'degenerate lattice' };
+    pitch = (m * skp - sk * sp) / den;
+    phase = (sp - pitch * sk) / m;
+  }
+  if (Math.abs(pitch / expectedPitch - 1) > MAX_PITCH_DEVIATION) {
+    return { reason: 'ticks-not-one-minute-apart',
+      detail: `${pitch.toFixed(3)} pt against an expected ${expectedPitch.toFixed(3)} pt` };
+  }
+  const slots = [...onLattice(pitch, phase)].sort((a, b) => a[0] - b[0]);
+  const possible = Math.floor((hi - lo) / pitch);
+  if (slots.length < MIN_LATTICE_FILL * possible) {
+    return { reason: 'too-few-ticks-on-the-lattice',
+      detail: `${slots.length} of about ${possible} positions carry a mark` };
+  }
+  const first = slots[0] ? slots[0][0] : 0;
+  return { ticks: slots.map(([k, v]) => ({ pos: v.pos, n: k - first })), pitch };
+}
+
+/**
+ * The parts of a sheet's graticule that CAN be read when its latitude labels
+ * are not text: the longitude edges in full, and the left and right ticks
+ * numbered by pitch. Refuses unless that is exactly the situation - both
+ * longitude edges read, and both latitude edges with no label at all.
+ *
+ * @param {Segment[]} segments @param {TextItem[]} items @param {Frame} frame
+ * @param {number} meanLat the sheet's latitude, degrees, from its published points:
+ *        on a conformal sheet a minute of latitude is drawn 1/cos(lat) times as
+ *        long as a minute of longitude, which is what fixes the expected pitch
+ * @returns {{fit: Observation[], holdout: Observation[], lngPitch: number,
+ *            edges: Record<string, {valueStep: number, labelOffset: number, fit: number, holdout: number}>,
+ *            left: {ticks: {pos: number, n: number}[], pitch: number},
+ *            right: {ticks: {pos: number, n: number}[], pitch: number}}
+ *           | {refused: Refusal[]}}
+ */
+export function unlabelledLatitudeGraticule(segments, items, frame, meanLat) {
+  const ticks = edgeTicks(segments, frame);
+  const labels = graticuleLabels(items);
+  if (labels.some((l) => l.kind === 'lat')) {
+    return { refused: [{ edge: 'left/right', reason: 'latitude-labels-are-text',
+      detail: 'this path is only for a sheet with no latitude label in its text at all' }] };
+  }
+  /** @type {Observation[]} */ const fit = [];
+  /** @type {Observation[]} */ const holdout = [];
+  /** @type {Record<string, {valueStep: number, labelOffset: number, fit: number, holdout: number}>} */ const edges = {};
+  /** @type {number[]} */ const pitches = [];
+  for (const edge of /** @type {const} */ (['bottom', 'top'])) {
+    const got = labelEdgeTicks(edge, ticks[edge], labels, frame);
+    if ('reason' in got) return { refused: [got] };
+    fit.push(...got.fit);
+    holdout.push(...got.holdout);
+    edges[edge] = { valueStep: got.valueStep, labelOffset: got.labelOffset,
+      fit: got.fit.length, holdout: got.holdout.length };
+    const a = got.fit[0], b = got.fit[got.fit.length - 1];
+    if (a && b && b.value !== a.value) pitches.push(Math.abs((b.x - a.x) / ((b.value - a.value) * 60)));
+  }
+  const x = edges.bottom, y = edges.top;
+  if (!x || !y || Math.abs(x.valueStep - y.valueStep) > 1e-9) {
+    return { refused: [{ edge: 'bottom/top', reason: 'edges-disagree-on-interval' }] };
+  }
+  const lngPitch = pitches.reduce((a, b) => a + b, 0) / (pitches.length || 1);
+  const expected = lngPitch / Math.cos(meanLat * Math.PI / 180);
+  const left = numberTicksByPitch(ticks.left, expected, frame.bottom, frame.top);
+  const right = numberTicksByPitch(ticks.right, expected, frame.bottom, frame.top);
+  if ('reason' in left) return { refused: [{ edge: 'left', ...left }] };
+  if ('reason' in right) return { refused: [{ edge: 'right', ...right }] };
+  if (Math.abs(left.pitch - right.pitch) > 0.01 * left.pitch) {
+    return { refused: [{ edge: 'left/right', reason: 'edges-disagree-on-pitch',
+      detail: `${left.pitch.toFixed(3)} vs ${right.pitch.toFixed(3)} pt` }] };
+  }
+  return { fit, holdout, edges, left, right, lngPitch };
+}
+
+/**
+ * Latitude observations for a pitch-numbered edge, GIVEN the whole minute its
+ * tick 0 stands on. Ticks on a whole 10' are the fit set and the rest the
+ * holdout - the same split the labelled path makes.
+ *
+ * @param {'left'|'right'} edge @param {{pos: number, n: number}[]} ticks
+ * @param {Frame} frame @param {number} baseMinute tick 0 in whole minutes of latitude
+ * @returns {{fit: Observation[], holdout: Observation[]}}
+ */
+export function latitudeObservations(edge, ticks, frame, baseMinute) {
+  /** @type {Observation[]} */ const fit = [];
+  /** @type {Observation[]} */ const holdout = [];
+  for (const t of ticks) {
+    const minute = baseMinute + t.n;
+    const major = minute % 10 === 0;
+    const obs = { kind: /** @type {'lat'} */ ('lat'), x: edge === 'left' ? frame.left : frame.right,
+      y: t.pos, value: minute / 60, major };
+    (major ? fit : holdout).push(obs);
+  }
+  return { fit, holdout };
+}
+
+/* ------------------------------------------------------------------ *
  * The conformal model
  * ------------------------------------------------------------------ */
 

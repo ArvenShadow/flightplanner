@@ -346,8 +346,11 @@ three cheap disciplines applied every time the page is touched:
   **THE PROCEDURE IS `docs/REIMPORT.md`** (v17.26, dataset now 2026-11-26):
   vac -> vac-raster -> aip -> hours, then `prune:vac`. A marker behind a value
   the edition marks deleted (`AmdtDeleted*` class, not `<del>`) is DROPPED and
-  counted; no non-numeric frequency may ship. ENBO's 2026-11-26 chart is
-  REFUSED (latitude labels are outlines, not text) and not drawn.
+  counted; no non-numeric frequency may ship. A sheet whose latitude labels
+  are NOT TEXT (ENBO, 2026-11-26) is placed by finding the 1' ticks by spacing
+  and trying every value for tick 0: exactly ONE must pass every gate via the
+  published points, else refused (v17.27; never by tick length or the picture).
+  → §{BODØ IS PLACED: LATITUDE TICKS FOUND BY THEIR SPACING, THE ONE UNKNOWN SETTLED BY THE PUBLISHED POINTS (v17.27)}
   → §{THE 2026-11-26 RE-IMPORT, A WITHDRAWN VALUE READ AS A LIVE ONE, AND THE PROCEDURE WRITTEN DOWN (v17.26)}
 - **Border**: Kartverket's land border, one chain, 2 NM snap tolerance
   (measured); the Skagerrak maritime line, foreign borders and implausible
@@ -565,8 +568,8 @@ download (quota eviction). → §{Not planned}
 12. The fix-style preview background.
 13. `verify-visual` reports the version badge on every bump.
 14. The Menu skin reveals the empty `#slot-sidebar-top` on hover.
-15. ENBO's VAC is not drawn since 2026-11-26 (labels are outlines); placing it
-    means inferring tick values - the author's call (see the v17.26 entry).
+15. ENBO's 11 reporting points skip build:vac's graticule-range check (its
+    reader needs latitude text); the raster build matches all 11 instead.
 
 ### Roadmap still open → §{Roadmap (the user's list, v16.28, extended v16.41 - NOT yet agreed in detail)}
 

@@ -10,6 +10,49 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## BODØ IS PLACED: LATITUDE TICKS FOUND BY THEIR SPACING, THE ONE UNKNOWN SETTLED BY THE PUBLISHED POINTS (v17.27)
+
+The author, on v17.26's refusal of the new Bodø chart: *"Give it a try one time
+and ill see if it works."* This narrows the v16.86 rule that a tick is major
+only because a printed label points at it - for ONE case, and without reading
+anything off the picture or classifying a tick by its drawn length.
+
+- THE CASE: both latitude edges carry no label in the text at all, both
+  longitude edges read in full, and the sheet prints a coordinate table. Any
+  other refusal is unchanged. A sheet with latitude text never takes this path.
+- WHAT THE MARKS SAY (`numberTicksByPitch`): which of them sit on an even
+  one-minute lattice. The pitch is known in advance to 3 % - on a conformal
+  sheet a minute of latitude is drawn 1/cos(lat) as long as a minute of
+  longitude, and the longitude edges give that - so it is a SEARCH for the
+  phase that puts the most marks on the lattice, not a sort.
+  - The first attempt assumed every mark on the edge was a tick and failed at
+    once ("ticks-collide-on-the-lattice"): Bodø's right edge carries 103 marks
+    for 34 ticks, its left 41 for 35. Measured pitch 16.211 / 16.208 pt, 1.0003
+    of the predicted minute.
+- WHAT THEY CANNOT SAY: which parallel tick 0 is. Every whole minute it could
+  be is tried (and the right edge 0 to 3 minutes either side of the left, since
+  the two are numbered separately): 175 candidates. Each goes through the SAME
+  code as a labelled sheet - graticule fit and residual gate, symbol matching,
+  published-point fit, holdout gate, cross-check - now one function, `solve`.
+  - A candidate counts only if the PUBLISHED POINTS carried it through the
+    cross-check; a graticule-only pass would be the candidate vouching for
+    itself. EXACTLY ONE must pass, or the chart is refused.
+  - Bodø: one passed. Tick 0 is 67°01'N; cross-check 10.65 m (limit 60),
+    published holdout 6.59 m, graticule fit 19.19 m. It puts the three majors
+    on 67°10', 67°20', 67°30' - the labels as printed, which were looked at
+    AFTER, as a check, not as an input.
+- The record carries `graticule.inferredLatitude` (null on the other 48); a
+  test pins the list to ENBO. Tested on ENDU with its latitude labels removed
+  from the text: the lattice found is the labelled ticks, the right base
+  reproduces every labelled value, and one minute out reproduces none.
+- **THE INDEX WAS WRITTEN INTO THE RASTER BUILD** (`Index/155`). The PDFs came
+  from the cache build:vac fills from the discovered index, so nothing failed -
+  but every v17.26 chart record's `sourceUrl` named the superseded index. Now
+  discovered; a test requires each link to name the dataset's edition.
+- Bodø's 11 reporting points still lack the build:vac graticule-RANGE check
+  (that reader needs latitude text). They are now corroborated a stronger way:
+  all 11 triangles on the sheet were matched to the table within metres.
+
 ## THE 2026-11-26 RE-IMPORT, A WITHDRAWN VALUE READ AS A LIVE ONE, AND THE PROCEDURE WRITTEN DOWN (v17.26)
 
 The author: *"Is there a way i can manually reimport everything if i lose access
