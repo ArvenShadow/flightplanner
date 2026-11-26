@@ -297,8 +297,11 @@ three cheap disciplines applied every time the page is touched:
   elevation and opens directly after the stop's plan. A fly-by is named from
   the published ATS callsign. → §{What happens at an aerodrome (v16.54-v16.59, roadmap item 17)}
   and → §{THE GROUND TIME BELONGS TO THE SECTOR IT DELAYS (v16.84)}
-  An EMPTY plan after a stop is owed nothing; the stop waits for the first
-  plan with a waypoint (v17.24). → §{AN EMPTY PLAN AFTER A STOP IS OWED NOTHING UNTIL IT HAS A WAYPOINT (v17.24)}
+  The untouched plan a stop opens is owed nothing; the stop waits for the
+  first plan with something FLOWN (`planHasFlying`: a second waypoint or a
+  circuit - the plan is SEEDED with its departure, so "no waypoints" was the
+  wrong test, v17.25). → §{THE PLAN A STOP OPENS IS NOT EMPTY, IT IS SEEDED - v17.24 DID NOTHING (v17.25)}
+  → §{AN EMPTY PLAN AFTER A STOP IS OWED NOTHING UNTIL IT HAS A WAYPOINT (v17.24)}
 - **Deleting a stop deletes the sector it opened** (found by position, not a
   stored link): an empty one silently, a planned one after asking; one undo
   step. → §{DELETING A STOP DELETES THE SECTOR IT OPENED (v17.4)}

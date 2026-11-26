@@ -10510,7 +10510,7 @@ T('a stop with no sector after it costs nothing at all', () => {
   ev(SEED);
 });
 
-T('an empty plan after a stop is owed nothing until it has a waypoint (v17.24)', () => {
+T('the untouched plan a stop opens is owed nothing until it has a waypoint of its own (v17.24, fixed v17.25)', () => {
   // The author: "when a new flight plan is opened after a full-stop / touch &
   // go, the plan is completely empty until a waypoint is made. I do not want
   // any extra 10minutes to be added before a new waypoint is made, in case i
@@ -10528,6 +10528,29 @@ T('an empty plan after a stop is owed nothing until it has a waypoint (v17.24)',
   try {
     ev(plans(null, ''));
     const t0 = mins(), b0 = burn();
+    // THE PLAN THE APP ITSELF OPENS AFTER A STOP (v17.25). v17.24 was tested
+    // only against `waypoints: []` and did nothing in the app: addNewFlightPlan
+    // seeds the new plan with its departure fix, so it LOOKS empty and is not.
+    for (const kind of ['full-stop', 'touch-go']) {
+      ev(plans(kind, ''));
+      ev('addNewFlightPlan(0);');
+      assert(ev('flights.length') === 2 && ev('flights[1].waypoints.length') === 1, 'fixture: the opened plan is not the seeded one-waypoint plan');
+      assert(doc.querySelectorAll('#tbody-flight-1 tr').length === 0, 'fixture: the opened plan shows a row');
+      assert(mins() === t0, 'the untouched plan opened by a ' + kind + ' lengthened the flight: ' + mins() + ' vs ' + t0);
+      assert(Math.abs(burn() - b0) < 0.05, 'the untouched plan opened by a ' + kind + ' burned fuel: ' + burn() + ' vs ' + b0);
+      assert(!/[1-9]/.test(txtOf('f-tot-time-1')), 'the untouched plan shows a time of its own: ' + txtOf('f-tot-time-1'));
+      assert(/Full stop|Touch/.test(doc.querySelectorAll('.flight-header')[1].textContent), 'the opened plan lost its ground-time editor');
+      // The first waypoint the pilot adds makes it a sector, and it is delayed.
+      ev(`flights[1].waypoints.push(${D}); renderAllFlightTables();`);
+      const tFly = mins();
+      ev(`delete flights[0].waypoints[1].stop; renderAllFlightTables();`);
+      assert(tFly - mins() === (kind === 'full-stop' ? 10 : 5), 'the first added waypoint did not bring the ' + kind + ' time back: ' + (tFly - mins()));
+    }
+    // A plan that opens with CIRCUITS is flying, even with one waypoint.
+    ev(plans('full-stop', `, { id: 2, title: 'B', depElev: 31, waypoints: [Object.assign(${C}, { isPattern: true, laps: 2, name: 'PATTERN', alt: 1000 })] }`));
+    const withStop = mins();
+    ev(`delete flights[0].waypoints[1].stop; renderAllFlightTables();`);
+    assert(withStop - mins() === 10, 'a plan opening with circuits was not delayed by the stop: ' + (withStop - mins()));
     for (const kind of ['full-stop', 'touch-go']) {
       ev(plans(kind, EMPTY));
       assert(mins() === t0, 'an empty plan after a ' + kind + ' lengthened the flight: ' + mins() + ' vs ' + t0);
@@ -10538,11 +10561,11 @@ T('an empty plan after a stop is owed nothing until it has a waypoint (v17.24)',
     // The editor for the ground time is still in the empty plan's header.
     ev(plans('full-stop', EMPTY));
     assert(/Full stop/.test(doc.querySelectorAll('.flight-header')[1].textContent), 'the empty plan lost its ground-time editor');
-    // ONE waypoint is enough: the sector exists and is delayed.
+    // The departure fix alone is NOT a sector (v17.25 - v17.24 said it was).
     ev(plans('full-stop', `, { id: 2, title: 'B', depElev: 31, waypoints: [${C}] }`));
-    assert(mins() - t0 === 10, 'the first waypoint did not bring the 10 min back: ' + (mins() - t0));
+    assert(mins() === t0, 'a plan holding only its departure fix was charged the stop: ' + (mins() - t0));
     ev(plans('touch-go', `, { id: 2, title: 'B', depElev: 31, waypoints: [${C}] }`));
-    assert(mins() - t0 === 5 && Math.abs((burn() - b0) - 1.0) < 0.15, 'the first waypoint did not bring the touch & go back: ' + (mins() - t0) + ' min, ' + (burn() - b0).toFixed(2));
+    assert(mins() === t0 && Math.abs(burn() - b0) < 0.05, 'a plan holding only its departure fix was charged the touch & go');
     // The stop WAITS, it is not dropped: an empty plan in between still
     // delays the planned one after it, by the same amount as with none.
     ev(plans('full-stop', `, { id: 3, title: 'C', depElev: 31, waypoints: [${C}, ${D}] }`));

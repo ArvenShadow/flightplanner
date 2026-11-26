@@ -10,6 +10,27 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE PLAN A STOP OPENS IS NOT EMPTY, IT IS SEEDED - v17.24 DID NOTHING (v17.25)
+
+The author, with a screenshot of the whole-flight totals: *"nope. doesnt work.
+The bottom bar still factors the last empty flight plan. Figure out what you
+just did and why this didnt work"*.
+
+- WHAT v17.24 DID: applied the queued stop only to a plan with
+  `waypoints.length > 0`.
+- WHY IT DID NOTHING: `addNewFlightPlan` SEEDS the plan a stop opens with one
+  waypoint, its departure fix. One waypoint draws no row, so the plan LOOKS
+  empty, and it passed the test every time. The author was asked for exactly
+  this ("figure out how its currently done") and the charge was traced but the
+  plan's creation was not.
+- WHY THE SUITE DID NOT CATCH IT: the v17.24 test built its "empty" plan by hand
+  as `waypoints: []` - a state the app never produces after a stop. A test of a
+  hand-made fixture instead of the app's own path.
+- NOW: `planHasFlying(fl)` - a second waypoint, or a circuit. The seeded
+  departure alone is not a sector. The test opens the plan with
+  `addNewFlightPlan(0)` and asserts the fixture is the one-waypoint, no-row plan.
+- The rest of v17.24 stands: the stop waits, it is not dropped.
+
 ## AN EMPTY PLAN AFTER A STOP IS OWED NOTHING UNTIL IT HAS A WAYPOINT (v17.24)
 
 The author: *"when a new flight plan is opened after a full-stop / touch & go,

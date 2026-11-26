@@ -385,7 +385,7 @@
             <li><b>Click a published aerodrome and say what happens there.</b> Three things mean three different plans, so the planner asks rather than guessing:
               <b>🔁 Touch &amp; go</b> — the aircraft never stops. It costs <b>5 minutes</b> of circuit time (priced at your <i>pattern</i> fuel flow, since that is what it is), then you are asked whether to fly <b>circuits</b> here; say yes and the laps are added at the derived circuit altitude.
               <b>🛩 Full stop</b> — <b>10 minutes</b> on the ground, and the next sector pays a fresh <b>start-up and taxi</b>, because the engine was shut down and started again. If you refuel there, put the fuel on board into the <b>⛽ Fuel after</b> box in the next plan's header and that sector departs with it; leave it empty and whatever is left carries over. It is <b>not</b> checked against tank capacity — the planner holds no published usable-fuel figure for the aircraft, so what fits in the tanks is your call. (A touch & go gets no such box: the engine never stops.)
-              <b>The ground time (and a touch &amp; go's fuel) is only counted once the next plan has a waypoint</b> — an empty plan left behind after a stop adds nothing to the flight time or the fuel. <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing. <b>A fly-by is not a take-off or a landing</b>, so there is no runway distance and no opening-hours finding for it — the 🕐 ATS opening hours card lists it as <b>OVR</b> and says whether ATS is open as you pass, and where it is closed that the <b>CTR is class G, RMZ</b> (AIP ENR 1.4: a CTR outside the opening hours of its ATC unit is an RMZ): keep a listening watch and call as necessary. A <b>reporting point</b> is never a landing either, even one a mile from the runway. A point you <b>clicked</b> onto the field has no such marker, so it counts as landing where it lies — <b>right-click it</b> and choose <b>Fly-by (no landing)</b> to say otherwise, or <b>Take off / land here</b> to undo it.
+              <b>The ground time (and a touch &amp; go's fuel) is only counted once the next plan has a waypoint of its own after the departure</b> — the untouched plan a stop opens, left behind, after a stop adds nothing to the flight time or the fuel. <b>➡ Fly-by</b> — nothing happens: an <b>ordinary waypoint at your planned altitude</b>, named after the <b>place</b> rather than the code (Bardufoss, Evenes, Skagen). It is not dragged down to the field — you are flying over, not landing. <b>A fly-by is not a take-off or a landing</b>, so there is no runway distance and no opening-hours finding for it — the 🕐 ATS opening hours card lists it as <b>OVR</b> and says whether ATS is open as you pass, and where it is closed that the <b>CTR is class G, RMZ</b> (AIP ENR 1.4: a CTR outside the opening hours of its ATC unit is an RMZ): keep a listening watch and call as necessary. A <b>reporting point</b> is never a landing either, even one a mile from the runway. A point you <b>clicked</b> onto the field has no such marker, so it counts as landing where it lies — <b>right-click it</b> and choose <b>Fly-by (no landing)</b> to say otherwise, or <b>Take off / land here</b> to undo it.
               <br><b>The first waypoint of a plan is asked a different question</b>, because you cannot touch down or shut down before you have taken off: a fresh plan offers <b>🛫 Departure</b> (on the field, at its published elevation, and it sets the plan's departure elevation to match) and <b>➡ Fly-by</b> (you are already airborne and pass overhead — it stays at your planned altitude and leaves the departure elevation alone). Nothing is guessed from the position in the plan: whichever you pick is what you get.
               <br>Both stops <b>end the sector</b> and open the next one, departing from that aerodrome's <b>published field elevation</b> — so the climb starts from the runway, not from the altitude the arrival row showed. The minutes are a starting figure, not a rule: they are editable in the new plan's header, and everything after them shifts by what you type.
               <br><b>Deleting the stop deletes the sector it opened</b>, so empty plans do not pile up while you edit: a sector with nothing flown in it yet goes with it at once, and one where you have already planned legs asks first (<b>Delete both</b>, <b>Delete only</b> the stop, or Cancel). Either way one <b>Ctrl+Z</b> puts both back. Deleting only the circuits after a touch &amp; go leaves the sector alone — the touch &amp; go is still there.
@@ -1500,7 +1500,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.24';
+    const APP_VERSION = '17.25';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6184,6 +6184,14 @@
      * But the pilot asked to edit them "in the next plan", and that is the
      * right place to look: it is the sector whose off-block time moves.
      */
+    /** Has this plan anything flown - a leg, or circuits? A plan holding only
+     *  its seeded departure fix (what a stop opens) has not, and neither has
+     *  one with no waypoints. @param {any} fl @returns {boolean} */
+    function planHasFlying(fl) {
+      const wps = (fl && fl.waypoints) || [];
+      return wps.length > 1 || wps.some(function(w) { return !!(w && w.isPattern); });
+    }
+
     function stopBeforeHTML(fIdx) {
       if (fIdx === 0) return '';
       const prev = flights[fIdx - 1];
@@ -7370,7 +7378,14 @@
         // for a sector that did not exist. The stop now WAITS for the first
         // plan that has a waypoint: it is not dropped, so an empty plan left
         // between two planned ones still delays the one after it.
-        if (pendingStop && fl.waypoints.length > 0) {
+        //
+        // "EMPTY" IS WHAT THE PILOT SEES, NOT `waypoints.length === 0` (v17.25).
+        // v17.24 tested for no waypoints at all and changed nothing, because
+        // addNewFlightPlan SEEDS the plan a stop opens with its departure fix:
+        // the table shows no row (one waypoint is no leg) while the array
+        // holds one. The author: "nope. doesnt work." A plan is a sector once
+        // it has something FLOWN - a second waypoint, or a circuit.
+        if (pendingStop && planHasFlying(fl)) {
           runningAccTime += pendingStop.min;
           sectorPrefixMin = pendingStop.min;
           if (pendingStop.kind === 'full-stop') {
