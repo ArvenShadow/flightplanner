@@ -343,6 +343,12 @@ three cheap disciplines applied every time the page is touched:
 - **A re-import is a multiset diff**; the ACC sector count is pinned per
   edition; a frequency without a unit is prose and dropped.
   → §{AIRAC updates: what re-importing actually costs (v16.42, 2026-09-03)}
+  **THE PROCEDURE IS `docs/REIMPORT.md`** (v17.26, dataset now 2026-11-26):
+  vac -> vac-raster -> aip -> hours, then `prune:vac`. A marker behind a value
+  the edition marks deleted (`AmdtDeleted*` class, not `<del>`) is DROPPED and
+  counted; no non-numeric frequency may ship. ENBO's 2026-11-26 chart is
+  REFUSED (latitude labels are outlines, not text) and not drawn.
+  → §{THE 2026-11-26 RE-IMPORT, A WITHDRAWN VALUE READ AS A LIVE ONE, AND THE PROCEDURE WRITTEN DOWN (v17.26)}
 - **Border**: Kartverket's land border, one chain, 2 NM snap tolerance
   (measured); the Skagerrak maritime line, foreign borders and implausible
   paths are REFUSED. Both border forms (typed field and vertex remark) are
@@ -559,6 +565,8 @@ download (quota eviction). → §{Not planned}
 12. The fix-style preview background.
 13. `verify-visual` reports the version badge on every bump.
 14. The Menu skin reveals the empty `#slot-sidebar-top` on hover.
+15. ENBO's VAC is not drawn since 2026-11-26 (labels are outlines); placing it
+    means inferring tick values - the author's call (see the v17.26 entry).
 
 ### Roadmap still open → §{Roadmap (the user's list, v16.28, extended v16.41 - NOT yet agreed in detail)}
 

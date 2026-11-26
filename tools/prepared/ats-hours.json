@@ -1,7 +1,7 @@
 {
  "source": "Avinor Operational Hours (AD 2.3), ATS table",
- "url": "https://aim-prod.avinor.no/no/OperationalHours/View/Index/82/ops_hrs.html",
- "revisedAirac": "2026-09-03",
+ "url": "https://aim-prod.avinor.no/no/OperationalHours/View/Index/85/ops_hrs.html",
+ "revisedAirac": "2026-11-26",
  "attribution": "Operational hours © Avinor AS.",
  "entries": {
   "ENAT": {
@@ -91,7 +91,7 @@
   },
   "ENKR": {
    "name": "Kirkenes/Høybuktmoen",
-   "hours": "MON - FRI: 0330 - 2315 (0230 - 2215), SAT: 0830 - 1810 (0730 - 1710), SUN: 0900 - 2315 (0800 - 2215)",
+   "hours": "MON - FRI: 0330 - 2315 (0230 - 2215), SAT: 0830 - 1750 (0730 - 1650), SUN: 1030 - 2315 (0930 - 2215)",
    "rmk": ""
   },
   "ENKJ": {
@@ -111,7 +111,7 @@
   },
   "ENNA": {
    "name": "Lakselv/Banak",
-   "hours": "MON - FRI: 0520 - 2250 (0420 - 2150), SAT: 1100 - 1530 (1000 - 1430), SUN: 1040 - 2250 (0940 - 2150)",
+   "hours": "MON - FRI: 0510 - 2310 (0410 - 2210), SAT: 0940 - 1300 (0840 - 1200), SUN: 1200 - 2310 (1100 - 2210)",
    "rmk": "AVBL O/R H24 for charterflights"
   },
   "ENLK": {
@@ -146,7 +146,7 @@
   },
   "ENNO": {
    "name": "Notodden",
-   "hours": "MON - FRI: 0500 - 1700 (0400 - 1600), SAT: 1000 - 1500 (0900 - 1400), SUN: 1000 - 1430 (0900 - 1330)",
+   "hours": "MON - THU: 0600 - 1800 (0500 - 1700), FRI: 0800 - 1500 (0700 - 1400), SAT: 1100 - 1600 (1000 - 1500), SUN: NIL",
    "rmk": "Public HOL excluded"
   },
   "ENAS": {
@@ -166,7 +166,7 @@
   },
   "ENRY": {
    "name": "Rygge",
-   "hours": "WEEK 33 - 18, MON: 0700 - 1900 (0600 - 1800), TUE - THU: 0700 - 2300 (0600 - 2200), FRI: 0700 - 1900 (0600 - 1800), SAT: 0800 - 1500 (0700 - 1400), SUN: NIL, WEEK 19 - 32, MON - FRI: 0700 - 1900 (0600 - 1800), SAT - SUN: 0900 - 1300 (0800 - 1200)",
+   "hours": "WEEK 33 - 18, MON - THU: 0700 - 2300 (0600 - 2200), FRI: 0700 - 1900 (0600 - 1800), SAT: 0800 - 1500 (0700 - 1400), SUN: CLOSED, WEEK 19 - 32, MON - FRI: 0700 - 1900 (0600 - 1800), SAT - SUN: 0900 - 1300 (0800 - 1200)",
    "rmk": "Outside HR of OPS, O/R to WingOps"
   },
   "ENRO": {
@@ -191,7 +191,7 @@
   },
   "ENTO": {
    "name": "Sandefjord/Torp",
-   "hours": "MON - SAT: 0500 - 2200 (0400 - 2100), SUN: 0600 - 2200 (0500 - 2100)",
+   "hours": "MON - FRI: 0500 - 2200 (0400 - 2100), SAT: 0500 - 2100 (0400 - 2000), SUN: 0700 - 2200 (0600 - 2100)",
    "rmk": ""
   },
   "ENST": {
@@ -256,12 +256,12 @@
   },
   "ENOL": {
    "name": "Ørland",
-   "hours": "TWR: H24, APP: MON - FRI: 0800 - 1430 (0700 - 1330), SAT - SUN: NIL",
+   "hours": "TWR: H24. APP: MON - FRI: 0800 - 1430 (0700 - 1330), SAT - SUN: NIL",
    "rmk": "Outside detailed APP HR, APP service provided by TWR"
   },
   "ENOV": {
    "name": "Ørsta-Volda/Hovden",
-   "hours": "MON - FRI: 0445 - 2230 (0345 - 2130), SAT: 0645 - 1700 (0545 - 1600), SUN: 0915 - 1715 (0815 - 1615) / 1845 - 2230 (1745 - 2130)",
+   "hours": "MON - FRI: 0445 - 2230 (0345 - 2130), SAT: 0945 - 1700 (0845 - 1600), SUN: 1100 - 2230 (1000 - 2130)",
    "rmk": "HOSP/SAR outside HR of OPS AVBL O/R VIA Polaris ACC Bodø"
   },
   "ENAL": {

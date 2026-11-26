@@ -184,7 +184,7 @@ async function main() {
   const report = {
     noVac: [], noTable: [], refusedTables: [], unnamedRows: [],
     refusedPoints: [], duplicates: [],
-    checks: { nameEchoed: 0, nameOnly: 0, graticule: 0, noGraticule: 0, total: 0 }
+    checks: { nameEchoed: 0, nameOnly: 0, graticule: 0, noGraticule: 0, noGraticuleCharts: /** @type {string[]} */ ([]), noGraticulePoints: 0, total: 0 }
   };
 
   for (const icao of [...names.keys()].sort()) {
@@ -215,7 +215,7 @@ async function main() {
     for (const v of vacs) {
       const items = await textItems(await graphic(edition, v.id));
       const grat = graticuleRange(items);
-      if (!grat) report.checks.noGraticule++;
+      if (!grat) { report.checks.noGraticule++; report.checks.noGraticuleCharts.push(icao); }
       const { tables, refused } = reportingPointTables(items);
       for (const r of refused) report.refusedTables.push({ icao, chart: v.ref, ...r });
       let got = 0;
@@ -239,6 +239,11 @@ async function main() {
               continue;
             }
             report.checks.graticule++;
+          } else {
+            // The sheet's graticule could not be read (ENBO at 2026-11-26: its
+            // latitude labels are outlines, not text), so this point is carried
+            // on the name echo and the ARP bound alone - and COUNTED, by chart.
+            report.checks.noGraticulePoints++;
           }
           // CHECK 2: a corruption bound against the ARP, not a tolerance.
           if (ad.lat !== null && ad.lng !== null) {

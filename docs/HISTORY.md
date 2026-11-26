@@ -10,6 +10,71 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE 2026-11-26 RE-IMPORT, A WITHDRAWN VALUE READ AS A LIVE ONE, AND THE PROCEDURE WRITTEN DOWN (v17.26)
+
+The author: *"Is there a way i can manually reimport everything if i lose access
+to claude?"* and then *"Do the reimport and write the doc."* The dataset moved
+2026-09-03-AIRAC -> 2026-11-26-AIRAC (index 155 -> 156). The procedure is now
+`docs/REIMPORT.md`, written from the commands that actually ran.
+
+- **THE ORDER IS vac -> vac-raster -> aip -> hours**, and the tools enforce most
+  of it: the raster step reads the pages the points step cached, the AIP build
+  reads both prepared snapshots, and the hours tool refuses until the dataset is
+  on the new edition. `build:hours` must be re-run after EVERY `build:aip`.
+- **WHAT THE EDITION CHANGED** (multiset diff, edition-stamped links ignored):
+  212 airspace volumes, 27 sectors, 53 aerodromes, 243 reporting points, 112
+  runway ends and 120 intersection positions - all the same counts, every ring
+  and every reporting-point coordinate identical. Real changes:
+  - ENGM tower: the table was republished with the E sector (120.105) first.
+  - ENAN and ENNA runway surface: ASPH/CONC -> ASPH.
+  - ATS hours changed at ENKR, ENNA, ENNO, ENOV, ENRY and ENTO; ENOL's text
+    changed punctuation only.
+  - Charts: 5 new sheets dated 2026-11-26 (ENDU, ENFL, ENGK, ENRE, ENSG) and 6
+    whose PDF changed with the printed date unchanged (ENAT, ENBN, ENGM, ENHF,
+    ENMS, ENSR). 48 prepared, worst seam 19.5 m against the 60 m limit.
+- **A WITHDRAWN VALUE WAS READ AS A LIVE ONE - found by the diff, not by a
+  test.** v16.42 checked that no `class="SD"` span sits inside a `<del>` and
+  concluded no superseded value was imported. That check still passes (0 in 56
+  pages) and is the wrong check: this edition marks a deleted value by REPLACING
+  the value span's class (`<span class=" AmdtDeletedAIRAC">118.305</span>`) and
+  leaving its `sdParams` marker behind. With no SD span of its own the marker
+  fell to "the nearest preceding SD span" and took its value - ENGM's withdrawn
+  tower row came through as a frequency of **"MHZ"**, on the card a pilot reads.
+  - `extractFields` now drops a marker that sits directly behind (or inside) a
+    deleted value. 41 such markers in the edition; only ENGM's reached the
+    dataset. Counted in `data/aip-report.json` (`withdrawnMarkers`).
+  - A test now refuses ANY non-numeric frequency in the shipped data - the guard
+    that would have caught this without a human reading the diff.
+  - Whether 2026-09-03 carried the same markup could not be re-checked (its
+    cache was not kept); its dataset had no non-numeric frequency.
+- **BODØ'S NEW CHART IS REFUSED, AND IT IS NOT DRAWN.** `graticule-unreadable`:
+  0 labels beside the left and right edges. The author: *"Bodø chart looks just
+  like the other charts though"* - it does on screen. In the file, its sideways
+  text is not text: 0 rotated text items of 386 against ENDU's 90 of 662, and
+  `pdftotext -bbox` finds no word in the left margin either; there are no
+  embedded images, so the labels are vector outlines. The longitude labels
+  (upright) are text and are read. The graticule model is what every chart is
+  placed from - the published points only refine it - so the sheet cannot be
+  placed and the gate does what it was built to do.
+  - The previous Bodø sheet is superseded, so it is not drawn either.
+  - Bodø's 11 reporting points still come from the coordinate table and are
+    identical to 2026-09-03, where all 11 passed the graticule check. Here they
+    pass the name echo and the ARP bound only; `vac-report.json` now NAMES the
+    chart (`noGraticuleCharts`) and counts its points, and the test pins it.
+  - NOT DONE, and the author's call: placing a sheet whose latitude labels are
+    not text (number the 1' ticks by pitch, find the one unknown offset from the
+    published points, then run every existing gate). It reverses the v16.86
+    decision that a tick is major only because a printed label points at it.
+- **SUPERSEDED CHART IMAGES ARE NOT DELETED BY THE BUILD.** 12 were left in
+  `data/vac/`; `npm run prune:vac` (new) lists and removes them.
+- **A REFUEL DOES NOT WAIT** - a v17.25 regression `verify:fixes` caught and
+  the jsdom suite did not: v17.25 deferred the whole queued stop, refuel
+  included, so a refuel typed in the untouched plan's header left "Final
+  remaining" where it was. Only the minutes and a touch & go's burn wait now.
+- Pinned tests updated after checking the source: the ENGM tower order (now
+  order-independent), the hours revision date, ENRY's raw text, the graticule
+  accounting.
+
 ## THE PLAN A STOP OPENS IS NOT EMPTY, IT IS SEEDED - v17.24 DID NOTHING (v17.25)
 
 The author, with a screenshot of the whole-flight totals: *"nope. doesnt work.

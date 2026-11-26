@@ -1,7 +1,15 @@
 {
-  "edition": "2026-09-03-AIRAC",
-  "prepared": 49,
-  "refused": [],
+  "edition": "2026-11-26-AIRAC",
+  "prepared": 48,
+  "refused": [
+    {
+      "ok": false,
+      "icao": "ENBO",
+      "chart": "AD 2 ENBO 6 - 1",
+      "reason": "graticule-unreadable",
+      "detail": "left: no-labels (0 beside this edge); right: no-labels (0 beside this edge)"
+    }
+  ],
   "seamLimitM": 60,
   "seams": [
     {

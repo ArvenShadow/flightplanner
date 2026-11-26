@@ -3429,6 +3429,36 @@ T('weather is never cached - a cached observation is a wrong observation', () =>
 });
 
 console.log('\n=== 64. AIP airspace import (Avinor eAIP, v16.29) ===');
+T('a marker left behind a value the edition marks deleted is dropped, not given the previous value (v17.26)', () => {
+  // FOUND AT THE 2026-11-26 RE-IMPORT. The eAIP does not wrap a withdrawn value
+  // in <del>: it replaces the value span's class with AmdtDeletedAIRAC and
+  // leaves the sdParams marker behind it. That marker then took "the nearest
+  // preceding SD span" - and ENGM's withdrawn tower row became a frequency of
+  // "MHZ". This is the ENGM markup itself, whitespace trimmed.
+  const aip = require('./tools/aip-fields.mjs');
+  const sd = (v, m) => `<span class="SD" id="x">${v}</span><span class="sdParams" style="display: none;">${m}</span>`;
+  const del = (v, m) => `<span class=" AmdtDeletedAIRAC" id="y" title="Effective date: 26 NOV 2026. ">${v}</span><span class="sdParams" style="display: none;">${m}</span>`;
+  const html = `<tr><td><p><ins class=" AmdtInsertedAIRAC"> ${sd('120.105', 'TFREQUENCY;VAL_FREQ_TRANS;699')} ${sd('MHZ', 'TFREQUENCY;UOM_FREQ;699')}</ins> ` +
+    `${del('118.305', 'TFREQUENCY;VAL_FREQ_TRANS;971')} <del class=" AmdtDeletedAIRAC" id="z"> </del> ${del('MHZ', 'TFREQUENCY;UOM_FREQ;971')} </p></td>` +
+    `<td><p>${sd('H24', 'TFREQUENCY_STS;CUSTOM_ATT26;804')}</p></td></tr>`;
+  const stats = {};
+  const got = aip.extractFields(html, stats).map((f) => f.id + ':' + f.field + '=' + f.value);
+  assert(got.join() === '699:VAL_FREQ_TRANS=120.105,699:UOM_FREQ=MHZ,804:CUSTOM_ATT26=H24', 'fields: ' + got.join());
+  assert(stats.withdrawn === 2, 'withdrawn markers counted: ' + stats.withdrawn);
+  // A live value straight after a deleted one is still read, and a deleted
+  // value's marker is not confused with one that follows a live SD span.
+  const mixed = `<p>${del('OLD', 'TX;A;1')} ${sd('NEW', 'TX;A;2')} <span class=" AmdtDeletedAIRAC">prose</span> text ${sd('KEPT', 'TX;A;3')}</p>`;
+  assert(aip.extractFields(mixed).map((f) => f.id + '=' + f.value).join() === '2=NEW,3=KEPT', 'mixed: ' + JSON.stringify(aip.extractFields(mixed)));
+  // THE SHIPPED DATA: no frequency whose value is not a number, anywhere.
+  const set = aipDataset();
+  const bad = [];
+  for (const f of set.features.concat(set.sectors || [])) for (const sv of (f.services || [])) for (const q of (sv.freqs || [])) {
+    if (!/^\d{3}\.\d{1,3}$/.test(String(q.mhz))) bad.push(f.name + ' ' + sv.code + ' ' + q.mhz);
+  }
+  assert(!bad.length, 'a non-numeric frequency shipped: ' + bad.slice(0, 5).join('; '));
+  const rep = JSON.parse(fs.readFileSync('data/aip-report.json', 'utf8'));
+  assert(typeof rep.withdrawnMarkers === 'number', 'the report does not count the withdrawn markers');
+});
 T('the eAIP field extractor survives the source structure', () => {
   const aip = require('./tools/aip-fields.mjs');
   const html = fs.readFileSync('test-fixtures/eaip-snippet.html', 'utf8');
@@ -3750,7 +3780,8 @@ T('a standby frequency is not offered as one to dial', () => {
   }
   // The tower row keeps BOTH of its real sector frequencies.
   const twr = A.serviceRows(engm).find((r) => r.tag === 'TWR');
-  assert(twr.freqs.join(',') === '118.305,120.105', 'ENGM tower: ' + twr.freqs.join(','));
+  // Order-independent: 2026-11-26 republished the table with the E sector first.
+  assert(twr.freqs.slice().sort().join(',') === '118.305,120.105', 'ENGM tower: ' + twr.freqs.join(','));
 });
 
 T('one position published under two spellings is one row', () => {
@@ -4819,8 +4850,17 @@ T('every shipped reporting point is corroborated by the chart it came from', () 
   // point inside that range was read correctly - a corrupted digit lands off
   // the sheet.
   const rep = JSON.parse(fs.readFileSync('tools/prepared/vac-report.json', 'utf8'));
-  assert(rep.checks.graticule === rep.checks.total,
-    rep.checks.graticule + '/' + rep.checks.total + ' points inside their chart graticule');
+  // EVERY POINT IS EITHER INSIDE ITS CHART'S GRATICULE OR ON A CHART NAMED AS
+  // HAVING NONE READABLE - never silently unchecked. EDITION-DEPENDENT, pinned:
+  // 2026-11-26 republished ENBO with its sideways latitude labels drawn as
+  // outlines instead of text (0 rotated text items against ENDU's 90), so its
+  // 11 points pass the name echo and the ARP bound only. Their coordinates are
+  // IDENTICAL to 2026-09-03, where all 11 passed the graticule check. If this
+  // list changes after an AIP update, look at the chart before editing it.
+  assert(rep.checks.graticule + rep.checks.noGraticulePoints === rep.checks.total,
+    rep.checks.graticule + ' + ' + rep.checks.noGraticulePoints + ' of ' + rep.checks.total + ' points accounted for');
+  assert(rep.checks.noGraticuleCharts.join() === 'ENBO' && rep.checks.noGraticulePoints === 11,
+    'charts with no readable graticule: ' + rep.checks.noGraticuleCharts + ' (' + rep.checks.noGraticulePoints + ' points), expected ENBO (11)');
   assert(!rep.refusedPoints.length, 'refused points shipped: ' + JSON.stringify(rep.refusedPoints));
   assert(!rep.unnamedRows.length, 'unnamed rows: ' + JSON.stringify(rep.unnamedRows));
   // The name check is a corroboration, not a gate: a point on the sheet edge
@@ -10546,6 +10586,16 @@ T('the untouched plan a stop opens is owed nothing until it has a waypoint of it
       ev(`delete flights[0].waypoints[1].stop; renderAllFlightTables();`);
       assert(tFly - mins() === (kind === 'full-stop' ? 10 : 5), 'the first added waypoint did not bring the ' + kind + ' time back: ' + (tFly - mins()));
     }
+    // A REFUEL DOES NOT WAIT (v17.26): typed for the untouched plan, it is on
+    // board at once - and it still adds no time and no burn.
+    ev(plans('full-stop', ''));
+    ev('addNewFlightPlan(0);');
+    const remBefore = parseFloat(txtOf('grand-final-rem'));
+    ev('flights[0].waypoints[1].fuelAfterGal = 80; renderAllFlightTables();');
+    assert(parseFloat(txtOf('grand-final-rem')) === 80 && remBefore < 80, 'a refuel typed for the untouched plan is not on board: ' + remBefore + ' -> ' + txtOf('grand-final-rem'));
+    assert(mins() === t0 && Math.abs(burn() - b0) < 0.05, 'the refuel brought the ground time or a burn with it');
+    ev(`flights[1].waypoints.push(${D}); renderAllFlightTables();`);
+    assert(parseFloat(txtOf('grand-final-rem')) < 80 && parseFloat(txtOf('grand-final-rem')) > 70, 'the planned sector did not start from the refuel: ' + txtOf('grand-final-rem'));
     // A plan that opens with CIRCUITS is flying, even with one waypoint.
     ev(plans('full-stop', `, { id: 2, title: 'B', depElev: 31, waypoints: [Object.assign(${C}, { isPattern: true, laps: 2, name: 'PATTERN', alt: 1000 })] }`));
     const withStop = mins();
@@ -14792,7 +14842,7 @@ T('a take-off outside the published ATS hours reaches the banner; one inside the
     const card = doc.getElementById('hours-body');
     assert(card.querySelector('tr.hours-closed') && /CLOSED · SUN 0750-2130 UTC/.test(card.textContent), 'the card does not show it closed');
     assert(/NOTAMs are not fetched/.test(card.textContent) && /ippc\.no/.test(card.textContent), 'the card does not say NOTAMs are not fetched');
-    assert(/revised per AIRAC 2026-09-03/.test(card.textContent) && /Operational hours © Avinor AS/.test(card.textContent), 'the card does not name its source');
+    assert(/revised per AIRAC 2026-11-26/.test(card.textContent) && /Operational hours © Avinor AS/.test(card.textContent), 'the card does not name its source');
     // No ETD: nothing to check, nothing on the banner, and the card says why.
     doc.getElementById('def-etd').value = '';
     w.renderAllFlightTables();
@@ -14906,7 +14956,7 @@ T('hours that could not be read are shown raw and are never a banner finding', (
     assert(!ev('runIntegrityCheck()').some((p) => /ENRY/.test(p)), 'an undecoded entry raised the banner');
     const card = doc.getElementById('hours-body').textContent;
     const rawEl = doc.getElementById('hours-body').querySelector('.hours-src');
-    assert(rawEl && /^WEEK 33 - 18, MON: 0700 - 1900/.test(rawEl.textContent), 'the published text itself is not shown: ' + (rawEl && rawEl.textContent));
+    assert(rawEl && /^WEEK 33 - 18, MON - THU: 0700 - 2300/.test(rawEl.textContent), 'the published text itself is not shown: ' + (rawEl && rawEl.textContent));
     assert(/Not decoded/.test(card) && /Outside HR of OPS, O\/R to WingOps/.test(card),
       'the refusal or the remark is missing: ' + card.slice(0, 300));
   } finally {

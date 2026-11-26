@@ -893,7 +893,12 @@ async function main() {
     let html;
     try { html = await page(edition, file); }
     catch (err) { report.pages.push({ page: label, error: String(err.message || err) }); continue; }
-    const fields = extractFields(html);
+    // Markers left behind a value the edition marks DELETED are dropped by the
+    // extractor and counted here, so the report shows how much tracked-change
+    // markup the edition carried (41 at 2026-11-26, where it was first seen).
+    const fieldStats = { withdrawn: 0 };
+    const fields = extractFields(html, fieldStats);
+    report.withdrawnMarkers = (report.withdrawnMarkers || 0) + fieldStats.withdrawn;
 
     if (icao) {
       const rw = parseRunways(html);
