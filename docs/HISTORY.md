@@ -10,6 +10,26 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## AN EMPTY PLAN AFTER A STOP IS OWED NOTHING UNTIL IT HAS A WAYPOINT (v17.24)
+
+The author: *"when a new flight plan is opened after a full-stop / touch & go,
+the plan is completely empty until a waypoint is made. I do not want any extra
+10minutes to be added before a new waypoint is made, in case i forget to delete
+the last empty flight plan so that the 10 minutes wont affect the flight time /
+add extra fuel consumption. Before you make changes, figure out how its
+currently done"*.
+
+- HOW IT WAS DONE: the render queues the stop (`pendingStop`: minutes, a touch &
+  go's fuel at the pattern flow, a refuel) at the end of the plan it is made on
+  and applies it at the top of the NEXT iteration - whatever that plan holds.
+  v16.84 made a stop with NO plan after it free; a stop with an EMPTY plan
+  after it was still charged, which is the state every stop leaves behind.
+- NOW: the queue is applied only to a plan with at least one waypoint. It is
+  not dropped, so an empty plan between two planned ones still delays the
+  later one. One waypoint is enough ("before a new waypoint is made").
+- The ground-time editor stays in the empty plan's header.
+- This is v16.84's rule applied to the surface it missed.
+
 ## THE WIND IS READ ALONG THE PLANNED PROFILE, NOT AT THE END FIX'S ALTITUDE (v17.23)
 
 The author, on learning that a leg's wind was read at the altitude of the fix it

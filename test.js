@@ -10510,6 +10510,50 @@ T('a stop with no sector after it costs nothing at all', () => {
   ev(SEED);
 });
 
+T('an empty plan after a stop is owed nothing until it has a waypoint (v17.24)', () => {
+  // The author: "when a new flight plan is opened after a full-stop / touch &
+  // go, the plan is completely empty until a waypoint is made. I do not want
+  // any extra 10minutes to be added before a new waypoint is made, in case i
+  // forget to delete the last empty flight plan".
+  const A = `{ lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 254, oat: 10, wdir: 0, wspd: 0, var: -11 }`;
+  const B = (stop) => `{ lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -12${stop ? `, stop: '${stop}'` : ''} }`;
+  const C = `{ lat: 69.67895054, lng: 18.91143033, name: 'ENTC', alt: 31, oat: 10, wdir: 0, wspd: 0, var: -12 }`;
+  const D = `{ lat: 69.05505349, lng: 18.54466865, name: 'ENDU', alt: 2500, oat: 10, wdir: 0, wspd: 0, var: -11 }`;
+  const plans = (stop, rest) => `aircraftProfile.patternFf = 12;
+    flights = [{ id: 1, title: 'A', depElev: 254, waypoints: [${A}, ${B(stop)}] }${rest}];
+    activeFlightIndex = 0; refreshMap(); renderAllFlightTables();`;
+  const EMPTY = `, { id: 2, title: 'B', depElev: 31, waypoints: [] }`;
+  const mins = () => parseFloat(txtOf('grand-tot-time').match(/\(([\d.]+) min\)/)[1]);
+  const burn = () => parseFloat(txtOf('grand-tot-burn'));
+  try {
+    ev(plans(null, ''));
+    const t0 = mins(), b0 = burn();
+    for (const kind of ['full-stop', 'touch-go']) {
+      ev(plans(kind, EMPTY));
+      assert(mins() === t0, 'an empty plan after a ' + kind + ' lengthened the flight: ' + mins() + ' vs ' + t0);
+      assert(Math.abs(burn() - b0) < 0.05, 'an empty plan after a ' + kind + ' burned fuel: ' + burn() + ' vs ' + b0);
+      assert(txtOf('f-tot-time-1') === '00:00' || parseFloat(txtOf('f-tot-time-1')) === 0 || !/[1-9]/.test(txtOf('f-tot-time-1')),
+        'the empty plan shows a time of its own: ' + txtOf('f-tot-time-1'));
+    }
+    // The editor for the ground time is still in the empty plan's header.
+    ev(plans('full-stop', EMPTY));
+    assert(/Full stop/.test(doc.querySelectorAll('.flight-header')[1].textContent), 'the empty plan lost its ground-time editor');
+    // ONE waypoint is enough: the sector exists and is delayed.
+    ev(plans('full-stop', `, { id: 2, title: 'B', depElev: 31, waypoints: [${C}] }`));
+    assert(mins() - t0 === 10, 'the first waypoint did not bring the 10 min back: ' + (mins() - t0));
+    ev(plans('touch-go', `, { id: 2, title: 'B', depElev: 31, waypoints: [${C}] }`));
+    assert(mins() - t0 === 5 && Math.abs((burn() - b0) - 1.0) < 0.15, 'the first waypoint did not bring the touch & go back: ' + (mins() - t0) + ' min, ' + (burn() - b0).toFixed(2));
+    // The stop WAITS, it is not dropped: an empty plan in between still
+    // delays the planned one after it, by the same amount as with none.
+    ev(plans('full-stop', `, { id: 3, title: 'C', depElev: 31, waypoints: [${C}, ${D}] }`));
+    const direct = mins();
+    ev(plans('full-stop', EMPTY + `, { id: 3, title: 'C', depElev: 31, waypoints: [${C}, ${D}] }`));
+    assert(mins() === direct, 'an empty plan in between swallowed the ground time: ' + mins() + ' vs ' + direct);
+    ev(plans(null, `, { id: 3, title: 'C', depElev: 31, waypoints: [${C}, ${D}] }`));
+    assert(direct - mins() === 10, 'the ground time is not 10 min on the planned sector');
+  } finally { ev(SEED); }
+});
+
 T('a full stop pays a fresh start-up and taxi; a touch & go does not', () => {
   // The author settled this in AUDIT.md: taxi fuel belongs to a departure, not
   // to the mission. Before v16.54 it was charged once and every sector after a
