@@ -37,11 +37,12 @@ import * as rwydiagram from './lib/rwydiagram.js';
 import * as ofppdf from './lib/ofppdf.js';
 import * as opshours from './lib/opshours.js';
 import * as replan from './lib/replan.js';
+import * as notam from './lib/notam.js';
 
 const api = { ...magvar, ...geodesy, ...dialog, ...performance, ...format, ...legs,
     ...airspace, ...vac, ...anchors,
               ...daylight, ...winds, ...integrity, ...exchange, ...plotting, ...metar,
-              ...ofpform, ...keys, ...corridor, ...skins, ...massbalance, ...rwyperf, ...rwydiagram, ...ofppdf, ...opshours, ...replan };
+              ...ofpform, ...keys, ...corridor, ...skins, ...massbalance, ...rwyperf, ...rwydiagram, ...ofppdf, ...opshours, ...replan, ...notam };
 
 // Named globals for the not-yet-migrated inline code and the test suite.
 for (const [name, value] of Object.entries(api)) {

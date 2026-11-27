@@ -1,0 +1,13 @@
+# The NOTAM relay - see notam-relay.mjs and README.md.
+name = "c182-notam-relay"
+main = "notam-relay.mjs"
+compatibility_date = "2026-01-01"
+workers_dev = true
+
+[vars]
+# The pages allowed to call the relay from a browser. The hosted planner, and
+# the local `npm run serve` copy on any port.
+ALLOWED_ORIGINS = "https://arvenshadow.github.io,http://localhost:*"
+
+# AUTOROUTER_USER, AUTOROUTER_PASS and RELAY_KEY are SECRETS, set by
+# .github/workflows/relay.yml from the repository's secrets. Never put them here.

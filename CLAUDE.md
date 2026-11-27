@@ -174,7 +174,7 @@ three cheap disciplines applied every time the page is touched:
   WHERE TO EDIT WHAT index; a test requires it to name every module in
   `src/lib/`. → §{The single-file artifact and the v16.8 build, Phase 1 extraction}
 - **Phase 1 closed at v16.19 on purpose.** The remaining page script is NOT
-  being force-modularised: it is one web of 59 shared mutable globals plus
+  being force-modularised: it is one web of 60 shared mutable globals plus
   the inline handlers, and threading that through module boundaries would
   make a UI edit span more files. (A test re-counts that number.)
 - **HIDDEN GLOBALS ARE THE TRAP when extracting.** A module takes what it needs
@@ -385,8 +385,16 @@ three cheap disciplines applied every time the page is touched:
   under the button, one write point. → §{THE FLOOR IS THE SHEET COUNT, NOT THE ZOOM (v16.87)}
 - **ATS opening hours** from Avinor's Operational Hours table, read strictly,
   refused when not decodable; only a decoded CLOSED take-off/landing is a
-  banner finding; the day is the UTC day. **NOTAMs are REFUSED** (ippc.no:
-  session DWR, no CORS). → §{ATS OPENING HOURS BUILT, NOTAMs REFUSED (v17.0, roadmap item 20)}
+  banner finding; the day is the UTC day. ippc.no itself cannot be read
+  (session DWR, no CORS). → §{ATS OPENING HOURS BUILT, NOTAMs REFUSED (v17.0, roadmap item 20)}
+- **NOTAMs come through the owner's own relay** (v17.28): `relay/` (a
+  Cloudflare Worker, deployed by `relay.yml`) asks autorouter, which imports
+  from Eurocontrol EAD. NEVER cached (only the login token is); the address and
+  key stay in THIS browser (`c182_notam_relay`, outside PROFILE_KEYS); SHOWN,
+  NEVER DECIDED ON - nothing reaches the banner, plan or paper; a failed or
+  off-form answer shows NO list. No relay set = nothing fetched, as before.
+  Not yet run against the live autorouter service (needs the owner's account).
+  → §{NOTAMs THROUGH THE OWNER'S OWN RELAY - THE v17.0 REFUSAL WAS OF ONE SOURCE, NOT OF THE IDEA (v17.28)}
   A LANDING open at its ETA but closed within ±30 min of it gets an amber
   card line and header chip, never the banner (`atsMarginAt`).
   → §{A LANDING WITHIN 30 MIN OF ATS CLOSING GETS AN AMBER LABEL (v17.8)}
@@ -544,7 +552,8 @@ three cheap disciplines applied every time the page is touched:
 
 ### Not planned (verified dead ends)
 
-NOTAM (ippc.no: no CORS), georeferenced 1:500 000 ICAO chart tiles
+NOTAM straight from ippc.no (no CORS; a relay to autorouter is used instead,
+v17.28), georeferenced 1:500 000 ICAO chart tiles
 (licensing), traffic (needs receivers), aviationweather.gov (no CORS),
 terrain elevation (declined), openAIP (lags the chart), offline chart
 download (quota eviction). → §{Not planned}

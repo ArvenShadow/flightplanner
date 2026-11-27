@@ -10,6 +10,66 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## NOTAMs THROUGH THE OWNER'S OWN RELAY - THE v17.0 REFUSAL WAS OF ONE SOURCE, NOT OF THE IDEA (v17.28)
+
+The author: *"are you certain that there are absolutely NO possibilities to
+fetch notams?"* - no. v17.0 established that ippc.no cannot be read by a page
+and that a build-time copy would be stale; "Not planned" then recorded that as
+"NOTAM", which is wider than what was shown. Then: *"check if other places are
+fetching notams ... Important that they fetch asap after theyve been dispatched
+from ippc"*, and *"lets do it"*.
+
+- WHAT WAS CHECKED (2026-11-27):
+  - ippc.no's own scripts request NOTAMs through beans named `AIMSL_RESTClient`
+    / `AIMSLBriefingClient`; AIMSL is an EAD interface name. So ippc reads
+    EAD, and a source reading EAD live is as fresh as ippc. (Inferred from the
+    names, not confirmed by Avinor.) It also issued a DWR session id with no
+    login - not pursued: obfuscated scripts, no documented API, terms unknown.
+  - **autorouter**: documents that its NOTAMs "are imported from Eurocontrol
+    EAD", that its database "is updated in real time", and that US-sourced
+    services miss NOTAMs not marked for international dissemination. Documented
+    API: `POST /v1.0/oauth2/token` (client credentials = the account's email and
+    password, token valid one hour) and `GET /v1.0/notam?itemas=[..]&offset&limit`
+    (max 100 rows). API access must be enabled per account by support ticket.
+    Its preflight answers with NO `Access-Control-Allow-Origin` (measured).
+  - FAA / ICAO services: US NOTAM system; ICAO's stored feed refreshes about
+    every three hours. Unsuitable for Norwegian domestic NOTAMs.
+  - EAD direct (MyEAD / AIMSL): a signed client agreement, not free.
+- SO A RELAY IS UNAVOIDABLE, for two separate reasons: no source grants a page
+  cross-site access, and the login is a password. `relay/notam-relay.mjs` is a
+  Cloudflare Worker: key first (`X-Relay-Key`, constant-time), then the location
+  list, then autorouter. The LOGIN token is cached in memory; **a NOTAM never
+  is** - `no-store`, and a test proves the second request asks autorouter again.
+  A runaway `total` stops at 15 pages and says `truncated`.
+- AUTONOMY: `.github/workflows/relay.yml` deploys it on a change under `relay/`
+  and pushes its three secrets from GitHub; it refuses to run without them. The
+  repository holds no credential (tested).
+- THE PLANNER SIDE: `src/lib/notam.js` (pure) and a NOTAM card under the hours
+  card. Decisions:
+  - The relay address and key live under `c182_notam_relay` in THIS BROWSER -
+    not in `aircraftProfile`, so never in PROFILE_KEYS or an export.
+  - **SHOWN, NEVER DECIDED ON.** Nothing reaches the banner, the plan or the
+    paper: deciding from a NOTAM's free text would be a guess.
+  - The answer is read STRICTLY; anything off-form is a failed fetch. **A failed
+    fetch clears the list** - an old list under a red line is still read.
+  - Fewer rows than the stated total is INCOMPLETE, said in the card. A plan
+    that has gained an aerodrome since the fetch is said in the card.
+  - Sorted against the flight's own instants (the hours card's), else "now".
+  - En-route (the ENOR FIR) is a setting, off by default: it is a long list.
+- THE LAYOUT IS CHECKED AGAINST THE SOURCE'S OWN EXAMPLE: autorouter's
+  documented NOTAM P0825/17 lays out with the B) C) E) text and the
+  4840N00912E position its documentation shows (minutes TRUNCATED - rounding
+  gave 4841N00913E, which is how that was found).
+- VERIFIED IN CHROMIUM across origins (page on localhost:8182, the real relay
+  code on :8787 with a stand-in for autorouter): the preflight for the custom
+  header passes, a wrong key shows the relay's own reason, a right one lists.
+- **NOT VERIFIED: the live autorouter service.** That needs the owner's
+  account and autorouter's approval of API access. Built to the documentation;
+  the first real fetch is the real test. If their answer differs from their
+  documentation the planner reports a failed fetch, not a wrong list.
+- Without a relay configured nothing changes: the card and the hours card both
+  still say NOTAMs are not fetched.
+
 ## BODØ IS PLACED: LATITUDE TICKS FOUND BY THEIR SPACING, THE ONE UNKNOWN SETTLED BY THE PUBLISHED POINTS (v17.27)
 
 The author, on v17.26's refusal of the new Bodø chart: *"Give it a try one time

@@ -221,6 +221,20 @@
         <div id="hours-body" style="font-size:11px; line-height:1.6;"></div>
       </div>
 
+      <!-- NOTAMs (v17.28): fetched live through the owner's relay, never cached,
+           shown and never decided on. Rendered by renderNotamCard. -->
+      <div class="card" style="margin-top:4px;" id="notam-card">
+        <div class="card-title">
+          📋 NOTAM
+          <span style="float:right;">
+            <button class="btn" id="notam-fetch-btn" onclick="fetchNotams()"
+                    style="font-size:10px; padding:2px 8px;">Fetch</button>
+          </span>
+        </div>
+        <div id="notam-status" style="font-size:10px; color:var(--text-muted); margin-bottom:4px;"></div>
+        <div id="notam-body" style="font-size:11px; line-height:1.5;"></div>
+      </div>
+
       <div class="card" style="margin-top:4px;" id="metar-card">
         <div class="card-title">
           📡 METAR &amp; TAF
@@ -392,7 +406,8 @@
               <br><b>The ground time belongs to the sector it delays</b>, which is the one whose header you edit it in: it opens that plan's total and moves every ETO in it, and it is <i>not</i> added to the sector you just landed from. So a plan that <b>ends</b> in a full stop — nothing after it, or you deleted the sector it opened — is charged <b>no ground time and no circuit fuel at all</b>: a landing is the end of the flight, and there is no off-block left for it to delay. Add a sector after it and the figures appear on that one. Turn the auto-open off in <b>Settings → At an aerodrome</b> if you would rather add sectors yourself.
               <br><b>The fly-by name is the one the aerodrome answers to on the radio</b>: it is taken from its published ATS callsign — "Evenes Tower" gives <b>Evenes</b>, "Skagen Information" gives <b>Skagen</b>, "Helle Information" gives <b>Helle</b> — which is also what the VFR chart prints. 49 of the 53 aerodromes publish a station of their own; the four that do not (Eggemoen, Gullknapp, Kjeller, Rena) use their published aerodrome name. An <i>approach</i> callsign is never used, because it can belong to an area centre — Polaris Control answers for several TIZs, and half of Norway would end up called Polaris. The dialog shows the exact name before you choose, and you can right-click to rename.
               <br><b>Reporting points are unchanged</b>: they are added with no dialog, because a published point already has its name and there is nothing to decide.</li>
-            <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>landing</b> that is inside the hours but within <b>30 minutes</b> of a closing (or an opening) gets a small <b>amber</b> label on the card and a chip in that sector's header — "ENDU ATS closes 18 min after ETA" — so a headwind or a late start cannot quietly turn it into a closed arrival. It is a heads-up, not a finding: the red banner is for a landing that is outside the hours as planned. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> (ippc.no cannot be read by a browser page): check them before flight.</li>
+            <li><b>🕐 ATS opening hours</b> checks <b>every take-off and landing</b> against its aerodrome's published ATS hours (Avinor's Operational Hours table, the one AD 2.3 refers to), at the time the plan puts you there — so set an <b>ETD</b>. A take-off or landing <b>outside</b> the hours is a red-banner finding; "no ATS", "on request" and hours that could not be read are <b>said</b> on the card, never guessed as open or closed, and the published text and its remark are always shown. A <b>landing</b> that is inside the hours but within <b>30 minutes</b> of a closing (or an opening) gets a small <b>amber</b> label on the card and a chip in that sector's header — "ENDU ATS closes 18 min after ETA" — so a headwind or a late start cannot quietly turn it into a closed arrival. It is a heads-up, not a finding: the red banner is for a landing that is outside the hours as planned. A <b>sector with no leg yet</b> — the one a full stop opens for you — is not a take-off until it goes somewhere, so deleting the landing that raised a warning clears it. <b>NOTAMs are not fetched</b> by this check (ippc.no cannot be read by a browser page): check them before flight.</li>
+            <li><b>📋 NOTAM</b> (optional) lists the NOTAMs for the plan's aerodromes, fetched live when you press <b>Fetch</b>. It needs <b>your own relay</b> set up once (Settings → NOTAM relay; the steps are in <code>relay/README.md</code>): the relay asks <b>autorouter</b>, which imports from <b>Eurocontrol's EAD</b>. Nothing is stored — every Fetch is a new request, and a failed one shows <b>no list at all</b> rather than an old one. NOTAMs in force during the flight come first. <b>It is an unofficial copy, not a briefing, and the planner never acts on what a NOTAM says</b> — nothing in it reaches the red banner, the plan or the printed OFP. <b>Check ippc.no before flight.</b></li>
             <li><b>MSA per leg</b>: the plan table's <b>MSA</b> column takes <b>your own figure</b> for each leg, read off the chart. Nothing computes it. It is saved with the route and printed in the OFP's MSA column; empty stays empty.</li>
             <li><b>Reshaping a route you already planned</b> — all from the right-click menus, one Ctrl+Z each:
               <ul>
@@ -1196,6 +1211,39 @@
 
         <div id="settings-page-keys" class="settings-page" hidden>
           <div class="setting-section">
+            <h3>NOTAM relay</h3>
+            <div class="setting-row">
+              <label>Relay address:</label>
+              <div><input type="url" id="set-notam-url" placeholder="https://c182-notam-relay.example.workers.dev" style="width:300px;" autocomplete="off" spellcheck="false"></div>
+            </div>
+            <div class="setting-row">
+              <label>Relay key:</label>
+              <div><input type="password" id="set-notam-key" style="width:300px;" autocomplete="off"></div>
+            </div>
+            <div class="setting-row">
+              <label>En-route NOTAMs:</label>
+              <div>
+                <select id="set-notam-fir" style="width:300px;">
+                  <option value="no">Off - the plan's aerodromes only</option>
+                  <option value="yes">On - also the Polaris FIR (ENOR), a long list</option>
+                </select>
+              </div>
+            </div>
+            <details class="setting-help">
+              <summary>Where the NOTAMs come from, and what this needs</summary>
+              <div>
+              A web page cannot read a NOTAM source itself, so the planner asks <b>your own relay</b>
+              (a small Cloudflare Worker, <code>relay/</code> in the repository), which asks
+              <b>autorouter</b>, which imports from <b>Eurocontrol's EAD</b> - the database ippc.no
+              also reads. Nothing is stored anywhere: every Fetch is a live request.
+              The address and the key are kept in <b>this browser only</b>; they are never put in a
+              route file or an export. Leave the address empty and nothing is fetched.
+              <b>It is an unofficial copy, not a briefing</b> - check ippc.no before flight.
+              </div>
+            </details>
+          </div>
+
+          <div class="setting-section">
             <h3>Keyboard shortcuts</h3>
             <p style="font-size:10px; color:var(--text-muted); margin:0 0 8px; line-height:1.6;">
               <b>Click a row's shortcut box</b>, then press the keystroke you want; the Clear
@@ -1270,11 +1318,12 @@
     //   the little runway drawn on that card    -> src/lib/rwydiagram.js
     //   ATS opening hours, is it open?  -> src/lib/opshours.js
     //   splitting / joining plans at a stop -> src/lib/replan.js
+    //   NOTAMs: the relay's answer, one NOTAM's text -> src/lib/notam.js
     //
     // What is left in THIS script is the part that talks to the browser -
     // the map, the tables, the modals and localStorage. It stays here on
     // purpose: it is one web of shared state (flights, activeFlightIndex,
-    // map, markers, undoStack...) plus 155 inline on*= handlers - 120 written
+    // map, markers, undoStack...) plus 156 inline on*= handlers - 121 written
     // into the markup and 35 generated into rows at render time - that need
     // these functions as globals. Splitting it across files would make an
     // edit span MORE files, not fewer. (Counts re-measured at v16.48; the
@@ -1500,7 +1549,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.27';
+    const APP_VERSION = '17.28';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -6985,6 +7034,10 @@
         normaliseBool(aircraftProfile.autoPlanAfterStop, true) ? 'yes' : 'no';
       document.getElementById('set-perf-wind').value =
         normaliseBool(aircraftProfile.perfWindCorr, false) ? 'yes' : 'no';
+      const relayNow = notamRelay();
+      document.getElementById('set-notam-url').value = relayNow.url;
+      document.getElementById('set-notam-key').value = relayNow.key;
+      document.getElementById('set-notam-fir').value = relayNow.fir ? 'yes' : 'no';
       updateRouteWeightPreview();
       const skinSel = document.getElementById('map-skin');
       if (skinSel && !skinSel.options.length) {
@@ -7193,6 +7246,144 @@
      *  MET Norway again. NEVER persisted: a cached forecast is a wrong
      *  forecast (v16.21), so this dies with the page. @type {any} */
     let lastWeather = null;
+
+    // =========================================================================
+    // 6d. NOTAMs (v17.28) - the fetch and the card
+    //
+    // The request URL, the strict reading of the answer and one NOTAM's text
+    // -> src/lib/notam.js. The relay itself -> relay/notam-relay.mjs.
+    //
+    // NEVER CACHED, the weather's rule: a stored NOTAM is a wrong NOTAM. The
+    // service worker only answers same-origin files and chart tiles, so the
+    // relay passes straight through, and the fetch says `no-store`.
+    //
+    // SHOWN, NEVER DECIDED ON. Nothing here reaches the banner, the plan or the
+    // paper: deciding from a NOTAM's free text would be a guess. The card says
+    // what it is beside every list.
+    // =========================================================================
+    /** The last answer, with the aerodromes it was asked for. Never persisted.
+     *  @type {null|{requested: string[], fetchedAtMs: number, rows: any[], truncated: boolean, total: number}} */
+    let lastNotams = null;
+
+    /** The relay's address and key: THIS BROWSER ONLY, under its own storage
+     *  key - not in aircraftProfile, so never in PROFILE_KEYS, a route file or
+     *  an export. */
+    function notamRelay() {
+      let v = null;
+      try { v = JSON.parse(localStorage.getItem('c182_notam_relay') || 'null'); } catch (e) { v = null; }
+      return { url: normaliseRelayUrl(v && v.url), key: v && typeof v.key === 'string' ? v.key : '',
+               fir: !!(v && v.fir === true) };
+    }
+    function saveNotamRelay(url, key, fir) {
+      const typed = String(url == null ? '' : url).trim();
+      const clean = normaliseRelayUrl(typed);
+      if (typed && !clean) say('The NOTAM relay address must be an https:// address - it was not saved.', 'warn');
+      try {
+        localStorage.setItem('c182_notam_relay', JSON.stringify({ url: clean, key: String(key == null ? '' : key).trim(), fir: fir === true }));
+      } catch (e) { /* storage refused: the fields simply do not stick */ }
+      renderNotamCard();
+    }
+    /** The aerodromes the plan touches - the METAR card's own list - plus the
+     *  FIR when the pilot asked for en-route NOTAMs. */
+    function notamWanted() {
+      const icaos = routeAerodromes(flights);
+      for (const c of runwayChecks) if (c.icao && !icaos.includes(c.icao)) icaos.push(c.icao);
+      if (notamRelay().fir) icaos.push('ENOR');
+      return notamLocations(icaos);
+    }
+    function notamStatus(msg, isError) {
+      const el = document.getElementById('notam-status');
+      if (!el) return;
+      el.innerHTML = msg;
+      el.style.color = isError ? '#e53e3e' : 'var(--text-muted)';
+    }
+    function renderNotamCard() {
+      const body = document.getElementById('notam-body');
+      if (!body) return;
+      const relay = notamRelay();
+      const btn = document.getElementById('notam-fetch-btn');
+      if (btn) btn.style.display = relay.url ? '' : 'none';
+      if (!relay.url) {
+        lastNotams = null;
+        notamStatus('', false);
+        body.innerHTML = '<span style="color:var(--text-muted);"><b>NOTAMs are not fetched.</b> ' +
+          'A NOTAM relay can be set up under Settings; without one, check ippc.no before flight.</span>';
+        return;
+      }
+      if (!lastNotams) {
+        body.innerHTML = '<span style="color:var(--text-muted);">Press Fetch for the NOTAMs of the plan\'s aerodromes. ' +
+          'Nothing is stored: every Fetch is a live request.</span>';
+        return;
+      }
+      // The flight's own window, from the same instants the hours card checks;
+      // with no ETD, "now".
+      const times = atsHoursChecks.map((c) => c.ms).filter((m) => m !== null);
+      const from = times.length ? Math.min.apply(null, times) : Date.now();
+      const to = times.length ? Math.max.apply(null, times) : Date.now();
+      const wanted = notamWanted();
+      const missing = wanted.filter((i) => !lastNotams.requested.includes(i));
+      let h = '';
+      if (missing.length) {
+        h += '<div style="color:#c05621; font-weight:600; margin-bottom:4px;">The plan now includes ' +
+          esc(missing.join(', ')) + ' - not in this fetch. Fetch again.</div>';
+      }
+      if (lastNotams.truncated) {
+        h += '<div style="color:#c05621; font-weight:600; margin-bottom:4px;">The list is INCOMPLETE: ' +
+          lastNotams.rows.length + ' of ' + lastNotams.total + ' NOTAMs were returned.</div>';
+      }
+      const label = { now: times.length ? 'in force during the flight' : 'in force now', later: 'starts later', ended: 'ended' };
+      for (const g of groupNotams(lastNotams.rows, lastNotams.requested, from, to)) {
+        h += '<div style="font-weight:700; margin-top:6px;">' + esc(g.icao || 'Other') +
+          ' <span style="font-weight:normal; color:var(--text-muted);">' + g.notams.length + ' NOTAM' + (g.notams.length === 1 ? '' : 's') + '</span></div>';
+        if (!g.notams.length) { h += '<div style="color:var(--text-muted);">None returned for this location.</div>'; continue; }
+        for (const n of g.notams) {
+          h += '<div class="notam-item" data-phase="' + n.phase + '" style="margin:3px 0; padding:3px 5px; border-left:3px solid ' +
+            (n.phase === 'now' ? '#c05621' : 'var(--border-color, #cbd5e0)') + ';' + (n.phase === 'ended' ? ' opacity:0.55;' : '') + '">' +
+            '<div style="font-size:9px; color:var(--text-muted); text-transform:uppercase;">' + esc(label[n.phase]) + '</div>' +
+            '<div style="font-family:monospace; font-size:10.5px; white-space:pre-wrap; word-break:break-word;">' +
+            esc(notamLines(n.row).join('\n')) + '</div></div>';
+        }
+      }
+      h += '<div style="font-size:9px; color:var(--text-muted); margin-top:6px;">' + esc(NOTAM_SOURCE_NOTE) +
+        ' Times are UTC.' + (times.length ? '' : ' Set an ETD to sort them against the flight.') + '</div>';
+      body.innerHTML = h;
+    }
+    async function fetchNotams() {
+      const relay = notamRelay();
+      if (!relay.url) { renderNotamCard(); return; }
+      const icaos = notamWanted();
+      if (!icaos.length) {
+        notamStatus('No published aerodrome on the route yet.', false);
+        return;
+      }
+      const btn = document.getElementById('notam-fetch-btn');
+      if (btn) btn.disabled = true;
+      notamStatus('Fetching ' + esc(icaos.join(', ')) + ' …', false);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      try {
+        const r = await fetch(notamRequestUrl(relay.url, icaos),
+          { headers: { 'X-Relay-Key': relay.key }, cache: 'no-store', signal: controller.signal });
+        let json = null;
+        try { json = await r.json(); } catch (e) { json = null; }
+        if (!r.ok && !(json && typeof json.error === 'string')) throw new Error('HTTP ' + r.status);
+        const got = parseNotamResponse(json);
+        lastNotams = { requested: got.requested, fetchedAtMs: got.fetchedAtMs, rows: got.rows,
+                       truncated: got.truncated, total: got.total };
+        notamStatus('Retrieved ' + new Date(got.fetchedAtMs).toISOString().slice(11, 16) + 'Z · ' +
+          got.rows.length + ' NOTAM' + (got.rows.length === 1 ? '' : 's') + ' for ' + esc(got.requested.join(', ')), false);
+      } catch (e) {
+        // A FAILED FETCH CLEARS THE LIST. An older answer left on screen under a
+        // red line would still be read as the current one.
+        lastNotams = null;
+        notamStatus('❌ Could not fetch NOTAMs: ' + esc(e && e.name === 'AbortError' ? 'no answer in 30 s' : (e && e.message ? e.message : 'network error')) +
+                    '. Nothing is shown. Check ippc.no before flight.', true);
+      } finally {
+        clearTimeout(timer);
+        if (btn) btn.disabled = false;
+      }
+      renderNotamCard();
+    }
 
     /**
      * ONE RENDERER, TWO HOSTS. The M&B tab shows the same reports for just the
@@ -7886,6 +8077,14 @@
           '. Check the hours in the AIS Portal.');
         showIntegrityProblems(problems);
       }
+      // The NOTAM card re-sorts against the flight's times and says when the
+      // plan has outgrown the last fetch. A list, not a check: if it cannot be
+      // drawn it says so in its own card and nothing else is affected.
+      try { renderNotamCard(); }
+      catch (e) {
+        const nb = document.getElementById('notam-body');
+        if (nb) nb.textContent = 'The NOTAM card failed to render. Check ippc.no before flight.';
+      }
       // LAST, so every finding above - including a card that failed to render -
       // is on the paper's DO NOT USE band, not only on the screen.
       printProblems = problems.slice();
@@ -8107,6 +8306,9 @@
       });
       aircraftProfile.autoPlanAfterStop = document.getElementById('set-auto-plan').value !== 'no';
       aircraftProfile.perfWindCorr = document.getElementById('set-perf-wind').value === 'yes';
+      saveNotamRelay(document.getElementById('set-notam-url').value,
+                     document.getElementById('set-notam-key').value,
+                     document.getElementById('set-notam-fir').value === 'yes');
       // The corridor radius is applied live as it is typed, but Save must also
       // commit it: a pilot who edits the box and presses Save & Recalculate
       // without leaving the field would otherwise lose the change.
@@ -10387,8 +10589,10 @@
       h += '<div style="font-size:9px; color:var(--text-muted); margin-top:4px;">' +
         (noEtd ? '<b>Set an ETD</b> to check each take-off and landing against its hours. ' : '') +
         'Published hours are UTC, winter time with summer time in brackets; the one in force on the date is used. ' +
-        'Extended or extraordinary openings (AD 1.1) and NOTAMs can change them - <b>NOTAMs are not fetched</b>: ' +
-        'ippc.no cannot be read by a browser page. Check ippc.no before flight.' +
+        'Extended or extraordinary openings (AD 1.1) and NOTAMs can change them - ' +
+        (notamRelay().url
+          ? '<b>this check does not read NOTAMs</b>; the NOTAM card lists them, unofficially. Check ippc.no before flight.'
+          : '<b>NOTAMs are not fetched</b>: ippc.no cannot be read by a browser page. Check ippc.no before flight.') +
         (src ? ' Source: ' + esc(src.source) + ', revised per AIRAC ' + esc(src.revisedAirac) + '. ' + esc(src.attribution) : '') +
         '</div>';
       host.innerHTML = h;

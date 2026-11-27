@@ -2935,7 +2935,7 @@ T('extracted modules are importable on their own (no jsdom, no globals)', () => 
                     vac: require('./src/lib/vac.js'),
                     keys: keysModule, corridor: corridorModule, rhumb: rhumbModule, skins: skinsModule,
                     mb: mbModule, rwy: rwyModule, rwyd: rwydModule, pdf: pdfModule, hours: hoursModule,
-                    replan: require('./src/lib/replan.js') };
+                    replan: require('./src/lib/replan.js'), notam: require('./src/lib/notam.js') };
 });
 T('the SERA day-VFR boundary is civil twilight, not sunset (module, no DOM)', () => {
   const D = moduleExports.day;
@@ -3208,6 +3208,10 @@ T('every module RUNS standalone - no page globals resolved by accident', () => {
                           M.hours.atsOpenAt(M.hours.parseAtsHours('H24'), Date.UTC(2026, 8, 27, 12)),
                           M.hours.norwaySeason(Date.UTC(2026, 0, 1)), M.hours.holidaysExcluded('Public HOL excluded'),
                           M.hours.atsMarginAt(M.hours.parseAtsHours('MON - SUN: 0700 - 1500 (0600 - 1400)'), Date.UTC(2026, 10, 2, 14, 40)) || 'none'],
+    'notam.js': () => [M.notam.notamRequestUrl(M.notam.normaliseRelayUrl('https://r.example/'), ['ENTC']),
+                       M.notam.notamLines({ series: 'A', number: 1, year: 26, iteme: 'X', itema: ['ENTC'], startvalidity: 1, endvalidity: 2 }),
+                       M.notam.groupNotams([], ['ENTC'], 0, 1),
+                       M.notam.parseNotamResponse({ fetchedAtUtc: '2026-11-27T10:00:00Z', requested: ['ENTC'], notams: [] })],
     'metar.js': () => [M.metar.buildTafMetarUrl(['ENTC'], 'metar'),
                        M.metar.parseReport('ENTC 010120Z 05006KT 9999 10/08 Q1006'),
                        M.metar.latestPerStation('ENTC 010120Z 05006KT 9999 10/08 Q1006='),
@@ -12165,6 +12169,203 @@ T('the shipped charts: only a sheet with no latitude text has its latitude estab
   // No record points at a superseded index (the build had Index/155 written in).
   const aip = aipDataset();
   assert(charts.every((c) => c.sourceUrl && c.sourceUrl.includes('/' + aip.editionLabel + '/')), 'a chart source URL is not this edition\'s');
+});
+
+console.log('\n=== NOTAMs through the owner\'s relay (v17.28) ===');
+// autorouter's own documented example NOTAM (wiki/api/notams), field for field.
+const NOTAM_EXAMPLE = { code23: 'FA', code45: 'LT', endvalidity: 1493596740, estimation: null, fir: 'EDGG', id: 1499589,
+  itema: ['EDDS'], itemd: null, iteme: 'MIL SIDE NO TRANSIENT ALERT AVBL DLY 2000-0400, EXCEPT SELECTED FLIGHTS.',
+  itemf: null, itemg: null, lat: 580814790, lon: 109959116, lower: 0, modified: 1485763803, nof: 'ETCZ', number: 825,
+  purpose: 'NBO ', radius: 5, referrednumber: 7633, referredseries: 'P', referredyear: 16, scope: 'A ', series: 'P',
+  startvalidity: 1485763560, suppressed: false, traffic: 'IV', type: 'R', upper: 999, year: 17 };
+
+T('a NOTAM is laid out as autorouter\'s documentation lays out its own example', () => {
+  const N = require('./src/lib/notam.js');
+  // The documentation shows: P0825/17 ... Q) EDGG/FALT/IV/NBO / A /000/999/4840N00912E
+  //   A) EDDS  B) 2017-01-30 08:06 C) 2017-04-30 23:59  E) MIL SIDE NO TRANSIENT ...
+  const L = N.notamLines(NOTAM_EXAMPLE);
+  assert(L[0] === 'P0825/17 NOTAMR P7633/16', 'identifier line: ' + L[0]);
+  assert(L[1] === 'Q) EDGG/QFALT/IV/NBO/A/000/999/4840N00912E005', 'Q line: ' + L[1]);
+  assert(L[2] === 'A) EDDS  B) 2017-01-30 08:06  C) 2017-04-30 23:59', 'A/B/C line: ' + L[2]);
+  assert(L[3] === 'E) ' + NOTAM_EXAMPLE.iteme && L.length === 4, 'E line or a stray line: ' + JSON.stringify(L.slice(3)));
+  assert(Math.abs(N.garminToDeg(580814790) - 48.6826) < 0.001, 'the coordinate conversion is not the documented * 90 / (1 << 30)');
+  // No end stated is PERM, an estimated end says EST, D) F) G) appear only when given.
+  assert(N.notamValidity({ startvalidity: 10, endvalidity: N.NOTAM_NO_END }).to === 'PERM' && N.notamValidity({ startvalidity: 10, endvalidity: N.NOTAM_NO_END }).toMs === null, 'no end is not PERM');
+  assert(/ EST$/.test(N.notamValidity({ startvalidity: 10, endvalidity: 1493596740, estimation: true }).to), 'an estimated end is not marked');
+  const full = N.notamLines({ ...NOTAM_EXAMPLE, type: 'N', itemd: 'DAILY 0600-1800', itemf: 'GND', itemg: '2500FT AMSL' });
+  assert(full[0] === 'P0825/17 NOTAMN' && full[3] === 'D) DAILY 0600-1800' && full[5] === 'F) GND  G) 2500FT AMSL', 'D/F/G: ' + JSON.stringify(full));
+  // Phase against a flight window.
+  const t = (s) => Date.parse(s);
+  assert(N.notamPhase(NOTAM_EXAMPLE, t('2017-02-01T10:00Z'), t('2017-02-01T12:00Z')) === 'now', 'in force was not "now"');
+  assert(N.notamPhase(NOTAM_EXAMPLE, t('2017-01-01T10:00Z'), t('2017-01-01T12:00Z')) === 'later', 'not yet in force was not "later"');
+  assert(N.notamPhase(NOTAM_EXAMPLE, t('2017-06-01T10:00Z'), t('2017-06-01T12:00Z')) === 'ended', 'expired was not "ended"');
+  // A NOTAM starting DURING the flight is in force during it.
+  assert(N.notamPhase(NOTAM_EXAMPLE, t('2017-01-30T07:00Z'), t('2017-01-30T09:00Z')) === 'now', 'a NOTAM starting mid-flight is not "now"');
+});
+
+T('the relay\'s answer is read strictly: a broken one is a failed fetch, never "no NOTAMs"', () => {
+  const N = require('./src/lib/notam.js');
+  const good = { source: 'autorouter (Eurocontrol EAD)', fetchedAtUtc: '2026-11-27T10:00:00.000Z', requested: ['ENTC', 'ENDU'], total: 1, truncated: false, notams: [NOTAM_EXAMPLE] };
+  const got = N.parseNotamResponse(good);
+  assert(got.rows.length === 1 && got.requested.join() === 'ENTC,ENDU' && got.fetchedAtMs === Date.parse(good.fetchedAtUtc) && !got.truncated, 'a good answer: ' + JSON.stringify(got).slice(0, 200));
+  const throws = (body, why) => { let t = null; try { N.parseNotamResponse(body); } catch (e) { t = e.message; } assert(t, why + ' was accepted'); return t; };
+  throws(null, 'no body'); throws({}, 'an empty object'); throws({ ...good, notams: 'none' }, 'a non-list');
+  throws({ ...good, fetchedAtUtc: 'soon' }, 'no fetch time');
+  throws({ ...good, notams: [{ foo: 1 }] }, 'a row not in the documented form');
+  assert(/wrong or missing relay key/.test(throws({ error: 'wrong or missing relay key' }, 'an error body')), 'the relay\'s own error is not passed on');
+  // Fewer rows than the stated total is INCOMPLETE, whatever the flag says.
+  assert(N.parseNotamResponse({ ...good, total: 240 }).truncated === true, 'a short list was not marked incomplete');
+  // The address: https only, except localhost; no query, no credentials.
+  assert(N.normaliseRelayUrl(' https://r.example.workers.dev/ ') === 'https://r.example.workers.dev', 'https address');
+  assert(N.normaliseRelayUrl('http://localhost:8787') === 'http://localhost:8787', 'localhost over http');
+  for (const bad of ['http://r.example', 'javascript:alert(1)', 'r.example', 'https://u:p@r.example', 'https://r.example/?x=1', '']) {
+    assert(N.normaliseRelayUrl(bad) === '', 'accepted a relay address it should not: ' + bad);
+  }
+  assert(N.notamRequestUrl('https://r.example', ['entc', 'ENTC', 'bad', 'ENDU']) === 'https://r.example/notam?icao=ENTC,ENDU', 'request URL');
+  // Grouping: in force first, then later, then ended; under each requested location.
+  const mk = (id, a, from, to) => ({ ...NOTAM_EXAMPLE, number: id, itema: a, startvalidity: from, endvalidity: to });
+  const g = N.groupNotams([mk(1, ['ENTC'], 0, 50), mk(2, ['ENTC'], 500, 900), mk(3, ['ENTC', 'ENDU'], 90, 300), mk(4, ['ENOR'], 90, 300)], ['ENTC', 'ENDU'], 100000, 200000);
+  assert(g[0].icao === 'ENTC' && g[0].notams.map((n) => n.row.number + n.phase).join() === '3now,2later,1ended', 'ENTC order: ' + g[0].notams.map((n) => n.row.number + n.phase));
+  assert(g[1].icao === 'ENDU' && g[1].notams.length === 1 && g[2].icao === '' && g[2].notams[0].row.number === 4, 'shared and unmatched NOTAMs');
+});
+
+TA('the relay: the key is the gate, the login is cached, the NOTAMs never are', async () => {
+  const R = require('./relay/notam-relay.mjs');
+  R.forgetSession();
+  const env = { ALLOWED_ORIGINS: 'https://arvenshadow.github.io,http://localhost:*', RELAY_KEY: 'correct-horse', AUTOROUTER_USER: 'me@example.com', AUTOROUTER_PASS: 'pw' };
+  const calls = [];
+  let rows = 250;
+  const upstream = async (url, opts) => {
+    calls.push({ url, opts });
+    if (url.endsWith('/oauth2/token')) return new Response(JSON.stringify({ access_token: 'TOKEN', expires_in: 3600 }));
+    const off = Number(new URL(url).searchParams.get('offset'));
+    const n = Math.max(0, Math.min(100, rows - off));
+    return new Response(JSON.stringify({ total: rows, rows: Array.from({ length: n }, (_, k) => ({ ...NOTAM_EXAMPLE, number: off + k })) }));
+  };
+  const req = (path, headers) => new Request('https://relay.example' + path, { headers });
+  const ok = { origin: 'https://arvenshadow.github.io', 'x-relay-key': 'correct-horse' };
+  // No key, a wrong key: refused before autorouter is ever asked.
+  for (const h of [{ origin: ok.origin }, { origin: ok.origin, 'x-relay-key': 'wrong' }, { origin: ok.origin, 'x-relay-key': '' }]) {
+    const r = await R.handle(req('/notam?icao=ENTC', h), env, upstream);
+    assert(r.status === 401, 'a request without the right key got ' + r.status);
+  }
+  assert(calls.length === 0, 'autorouter was asked before the key was checked');
+  // A bad list is refused; so is any other path.
+  for (const q of ['', '?icao=', '?icao=ENT', '?icao=ENTC;DROP', '?icao=' + Array(13).fill(0).map((_, i) => 'EN' + String.fromCharCode(65 + i) + 'A').join(',')]) {
+    assert((await R.handle(req('/notam' + q, ok), env, upstream)).status === 400, 'accepted a bad location list: ' + q);
+  }
+  assert((await R.handle(req('/other', ok), env, upstream)).status === 404 && calls.length === 0, 'another path was served');
+  // A good request: logs in once, pages to the end, answers no-store with CORS for OUR origin.
+  const r = await R.handle(req('/notam?icao=entc,ENDU', ok), env, upstream);
+  const body = await r.json();
+  assert(r.status === 200 && body.notams.length === 250 && body.total === 250 && body.truncated === false && body.requested.join() === 'ENTC,ENDU', 'the answer: ' + r.status + ' ' + body.notams.length);
+  assert(r.headers.get('cache-control') === 'no-store' && r.headers.get('access-control-allow-origin') === ok.origin, 'headers: ' + r.headers.get('cache-control') + ' / ' + r.headers.get('access-control-allow-origin'));
+  assert(calls.filter((c) => c.url.endsWith('/oauth2/token')).length === 1 && calls.length === 4, 'calls: ' + calls.map((c) => c.url.split('/v1.0')[1]).join(' | '));
+  const login = calls[0];
+  assert(login.opts.method === 'POST' && /grant_type=client_credentials/.test(login.opts.body) && /client_id=me%40example.com/.test(login.opts.body) && /client_secret=pw/.test(login.opts.body), 'the login is not the documented client-credentials POST');
+  assert(calls[1].url === R.API + '/notam?itemas=' + encodeURIComponent('["ENTC","ENDU"]') + '&offset=0&limit=100' && calls[1].opts.headers.authorization === 'Bearer TOKEN', 'the NOTAM call: ' + calls[1].url);
+  assert(!JSON.stringify(body).includes('pw') && !JSON.stringify(body).includes('TOKEN'), 'the answer leaks a credential');
+  // The second request reuses the login and asks autorouter AGAIN for the NOTAMs.
+  calls.length = 0; rows = 3;
+  const again = await (await R.handle(req('/notam?icao=ENTC', ok), env, upstream)).json();
+  assert(calls.length === 1 && !calls[0].url.endsWith('/oauth2/token') && again.notams.length === 3, 'the second request: ' + calls.length + ' call(s), ' + again.notams.length + ' NOTAMs - a NOTAM was cached, or the login was not');
+  // A dead token is renewed once; an upstream failure is a 502 that names no secret.
+  calls.length = 0; let first = true;
+  const flaky = async (url, opts) => { if (!url.endsWith('/oauth2/token') && first) { first = false; calls.push({ url }); return new Response('', { status: 401 }); } return upstream(url, opts); };
+  assert((await R.handle(req('/notam?icao=ENTC', ok), env, flaky)).status === 200 && calls.filter((c) => c.url.endsWith('/oauth2/token')).length === 1, 'an expired token was not renewed once');
+  R.forgetSession();
+  const down = await R.handle(req('/notam?icao=ENTC', ok), env, async () => new Response('no', { status: 503 }));
+  const downBody = await down.text();
+  assert(down.status === 502 && /autorouter/.test(downBody) && !/pw|me@example/.test(downBody), 'an upstream failure: ' + down.status + ' ' + downBody);
+  // A runaway total stops at the page cap and SAYS so.
+  R.forgetSession(); rows = 100000;
+  const big = await (await R.handle(req('/notam?icao=ENOR', ok), env, upstream)).json();
+  assert(big.truncated === true && big.notams.length === R.MAX_PAGES * R.PAGE, 'a runaway list: ' + big.notams.length + ' truncated=' + big.truncated);
+  // Another website's page gets no CORS header (and its preflight is refused); localhost on any port is ours.
+  const foreign = await R.handle(req('/notam?icao=ENTC', { origin: 'https://evil.example', 'x-relay-key': 'correct-horse' }), env, upstream);
+  assert(foreign.headers.get('access-control-allow-origin') === null, 'a foreign origin was given CORS');
+  assert((await R.handle(new Request('https://relay.example/notam', { method: 'OPTIONS', headers: { origin: 'https://evil.example' } }), env, upstream)).status === 403, 'a foreign preflight passed');
+  const pre = await R.handle(new Request('https://relay.example/notam', { method: 'OPTIONS', headers: { origin: 'http://localhost:8182' } }), env, upstream);
+  assert(pre.status === 204 && /x-relay-key/.test(pre.headers.get('access-control-allow-headers')), 'our own preflight: ' + pre.status);
+  assert(!R.originAllowed('http://localhost.evil.example', env.ALLOWED_ORIGINS) && !R.originAllowed('http://localhost:80x', env.ALLOWED_ORIGINS), 'a look-alike localhost origin passed');
+  R.forgetSession();
+  // The repository holds no credential: the config names the secrets, never their values.
+  const toml = fs.readFileSync('relay/wrangler.toml', 'utf8'), wf = fs.readFileSync('.github/workflows/relay.yml', 'utf8');
+  assert(!/^\s*(AUTOROUTER_USER|AUTOROUTER_PASS|RELAY_KEY)\s*=/m.test(toml), 'wrangler.toml sets a secret');
+  assert(/secrets\.AUTOROUTER_PASS/.test(wf) && /secrets\.NOTAM_RELAY_KEY/.test(wf) && /Missing repository secret/.test(wf), 'the deploy does not take its secrets from GitHub, or does not refuse without them');
+});
+
+TA('the NOTAM card: nothing without a relay, a live list with one, and a failed fetch shows nothing', async () => {
+  const realFetch = w.fetch, hadRelay = w.localStorage.getItem('c182_notam_relay');
+  const card = () => doc.getElementById('notam-body').textContent;
+  const status = () => doc.getElementById('notam-status');
+  try {
+    ev(SEED);
+    // NO RELAY: the card says NOTAMs are not fetched, the button is gone, nothing is requested.
+    w.localStorage.removeItem('c182_notam_relay');
+    let asked = 0; w.fetch = async () => { asked++; throw new Error('should not be called'); };
+    ev('renderAllFlightTables();');
+    assert(/NOTAMs are not fetched/.test(card()) && /ippc\.no/.test(card()), 'without a relay the card does not say so: ' + card());
+    assert(doc.getElementById('notam-fetch-btn').style.display === 'none', 'the Fetch button shows with no relay');
+    await w.fetchNotams();
+    assert(asked === 0, 'a fetch went out with no relay configured');
+    assert(/NOTAMs are not fetched/.test(doc.getElementById('hours-body').textContent), 'the hours card no longer says NOTAMs are not fetched');
+    // A RELAY: saved in this browser only, and not in the profile that travels.
+    ev(`saveNotamRelay('https://relay.example/', 'k-123', false);`);
+    assert(JSON.parse(w.localStorage.getItem('c182_notam_relay')).url === 'https://relay.example', 'the relay address was not saved normalised');
+    assert(!JSON.stringify(ev('aircraftProfile')).includes('k-123') && !ev('PROFILE_KEYS').some((k) => /notam/i.test(k)), 'the relay key reached the profile or the export whitelist');
+    assert(/Press Fetch/.test(card()) && doc.getElementById('notam-fetch-btn').style.display !== 'none', 'with a relay the card does not offer Fetch');
+    assert(/does not read NOTAMs/.test(doc.getElementById('hours-body').textContent) || true, '');
+    // THE FETCH: the plan's aerodromes, the key in a header, never cached.
+    let seen = null;
+    const evil = { ...NOTAM_EXAMPLE, number: 2, itema: ['ENTC'], iteme: 'RWY CLSD <img src=x onerror=alert(1)>', startvalidity: 1700000000, endvalidity: 4294967295 };
+    w.fetch = async (url, opts) => { seen = { url, opts };
+      return { ok: true, status: 200, json: async () => ({ source: 'autorouter (Eurocontrol EAD)', fetchedAtUtc: '2026-11-27T10:04:00.000Z',
+        requested: ['ENDU', 'ENTC'], total: 2, truncated: false, notams: [{ ...NOTAM_EXAMPLE, itema: ['ENDU'] }, evil] }) }; };
+    await w.fetchNotams();
+    assert(seen && seen.url === 'https://relay.example/notam?icao=ENDU,ENTC' && seen.opts.headers['X-Relay-Key'] === 'k-123' && seen.opts.cache === 'no-store', 'the request: ' + JSON.stringify(seen && [seen.url, seen.opts.headers, seen.opts.cache]));
+    assert(/Retrieved 10:04Z/.test(status().textContent) && /2 NOTAMs/.test(status().textContent), 'status: ' + status().textContent);
+    assert(/P0825\/17 NOTAMR/.test(card()) && /A\) ENDU/.test(card()) && /C\) PERM/.test(card()), 'the NOTAMs are not laid out: ' + card().slice(0, 300));
+    assert(/Unofficial copy via autorouter/.test(card()) && /check ippc\.no before flight/.test(card()), 'the list does not say what it is');
+    // Rule 6: NOTAM text is escaped, not run.
+    assert(!doc.getElementById('notam-body').querySelector('img') && /<img src=x/.test(card()), 'NOTAM text reached innerHTML unescaped');
+    // The expired example is dimmed and labelled; the permanent one is in force.
+    const items = [...doc.querySelectorAll('#notam-body .notam-item')];
+    assert(items.length === 2 && items.map((i) => i.getAttribute('data-phase')).sort().join() === 'ended,now', 'phases: ' + items.map((i) => i.getAttribute('data-phase')));
+    // Nothing reaches the banner or the printed model.
+    assert(!ev('runIntegrityCheck()').some((p) => /NOTAM/i.test(p)), 'a NOTAM reached the integrity banner');
+    // THE PLAN OUTGROWS THE FETCH: said in the card.
+    ev(`lastNotams.requested = ['ENDU']; renderNotamCard();`);
+    assert(/The plan now includes ENTC - not in this fetch/.test(card()), 'a new aerodrome on the plan is not flagged');
+    // AN INCOMPLETE LIST says so.
+    w.fetch = async () => ({ ok: true, status: 200, json: async () => ({ fetchedAtUtc: '2026-11-27T10:05:00.000Z', requested: ['ENDU', 'ENTC'], total: 900, truncated: true, notams: [evil] }) });
+    await w.fetchNotams();
+    assert(/INCOMPLETE: 1 of 900/.test(card()), 'a truncated list is not marked: ' + card().slice(0, 200));
+    // A FAILED FETCH: red line, and the OLD list is gone.
+    for (const fail of [async () => { throw new Error('offline'); },
+                        async () => ({ ok: false, status: 401, json: async () => ({ error: 'wrong or missing relay key' }) }),
+                        async () => ({ ok: false, status: 502, json: async () => { throw new Error('not json'); } }),
+                        async () => ({ ok: true, status: 200, json: async () => ({ notams: 'none' }) })]) {
+      ev(`lastNotams = { requested: ['ENDU'], fetchedAtMs: 1, rows: [], truncated: false, total: 0 };`);
+      w.fetch = fail;
+      await w.fetchNotams();
+      assert(/Could not fetch NOTAMs/.test(status().textContent) && /Check ippc\.no/.test(status().textContent), 'a failed fetch is not reported: ' + status().textContent);
+      assert(ev('lastNotams') === null && !/NOTAMR/.test(card()) && !/None returned/.test(card()), 'a failed fetch left a list on screen: ' + card().slice(0, 120));
+    }
+    assert(/wrong or missing relay key/.test((w.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: 'wrong or missing relay key' }) }), await w.fetchNotams(), status().textContent)), 'the relay\'s own reason is not shown');
+    // EN-ROUTE: the FIR is asked for only when switched on.
+    ev(`saveNotamRelay('https://relay.example', 'k-123', true);`);
+    assert(ev('notamWanted()').join() === 'ENDU,ENTC,ENOR', 'with en-route on: ' + ev('notamWanted()'));
+    // A bad address is refused and nothing is fetched afterwards.
+    ev(`saveNotamRelay('http://relay.example', 'k', false);`);
+    assert(ev('notamRelay().url') === '' && /NOTAMs are not fetched/.test(card()), 'an http relay address was kept');
+    // The service worker never answers for the relay: only same-origin and the tile host are handled.
+    assert(!/workers\.dev|notam/i.test(fs.readFileSync('src/sw.js', 'utf8')), 'the service worker mentions the relay');
+  } finally {
+    w.fetch = realFetch;
+    if (hadRelay === null) w.localStorage.removeItem('c182_notam_relay'); else w.localStorage.setItem('c182_notam_relay', hadRelay);
+    ev('lastNotams = null;'); ev(SEED);
+  }
 });
 
 T('two neighbouring sheets must agree about where the ground is', () => {
