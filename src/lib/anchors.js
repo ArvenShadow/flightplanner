@@ -231,7 +231,7 @@ export const DEFAULT_FIX_STYLE = {
   adShape: 'square',
   rpShape: 'triangle',  // the symbol the VAC itself uses for a reporting point
   style: 'filled',
-  size: 10,
+  size: 18,             // v17.29, the author's default (was 10)
   labels: true
 };
 
@@ -262,7 +262,7 @@ export const FIX_SIZE_MAX = 18;
  */
 export const ROUTE_WEIGHT_MIN = 2;
 export const ROUTE_WEIGHT_MAX = 10;
-export const ROUTE_WEIGHT_DEFAULT = 4;
+export const ROUTE_WEIGHT_DEFAULT = 6;   // v17.29, the author's default (was 4)
 
 /**
  * WHAT HAPPENS AT AN AERODROME (v16.54, roadmap item 17).

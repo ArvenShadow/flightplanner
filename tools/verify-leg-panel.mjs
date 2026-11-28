@@ -27,6 +27,7 @@ const check = (ok, msg) => { console.log((ok ? '  ok    ' : '  FAIL  ') + msg); 
 
 const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
 const page = await (await b.newContext({ viewport: { width: 1400, height: 950 } })).newPage();
+await (await import(new URL('./verify-baseline.mjs', import.meta.url).href)).pinBaseline(page);
 const errs = [];
 page.on('pageerror', (e) => errs.push(String(e)));
 await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());

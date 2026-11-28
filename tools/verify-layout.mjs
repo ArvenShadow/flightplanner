@@ -37,6 +37,7 @@ const errs = [];
 async function measure(width, height) {
   const ctx = await b.newContext({ viewport: { width, height } });
   const page = await ctx.newPage();
+  await (await import(new URL('./verify-baseline.mjs', import.meta.url).href)).pinBaseline(page);
   page.on('pageerror', (e) => errs.push(width + 'x' + height + ': ' + e));
   await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
@@ -115,6 +116,7 @@ check(short.map.height >= 140, `...and the map does not vanish: ${short.map.heig
 {
   const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
+  await (await import(new URL('./verify-baseline.mjs', import.meta.url).href)).pinBaseline(page);
   page.on('pageerror', (e) => errs.push('map-only: ' + e));
   await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
@@ -163,6 +165,7 @@ check(short.map.height >= 140, `...and the map does not vanish: ${short.map.heig
 {
   const ctx = await b.newContext({ viewport: { width: 1400, height: 950 } });
   const page = await ctx.newPage();
+  await (await import(new URL('./verify-baseline.mjs', import.meta.url).href)).pinBaseline(page);
   page.on('pageerror', (e) => errs.push('keys: ' + e));
   await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
@@ -258,6 +261,7 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
 {
   const ctx = await b.newContext({ viewport: { width: 1400, height: 950 } });
   const page = await ctx.newPage();
+  await (await import(new URL('./verify-baseline.mjs', import.meta.url).href)).pinBaseline(page);
   page.on('pageerror', (e) => errs.push('help: ' + e));
   await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
@@ -355,6 +359,7 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
 {
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 } });
   const page = await ctx.newPage();
+  await (await import(new URL('./verify-baseline.mjs', import.meta.url).href)).pinBaseline(page);
   page.on('pageerror', (e) => errs.push('splitter: ' + e));
   await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
@@ -613,6 +618,7 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
 {
   const ctx = await b.newContext({ viewport: { width: 1500, height: 950 } });
   const page = await ctx.newPage();
+  await (await import(new URL('./verify-baseline.mjs', import.meta.url).href)).pinBaseline(page);
   page.on('pageerror', (e) => errs.push('numcells: ' + e));
   await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());
   await page.goto('file://' + APP, { waitUntil: 'domcontentloaded' });
@@ -834,6 +840,7 @@ check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs[0] : ''))
   // 720 px tall on purpose: the 13" laptop this project already sizes for.
   const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
+  await (await import(new URL('./verify-baseline.mjs', import.meta.url).href)).pinBaseline(page);
   const perr = [];
   page.on('pageerror', (e) => perr.push(String(e)));
   await page.route('**://**/**', (r) => r.request().url().startsWith('file:') ? r.continue() : r.abort());

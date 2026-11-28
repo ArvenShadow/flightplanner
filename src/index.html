@@ -161,7 +161,7 @@
           </div>
           <div class="input-group">
             <label id="fuel-reserve-label" title="Legs where remaining fuel drops below this are flagged red">Reserve (gal)</label>
-            <input type="number" id="fuel-reserve" value="8" step="0.5" onfocus="this.select()" onfocusin="rememberPlanField(this)" onchange="pushPlanFieldUndo(this, 'change reserve'); renderAllFlightTables(); savePlanningPrefs();">
+            <input type="number" id="fuel-reserve" value="12" step="0.5" onfocus="this.select()" onfocusin="rememberPlanField(this)" onchange="pushPlanFieldUndo(this, 'change reserve'); renderAllFlightTables(); savePlanningPrefs();">
           </div>
           <div class="input-group">
             <label title="Estimated Time of Departure as LOCAL clock time on the Flight Date (this computer's timezone). When set, an ETO clock time is shown for every leg.">ETD (HH:MM <span id="etd-tz">local</span>)</label>
@@ -1549,7 +1549,7 @@
     // and api.github.com send Access-Control-Allow-Origin: *, so the fetch is
     // legal even from a double-clicked local file (origin "null"). The check
     // fails SILENTLY when offline — the planner never depends on it.
-    const APP_VERSION = '17.28';
+    const APP_VERSION = '17.29';
     const REPO_URL = 'https://github.com/ArvenShadow/flightplanner';
     const UPDATE_URL = 'https://raw.githubusercontent.com/ArvenShadow/flightplanner/main/package.json';
 
@@ -2010,12 +2010,12 @@
 
     let aircraftProfile = {
       mode: 'C182T',          // 'C182T' = POH tables, 'MANUAL' = user values
-      cruiseRpm: 2300,
-      cruiseMp: 23,
+      cruiseRpm: 2200,        // v17.29, the author's own cruise setting: 20 in / 2200 rpm
+      cruiseMp: 20,
       cruiseTas: 130,         // used in MANUAL mode only
       cruiseFf: 12.5,         // used in MANUAL mode only
       climbMode: 'CRUISECLIMB', // C182T only: 'POH' (Fig 5-8 full throttle) or 'CRUISECLIMB'
-      ccRoc: 500,             // cruise-climb rate of climb, user-observed
+      ccRoc: 800,             // cruise-climb rate of climb, user-observed (800 since v17.29)
       ccKias: 90,             // cruise-climb indicated airspeed
       ccFf: 15.0,             // cruise-climb fuel flow, user-observed
       roc: 700,
@@ -2027,7 +2027,17 @@
       patternTime: 5,
       patternFf: 12.0,
       taxiFuel: 1.7,
-      theme: 'light',
+      // THE STARTING VALUES OF A BROWSER THAT HAS NEVER SAVED ANYTHING (v17.29,
+      // the author's list). A saved profile still wins: loadSavedProfile lays
+      // it over this object, so nobody's existing settings move.
+      theme: 'dark',
+      skin: 'slate',
+      density: 'bold',
+      baseChart: 'vfr',       // the ICAO 1:500 000 chart
+      chartDetail: 'sharp',
+      fixesOn: true,
+      corridorOn: true,
+      corridorNM: 1,
       distUnit: 'NM',
       fuelUnit: 'GAL'
     };
@@ -7165,7 +7175,7 @@
     async function resetFixStyle() {
       if (!await confirmDialog('Restore the default fix symbols?',
         'Aerodromes go back to a blue square, reporting points to an orange triangle, ' +
-        '10 px, filled, names shown, and the route track to ' + ROUTE_WEIGHT_DEFAULT + ' px.',
+        DEFAULT_FIX_STYLE.size + ' px, filled, names shown, and the route track to ' + ROUTE_WEIGHT_DEFAULT + ' px.',
         { okLabel: 'Restore' })) return;
       document.getElementById('map-fix-ad-color').value = DEFAULT_FIX_STYLE.adColor;
       document.getElementById('map-fix-rp-color').value = DEFAULT_FIX_STYLE.rpColor;

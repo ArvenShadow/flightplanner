@@ -538,6 +538,11 @@ three cheap disciplines applied every time the page is touched:
   → §{THE CONTROL STOPS AT ITS OWN EDGE, SO THE APP CARRIES THE DRAG (v16.90)}
 - **Number cells**: no spin buttons; floors are `calc(<n>ch + 16px)` and are
   checked in every style and size. → §{THE FLOOR IS TEXT PLUS CHROME, AND THE CHROME IS NOT A CONSTANT (v16.71)}
+- **The starting values are the author's** (v17.29): 20 in / 2200 rpm, cruise
+  climb 800 fpm, reserve 12, dark + Slate + Bold, ICAO chart at sharp detail,
+  fixes on (18 px), track 6 px, corridor on at 1 NM. A saved profile still
+  wins; the validators' fallbacks did not move.
+  → §{THE STARTING VALUES ARE THE AUTHOR'S (v17.29)}
 - **Skins and sizes**: `body.skin-*` (Default, Menu, Slate, Chart, Float) and
   `body.density-*` (Normal, Compact, Bold), CSS only, default skin has NO
   CSS; shape rules before the styles, size rules after. Tier 3 (column order)

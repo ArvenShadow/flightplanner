@@ -10,6 +10,39 @@ before changing the feature it describes. Where this file and CLAUDE.md
 disagree, CLAUDE.md wins: several entries here were later superseded, and the
 entry that superseded them says so.
 
+## THE STARTING VALUES ARE THE AUTHOR'S (v17.29)
+
+The author: *"please change some of the default values in the app: reserve fuel
+is 12, engine cruise setting is 20MP/2200RPM, climb speed is 800, fixes set to
+on, icao map selected, details sharp, line width 6px, symbol size 18px, corridor
+1nm on, dark mode, slate, bold set."*
+
+- IN THE PROFILE LITERAL: `cruiseRpm` 2200, `cruiseMp` 20, `ccRoc` 800, `theme`
+  dark, `skin` slate, `density` bold, `baseChart` vfr, `chartDetail` sharp,
+  `fixesOn`, `corridorOn` with `corridorNM` 1. The reserve field starts at 12.
+- IN THE CONSTANTS, so "reset map settings" lands on the same values:
+  `ROUTE_WEIGHT_DEFAULT` 6 (was 4), `DEFAULT_FIX_STYLE.size` 18 (was 10).
+- **"CLIMB SPEED 800" WAS READ AS THE CRUISE-CLIMB RATE** (`ccRoc`, 500 -> 800
+  fpm), the figure the default climb model uses. The manual model's own rate
+  (`roc`, 700) was left alone. The author's to correct if that was not meant.
+- **A SAVED PROFILE STILL WINS.** These are the values of a browser that has
+  saved nothing; `loadSavedProfile` overlays whatever is stored, so no existing
+  setup moves - including the author's own, until its storage is cleared.
+- The FALLBACKS did not move: a profile with no `baseChart` still reads topo and
+  one with no `corridorOn` still reads off, so an old route file imports as it
+  did. Only the starting object changed.
+- 20 in / 2200 rpm is a row the POH cruise table carries from sea level to
+  8 500 ft (tested); above that the table's own full-throttle limit applies.
+- **TWO VERIFIERS WERE MEASURING THE OLD DEFAULTS WITHOUT SAYING SO.**
+  `verify:layout` and `verify:leg` assert pixel facts and went red (2 and 11
+  checks): Bold makes the header 85 px, and a fix marker now sits where a click
+  used to land on bare map. Nothing was broken. They now pin the profile they
+  were measured on (`tools/verify-baseline.mjs`) instead of inheriting whatever
+  a fresh browser starts on; the defaults themselves are tested in `test.js`.
+  - WHAT THAT HIDES, stated: on a 1280x720 screen the NEW defaults (Bold) put
+    the daylight card 613 px into a 403 px sidebar - it is below the fold. That
+    is the cost of Bold on a small laptop, and Compact exists for it.
+
 ## NOTAMs THROUGH THE OWNER'S OWN RELAY - THE v17.0 REFUSAL WAS OF ONE SOURCE, NOT OF THE IDEA (v17.28)
 
 The author: *"are you certain that there are absolutely NO possibilities to

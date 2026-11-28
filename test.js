@@ -2846,8 +2846,13 @@ T('the export request asks for the higher-resolution raster in a lossless format
   // print is the reason for the whole feature.
   assert(lo.includes('format=png24') && !/format=(png8|jpg|jpeg)/.test(lo), 'not a lossless format: ' + lo);
 });
-T('default chart is topo and the label bar says so (with the projection)', () => {
-  assert(ev('baseChart()') === 'topo', 'default not topo');
+T('the default chart is the ICAO chart (v17.29); topo is one toggle away and the label bar says so (with the projection)', () => {
+  // The author's default since v17.29. A profile with no choice in it still
+  // reads as topo - the fallback did not move, only the starting value.
+  assert(ev('baseChart()') === 'vfr' && txtOf('chart-btn').includes('VFR ICAO'), 'the default is not the ICAO chart: ' + txtOf('chart-btn'));
+  assert(ev(`(function(){ const was = aircraftProfile.baseChart; delete aircraftProfile.baseChart; const r = baseChart(); aircraftProfile.baseChart = was; return r; })()`) === 'topo', 'no stored choice is not topo');
+  ev('toggleBaseChart()');
+  assert(ev('baseChart()') === 'topo', 'not switched to topo');
   assert(txtOf('chart-btn').includes('Chart: Topo'), 'button: ' + txtOf('chart-btn'));
   const lbl = txtOf('chart-label');
   assert(lbl.includes('Kartverket topo') && lbl.includes('EPSG:3857'), 'label: ' + lbl);
@@ -3857,8 +3862,10 @@ T('nothing published with a dialable frequency is invisible on the card', () => 
 
 T('the corridor toggles, follows the track, and takes no clicks', () => {
   ev(SEED);
+  // ON BY DEFAULT since v17.29 (the author), at 1 NM.
+  assert(ev('corridorEnabled()') === true && ev('corridorRadiusNM()') === 1 && /1 NM/.test(txtOf('corridor-btn')), 'the corridor is not on at 1 NM by default: ' + txtOf('corridor-btn'));
   ev(`delete aircraftProfile.corridorOn; delete aircraftProfile.corridorNM;`);
-  ev(`refreshMap();`);
+  ev(`refreshMap(); updateCorridorBtn();`);
   assert(ev('corridorLayers.length') === 0, 'the corridor drew while switched off');
   assert(/Off/.test(txtOf('corridor-btn')), 'the button does not say Off: ' + txtOf('corridor-btn'));
 
@@ -5061,6 +5068,40 @@ TA('in View Mode a fix click adds nothing - reporting point, aerodrome or search
   assert(ev('flights[activeFlightIndex].waypoints.length') === before + 1, 'Edit Mode no longer adds a fix');
   ev('undoLast(true); aircraftProfile.fixesOn = false; drawFixes();');
 });
+T('a browser that has saved nothing starts on the author\'s defaults (v17.29)', () => {
+  // The author's list: "reserve fuel is 12, engine cruise setting is 20MP/2200RPM,
+  // climb speed is 800, fixes set to on, icao map selected, details sharp, line
+  // width 6px, symbol size 18px, corridor 1nm on, dark mode, slate, bold set."
+  // Read from the SOURCE: by this point in the suite the live profile has been
+  // through a hundred tests and says nothing about a first boot.
+  const src = fs.readFileSync('src/index.html', 'utf8');
+  const lit = src.match(/let aircraftProfile = (\{[\s\S]*?\n    \});/);
+  assert(lit, 'the profile literal moved');
+  const d = new Function('return ' + lit[1])();
+  const want = { cruiseRpm: 2200, cruiseMp: 20, ccRoc: 800, theme: 'dark', skin: 'slate', density: 'bold',
+    baseChart: 'vfr', chartDetail: 'sharp', fixesOn: true, corridorOn: true, corridorNM: 1 };
+  for (const [k, v] of Object.entries(want)) assert(d[k] === v, 'default ' + k + ' is ' + JSON.stringify(d[k]) + ', not ' + JSON.stringify(v));
+  assert(/id="fuel-reserve" value="12"/.test(src), 'the reserve field does not start at 12');
+  const A = moduleExports.anchors;
+  assert(A.ROUTE_WEIGHT_DEFAULT === 6 && A.DEFAULT_FIX_STYLE.size === 18, 'line width / symbol size defaults: ' + A.ROUTE_WEIGHT_DEFAULT + ' / ' + A.DEFAULT_FIX_STYLE.size);
+  // Every one is a value its own validator accepts, and travels in the profile.
+  const X = moduleExports.exch, K = moduleExports.skins;
+  assert(K.normaliseSkin(d.skin) === 'slate' && K.normaliseDensity(d.density) === 'bold', 'slate / bold are not valid ids');
+  assert(ev('CHART_DETAIL_MODES').includes(d.chartDetail), 'sharp is not a chart detail mode');
+  for (const k of Object.keys(want)) assert(X.PROFILE_KEYS.includes(k), k + ' is not in PROFILE_KEYS, so a saved choice could not override the default');
+  // 20 in / 2200 rpm is a row the POH table has at the altitudes this is flown.
+  const P = moduleExports.perf;
+  P.setAircraftProfile({ mode: 'C182T', cruiseRpm: 2200, cruiseMp: 20 });
+  try {
+    for (const alt of [0, 2500, 4500, 6500, 8500]) {
+      const c = P.cruisePerf(alt, P.isaTemp(alt));
+      assert(c.usedRpm === 2200 && c.usedMp === 20 && c.tas > 100 && c.gph > 8, '20/2200 at ' + alt + ' ft: ' + JSON.stringify(c));
+    }
+  } finally { P.setAircraftProfile(ev('aircraftProfile')); }
+  // A SAVED PROFILE STILL WINS: the defaults are a starting point, not a reset.
+  assert(/Object\.assign\(aircraftProfile, pickProfileKeys\(JSON\.parse\(saved\)\)\)/.test(src), 'a saved profile no longer overlays the defaults');
+});
+
 T('the fix symbol is a validated setting, and a bad value degrades safely', () => {
   const A = moduleExports.anchors;
   // The reporting-point default is ORANGE on purpose: nothing on either base
@@ -5069,7 +5110,7 @@ T('the fix symbol is a validated setting, and a bad value degrades safely', () =
   const d = A.normaliseFixStyle({});
   assert(d.rpColor === '#dd6b20' && d.rpShape === 'triangle', JSON.stringify(d));
   assert(d.adColor === '#2b6cb0' && d.adShape === 'square', JSON.stringify(d));
-  assert(d.size === 10 && d.style === 'filled' && d.labels === true, JSON.stringify(d));
+  assert(d.size === 18 && d.style === 'filled' && d.labels === true, JSON.stringify(d));   // 18 since v17.29
   assert(A.DEFAULT_FIX_STYLE.rpColor === d.rpColor, 'the defaults disagree with themselves');
 
   // Every field is honoured when it is valid...
@@ -7556,7 +7597,7 @@ T('the route has a fat invisible grab line, and it is not the one you see', () =
   assert(ev('hitLines.length') === ev('polylines.length'), 'one grab line per route');
   assert(ev('hitLines[0]._opts.opacity') === 0, 'the grab line is visible');
   assert(ev('hitLines[0]._opts.weight') >= 12, 'the grab line is too thin to help: ' + ev('hitLines[0]._opts.weight'));
-  assert(ev('polylines[0]._opts.weight') === 4, 'the VISIBLE line got fattened instead');
+  assert(ev('polylines[0]._opts.weight') === 6, 'the VISIBLE line got fattened instead');
   assert(ev('hitLines[0]._opts.bubblingMouseEvents') === false,
     'a line gesture would also fire the map click and append a waypoint');
   // and it tracks the same coordinates, or the grab area drifts off the route
